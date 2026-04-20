@@ -1,0 +1,26 @@
+{
+  "name": "@episteme/editor",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": { "typecheck": "tsc --noEmit" },
+  "dependencies": {
+    "@episteme/markdown": "workspace:*",
+    "@tiptap/core": "^2.10.0",
+    "@tiptap/react": "^2.10.0",
+    "@tiptap/pm": "^2.10.0",
+    "@tiptap/extension-placeholder": "^2.10.0",
+    "tiptap-markdown": "^0.8.10"
+  },
+  "peerDependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "typescript": "^5"
+  }
+}
