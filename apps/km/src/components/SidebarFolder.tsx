@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ChevronRight } from "lucide-react";
+import { useDraggable, useDroppable } from "@dnd-kit/core";
 import {
   SidebarMenuButton,
   SidebarMenuItem,
@@ -14,6 +15,7 @@ import { useExpanded } from "@/hooks/use-expanded";
 import type { FolderNode } from "@/lib/tree";
 import type { NoteItem, PaperItem, ReferenceItem } from "@/lib/tree-server";
 import { SidebarContextMenu } from "./SidebarContextMenu";
+import type { DragData } from "./SidebarSection";
 
 type ContentSection = "papers" | "references" | "notes";
 type Item = PaperItem | ReferenceItem | NoteItem;
@@ -33,6 +35,16 @@ function itemTitle(item: Item): string {
 
 function itemFolderPath(item: Item): string {
   return (item as { folder_path?: string }).folder_path ?? "";
+}
+
+function mergeRefs<T>(...refs: Array<React.Ref<T> | undefined>) {
+  return (node: T | null) => {
+    for (const ref of refs) {
+      if (!ref) continue;
+      if (typeof ref === "function") ref(node);
+      else (ref as React.RefObject<T | null>).current = node;
+    }
+  };
 }
 
 interface SidebarFolderProps {
@@ -86,6 +98,25 @@ function FolderRow({ node, section, depth, libraryId, onMutate }: FolderRowProps
   const [open, setOpen] = useExpanded(storageKey, false);
   const titleMuted = node.items.length === 0 && node.children.length === 0;
 
+  const dragData: DragData = {
+    section,
+    kind: "folder",
+    folderPath: node.path,
+    title: node.folder,
+  };
+  const dropData: DragData = { section, kind: "folder", folderPath: node.path };
+  const {
+    setNodeRef: setDragRef,
+    attributes,
+    listeners,
+    isDragging,
+  } = useDraggable({ id: `drag:folder:${section}:${node.path}`, data: dragData });
+  const { setNodeRef: setDropRef, isOver } = useDroppable({
+    id: `drop:folder:${section}:${node.path}`,
+    data: dropData,
+  });
+  const setRef = mergeRefs<HTMLButtonElement>(setDragRef, setDropRef);
+
   return (
     <SidebarMenuItem>
       <SidebarContextMenu
@@ -94,9 +125,18 @@ function FolderRow({ node, section, depth, libraryId, onMutate }: FolderRowProps
         onMutate={onMutate}
       >
         <SidebarMenuButton
+          render={
+            <button
+              type="button"
+              ref={setRef}
+              {...attributes}
+              {...listeners}
+            />
+          }
           onClick={() => setOpen(!open)}
           aria-expanded={open}
-          className={titleMuted ? "text-muted-foreground" : undefined}
+          data-over={isOver ? "true" : undefined}
+          className={`${titleMuted ? "text-muted-foreground" : ""}${isDragging ? " opacity-50" : ""} data-[over=true]:ring-1 data-[over=true]:ring-foreground/20 data-[over=true]:bg-sidebar-accent/50`}
         >
           <ChevronRight
             className={`transition-transform ${open ? "rotate-90" : ""}`}
@@ -144,6 +184,25 @@ function FolderSubRow({ node, section, depth, libraryId, onMutate }: FolderRowPr
   const storageKey = `${libraryId}:${section}:${node.path}`;
   const [open, setOpen] = useExpanded(storageKey, false);
 
+  const dragData: DragData = {
+    section,
+    kind: "folder",
+    folderPath: node.path,
+    title: node.folder,
+  };
+  const dropData: DragData = { section, kind: "folder", folderPath: node.path };
+  const {
+    setNodeRef: setDragRef,
+    attributes,
+    listeners,
+    isDragging,
+  } = useDraggable({ id: `drag:folder:${section}:${node.path}`, data: dragData });
+  const { setNodeRef: setDropRef, isOver } = useDroppable({
+    id: `drop:folder:${section}:${node.path}`,
+    data: dropData,
+  });
+  const setRef = mergeRefs<HTMLButtonElement>(setDragRef, setDropRef);
+
   return (
     <SidebarMenuSubItem>
       <SidebarContextMenu
@@ -152,9 +211,18 @@ function FolderSubRow({ node, section, depth, libraryId, onMutate }: FolderRowPr
         onMutate={onMutate}
       >
         <SidebarMenuSubButton
-          render={<button type="button" />}
+          render={
+            <button
+              type="button"
+              ref={setRef}
+              {...attributes}
+              {...listeners}
+            />
+          }
           onClick={() => setOpen(!open)}
           aria-expanded={open}
+          data-over={isOver ? "true" : undefined}
+          className={`${isDragging ? "opacity-50 " : ""}data-[over=true]:ring-1 data-[over=true]:ring-foreground/20 data-[over=true]:bg-sidebar-accent/50`}
         >
           <ChevronRight
             className={`transition-transform ${open ? "rotate-90" : ""}`}
@@ -210,6 +278,21 @@ function LeafRow({ item, section, libraryId, onMutate }: LeafRowProps) {
   const href = itemHref(section, item);
   const isActive = pathname === href;
   const hasTitle = typeof item.title === "string" && item.title.trim().length > 0;
+
+  const dragData: DragData = {
+    section,
+    kind: "leaf",
+    id: String(item.id),
+    folderPath: itemFolderPath(item),
+    title: item.title ?? undefined,
+  };
+  const {
+    setNodeRef,
+    attributes,
+    listeners,
+    isDragging,
+  } = useDraggable({ id: `drag:leaf:${section}:${item.id}`, data: dragData });
+
   return (
     <SidebarMenuItem>
       <SidebarContextMenu
@@ -224,9 +307,16 @@ function LeafRow({ item, section, libraryId, onMutate }: LeafRowProps) {
         onMutate={onMutate}
       >
         <SidebarMenuButton
-          render={<Link href={href} />}
+          render={
+            <Link
+              href={href}
+              ref={setNodeRef}
+              {...attributes}
+              {...listeners}
+            />
+          }
           isActive={isActive}
-          className={`data-[active=true]:bg-transparent data-[active=true]:border-l-2 data-[active=true]:border-foreground data-[active=true]:font-medium data-[active=true]:rounded-l-none data-[active=true]:pl-[calc(0.5rem-2px)]${hasTitle ? "" : " text-muted-foreground italic"}`}
+          className={`data-[active=true]:bg-transparent data-[active=true]:border-l-2 data-[active=true]:border-foreground data-[active=true]:font-medium data-[active=true]:rounded-l-none data-[active=true]:pl-[calc(0.5rem-2px)]${hasTitle ? "" : " text-muted-foreground italic"}${isDragging ? " opacity-50" : ""}`}
         >
           <span>{itemTitle(item)}</span>
         </SidebarMenuButton>
@@ -240,11 +330,33 @@ function SubLeafLink({ item, section }: { item: Item; section: ContentSection })
   const href = itemHref(section, item);
   const isActive = pathname === href;
   const hasTitle = typeof item.title === "string" && item.title.trim().length > 0;
+
+  const dragData: DragData = {
+    section,
+    kind: "leaf",
+    id: String(item.id),
+    folderPath: itemFolderPath(item),
+    title: item.title ?? undefined,
+  };
+  const {
+    setNodeRef,
+    attributes,
+    listeners,
+    isDragging,
+  } = useDraggable({ id: `drag:leaf:${section}:${item.id}`, data: dragData });
+
   return (
     <SidebarMenuSubButton
-      render={<Link href={href} />}
+      render={
+        <Link
+          href={href}
+          ref={setNodeRef}
+          {...attributes}
+          {...listeners}
+        />
+      }
       isActive={isActive}
-      className={`data-[active=true]:bg-transparent data-[active=true]:border-l-2 data-[active=true]:border-foreground data-[active=true]:font-medium data-[active=true]:rounded-l-none data-[active=true]:pl-[calc(0.5rem-2px)]${hasTitle ? "" : " text-muted-foreground italic"}`}
+      className={`data-[active=true]:bg-transparent data-[active=true]:border-l-2 data-[active=true]:border-foreground data-[active=true]:font-medium data-[active=true]:rounded-l-none data-[active=true]:pl-[calc(0.5rem-2px)]${hasTitle ? "" : " text-muted-foreground italic"}${isDragging ? " opacity-50" : ""}`}
     >
       <span>{itemTitle(item)}</span>
     </SidebarMenuSubButton>
