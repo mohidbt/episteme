@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -15,7 +16,7 @@ import {
   type TestUser,
 } from "../../../_test-utils";
 import { ensureMinIOReady } from "../../../_minio-setup";
-import { storage, paperCoverKey } from "@/lib/storage";
+import { storage, paperSourceKey, paperCoverKey } from "@/lib/storage";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SAMPLE_PDF_PATH = path.join(
@@ -26,6 +27,7 @@ const SAMPLE_PDF_PATH = path.join(
 let u: TestUser;
 let libraryId: number;
 let sampleBytes: Buffer;
+const createdPaperIds: string[] = [];
 
 beforeAll(async () => {
   await ensureMinIOReady();
@@ -42,6 +44,11 @@ beforeAll(async () => {
 }, 60_000);
 
 afterAll(async () => {
+  // Swallow 404s — some tests intentionally skip PUT, others already cleaned up.
+  for (const pid of createdPaperIds) {
+    await storage.deleteObject(paperSourceKey(pid)).catch(() => {});
+    await storage.deleteObject(paperCoverKey(pid)).catch(() => {});
+  }
   await deleteTestUser(u.id);
 });
 
@@ -59,7 +66,9 @@ async function initUpload(filename = "sample.pdf"): Promise<{ paperId: string; u
     }),
   );
   if (r.status !== 201) throw new Error(`init upload failed: ${r.status}`);
-  return r.json();
+  const body = await r.json();
+  createdPaperIds.push(body.paperId);
+  return body;
 }
 
 async function putSource(uploadUrl: string, bytes: Buffer): Promise<void> {
@@ -124,7 +133,7 @@ describe("POST /api/papers/:id/finalize", () => {
       expect(Array.isArray(paper.authors)).toBe(true);
       expect(paper.authors.length).toBeGreaterThan(0);
       expect(paper.authors).toContain("Ashish Vaswani");
-      expect(paper.storageUrl).toBe(`s3://episteme-dev/${paperId}/source.pdf`);
+      expect(paper.storageUrl).toBe(paperSourceKey(paperId));
 
       // Cover should exist — fetch via presigned GET.
       const coverUrl = await storage.getPresignedGet(paperCoverKey(paperId), 60);
@@ -186,5 +195,30 @@ describe("POST /api/papers/:id/finalize", () => {
       );
     },
     30_000,
+  );
+
+  it(
+    "rejects oversized source PDF with 413",
+    async () => {
+      const { paperId, uploadUrl } = await initUpload();
+      // Small PUT through the presigned URL (signature binds content-type,
+      // not length), then overwrite via the SDK with a >50 MB payload.
+      await putSource(uploadUrl, Buffer.alloc(16));
+      const big = randomBytes(50 * 1024 * 1024 + 1);
+      await storage.uploadObject(paperSourceKey(paperId), big, "application/pdf");
+
+      const r = await POST_FINALIZE(
+        req(`/api/papers/${paperId}/finalize`, { method: "POST", cookie: u.cookie }),
+        params({ id: paperId }),
+      );
+      expect(r.status).toBe(413);
+      expect((await r.json()).error).toBe("payload_too_large");
+
+      await DEL_PAPER(
+        req(`/api/papers/${paperId}`, { method: "DELETE", cookie: u.cookie }),
+        params({ id: paperId }),
+      );
+    },
+    60_000,
   );
 });

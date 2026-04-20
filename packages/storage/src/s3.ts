@@ -2,6 +2,7 @@ import {
   S3Client,
   PutObjectCommand,
   GetObjectCommand,
+  HeadObjectCommand,
   DeleteObjectCommand,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
@@ -27,6 +28,7 @@ export interface Storage {
     expiresInSec: number,
   ): Promise<string>;
   getPresignedGet(key: string, expiresInSec: number): Promise<string>;
+  getPresignedHead(key: string, expiresInSec: number): Promise<string>;
   deleteObject(key: string): Promise<void>;
 }
 
@@ -69,6 +71,14 @@ export function createStorage(cfg: StorageConfig): Storage {
       return getSignedUrl(
         client,
         new GetObjectCommand({ Bucket: cfg.bucket, Key: key }),
+        { expiresIn: expiresInSec },
+      );
+    },
+
+    async getPresignedHead(key, expiresInSec) {
+      return getSignedUrl(
+        client,
+        new HeadObjectCommand({ Bucket: cfg.bucket, Key: key }),
         { expiresIn: expiresInSec },
       );
     },

@@ -14,10 +14,12 @@ import {
   type TestUser,
 } from "../_test-utils";
 import { ensureMinIOReady } from "../_minio-setup";
+import { storage, paperSourceKey, paperCoverKey } from "@/lib/storage";
 
 let u: TestUser;
 let other: TestUser;
 let libraryId: number;
+const createdPaperIds: string[] = [];
 
 beforeAll(async () => {
   await ensureMinIOReady();
@@ -30,6 +32,10 @@ beforeAll(async () => {
 }, 60_000);
 
 afterAll(async () => {
+  for (const pid of createdPaperIds) {
+    await storage.deleteObject(paperSourceKey(pid)).catch(() => {});
+    await storage.deleteObject(paperCoverKey(pid)).catch(() => {});
+  }
   await deleteTestUser(u.id);
   await deleteTestUser(other.id);
 });
@@ -84,6 +90,7 @@ describe("papers", () => {
     );
     expect(r.status).toBe(201);
     const body = await r.json();
+    createdPaperIds.push(body.paperId);
     expect(typeof body.paperId).toBe("string");
     const url = new URL(body.uploadUrl);
     expect(url.searchParams.get("X-Amz-Signature")).toBeTruthy();
@@ -105,6 +112,7 @@ describe("papers", () => {
       }),
     );
     const { paperId } = await r.json();
+    createdPaperIds.push(paperId);
     const one = await GET_ID(req(`/api/papers/${paperId}`, { cookie: u.cookie }), params({ id: paperId }));
     const paper = await one.json();
     expect(paper.title).toBe("My Great Paper");
@@ -121,6 +129,7 @@ describe("papers", () => {
     const c = await POST(req("/api/papers", { method: "POST", cookie: u.cookie, body: JSON.stringify(initUpload()) }));
     expect(c.status).toBe(201);
     const { paperId } = await c.json();
+    createdPaperIds.push(paperId);
 
     const list = await GET(req(`/api/papers?libraryId=${libraryId}`, { cookie: u.cookie }));
     const rows = await list.json();
@@ -142,6 +151,7 @@ describe("papers", () => {
   it("ownership: cannot patch other's paper", async () => {
     const c = await POST(req("/api/papers", { method: "POST", cookie: u.cookie, body: JSON.stringify(initUpload()) }));
     const { paperId } = await c.json();
+    createdPaperIds.push(paperId);
     const r = await PATCH_ID(
       req(`/api/papers/${paperId}`, { method: "PATCH", cookie: other.cookie, body: JSON.stringify({ title: "hack" }) }),
       params({ id: paperId }),
@@ -163,6 +173,7 @@ describe("papers", () => {
       }),
     );
     const { paperId } = await c.json();
+    createdPaperIds.push(paperId);
     const r = await GET(req(`/api/papers?libraryId=${libraryId}&folderPath=foo/`, { cookie: u.cookie }));
     const rows = await r.json();
     expect(rows.length).toBeGreaterThan(0);
@@ -193,6 +204,7 @@ describe("papers", () => {
     expect(b.status).toBe(201);
     const aBody = await a.json();
     const bBody = await b.json();
+    createdPaperIds.push(aBody.paperId, bBody.paperId);
     expect(aBody.paperId).not.toBe(bBody.paperId);
 
     await DEL_ID(req(`/api/papers/${aBody.paperId}`, { method: "DELETE", cookie: u.cookie }), params({ id: aBody.paperId }));
@@ -208,6 +220,7 @@ describe("papers", () => {
       }),
     );
     const { paperId: firstId } = await first.json();
+    createdPaperIds.push(firstId);
 
     // Ensure a measurable addedAt delta (timestamp has ms resolution).
     await new Promise((r) => setTimeout(r, 15));
@@ -220,6 +233,7 @@ describe("papers", () => {
       }),
     );
     const { paperId: secondId } = await second.json();
+    createdPaperIds.push(secondId);
 
     const list = await GET(
       req(`/api/papers?libraryId=${libraryId}&folderPath=order/`, { cookie: u.cookie }),

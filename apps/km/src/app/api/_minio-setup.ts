@@ -6,14 +6,13 @@ import { storage, paperSourceKey } from "@/lib/storage";
 const REPO_ROOT = new URL("../../../../../", import.meta.url).pathname;
 
 async function waitForBucket(timeoutMs = 30_000): Promise<void> {
-  // Probe the bucket by asking for a presigned GET (which requires the client
-  // to be reachable) and issuing a HEAD for a guaranteed-missing key. MinIO
-  // returns 404 for missing objects once the bucket exists, 403 / connection
-  // error otherwise.
+  // Probe the bucket by issuing a HEAD for a guaranteed-missing key with a
+  // HEAD-signed URL. MinIO returns 404 for missing objects once the bucket
+  // exists, other statuses / connection errors while still coming up.
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     try {
-      const url = await storage.getPresignedGet(
+      const url = await storage.getPresignedHead(
         paperSourceKey("__probe-bucket-ready__"),
         30,
       );
