@@ -1,0 +1,14 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: episteme
+      POSTGRES_PASSWORD: episteme
+      POSTGRES_DB: episteme
+    ports:
+      - "5432:5432"
+    volumes:
+      - episteme_pgdata:/var/lib/postgresql/data
+
+volumes:
+  episteme_pgdata:

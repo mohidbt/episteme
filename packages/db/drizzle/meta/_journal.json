@@ -1,0 +1,69 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1775983138885,
+      "tag": "0000_goofy_spencer_smythe",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1776017397883,
+      "tag": "0001_aromatic_junta",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1776086251531,
+      "tag": "0002_spicy_tattoo",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1776111245790,
+      "tag": "0003_powerful_lady_bullseye",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1776115262987,
+      "tag": "0004_drop_user_comments",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1776412132614,
+      "tag": "0005_phase_2_1_ai_highlight_runs",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1776591425441,
+      "tag": "0006_overjoyed_phantom_reporter",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1776591559078,
+      "tag": "0007_puzzling_secret_warriors",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1776621324582,
+      "tag": "0008_awesome_proudstar",
+      "breakpoints": true
+    }
+  ]
+}

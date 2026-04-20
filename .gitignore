@@ -1,0 +1,24 @@
+# Internal planning — not for public eyes
+episteme-km-prd.md
+docs/superpowers/plans/
+docs/superpowers/specs/
+
+node_modules
+.pnpm-store
+dist
+.next
+.turbo
+.DS_Store
+*.log
+.env
+.env.local
+.env.*.local
+.vercel
+coverage
+playwright-report
+test-results
+**/tsconfig.tsbuildinfo
+**/.venv
+**/__pycache__
+**/*.egg-info
+**/uploads

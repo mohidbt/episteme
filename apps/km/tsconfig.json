@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "plugins": [{ "name": "next" }],
+    "paths": {
+      "@/*": ["./src/*"],
+      "@episteme/db": ["../../packages/db/src/index.ts"],
+      "@episteme/db/*": ["../../packages/db/src/*"],
+      "@episteme/auth": ["../../packages/auth/src/index.ts"],
+      "@episteme/auth/*": ["../../packages/auth/src/*"]
+    }
+  },
+  "include": ["next-env.d.ts", "src/**/*.ts", "src/**/*.tsx", ".next/types/**/*.ts"],
+  "exclude": ["node_modules"]
+}
