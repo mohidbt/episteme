@@ -14,7 +14,7 @@ export const references_ = pgTable(
     cslJson: jsonb("csl_json"),
     paperId: uuid("paper_id").references(() => papers.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at").defaultNow().notNull(),
-    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull().$onUpdate(() => new Date()),
   },
   (t) => [
     uniqueIndex("references_library_key_unique").on(t.libraryId, t.citationKey),

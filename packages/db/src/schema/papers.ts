@@ -17,7 +17,7 @@ export const papers = pgTable(
     doi: text("doi"),
     venue: text("venue"),
     addedAt: timestamp("added_at").defaultNow().notNull(),
-    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull().$onUpdate(() => new Date()),
   },
   (t) => [
     index("papers_library_idx").on(t.libraryId),

@@ -71,6 +71,13 @@
       "when": 1776690453568,
       "tag": "0009_unusual_natasha_romanoff",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1776690966945,
+      "tag": "0010_lowly_cerise",
+      "breakpoints": true
     }
   ]
 }

@@ -10,5 +10,8 @@ export const paperEmbeddings = pgTable(
     content: text("content").notNull(),
     embedding: vector("embedding", { dimensions: 1536 }),
   },
-  (t) => [index("paper_embeddings_paper_idx").on(t.paperId)],
+  (t) => [
+    index("paper_embeddings_paper_idx").on(t.paperId),
+    index("paper_embeddings_embedding_idx").using("ivfflat", t.embedding.op("vector_cosine_ops")).with({ lists: 100 }),
+  ],
 );

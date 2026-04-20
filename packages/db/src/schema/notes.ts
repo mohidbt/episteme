@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { pgTable, uuid, text, timestamp, integer, boolean, jsonb, customType, pgEnum, uniqueIndex, index } from "drizzle-orm/pg-core";
 import { libraries } from "./libraries";
 import { user } from "./auth";
@@ -25,11 +26,11 @@ export const notes = pgTable(
     isPublic: boolean("is_public").default(false).notNull(),
     publicSlug: text("public_slug"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
-    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull().$onUpdate(() => new Date()),
   },
   (t) => [
     uniqueIndex("notes_user_slug_unique").on(t.userId, t.slug),
-    uniqueIndex("notes_user_public_slug_unique").on(t.userId, t.publicSlug),
+    uniqueIndex("notes_user_public_slug_unique").on(t.userId, t.publicSlug).where(sql`public_slug IS NOT NULL`),
     index("notes_library_folder_idx").on(t.libraryId, t.folderPath),
   ],
 );

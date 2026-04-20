@@ -10,5 +10,8 @@ export const noteEmbeddings = pgTable(
     content: text("content").notNull(),
     embedding: vector("embedding", { dimensions: 1536 }),
   },
-  (t) => [index("note_embeddings_note_idx").on(t.noteId)],
+  (t) => [
+    index("note_embeddings_note_idx").on(t.noteId),
+    index("note_embeddings_embedding_idx").using("ivfflat", t.embedding.op("vector_cosine_ops")).with({ lists: 100 }),
+  ],
 );
