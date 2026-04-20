@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
+import { HeadBucketCommand, S3Client } from "@aws-sdk/client-s3";
 import { beforeAll, describe, expect, it } from "vitest";
 import { createStorage, type StorageConfig } from "../s3";
 
@@ -12,18 +13,23 @@ const CFG: StorageConfig = {
   forcePathStyle: true,
 };
 
-async function waitForMinio(url: string, timeoutMs = 30_000): Promise<void> {
+async function waitForBucket(cfg: StorageConfig, timeoutMs = 30_000): Promise<void> {
+  const client = new S3Client({
+    endpoint: cfg.endpoint,
+    region: cfg.region ?? "us-east-1",
+    forcePathStyle: true,
+    credentials: { accessKeyId: cfg.accessKey, secretAccessKey: cfg.secretKey },
+  });
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     try {
-      const res = await fetch(url);
-      if (res.ok) return;
+      await client.send(new HeadBucketCommand({ Bucket: cfg.bucket }));
+      return;
     } catch {
-      // not up yet
+      await new Promise((r) => setTimeout(r, 500));
     }
-    await new Promise((r) => setTimeout(r, 500));
   }
-  throw new Error(`MinIO not ready at ${url} within ${timeoutMs}ms`);
+  throw new Error(`bucket ${cfg.bucket} not ready within ${timeoutMs}ms`);
 }
 
 describe("createStorage - presigned URLs (unit)", () => {
@@ -66,9 +72,7 @@ describe("createStorage - round trip against MinIO (integration)", () => {
     if (res.status !== 0) {
       throw new Error(`docker compose up failed with status ${res.status}`);
     }
-    await waitForMinio("http://localhost:9000/minio/health/ready");
-    // minio-init is a one-shot; give it a moment to finish creating the bucket
-    await new Promise((r) => setTimeout(r, 1500));
+    await waitForBucket(CFG);
   });
 
   it("uploads, fetches via presigned GET, then deletes", async () => {
