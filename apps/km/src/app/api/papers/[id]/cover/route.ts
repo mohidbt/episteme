@@ -17,5 +17,8 @@ export async function GET(req: Request, { params }: Ctx) {
   const res = await requireOwned<PaperRow>(papers, id, userId);
   if (!res.ok) return jsonError(res.status, res.status === 404 ? "not_found" : "forbidden");
   const url = await storage.getPresignedGet(paperCoverKey(id), PRESIGN_TTL_SEC);
-  return Response.redirect(url, 302);
+  return new Response(null, {
+    status: 302,
+    headers: { location: url, "cache-control": "private, no-store" },
+  });
 }
