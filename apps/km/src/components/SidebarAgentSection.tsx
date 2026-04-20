@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Brain, Settings, Sparkles } from "lucide-react";
+import { Bot, Brain, Settings, Sparkles } from "lucide-react";
 import {
   SidebarGroup,
   SidebarGroupContent,
@@ -22,7 +22,8 @@ export function SidebarAgentSection() {
   const pathname = usePathname();
   return (
     <SidebarGroup>
-      <SidebarGroupLabel className="text-[11px] font-medium tracking-[0.14em] uppercase text-muted-foreground">
+      <SidebarGroupLabel className="gap-2 text-[11px] font-medium tracking-[0.14em] uppercase text-muted-foreground">
+        <Bot data-icon="inline-start" aria-hidden />
         Agent
       </SidebarGroupLabel>
       <SidebarGroupContent>
