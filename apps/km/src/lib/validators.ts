@@ -78,7 +78,5 @@ export const noteLinkCreateSchema = z.object({
   sourceNoteId: z.string(),
   targetKind: z.enum(["note", "paper", "reference"]),
   targetId: z.string().nullable().optional(),
-  targetTitleRaw: z.string().nullable().optional(),
-  positionStart: z.number().int().optional(),
-  positionEnd: z.number().int().optional(),
+  targetTitleRaw: nonEmptyTrimmed(1000),
 });
