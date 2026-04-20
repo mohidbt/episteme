@@ -87,6 +87,24 @@ describe("sanitizeFilename", () => {
     expect(sanitizeFilename("paper.pdf   ")).toBe("paper.pdf");
     expect(sanitizeFilename("  paper.pdf")).toBe("paper.pdf");
   });
+
+  it("prefixes Windows-reserved basenames", () => {
+    expect(sanitizeFilename("CON.pdf")).toBe("_CON.pdf");
+  });
+
+  it("strips embedded null bytes", () => {
+    expect(sanitizeFilename("foo\x00bar.pdf")).toBe("foobar.pdf");
+  });
+
+  it("strips leading ASCII control chars", () => {
+    expect(sanitizeFilename("\x1bfoo.pdf")).toBe("foo.pdf");
+  });
+
+  it("caps basename at 200 UTF-8 bytes while preserving .pdf", () => {
+    const out = sanitizeFilename("论文".repeat(50) + ".pdf");
+    expect(Buffer.byteLength(out, "utf8")).toBeLessThanOrEqual(204);
+    expect(out.endsWith(".pdf")).toBe(true);
+  });
 });
 
 describe("filenameToTitle", () => {

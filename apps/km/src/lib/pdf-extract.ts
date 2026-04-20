@@ -1,11 +1,48 @@
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import type { TextItem } from "pdfjs-dist/types/src/display/api";
+import { createCanvas, type Canvas } from "@napi-rs/canvas";
 
 export interface PaperMetadata {
   title: string;
   authors: string[];
   doi?: string;
   year?: number;
+}
+
+// pdfjs-dist exception class names that map to "malformed/unreadable PDF"
+// rather than a programmer error. We match on `.name` because not all of
+// these are reliably importable from pdfjs-dist across versions.
+const PDFJS_MALFORMED_NAMES = new Set([
+  "PasswordException",
+  "InvalidPDFException",
+  "UnknownErrorException",
+  "MissingPDFException",
+]);
+
+function isMalformedPdfError(err: unknown): boolean {
+  return (
+    err instanceof Error &&
+    typeof err.name === "string" &&
+    PDFJS_MALFORMED_NAMES.has(err.name)
+  );
+}
+
+// Public CanvasFactory for pdfjs-dist backed by @napi-rs/canvas. pdfjs v5
+// auto-selects one under Node, but that path exposes only private/internal
+// getters. Passing our own keeps us on the public API.
+class NodeCanvasFactory {
+  create(width: number, height: number) {
+    const canvas = createCanvas(width, height);
+    return { canvas, context: canvas.getContext("2d") };
+  }
+  reset(ctx: { canvas: Canvas }, width: number, height: number) {
+    ctx.canvas.width = width;
+    ctx.canvas.height = height;
+  }
+  destroy(ctx: { canvas: Canvas }) {
+    ctx.canvas.width = 0;
+    ctx.canvas.height = 0;
+  }
 }
 
 // DOI per crossref: 10.<registrant>/<suffix>. Suffix chars are tight enough
@@ -23,13 +60,54 @@ const YEAR_RE = /\b(?:19|20)\d{2}\b/;
 const PUB_YEAR_RE =
   /(?:Conference|Proceedings|Published|NeurIPS|NIPS|ICML|ICLR|AAAI|ACL|EMNLP|NAACL|CVPR|ECCV|ICCV|JMLR|TACL)[^.\n]{0,80}?\b((?:19|20)\d{2})\b/;
 
-/** Strip path traversal / directory segments and trim whitespace. Preserves unicode. */
+// Windows reserved basenames (case-insensitive). If the basename (sans ext)
+// matches, we prefix with "_" to keep the filename writable on Windows and
+// portable across object stores that reject these names.
+const WIN_RESERVED = new Set([
+  "CON", "PRN", "AUX", "NUL",
+  "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+  "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
+]);
+
+// Maximum UTF-8 byte length for the basename portion (excluding extension).
+const MAX_BASENAME_BYTES = 200;
+
+/**
+ * Sanitize a raw filename for safe use as a disk / object-store key:
+ *   - strip path segments (both "/" and "\")
+ *   - strip null bytes + ASCII control chars
+ *   - prefix Windows-reserved basenames with "_"
+ *   - cap the basename at 200 UTF-8 bytes, preserving a trailing `.pdf`
+ *
+ * Preserves unicode.
+ */
 export function sanitizeFilename(raw: string): string {
   const trimmed = raw.trim();
   // Take only the final path segment — handles both "/" and "\".
   const lastSlash = Math.max(trimmed.lastIndexOf("/"), trimmed.lastIndexOf("\\"));
-  const base = lastSlash >= 0 ? trimmed.slice(lastSlash + 1) : trimmed;
-  return base;
+  let base = lastSlash >= 0 ? trimmed.slice(lastSlash + 1) : trimmed;
+
+  // Drop null bytes and C0/C1-ish ASCII control chars (0x00–0x1f, 0x7f).
+  base = base.replace(/[\x00-\x1f\x7f]/g, "");
+
+  // Separate extension (only treat `.pdf` specially — the field everything
+  // else downstream uses is the basename).
+  const pdfMatch = base.match(/\.pdf$/i);
+  const ext = pdfMatch ? pdfMatch[0] : "";
+  let stem = ext ? base.slice(0, -ext.length) : base;
+
+  // Windows-reserved basename — case-insensitive — prefix with "_".
+  if (WIN_RESERVED.has(stem.toUpperCase())) {
+    stem = `_${stem}`;
+  }
+
+  // Cap stem at 200 UTF-8 bytes. Drop chars (not bytes) so we don't split a
+  // multi-byte sequence. `.pdf` is always ASCII so we don't count it.
+  while (Buffer.byteLength(stem, "utf8") > MAX_BASENAME_BYTES) {
+    stem = stem.slice(0, -1);
+  }
+
+  return stem + ext;
 }
 
 /** Convert a raw filename into a fallback title: sanitize then drop a trailing .pdf. */
@@ -221,8 +299,11 @@ export async function extractMetadata(
       isEvalSupported: false,
       useSystemFonts: false,
     }).promise;
-  } catch {
-    return fallback(fallbackFilename);
+  } catch (err) {
+    // Only swallow the known "this PDF can't be parsed" cases. Everything
+    // else (OOM, I/O, bugs) must propagate so it surfaces in logs.
+    if (isMalformedPdfError(err)) return fallback(fallbackFilename);
+    throw err;
   }
 
   try {
@@ -264,30 +345,30 @@ export async function extractMetadata(
 }
 
 export async function extractCover(bytes: Uint8Array): Promise<Uint8Array> {
+  const canvasFactory = new NodeCanvasFactory();
+  // pdfjs's DocumentInitParameters and RenderParameters types don't surface
+  // `canvasFactory` in the .d.ts we consume, but both runtime objects accept
+  // it. Cast the params bag at the single boundary.
   const doc = await getDocument({
     // Copy — see note in extractMetadata; pdfjs-dist detaches the buffer.
     data: new Uint8Array(bytes),
     isEvalSupported: false,
     useSystemFonts: false,
-  }).promise;
+    canvasFactory,
+  } as unknown as Parameters<typeof getDocument>[0]).promise;
   try {
     const page = await doc.getPage(1);
     const viewport = page.getViewport({ scale: 1.5 });
-    // pdfjs-dist v5 autoselects NodeCanvasFactory (backed by @napi-rs/canvas)
-    // when running under Node — we reuse that internal factory to avoid
-    // shipping our own.
-    const factory = (page as unknown as {
-      _transport: { canvasFactory: { create(w: number, h: number): { canvas: unknown; context: unknown } } };
-    })._transport.canvasFactory;
-    const { canvas, context } = factory.create(viewport.width, viewport.height);
-    // pdfjs v5 types expect `canvas: HTMLCanvasElement`; under Node the
-    // @napi-rs/canvas Canvas is a drop-in replacement — cast to satisfy TS.
+    const { canvas, context } = canvasFactory.create(viewport.width, viewport.height);
     await page.render({
-      canvas: canvas as HTMLCanvasElement,
-      canvasContext: context as CanvasRenderingContext2D,
+      // pdfjs v5 types expect DOM canvas/context; under Node @napi-rs/canvas
+      // is a drop-in replacement — cast at the boundary.
+      canvas: canvas as unknown as HTMLCanvasElement,
+      canvasContext: context as unknown as CanvasRenderingContext2D,
       viewport,
-    }).promise;
-    const png = (canvas as { toBuffer(fmt: string): Buffer }).toBuffer("image/png");
+      canvasFactory,
+    } as Parameters<typeof page.render>[0]).promise;
+    const png = canvas.toBuffer("image/png");
     return new Uint8Array(png.buffer, png.byteOffset, png.byteLength);
   } finally {
     await doc.destroy();
