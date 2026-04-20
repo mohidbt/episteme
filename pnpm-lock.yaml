@@ -31,6 +31,9 @@ importers:
       '@episteme/markdown':
         specifier: workspace:*
         version: link:../../packages/markdown
+      '@napi-rs/canvas':
+        specifier: ^0.1.80
+        version: 0.1.99
       better-auth:
         specifier: ^1.6.0
         version: 1.6.5(@opentelemetry/api@1.9.1)(drizzle-kit@0.31.10)(drizzle-orm@0.45.2(@opentelemetry/api@1.9.1)(kysely@0.28.16)(postgres@3.4.9))(next@16.2.2(@opentelemetry/api@1.9.1)(@playwright/test@1.59.1)(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(vitest@4.1.4(@opentelemetry/api@1.9.1)(@types/node@20.19.39)(happy-dom@20.9.0)(jsdom@26.1.0)(msw@2.13.4(@types/node@20.19.39)(typescript@5.9.3))(vite@8.0.9(@types/node@20.19.39)(esbuild@0.27.7)(jiti@2.6.1)(tsx@4.21.0)))
@@ -52,6 +55,9 @@ importers:
       next-themes:
         specifier: ^0.4.6
         version: 0.4.6(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+      pdfjs-dist:
+        specifier: 5.4.296
+        version: 5.4.296
       react:
         specifier: 19.2.4
         version: 19.2.4
@@ -6744,7 +6750,6 @@ snapshots:
       '@napi-rs/canvas-linux-x64-musl': 0.1.99
       '@napi-rs/canvas-win32-arm64-msvc': 0.1.99
       '@napi-rs/canvas-win32-x64-msvc': 0.1.99
-    optional: true
 
   '@napi-rs/wasm-runtime@0.2.12':
     dependencies:
