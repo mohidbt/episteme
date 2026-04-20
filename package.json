@@ -10,9 +10,9 @@
     "build": "pnpm -r --parallel build",
     "typecheck": "pnpm -r --parallel typecheck",
     "lint": "pnpm -r --parallel lint",
-    "db:migrate": "pnpm -F @episteme/db drizzle-kit migrate",
-    "db:generate": "pnpm -F @episteme/db drizzle-kit generate",
-    "db:studio": "pnpm -F @episteme/db drizzle-kit studio"
+    "db:migrate": "pnpm -F @episteme/db migrate",
+    "db:generate": "pnpm -F @episteme/db generate",
+    "db:studio": "pnpm -F @episteme/db studio"
   },
   "engines": {
     "node": ">=20"

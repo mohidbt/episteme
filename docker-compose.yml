@@ -6,7 +6,7 @@ services:
       POSTGRES_PASSWORD: episteme
       POSTGRES_DB: episteme
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - episteme_pgdata:/var/lib/postgresql/data
 
