@@ -7,6 +7,17 @@ const bytea = customType<{ data: Uint8Array; notNull: false }>({
   dataType() { return "bytea"; },
 });
 
+// Minimal ProseMirror JSON shape. Kept local to avoid coupling @episteme/db to tiptap.
+// Mirrors the relevant shape of `JSONContent` from @tiptap/core.
+export type ProseMirrorJSON = {
+  type?: string;
+  attrs?: Record<string, unknown>;
+  content?: ProseMirrorJSON[];
+  marks?: { type: string; attrs?: Record<string, unknown> }[];
+  text?: string;
+  [key: string]: unknown;
+};
+
 export const noteTypeEnum = pgEnum("note_type", ["md", "latex", "pdf-ref"]);
 
 export const notes = pgTable(
@@ -20,7 +31,7 @@ export const notes = pgTable(
     title: text("title").notNull(),
     slug: text("slug").notNull(),
     contentMd: text("content_md").default("").notNull(),
-    contentJson: jsonb("content_json"),
+    contentJson: jsonb("content_json").$type<ProseMirrorJSON>(),
     yjsState: bytea("yjs_state"),
     noteType: noteTypeEnum("note_type").default("md").notNull(),
     isPublic: boolean("is_public").default(false).notNull(),

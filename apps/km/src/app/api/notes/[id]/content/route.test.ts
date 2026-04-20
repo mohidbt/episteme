@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment node
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { PATCH } from "./route";
@@ -92,8 +92,11 @@ describe("PATCH /api/notes/:id/content", () => {
       params({ id: noteId }),
     );
     expect(r.status).toBe(204);
+    expect(await r.text()).toBe("");
     const [row] = await db.select().from(notes).where(eq(notes.id, noteId));
     expect(row.contentMd).toBe(md);
-    expect(row.contentJson).not.toBeNull();
+    // TODO(phase-0.2 follow-up): assert contentJson non-null once a DOM-free
+    // md→PM JSON converter replaces Tiptap on the server. See saveNoteMd.
+    expect(row.contentJson).toBeNull();
   });
 });
