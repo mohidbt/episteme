@@ -58,7 +58,7 @@ beforeAll(async () => {
     }),
   );
 
-  // 1 reference
+  // 2 references: one with cslJson.title, one without (to verify fallback)
   await POST_REF(
     req("/api/references", {
       method: "POST",
@@ -66,7 +66,18 @@ beforeAll(async () => {
       body: JSON.stringify({
         libraryId,
         citationKey: "smith2020",
-        cslJson: { title: "A Ref" },
+        cslJson: { title: "Smith 2020 — Real Title" },
+        folderPath: "",
+      }),
+    }),
+  );
+  await POST_REF(
+    req("/api/references", {
+      method: "POST",
+      cookie: u.cookie,
+      body: JSON.stringify({
+        libraryId,
+        citationKey: "jones2021",
         folderPath: "",
       }),
     }),
@@ -135,8 +146,16 @@ describe("tree", () => {
     const paperFolders = body.sections.papers.items.map((x: any) => x.folder_path).sort();
     expect(paperFolders).toEqual(["", "biology/"]);
 
-    expect(body.sections.references.items).toHaveLength(1);
-    expect(body.sections.references.items[0].title).toBe("smith2020");
+    expect(body.sections.references.items).toHaveLength(2);
+    const refs = body.sections.references.items;
+    const smith = refs.find((r: any) => r.citation_key === "smith2020");
+    const jones = refs.find((r: any) => r.citation_key === "jones2021");
+    expect(smith).toBeDefined();
+    expect(smith.title).toBe("Smith 2020 — Real Title");
+    expect(smith.citation_key).toBe("smith2020");
+    expect(jones).toBeDefined();
+    expect(jones.title).toBe("jones2021");
+    expect(jones.citation_key).toBe("jones2021");
 
     expect(body.sections.notes.items).toHaveLength(3);
     for (const n of body.sections.notes.items) {
