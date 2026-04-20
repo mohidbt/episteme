@@ -1,5 +1,5 @@
 import { Editor, type JSONContent } from "@tiptap/core";
-import { createExtensions } from "./extensions.js";
+import { createExtensions } from "./extensions";
 
 export function mdToProseMirror(md: string): JSONContent {
   const editor = new Editor({

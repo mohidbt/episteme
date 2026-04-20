@@ -31,6 +31,14 @@ export default defineConfig({
         __dirname,
         "../../packages/db/src/index.ts",
       ),
+      "@episteme/markdown": path.resolve(
+        __dirname,
+        "../../packages/markdown/src/index.ts",
+      ),
+      "@episteme/editor": path.resolve(
+        __dirname,
+        "../../packages/editor/src/index.ts",
+      ),
     },
   },
 });

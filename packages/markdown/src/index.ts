@@ -1,3 +1,3 @@
-export { mdToProseMirror } from "./md-to-prosemirror.js";
-export { proseMirrorToMd } from "./prosemirror-to-md.js";
-export { createExtensions } from "./extensions.js";
+export { mdToProseMirror } from "./md-to-prosemirror";
+export { proseMirrorToMd } from "./prosemirror-to-md";
+export { createExtensions } from "./extensions";

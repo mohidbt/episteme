@@ -1,5 +1,5 @@
 import { Editor, type JSONContent } from "@tiptap/core";
-import { createExtensions } from "./extensions.js";
+import { createExtensions } from "./extensions";
 
 // Post-process the tiptap-markdown output to match our preferred dialect:
 // italic `*..*` -> `_.._` is handled by overriding the italic mark's

@@ -7,7 +7,9 @@
       "@episteme/db": ["../../packages/db/src/index.ts"],
       "@episteme/db/*": ["../../packages/db/src/*"],
       "@episteme/auth": ["../../packages/auth/src/index.ts"],
-      "@episteme/auth/*": ["../../packages/auth/src/*"]
+      "@episteme/auth/*": ["../../packages/auth/src/*"],
+      "@episteme/editor": ["../../packages/editor/src/index.ts"],
+      "@episteme/markdown": ["../../packages/markdown/src/index.ts"]
     }
   },
   "include": ["next-env.d.ts", "src/**/*.ts", "src/**/*.tsx", ".next/types/**/*.ts"],
