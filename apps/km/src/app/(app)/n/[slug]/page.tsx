@@ -4,6 +4,8 @@ import { and, eq } from "drizzle-orm";
 import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { notes } from "@episteme/db/schema";
+import { getDefaultLibrary } from "@/lib/default-library";
+import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { NoteEditor } from "./NoteEditor";
 
 export default async function NotePage({
@@ -19,8 +21,17 @@ export default async function NotePage({
     .from(notes)
     .where(and(eq(notes.userId, session.user.id), eq(notes.slug, slug)));
   if (!note) notFound();
+  const library = await getDefaultLibrary(session.user.id);
   return (
     <div className="mx-auto max-w-3xl p-6">
+      {library && (
+        <Breadcrumbs
+          libraryName={library.name}
+          section="notes"
+          folderPath={note.folderPath ?? ""}
+          title={note.title}
+        />
+      )}
       <h1
         className="text-2xl font-semibold mb-3"
         data-testid="note-title"
