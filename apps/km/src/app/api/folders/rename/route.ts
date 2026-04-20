@@ -48,12 +48,14 @@ export async function POST(req: Request) {
   const result = await db.transaction(async (tx) => {
     const updated = await tx
       .update(table)
-      .set({ folderPath: sql`REPLACE(${table.folderPath}, ${oldPath}, ${newPath})` })
+      .set({
+        folderPath: sql`${newPath} || SUBSTRING(${table.folderPath} FROM ${oldPath.length + 1}::int)`,
+      })
       .where(
         and(
           eq(table.userId, userId),
           eq(table.libraryId, libraryId),
-          or(eq(table.folderPath, oldPath), like(table.folderPath, sql`${oldPath} || '%'`)),
+          or(eq(table.folderPath, oldPath), like(table.folderPath, `${oldPath}%`)),
         ),
       )
       .returning({ id: table.id });

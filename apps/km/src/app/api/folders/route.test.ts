@@ -152,6 +152,35 @@ describe("folders/rename", () => {
     await db.delete(notes).where(and(eq(notes.userId, u.id), eq(notes.libraryId, libraryId)));
   });
 
+  it("rename substitutes only the prefix, not all occurrences", async () => {
+    const nRoot = await seedNote("a/a/b/", "pathological root");
+    const nSub = await seedNote("a/a/b/sub/", "pathological sub");
+    const nUnrelated = await seedNote("other/a/", "unrelated with a");
+
+    const r = await POST_RENAME(
+      req("/api/folders/rename", {
+        method: "POST",
+        cookie: u.cookie,
+        body: JSON.stringify({
+          libraryId,
+          section: "notes",
+          oldPath: "a/",
+          newPath: "new/",
+        }),
+      }),
+    );
+    expect(r.status).toBe(200);
+    const j = await r.json();
+    expect(j.ok).toBe(true);
+    expect(j.updatedCount).toBe(2);
+
+    expect(await getNoteFolderPath(nRoot)).toBe("new/a/b/");
+    expect(await getNoteFolderPath(nSub)).toBe("new/a/b/sub/");
+    expect(await getNoteFolderPath(nUnrelated)).toBe("other/a/");
+
+    await db.delete(notes).where(and(eq(notes.userId, u.id), eq(notes.libraryId, libraryId)));
+  });
+
   it("cross-table isolation", async () => {
     const paperId = await seedPaper("inbox/", "p.pdf");
     const noteId = await seedNote("inbox/", "note in inbox");
