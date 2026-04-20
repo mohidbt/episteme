@@ -1,0 +1,23 @@
+import { pgTable, uuid, text, timestamp, integer, jsonb, uniqueIndex, index } from "drizzle-orm/pg-core";
+import { libraries } from "./libraries";
+import { papers } from "./papers";
+import { user } from "./auth";
+
+export const references_ = pgTable(
+  "references",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    libraryId: integer("library_id").notNull().references(() => libraries.id, { onDelete: "cascade" }),
+    userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+    folderPath: text("folder_path").default("").notNull(),
+    citationKey: text("citation_key").notNull(),
+    cslJson: jsonb("csl_json"),
+    paperId: uuid("paper_id").references(() => papers.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("references_library_key_unique").on(t.libraryId, t.citationKey),
+    index("references_library_folder_idx").on(t.libraryId, t.folderPath),
+  ],
+);
