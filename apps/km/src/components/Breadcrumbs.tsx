@@ -8,7 +8,7 @@ interface BreadcrumbsProps {
   libraryName: string;
   section: Section;
   folderPath: string;
-  title: string;
+  title?: string;
 }
 
 const SECTION_LABEL: Record<Section, string> = {
@@ -37,8 +37,12 @@ export function Breadcrumbs({ libraryName, section, folderPath, title }: Breadcr
           <span>{seg}</span>
         </span>
       ))}
-      <ChevronRight className="size-3" aria-hidden />
-      <span className="normal-case tracking-normal text-foreground">{title}</span>
+      {title !== undefined && (
+        <>
+          <ChevronRight className="size-3" aria-hidden />
+          <span className="normal-case tracking-normal text-foreground">{title}</span>
+        </>
+      )}
     </nav>
   );
 }
