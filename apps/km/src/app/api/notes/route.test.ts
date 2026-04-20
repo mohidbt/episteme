@@ -90,6 +90,34 @@ describe("notes", () => {
     expect((await changed.json()).slug).toBe("brand-new");
   });
 
+  it("PATCH with unchanged title keeps slug (no -2 suffix)", async () => {
+    const create = await POST(req("/api/notes", { method: "POST", userId, body: JSON.stringify(noteBody({ title: "My Note" })) }));
+    const note = await create.json();
+    expect(note.slug).toBe("my-note");
+
+    const patched = await PATCH_ID(
+      req(`/api/notes/${note.id}`, { method: "PATCH", userId, body: JSON.stringify({ title: "My Note" }) }),
+      params({ id: note.id }),
+    );
+    const patchedJson = await patched.json();
+    expect(patchedJson.slug).toBe("my-note");
+  });
+
+  it("PATCH to title matching another note's title produces -2 slug", async () => {
+    const occupy = await POST(req("/api/notes", { method: "POST", userId, body: JSON.stringify(noteBody({ title: "Shared Title" })) }));
+    expect((await occupy.json()).slug).toBe("shared-title");
+
+    const other = await POST(req("/api/notes", { method: "POST", userId, body: JSON.stringify(noteBody({ title: "Other Title" })) }));
+    const otherNote = await other.json();
+    expect(otherNote.slug).toBe("other-title");
+
+    const patched = await PATCH_ID(
+      req(`/api/notes/${otherNote.id}`, { method: "PATCH", userId, body: JSON.stringify({ title: "Shared Title" }) }),
+      params({ id: otherNote.id }),
+    );
+    expect((await patched.json()).slug).toBe("shared-title-2");
+  });
+
   it("golden path CRUD + ownership", async () => {
     const c = await POST(req("/api/notes", { method: "POST", userId, body: JSON.stringify(noteBody({ title: "CRUD Note" })) }));
     const note = await c.json();
