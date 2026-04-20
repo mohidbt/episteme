@@ -2,6 +2,7 @@
 episteme-km-prd.md
 docs/superpowers/plans/
 docs/superpowers/specs/
+**/CLAUDE.md
 
 node_modules
 .pnpm-store
