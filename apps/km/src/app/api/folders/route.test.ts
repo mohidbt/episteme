@@ -207,6 +207,72 @@ describe("folders/rename", () => {
   });
 });
 
+describe("folders/rename C1 regression — LIKE wildcard injection", () => {
+  it("400 when oldPath contains _ wildcard and does not move unrelated rows", async () => {
+    const nX = await seedNote("aXtest/", "x note");
+    const nY = await seedNote("aYtest/", "y note");
+
+    const r = await POST_RENAME(
+      req("/api/folders/rename", {
+        method: "POST",
+        cookie: u.cookie,
+        body: JSON.stringify({ libraryId, section: "notes", oldPath: "a_test/", newPath: "renamed/" }),
+      }),
+    );
+    expect(r.status).toBe(400);
+
+    // rows must be untouched
+    expect(await getNoteFolderPath(nX)).toBe("aXtest/");
+    expect(await getNoteFolderPath(nY)).toBe("aYtest/");
+
+    await db.delete(notes).where(and(eq(notes.userId, u.id), eq(notes.libraryId, libraryId)));
+  });
+});
+
+describe("folders/delete C1 regression — LIKE wildcard injection", () => {
+  it("400 when path contains _ wildcard and does not delete unrelated rows", async () => {
+    const nX = await seedNote("aXtest/", "x note for delete");
+
+    const r = await POST_DELETE(
+      req("/api/folders/delete", {
+        method: "POST",
+        cookie: u.cookie,
+        body: JSON.stringify({ libraryId, section: "notes", path: "a_test/" }),
+      }),
+    );
+    expect(r.status).toBe(400);
+
+    // row must still exist
+    expect(await getNoteFolderPath(nX)).toBe("aXtest/");
+
+    await db.delete(notes).where(and(eq(notes.userId, u.id), eq(notes.libraryId, libraryId)));
+  });
+});
+
+describe("folders/rename C2 regression — Unicode char_length", () => {
+  it("correctly renames emoji folder and its child using char_length", async () => {
+    const nRoot = await seedNote("🌲/", "tree root");
+    const nChild = await seedNote("🌲/child/", "tree child");
+
+    const r = await POST_RENAME(
+      req("/api/folders/rename", {
+        method: "POST",
+        cookie: u.cookie,
+        body: JSON.stringify({ libraryId, section: "notes", oldPath: "🌲/", newPath: "tree/" }),
+      }),
+    );
+    expect(r.status).toBe(200);
+    const j = await r.json();
+    expect(j.ok).toBe(true);
+    expect(j.updatedCount).toBe(2);
+
+    expect(await getNoteFolderPath(nRoot)).toBe("tree/");
+    expect(await getNoteFolderPath(nChild)).toBe("tree/child/");
+
+    await db.delete(notes).where(and(eq(notes.userId, u.id), eq(notes.libraryId, libraryId)));
+  });
+});
+
 describe("folders/delete", () => {
   it("400 empty path (cannot delete section root)", async () => {
     const r = await POST_DELETE(

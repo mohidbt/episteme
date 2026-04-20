@@ -4,12 +4,12 @@ import { db } from "@/lib/db";
 import { libraries, notes, papers, references_ } from "@episteme/db/schema";
 import { getUserIdFromRequest } from "@/lib/auth";
 import { jsonError } from "@/lib/crud";
-import { normalizeFolderPath } from "@/lib/tree";
+import { normalizeFolderPath, isValidFolderPath } from "@/lib/tree";
 
 const bodySchema = z.object({
   libraryId: z.number().int(),
   section: z.enum(["papers", "references", "notes"]),
-  path: z.string(),
+  path: z.string().refine(isValidFolderPath, { message: 'folder path cannot contain %, _, or \\' }),
 });
 
 const TABLES = {

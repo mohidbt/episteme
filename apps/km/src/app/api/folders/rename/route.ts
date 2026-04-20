@@ -4,13 +4,13 @@ import { db } from "@/lib/db";
 import { libraries, notes, papers, references_ } from "@episteme/db/schema";
 import { getUserIdFromRequest } from "@/lib/auth";
 import { jsonError } from "@/lib/crud";
-import { normalizeFolderPath } from "@/lib/tree";
+import { normalizeFolderPath, isValidFolderPath } from "@/lib/tree";
 
 const bodySchema = z.object({
   libraryId: z.number().int(),
   section: z.enum(["papers", "references", "notes"]),
-  oldPath: z.string(),
-  newPath: z.string(),
+  oldPath: z.string().refine(isValidFolderPath, { message: 'folder path cannot contain %, _, or \\' }),
+  newPath: z.string().refine(isValidFolderPath, { message: 'folder path cannot contain %, _, or \\' }),
 });
 
 const TABLES = {
@@ -49,7 +49,7 @@ export async function POST(req: Request) {
     const updated = await tx
       .update(table)
       .set({
-        folderPath: sql`${newPath} || SUBSTRING(${table.folderPath} FROM ${oldPath.length + 1}::int)`,
+        folderPath: sql`${newPath} || SUBSTRING(${table.folderPath} FROM char_length(${oldPath}) + 1)`,
       })
       .where(
         and(

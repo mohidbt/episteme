@@ -20,6 +20,12 @@ interface TreeItem {
   folder_path: string;
 }
 
+export const FOLDER_PATH_FORBIDDEN = /[%_\\]/;
+
+export function isValidFolderPath(raw: string): boolean {
+  return !FOLDER_PATH_FORBIDDEN.test(raw);
+}
+
 export function normalizeFolderPath(raw: string | null | undefined): string {
   if (raw == null) return "";
   const segments = raw.split("/").filter((s) => s.length > 0);

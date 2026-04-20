@@ -5,6 +5,7 @@ import {
   buildFolderTree,
   computeMovePatch,
   computeFolderRename,
+  isValidFolderPath,
 } from "./tree";
 
 describe("splitFolderPath", () => {
@@ -246,5 +247,35 @@ describe("computeFolderRename", () => {
     expect(rewrite("deep-learning/cnn/")).toBe("dl/cnn/");
     expect(rewrite("deep-learning/")).toBe("dl/");
     expect(rewrite("other/")).toBe("other/");
+  });
+});
+
+describe("isValidFolderPath", () => {
+  it("rejects a path containing %", () => {
+    expect(isValidFolderPath("a%/")).toBe(false);
+  });
+
+  it("rejects a path containing _", () => {
+    expect(isValidFolderPath("a_b/")).toBe(false);
+  });
+
+  it("rejects a path containing backslash", () => {
+    expect(isValidFolderPath("a\\b/")).toBe(false);
+  });
+
+  it("accepts a normal nested path", () => {
+    expect(isValidFolderPath("projects/phd/")).toBe(true);
+  });
+
+  it("accepts an empty string", () => {
+    expect(isValidFolderPath("")).toBe(true);
+  });
+
+  it("accepts a path with uppercase and digits", () => {
+    expect(isValidFolderPath("Zeta/2026/")).toBe(true);
+  });
+
+  it("accepts a path with hyphens", () => {
+    expect(isValidFolderPath("deep-learning/")).toBe(true);
   });
 });
