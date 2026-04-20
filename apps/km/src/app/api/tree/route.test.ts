@@ -38,8 +38,8 @@ beforeAll(async () => {
       body: JSON.stringify({
         libraryId,
         filename: "p1.pdf",
-        storageUrl: "https://example.com/p1.pdf",
-        title: "Paper One",
+        contentType: "application/pdf",
+        sizeBytes: 1024,
         folderPath: "",
       }),
     }),
@@ -51,8 +51,8 @@ beforeAll(async () => {
       body: JSON.stringify({
         libraryId,
         filename: "p2.pdf",
-        storageUrl: "https://example.com/p2.pdf",
-        title: "Paper Two",
+        contentType: "application/pdf",
+        sizeBytes: 1024,
         folderPath: "biology/",
       }),
     }),

@@ -10,14 +10,16 @@ import { POST as POST_REF } from "./references/route";
 import { POST as POST_NOTE } from "./notes/route";
 import { POST as POST_LINK } from "./notes/[id]/links/route";
 import { createTestUser, deleteTestUser, params, req, type TestUser } from "./_test-utils";
+import { ensureMinIOReady } from "./_minio-setup";
 
 let userA: TestUser;
 let userB: TestUser;
 
 beforeAll(async () => {
+  await ensureMinIOReady();
   userA = await createTestUser();
   userB = await createTestUser();
-});
+}, 60_000);
 
 afterAll(async () => {
   await deleteTestUser(userA.id);
@@ -42,12 +44,12 @@ describe("cascade delete library", () => {
         body: JSON.stringify({
           libraryId: libId,
           filename: "c.pdf",
-          storageUrl: "s3://x/c.pdf",
-          title: "Cascaded",
+          contentType: "application/pdf",
+          sizeBytes: 1024,
         }),
       }),
     );
-    const paper = await paperR.json();
+    const { paperId } = await paperR.json();
 
     const refR = await POST_REF(
       req("/api/references", {
@@ -90,7 +92,7 @@ describe("cascade delete library", () => {
     const libRows = await db.select().from(libraries).where(eq(libraries.id, libId));
     expect(libRows.length).toBe(0);
 
-    const paperRows = await db.select().from(papers).where(eq(papers.id, paper.id));
+    const paperRows = await db.select().from(papers).where(eq(papers.id, paperId));
     expect(paperRows.length).toBe(0);
 
     const refRows = await db.select().from(references_).where(eq(references_.id, ref.id));
@@ -115,12 +117,12 @@ describe("paper delete sets reference.paperId to null", () => {
         body: JSON.stringify({
           libraryId: libId,
           filename: "p.pdf",
-          storageUrl: "s3://x/p.pdf",
-          title: "P",
+          contentType: "application/pdf",
+          sizeBytes: 1024,
         }),
       }),
     );
-    const paper = await paperR.json();
+    const { paperId } = await paperR.json();
 
     const refR = await POST_REF(
       req("/api/references", {
@@ -130,16 +132,16 @@ describe("paper delete sets reference.paperId to null", () => {
           libraryId: libId,
           citationKey: `pd${Date.now()}`,
           cslJson: { type: "article-journal" },
-          paperId: paper.id,
+          paperId,
         }),
       }),
     );
     const ref = await refR.json();
-    expect(ref.paperId).toBe(paper.id);
+    expect(ref.paperId).toBe(paperId);
 
     const del = await DEL_PAPER(
-      req(`/api/papers/${paper.id}`, { method: "DELETE", cookie: userA.cookie }),
-      params({ id: paper.id }),
+      req(`/api/papers/${paperId}`, { method: "DELETE", cookie: userA.cookie }),
+      params({ id: paperId }),
     );
     expect(del.status).toBe(204);
 
@@ -176,8 +178,8 @@ describe("polymorphic note_links", () => {
         body: JSON.stringify({
           libraryId: libId,
           filename: "t.pdf",
-          storageUrl: "s3://x/t.pdf",
-          title: "T",
+          contentType: "application/pdf",
+          sizeBytes: 1024,
         }),
       }),
     )).json();
@@ -196,7 +198,7 @@ describe("polymorphic note_links", () => {
 
     const cases = [
       { targetKind: "note", targetId: tgtNote.id, targetTitleRaw: "TargetNote" },
-      { targetKind: "paper", targetId: tgtPaper.id, targetTitleRaw: "T" },
+      { targetKind: "paper", targetId: tgtPaper.paperId, targetTitleRaw: "T" },
       { targetKind: "reference", targetId: tgtRef.id, targetTitleRaw: "ref" },
       { targetKind: "note", targetId: null, targetTitleRaw: "Unresolved Thing" },
     ];
@@ -235,8 +237,8 @@ describe("cross-library ownership on POST", () => {
         body: JSON.stringify({
           libraryId: libB,
           filename: "x.pdf",
-          storageUrl: "s3://x/x.pdf",
-          title: "X",
+          contentType: "application/pdf",
+          sizeBytes: 1024,
         }),
       }),
     );

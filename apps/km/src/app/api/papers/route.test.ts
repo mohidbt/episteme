@@ -13,30 +13,32 @@ import {
   req,
   type TestUser,
 } from "../_test-utils";
+import { ensureMinIOReady } from "../_minio-setup";
 
 let u: TestUser;
 let other: TestUser;
 let libraryId: number;
 
 beforeAll(async () => {
+  await ensureMinIOReady();
   u = await createTestUser();
   other = await createTestUser();
   const r = await POST_LIB(
     req("/api/libraries", { method: "POST", cookie: u.cookie, body: JSON.stringify({ name: "Papers Lib" }) }),
   );
   libraryId = (await r.json()).id;
-});
+}, 60_000);
 
 afterAll(async () => {
   await deleteTestUser(u.id);
   await deleteTestUser(other.id);
 });
 
-const paperBody = (overrides: Record<string, unknown> = {}) => ({
+const initUpload = (overrides: Record<string, unknown> = {}) => ({
   libraryId,
   filename: "a.pdf",
-  storageUrl: "s3://x/a.pdf",
-  title: "Alpha",
+  contentType: "application/pdf",
+  sizeBytes: 1024,
   ...overrides,
 });
 
@@ -52,60 +54,181 @@ describe("papers", () => {
   });
 
   it("400 validation on POST", async () => {
-    const r = await POST(req("/api/papers", { method: "POST", cookie: u.cookie, body: JSON.stringify({ libraryId }) }));
+    const r = await POST(
+      req("/api/papers", { method: "POST", cookie: u.cookie, body: JSON.stringify({ libraryId }) }),
+    );
     expect(r.status).toBe(400);
   });
 
-  it("403 creating paper in other user's library", async () => {
+  it("400 rejects non-PDF contentType", async () => {
     const r = await POST(
-      req("/api/papers", { method: "POST", cookie: other.cookie, body: JSON.stringify(paperBody()) }),
+      req("/api/papers", {
+        method: "POST",
+        cookie: u.cookie,
+        body: JSON.stringify(initUpload({ contentType: "image/png" })),
+      }),
+    );
+    expect(r.status).toBe(400);
+  });
+
+  it("403 initializing upload in other user's library", async () => {
+    const r = await POST(
+      req("/api/papers", { method: "POST", cookie: other.cookie, body: JSON.stringify(initUpload()) }),
     );
     expect(r.status).toBe(403);
   });
 
-  it("golden path CRUD", async () => {
-    const c = await POST(req("/api/papers", { method: "POST", cookie: u.cookie, body: JSON.stringify(paperBody()) }));
+  it("POST returns presigned uploadUrl with X-Amz-Signature", async () => {
+    const r = await POST(
+      req("/api/papers", { method: "POST", cookie: u.cookie, body: JSON.stringify(initUpload()) }),
+    );
+    expect(r.status).toBe(201);
+    const body = await r.json();
+    expect(typeof body.paperId).toBe("string");
+    const url = new URL(body.uploadUrl);
+    expect(url.searchParams.get("X-Amz-Signature")).toBeTruthy();
+    expect(url.pathname.endsWith(`/${body.paperId}/source.pdf`)).toBe(true);
+
+    // Clean up so later tests that snapshot listing aren't polluted.
+    await DEL_ID(
+      req(`/api/papers/${body.paperId}`, { method: "DELETE", cookie: u.cookie }),
+      params({ id: body.paperId }),
+    );
+  });
+
+  it("creates row with placeholder title = filenameToTitle(filename)", async () => {
+    const r = await POST(
+      req("/api/papers", {
+        method: "POST",
+        cookie: u.cookie,
+        body: JSON.stringify(initUpload({ filename: "My Great Paper.pdf" })),
+      }),
+    );
+    const { paperId } = await r.json();
+    const one = await GET_ID(req(`/api/papers/${paperId}`, { cookie: u.cookie }), params({ id: paperId }));
+    const paper = await one.json();
+    expect(paper.title).toBe("My Great Paper");
+    expect(paper.filename).toBe("My Great Paper.pdf");
+    expect(paper.storageUrl).toBe(null);
+
+    await DEL_ID(
+      req(`/api/papers/${paperId}`, { method: "DELETE", cookie: u.cookie }),
+      params({ id: paperId }),
+    );
+  });
+
+  it("golden path: init → CRUD", async () => {
+    const c = await POST(req("/api/papers", { method: "POST", cookie: u.cookie, body: JSON.stringify(initUpload()) }));
     expect(c.status).toBe(201);
-    const paper = await c.json();
+    const { paperId } = await c.json();
 
     const list = await GET(req(`/api/papers?libraryId=${libraryId}`, { cookie: u.cookie }));
     const rows = await list.json();
-    expect(rows.some((r: any) => r.id === paper.id)).toBe(true);
+    expect(rows.some((r: any) => r.id === paperId)).toBe(true);
 
-    const one = await GET_ID(req(`/api/papers/${paper.id}`, { cookie: u.cookie }), params({ id: paper.id }));
+    const one = await GET_ID(req(`/api/papers/${paperId}`, { cookie: u.cookie }), params({ id: paperId }));
     expect(one.status).toBe(200);
 
     const patched = await PATCH_ID(
-      req(`/api/papers/${paper.id}`, { method: "PATCH", cookie: u.cookie, body: JSON.stringify({ title: "Beta" }) }),
-      params({ id: paper.id }),
+      req(`/api/papers/${paperId}`, { method: "PATCH", cookie: u.cookie, body: JSON.stringify({ title: "Beta" }) }),
+      params({ id: paperId }),
     );
     expect((await patched.json()).title).toBe("Beta");
 
-    const del = await DEL_ID(req(`/api/papers/${paper.id}`, { method: "DELETE", cookie: u.cookie }), params({ id: paper.id }));
+    const del = await DEL_ID(req(`/api/papers/${paperId}`, { method: "DELETE", cookie: u.cookie }), params({ id: paperId }));
     expect(del.status).toBe(204);
   });
 
   it("ownership: cannot patch other's paper", async () => {
-    const c = await POST(req("/api/papers", { method: "POST", cookie: u.cookie, body: JSON.stringify(paperBody()) }));
-    const paper = await c.json();
+    const c = await POST(req("/api/papers", { method: "POST", cookie: u.cookie, body: JSON.stringify(initUpload()) }));
+    const { paperId } = await c.json();
     const r = await PATCH_ID(
-      req(`/api/papers/${paper.id}`, { method: "PATCH", cookie: other.cookie, body: JSON.stringify({ title: "hack" }) }),
-      params({ id: paper.id }),
+      req(`/api/papers/${paperId}`, { method: "PATCH", cookie: other.cookie, body: JSON.stringify({ title: "hack" }) }),
+      params({ id: paperId }),
     );
     expect(r.status).toBe(403);
+
+    await DEL_ID(
+      req(`/api/papers/${paperId}`, { method: "DELETE", cookie: u.cookie }),
+      params({ id: paperId }),
+    );
   });
 
   it("folderPath filter", async () => {
-    await POST(
+    const c = await POST(
       req("/api/papers", {
         method: "POST",
         cookie: u.cookie,
-        body: JSON.stringify(paperBody({ filename: "in-folder.pdf", folderPath: "foo" })),
+        body: JSON.stringify(initUpload({ filename: "in-folder.pdf", folderPath: "foo/" })),
       }),
     );
-    const r = await GET(req(`/api/papers?libraryId=${libraryId}&folderPath=foo`, { cookie: u.cookie }));
+    const { paperId } = await c.json();
+    const r = await GET(req(`/api/papers?libraryId=${libraryId}&folderPath=foo/`, { cookie: u.cookie }));
     const rows = await r.json();
     expect(rows.length).toBeGreaterThan(0);
-    expect(rows.every((p: any) => p.folderPath === "foo")).toBe(true);
+    expect(rows.every((p: any) => p.folderPath === "foo/")).toBe(true);
+
+    await DEL_ID(
+      req(`/api/papers/${paperId}`, { method: "DELETE", cookie: u.cookie }),
+      params({ id: paperId }),
+    );
+  });
+
+  it("allows duplicate filename in same folder (two distinct rows)", async () => {
+    const a = await POST(
+      req("/api/papers", {
+        method: "POST",
+        cookie: u.cookie,
+        body: JSON.stringify(initUpload({ filename: "sample.pdf" })),
+      }),
+    );
+    const b = await POST(
+      req("/api/papers", {
+        method: "POST",
+        cookie: u.cookie,
+        body: JSON.stringify(initUpload({ filename: "sample.pdf" })),
+      }),
+    );
+    expect(a.status).toBe(201);
+    expect(b.status).toBe(201);
+    const aBody = await a.json();
+    const bBody = await b.json();
+    expect(aBody.paperId).not.toBe(bBody.paperId);
+
+    await DEL_ID(req(`/api/papers/${aBody.paperId}`, { method: "DELETE", cookie: u.cookie }), params({ id: aBody.paperId }));
+    await DEL_ID(req(`/api/papers/${bBody.paperId}`, { method: "DELETE", cookie: u.cookie }), params({ id: bBody.paperId }));
+  });
+
+  it("GET lists by addedAt desc (newest first)", async () => {
+    const first = await POST(
+      req("/api/papers", {
+        method: "POST",
+        cookie: u.cookie,
+        body: JSON.stringify(initUpload({ filename: "order-first.pdf", folderPath: "order/" })),
+      }),
+    );
+    const { paperId: firstId } = await first.json();
+
+    // Ensure a measurable addedAt delta (timestamp has ms resolution).
+    await new Promise((r) => setTimeout(r, 15));
+
+    const second = await POST(
+      req("/api/papers", {
+        method: "POST",
+        cookie: u.cookie,
+        body: JSON.stringify(initUpload({ filename: "order-second.pdf", folderPath: "order/" })),
+      }),
+    );
+    const { paperId: secondId } = await second.json();
+
+    const list = await GET(
+      req(`/api/papers?libraryId=${libraryId}&folderPath=order/`, { cookie: u.cookie }),
+    );
+    const rows = await list.json();
+    expect(rows[0].id).toBe(secondId);
+    expect(rows[1].id).toBe(firstId);
+
+    await DEL_ID(req(`/api/papers/${firstId}`, { method: "DELETE", cookie: u.cookie }), params({ id: firstId }));
+    await DEL_ID(req(`/api/papers/${secondId}`, { method: "DELETE", cookie: u.cookie }), params({ id: secondId }));
   });
 });

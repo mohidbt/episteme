@@ -1,0 +1,190 @@
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { POST as POST_PAPER } from "../../route";
+import { PATCH as PATCH_PAPER, GET as GET_PAPER } from "../route";
+import { DELETE as DEL_PAPER } from "../route";
+import { POST as POST_FINALIZE } from "./route";
+import { POST as POST_LIB } from "../../../libraries/route";
+import {
+  createTestUser,
+  deleteTestUser,
+  params,
+  req,
+  type TestUser,
+} from "../../../_test-utils";
+import { ensureMinIOReady } from "../../../_minio-setup";
+import { storage, paperCoverKey } from "@/lib/storage";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const SAMPLE_PDF_PATH = path.join(
+  __dirname,
+  "../../../../../../e2e/fixtures/sample.pdf",
+);
+
+let u: TestUser;
+let libraryId: number;
+let sampleBytes: Buffer;
+
+beforeAll(async () => {
+  await ensureMinIOReady();
+  u = await createTestUser();
+  const r = await POST_LIB(
+    req("/api/libraries", {
+      method: "POST",
+      cookie: u.cookie,
+      body: JSON.stringify({ name: "Finalize Lib" }),
+    }),
+  );
+  libraryId = (await r.json()).id;
+  sampleBytes = await readFile(SAMPLE_PDF_PATH);
+}, 60_000);
+
+afterAll(async () => {
+  await deleteTestUser(u.id);
+});
+
+async function initUpload(filename = "sample.pdf"): Promise<{ paperId: string; uploadUrl: string }> {
+  const r = await POST_PAPER(
+    req("/api/papers", {
+      method: "POST",
+      cookie: u.cookie,
+      body: JSON.stringify({
+        libraryId,
+        filename,
+        contentType: "application/pdf",
+        sizeBytes: sampleBytes.length,
+      }),
+    }),
+  );
+  if (r.status !== 201) throw new Error(`init upload failed: ${r.status}`);
+  return r.json();
+}
+
+async function putSource(uploadUrl: string, bytes: Buffer): Promise<void> {
+  // Reuse bytes across fetches — copy each time to avoid any Undici
+  // transformations on shared buffers.
+  const res = await fetch(uploadUrl, {
+    method: "PUT",
+    body: new Uint8Array(bytes),
+    headers: { "content-type": "application/pdf" },
+  });
+  if (!res.ok) throw new Error(`PUT source failed: ${res.status} ${await res.text()}`);
+}
+
+describe("POST /api/papers/:id/finalize", () => {
+  it("401 no user", async () => {
+    const r = await POST_FINALIZE(
+      req(`/api/papers/00000000-0000-0000-0000-000000000000/finalize`, { method: "POST" }),
+      params({ id: "00000000-0000-0000-0000-000000000000" }),
+    );
+    expect(r.status).toBe(401);
+  });
+
+  it("404 when paper does not exist", async () => {
+    const r = await POST_FINALIZE(
+      req(`/api/papers/00000000-0000-0000-0000-000000000000/finalize`, {
+        method: "POST",
+        cookie: u.cookie,
+      }),
+      params({ id: "00000000-0000-0000-0000-000000000000" }),
+    );
+    expect(r.status).toBe(404);
+  });
+
+  it("422 when source object is missing", async () => {
+    const { paperId } = await initUpload();
+    // Intentionally skip the PUT.
+    const r = await POST_FINALIZE(
+      req(`/api/papers/${paperId}/finalize`, { method: "POST", cookie: u.cookie }),
+      params({ id: paperId }),
+    );
+    expect(r.status).toBe(422);
+    await DEL_PAPER(
+      req(`/api/papers/${paperId}`, { method: "DELETE", cookie: u.cookie }),
+      params({ id: paperId }),
+    );
+  });
+
+  it(
+    "extracts metadata + cover from uploaded PDF",
+    async () => {
+      const { paperId, uploadUrl } = await initUpload();
+      await putSource(uploadUrl, sampleBytes);
+
+      const r = await POST_FINALIZE(
+        req(`/api/papers/${paperId}/finalize`, { method: "POST", cookie: u.cookie }),
+        params({ id: paperId }),
+      );
+      expect(r.status).toBe(200);
+      const paper = await r.json();
+      expect(paper.title).toBe("Attention Is All You Need");
+      expect(paper.year).toBe(2017);
+      expect(Array.isArray(paper.authors)).toBe(true);
+      expect(paper.authors.length).toBeGreaterThan(0);
+      expect(paper.authors).toContain("Ashish Vaswani");
+      expect(paper.storageUrl).toBe(`s3://episteme-dev/${paperId}/source.pdf`);
+
+      // Cover should exist — fetch via presigned GET.
+      const coverUrl = await storage.getPresignedGet(paperCoverKey(paperId), 60);
+      const coverRes = await fetch(coverUrl);
+      expect(coverRes.status).toBe(200);
+      const coverBytes = new Uint8Array(await coverRes.arrayBuffer());
+      expect(coverBytes.length).toBeGreaterThan(2048);
+      // PNG signature.
+      expect(coverBytes[0]).toBe(0x89);
+      expect(coverBytes[1]).toBe(0x50);
+
+      await DEL_PAPER(
+        req(`/api/papers/${paperId}`, { method: "DELETE", cookie: u.cookie }),
+        params({ id: paperId }),
+      );
+    },
+    30_000,
+  );
+
+  it(
+    "idempotent: re-finalize does not clobber user-edited title",
+    async () => {
+      const { paperId, uploadUrl } = await initUpload();
+      await putSource(uploadUrl, sampleBytes);
+
+      // First finalize — title becomes extracted value.
+      const first = await POST_FINALIZE(
+        req(`/api/papers/${paperId}/finalize`, { method: "POST", cookie: u.cookie }),
+        params({ id: paperId }),
+      );
+      expect(first.status).toBe(200);
+
+      // User edits title.
+      const edited = await PATCH_PAPER(
+        req(`/api/papers/${paperId}`, {
+          method: "PATCH",
+          cookie: u.cookie,
+          body: JSON.stringify({ title: "User Edited Title" }),
+        }),
+        params({ id: paperId }),
+      );
+      expect((await edited.json()).title).toBe("User Edited Title");
+
+      // Second finalize must NOT overwrite the user's title.
+      const second = await POST_FINALIZE(
+        req(`/api/papers/${paperId}/finalize`, { method: "POST", cookie: u.cookie }),
+        params({ id: paperId }),
+      );
+      expect(second.status).toBe(200);
+      const paper = await second.json();
+      expect(paper.title).toBe("User Edited Title");
+      // Year + authors were already set by the first finalize; they should remain.
+      expect(paper.year).toBe(2017);
+      expect(paper.authors).toContain("Ashish Vaswani");
+
+      await DEL_PAPER(
+        req(`/api/papers/${paperId}`, { method: "DELETE", cookie: u.cookie }),
+        params({ id: paperId }),
+      );
+    },
+    30_000,
+  );
+});

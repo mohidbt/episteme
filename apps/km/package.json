@@ -19,6 +19,7 @@
     "@episteme/db": "workspace:*",
     "@episteme/editor": "workspace:*",
     "@episteme/markdown": "workspace:*",
+    "@episteme/storage": "workspace:*",
     "@napi-rs/canvas": "^0.1.80",
     "better-auth": "^1.6.0",
     "class-variance-authority": "^0.7.1",

@@ -1,10 +1,17 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { papers } from "@episteme/db/schema";
-import { libraries } from "@episteme/db/schema";
+import { papers, libraries } from "@episteme/db/schema";
 import { getUserIdFromRequest } from "@/lib/auth";
-import { paperCreateSchema } from "@/lib/validators";
+import { paperUploadInitSchema } from "@/lib/validators";
 import { jsonError, requireOwned } from "@/lib/crud";
+import { storage, paperSourceKey } from "@/lib/storage";
+import { filenameToTitle, sanitizeFilename } from "@/lib/pdf-extract";
+
+// pdfjs-dist + @napi-rs/canvas need the Node runtime; finalize imports them
+// transitively via pdf-extract. Pin here so dev and prod agree.
+export const runtime = "nodejs";
+
+const UPLOAD_TTL_SEC = 600;
 
 export async function GET(req: Request) {
   const userId = await getUserIdFromRequest(req);
@@ -17,7 +24,11 @@ export async function GET(req: Request) {
   const folderPath = url.searchParams.get("folderPath");
   const conds = [eq(papers.userId, userId), eq(papers.libraryId, libraryId)];
   if (folderPath !== null) conds.push(eq(papers.folderPath, folderPath));
-  const rows = await db.select().from(papers).where(and(...conds)).orderBy(asc(papers.addedAt));
+  const rows = await db
+    .select()
+    .from(papers)
+    .where(and(...conds))
+    .orderBy(desc(papers.addedAt));
   return Response.json(rows);
 }
 
@@ -25,10 +36,30 @@ export async function POST(req: Request) {
   const userId = await getUserIdFromRequest(req);
   if (!userId) return jsonError(401, "unauthorized");
   const body = await req.json().catch(() => null);
-  const parsed = paperCreateSchema.safeParse(body);
+  const parsed = paperUploadInitSchema.safeParse(body);
   if (!parsed.success) return jsonError(400, "validation", { issues: parsed.error.issues });
   const lib = await requireOwned<any>(libraries, parsed.data.libraryId, userId);
   if (!lib.ok) return jsonError(lib.status, lib.status === 404 ? "not_found" : "forbidden");
-  const [row] = await db.insert(papers).values({ ...parsed.data, userId }).returning();
-  return Response.json(row, { status: 201 });
+
+  const cleanFilename = sanitizeFilename(parsed.data.filename);
+  const placeholderTitle = filenameToTitle(parsed.data.filename);
+
+  const [row] = await db
+    .insert(papers)
+    .values({
+      libraryId: parsed.data.libraryId,
+      userId,
+      folderPath: parsed.data.folderPath,
+      filename: cleanFilename,
+      title: placeholderTitle,
+    })
+    .returning();
+
+  const uploadUrl = await storage.getPresignedPut(
+    paperSourceKey(row.id),
+    parsed.data.contentType,
+    UPLOAD_TTL_SEC,
+  );
+
+  return Response.json({ paperId: row.id, uploadUrl }, { status: 201 });
 }

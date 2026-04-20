@@ -22,16 +22,15 @@ export const libraryUpdateSchema = z.object({
   name: nonEmptyTrimmed(200).optional(),
 });
 
-export const paperCreateSchema = z.object({
+const PDF_CONTENT_TYPE = "application/pdf";
+const MAX_PDF_BYTES = 50 * 1024 * 1024; // 50 MB cap
+
+export const paperUploadInitSchema = z.object({
   libraryId: z.number().int(),
   folderPath: folderPathSchema.default(""),
   filename: nonEmptyTrimmed(500),
-  storageUrl: nonEmptyTrimmed(2000),
-  title: nonEmptyTrimmed(1000),
-  authors: z.array(z.string()).optional(),
-  year: yearSchema.optional(),
-  doi: z.string().optional(),
-  venue: z.string().optional(),
+  contentType: z.literal(PDF_CONTENT_TYPE),
+  sizeBytes: z.number().int().positive().max(MAX_PDF_BYTES),
 });
 
 export const paperUpdateSchema = z.object({

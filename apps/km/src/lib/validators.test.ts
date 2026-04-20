@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   libraryCreateSchema,
   noteLinkCreateSchema,
-  paperCreateSchema,
+  paperUpdateSchema,
+  paperUploadInitSchema,
   referenceCreateSchema,
 } from "./validators";
 
@@ -11,31 +12,64 @@ const baseRef = {
   cslJson: { type: "article-journal" },
 };
 
-const basePaper = {
+const baseUpload = {
   libraryId: 1,
   filename: "a.pdf",
-  storageUrl: "s3://x/a.pdf",
-  title: "A",
+  contentType: "application/pdf",
+  sizeBytes: 1024,
 };
 
 const currentYear = new Date().getFullYear();
 
-describe("paperCreateSchema year boundaries", () => {
+describe("paperUpdateSchema year boundaries", () => {
   it("rejects year 999", () => {
-    const r = paperCreateSchema.safeParse({ ...basePaper, year: 999 });
+    const r = paperUpdateSchema.safeParse({ year: 999 });
     expect(r.success).toBe(false);
   });
   it("accepts year 1000", () => {
-    const r = paperCreateSchema.safeParse({ ...basePaper, year: 1000 });
+    const r = paperUpdateSchema.safeParse({ year: 1000 });
     expect(r.success).toBe(true);
   });
   it("accepts year currentYear+1", () => {
-    const r = paperCreateSchema.safeParse({ ...basePaper, year: currentYear + 1 });
+    const r = paperUpdateSchema.safeParse({ year: currentYear + 1 });
     expect(r.success).toBe(true);
   });
   it("rejects year currentYear+2", () => {
-    const r = paperCreateSchema.safeParse({ ...basePaper, year: currentYear + 2 });
+    const r = paperUpdateSchema.safeParse({ year: currentYear + 2 });
     expect(r.success).toBe(false);
+  });
+});
+
+describe("paperUploadInitSchema", () => {
+  it("requires application/pdf contentType", () => {
+    const r = paperUploadInitSchema.safeParse({
+      ...baseUpload,
+      contentType: "image/png",
+    });
+    expect(r.success).toBe(false);
+  });
+  it("rejects sizeBytes above 50 MB", () => {
+    const r = paperUploadInitSchema.safeParse({
+      ...baseUpload,
+      sizeBytes: 50 * 1024 * 1024 + 1,
+    });
+    expect(r.success).toBe(false);
+  });
+  it("accepts sizeBytes exactly 50 MB", () => {
+    const r = paperUploadInitSchema.safeParse({
+      ...baseUpload,
+      sizeBytes: 50 * 1024 * 1024,
+    });
+    expect(r.success).toBe(true);
+  });
+  it("rejects zero sizeBytes", () => {
+    const r = paperUploadInitSchema.safeParse({ ...baseUpload, sizeBytes: 0 });
+    expect(r.success).toBe(false);
+  });
+  it("defaults folderPath to empty string", () => {
+    const r = paperUploadInitSchema.safeParse(baseUpload);
+    expect(r.success).toBe(true);
+    if (r.success) expect(r.data.folderPath).toBe("");
   });
 });
 

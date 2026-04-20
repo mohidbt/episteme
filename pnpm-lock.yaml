@@ -31,6 +31,9 @@ importers:
       '@episteme/markdown':
         specifier: workspace:*
         version: link:../../packages/markdown
+      '@episteme/storage':
+        specifier: workspace:*
+        version: link:../../packages/storage
       '@napi-rs/canvas':
         specifier: ^0.1.80
         version: 0.1.99

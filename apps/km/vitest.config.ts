@@ -14,6 +14,10 @@ export default defineConfig({
         "test-secret-for-integration-tests-only-not-for-prod",
       BETTER_AUTH_URL:
         process.env.BETTER_AUTH_URL || "http://localhost:3001",
+      S3_ENDPOINT: process.env.S3_ENDPOINT || "http://localhost:9000",
+      S3_BUCKET: process.env.S3_BUCKET || "episteme-dev",
+      S3_ACCESS_KEY: process.env.S3_ACCESS_KEY || "episteme",
+      S3_SECRET_KEY: process.env.S3_SECRET_KEY || "episteme-dev",
     },
   },
   resolve: {
@@ -38,6 +42,10 @@ export default defineConfig({
       "@episteme/editor": path.resolve(
         __dirname,
         "../../packages/editor/src/index.ts",
+      ),
+      "@episteme/storage": path.resolve(
+        __dirname,
+        "../../packages/storage/src/index.ts",
       ),
     },
   },
