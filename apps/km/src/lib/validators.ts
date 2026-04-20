@@ -33,16 +33,15 @@ export const paperUploadInitSchema = z.object({
   sizeBytes: z.number().int().positive().max(MAX_PDF_BYTES),
 });
 
-export const paperUpdateSchema = z.object({
-  folderPath: folderPathSchema.optional(),
-  filename: nonEmptyTrimmed(500).optional(),
-  storageUrl: nonEmptyTrimmed(2000).optional(),
-  title: nonEmptyTrimmed(1000).optional(),
-  authors: z.array(z.string()).optional(),
-  year: yearSchema.optional(),
-  doi: z.string().optional(),
-  venue: z.string().optional(),
-});
+export const paperUpdateSchema = z
+  .object({
+    folderPath: folderPathSchema.optional(),
+    title: nonEmptyTrimmed(1000).optional(),
+    authors: z.array(z.string()).optional(),
+    year: yearSchema.optional(),
+    doi: z.string().nullable().optional(),
+  })
+  .strict();
 
 const citationKey = z
   .string()
