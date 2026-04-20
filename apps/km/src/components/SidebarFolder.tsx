@@ -13,6 +13,7 @@ import {
 import { useExpanded } from "@/hooks/use-expanded";
 import type { FolderNode } from "@/lib/tree";
 import type { NoteItem, PaperItem, ReferenceItem } from "@/lib/tree-server";
+import { SidebarContextMenu } from "./SidebarContextMenu";
 
 type ContentSection = "papers" | "references" | "notes";
 type Item = PaperItem | ReferenceItem | NoteItem;
@@ -30,14 +31,19 @@ function itemTitle(item: Item): string {
   return "Untitled";
 }
 
+function itemFolderPath(item: Item): string {
+  return (item as { folder_path?: string }).folder_path ?? "";
+}
+
 interface SidebarFolderProps {
   node: FolderNode<Item>;
   section: ContentSection;
   depth: number;
   libraryId: number;
+  onMutate: () => void;
 }
 
-export function SidebarFolder({ node, section, depth, libraryId }: SidebarFolderProps) {
+export function SidebarFolder({ node, section, depth, libraryId, onMutate }: SidebarFolderProps) {
   if (depth === 0) {
     // Root — render items + children flat, no folder row.
     return (
@@ -49,15 +55,22 @@ export function SidebarFolder({ node, section, depth, libraryId }: SidebarFolder
             section={section}
             depth={1}
             libraryId={libraryId}
+            onMutate={onMutate}
           />
         ))}
         {node.items.map((item) => (
-          <LeafRow key={`leaf:${section}:${item.id}`} item={item} section={section} />
+          <LeafRow
+            key={`leaf:${section}:${item.id}`}
+            item={item}
+            section={section}
+            libraryId={libraryId}
+            onMutate={onMutate}
+          />
         ))}
       </>
     );
   }
-  return <FolderRow node={node} section={section} depth={depth} libraryId={libraryId} />;
+  return <FolderRow node={node} section={section} depth={depth} libraryId={libraryId} onMutate={onMutate} />;
 }
 
 interface FolderRowProps {
@@ -65,26 +78,33 @@ interface FolderRowProps {
   section: ContentSection;
   depth: number;
   libraryId: number;
+  onMutate: () => void;
 }
 
-function FolderRow({ node, section, depth, libraryId }: FolderRowProps) {
+function FolderRow({ node, section, depth, libraryId, onMutate }: FolderRowProps) {
   const storageKey = `${libraryId}:${section}:${node.path}`;
   const [open, setOpen] = useExpanded(storageKey, false);
   const titleMuted = node.items.length === 0 && node.children.length === 0;
 
   return (
     <SidebarMenuItem>
-      <SidebarMenuButton
-        onClick={() => setOpen(!open)}
-        aria-expanded={open}
-        className={titleMuted ? "text-muted-foreground" : undefined}
+      <SidebarContextMenu
+        target={{ kind: "folder", section, folderPath: node.path }}
+        libraryId={libraryId}
+        onMutate={onMutate}
       >
-        <ChevronRight
-          className={`transition-transform ${open ? "rotate-90" : ""}`}
-          aria-hidden
-        />
-        <span>{node.folder}</span>
-      </SidebarMenuButton>
+        <SidebarMenuButton
+          onClick={() => setOpen(!open)}
+          aria-expanded={open}
+          className={titleMuted ? "text-muted-foreground" : undefined}
+        >
+          <ChevronRight
+            className={`transition-transform ${open ? "rotate-90" : ""}`}
+            aria-hidden
+          />
+          <span>{node.folder}</span>
+        </SidebarMenuButton>
+      </SidebarContextMenu>
       {open && (node.children.length > 0 || node.items.length > 0) && (
         <SidebarMenuSub>
           {node.children.map((child) => (
@@ -94,11 +114,24 @@ function FolderRow({ node, section, depth, libraryId }: FolderRowProps) {
               section={section}
               depth={depth + 1}
               libraryId={libraryId}
+              onMutate={onMutate}
             />
           ))}
           {node.items.map((item) => (
             <SidebarMenuSubItem key={`leaf:${section}:${item.id}`}>
-              <SubLeafLink item={item} section={section} />
+              <SidebarContextMenu
+                target={{
+                  kind: "leaf",
+                  section,
+                  id: item.id,
+                  folderPath: itemFolderPath(item),
+                  title: item.title,
+                }}
+                libraryId={libraryId}
+                onMutate={onMutate}
+              >
+                <SubLeafLink item={item} section={section} />
+              </SidebarContextMenu>
             </SidebarMenuSubItem>
           ))}
         </SidebarMenuSub>
@@ -107,23 +140,29 @@ function FolderRow({ node, section, depth, libraryId }: FolderRowProps) {
   );
 }
 
-function FolderSubRow({ node, section, depth, libraryId }: FolderRowProps) {
+function FolderSubRow({ node, section, depth, libraryId, onMutate }: FolderRowProps) {
   const storageKey = `${libraryId}:${section}:${node.path}`;
   const [open, setOpen] = useExpanded(storageKey, false);
 
   return (
     <SidebarMenuSubItem>
-      <SidebarMenuSubButton
-        render={<button type="button" />}
-        onClick={() => setOpen(!open)}
-        aria-expanded={open}
+      <SidebarContextMenu
+        target={{ kind: "folder", section, folderPath: node.path }}
+        libraryId={libraryId}
+        onMutate={onMutate}
       >
-        <ChevronRight
-          className={`transition-transform ${open ? "rotate-90" : ""}`}
-          aria-hidden
-        />
-        <span>{node.folder}</span>
-      </SidebarMenuSubButton>
+        <SidebarMenuSubButton
+          render={<button type="button" />}
+          onClick={() => setOpen(!open)}
+          aria-expanded={open}
+        >
+          <ChevronRight
+            className={`transition-transform ${open ? "rotate-90" : ""}`}
+            aria-hidden
+          />
+          <span>{node.folder}</span>
+        </SidebarMenuSubButton>
+      </SidebarContextMenu>
       {open && (node.children.length > 0 || node.items.length > 0) && (
         <SidebarMenuSub>
           {node.children.map((child) => (
@@ -133,11 +172,24 @@ function FolderSubRow({ node, section, depth, libraryId }: FolderRowProps) {
               section={section}
               depth={depth + 1}
               libraryId={libraryId}
+              onMutate={onMutate}
             />
           ))}
           {node.items.map((item) => (
             <SidebarMenuSubItem key={`leaf:${section}:${item.id}`}>
-              <SubLeafLink item={item} section={section} />
+              <SidebarContextMenu
+                target={{
+                  kind: "leaf",
+                  section,
+                  id: item.id,
+                  folderPath: itemFolderPath(item),
+                  title: item.title,
+                }}
+                libraryId={libraryId}
+                onMutate={onMutate}
+              >
+                <SubLeafLink item={item} section={section} />
+              </SidebarContextMenu>
             </SidebarMenuSubItem>
           ))}
         </SidebarMenuSub>
@@ -146,20 +198,39 @@ function FolderSubRow({ node, section, depth, libraryId }: FolderRowProps) {
   );
 }
 
-function LeafRow({ item, section }: { item: Item; section: ContentSection }) {
+interface LeafRowProps {
+  item: Item;
+  section: ContentSection;
+  libraryId: number;
+  onMutate: () => void;
+}
+
+function LeafRow({ item, section, libraryId, onMutate }: LeafRowProps) {
   const pathname = usePathname();
   const href = itemHref(section, item);
   const isActive = pathname === href;
   const hasTitle = typeof item.title === "string" && item.title.trim().length > 0;
   return (
     <SidebarMenuItem>
-      <SidebarMenuButton
-        render={<Link href={href} />}
-        isActive={isActive}
-        className={`data-[active=true]:bg-transparent data-[active=true]:border-l-2 data-[active=true]:border-foreground data-[active=true]:font-medium data-[active=true]:rounded-l-none data-[active=true]:pl-[calc(0.5rem-2px)]${hasTitle ? "" : " text-muted-foreground italic"}`}
+      <SidebarContextMenu
+        target={{
+          kind: "leaf",
+          section,
+          id: item.id,
+          folderPath: itemFolderPath(item),
+          title: item.title,
+        }}
+        libraryId={libraryId}
+        onMutate={onMutate}
       >
-        <span>{itemTitle(item)}</span>
-      </SidebarMenuButton>
+        <SidebarMenuButton
+          render={<Link href={href} />}
+          isActive={isActive}
+          className={`data-[active=true]:bg-transparent data-[active=true]:border-l-2 data-[active=true]:border-foreground data-[active=true]:font-medium data-[active=true]:rounded-l-none data-[active=true]:pl-[calc(0.5rem-2px)]${hasTitle ? "" : " text-muted-foreground italic"}`}
+        >
+          <span>{itemTitle(item)}</span>
+        </SidebarMenuButton>
+      </SidebarContextMenu>
     </SidebarMenuItem>
   );
 }

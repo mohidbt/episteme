@@ -11,6 +11,7 @@ import { buildFolderTree } from "@/lib/tree";
 import type { NoteItem, PaperItem, ReferenceItem } from "@/lib/tree-server";
 import { SidebarFolder } from "./SidebarFolder";
 import { SidebarAgentSection } from "./SidebarAgentSection";
+import { SidebarContextMenu } from "./SidebarContextMenu";
 
 type ContentSection = "papers" | "references" | "notes";
 
@@ -19,6 +20,7 @@ interface ContentProps {
   label: string;
   items: (PaperItem | ReferenceItem | NoteItem)[];
   libraryId: number;
+  onMutate: () => void;
 }
 
 interface AgentProps {
@@ -39,12 +41,26 @@ export function SidebarSection(props: Props) {
   }
   const Icon = SECTION_ICON[props.kind];
   const tree = buildFolderTree(props.items);
+  const canOpenHeaderMenu = props.kind === "notes";
+  const label = (
+    <SidebarGroupLabel className="gap-2 text-[11px] font-medium tracking-[0.14em] uppercase text-muted-foreground">
+      <Icon data-icon="inline-start" aria-hidden />
+      {props.label}
+    </SidebarGroupLabel>
+  );
   return (
     <SidebarGroup>
-      <SidebarGroupLabel className="gap-2 text-[11px] font-medium tracking-[0.14em] uppercase text-muted-foreground">
-        <Icon data-icon="inline-start" aria-hidden />
-        {props.label}
-      </SidebarGroupLabel>
+      {canOpenHeaderMenu ? (
+        <SidebarContextMenu
+          target={{ kind: "section-header", section: props.kind }}
+          libraryId={props.libraryId}
+          onMutate={props.onMutate}
+        >
+          {label}
+        </SidebarContextMenu>
+      ) : (
+        label
+      )}
       <SidebarGroupContent>
         <SidebarMenu>
           <SidebarFolder
@@ -52,6 +68,7 @@ export function SidebarSection(props: Props) {
             section={props.kind}
             depth={0}
             libraryId={props.libraryId}
+            onMutate={props.onMutate}
           />
         </SidebarMenu>
       </SidebarGroupContent>

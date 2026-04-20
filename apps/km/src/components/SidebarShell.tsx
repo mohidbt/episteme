@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import {
   Sidebar as ShadcnSidebar,
   SidebarContent,
@@ -14,6 +15,8 @@ interface SidebarShellProps {
 }
 
 export function SidebarShell({ library, tree }: SidebarShellProps) {
+  const router = useRouter();
+  const onMutate = () => router.refresh();
   return (
     <ShadcnSidebar collapsible="none" className="border-r">
       <SidebarHeader className="px-4 pt-5 pb-3">
@@ -30,18 +33,21 @@ export function SidebarShell({ library, tree }: SidebarShellProps) {
           label="Papers"
           items={tree.sections.papers.items}
           libraryId={library.id}
+          onMutate={onMutate}
         />
         <SidebarSection
           kind="references"
           label="References"
           items={tree.sections.references.items}
           libraryId={library.id}
+          onMutate={onMutate}
         />
         <SidebarSection
           kind="notes"
           label="Notes"
           items={tree.sections.notes.items}
           libraryId={library.id}
+          onMutate={onMutate}
         />
         <SidebarSection kind="agent" />
       </SidebarContent>
