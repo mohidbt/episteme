@@ -9,7 +9,7 @@ import { jsonError, requireOwned } from "@/lib/crud";
 type Ctx = { params: Promise<{ id: string }> };
 
 export async function GET(req: Request, { params }: Ctx) {
-  const userId = getUserIdFromRequest(req);
+  const userId = await getUserIdFromRequest(req);
   if (!userId) return jsonError(401, "unauthorized");
   const { id } = await params;
   const owner = await requireOwned<any>(notes, id, userId);
@@ -23,7 +23,7 @@ export async function GET(req: Request, { params }: Ctx) {
 }
 
 export async function POST(req: Request, { params }: Ctx) {
-  const userId = getUserIdFromRequest(req);
+  const userId = await getUserIdFromRequest(req);
   if (!userId) return jsonError(401, "unauthorized");
   const { id } = await params;
   const owner = await requireOwned<any>(notes, id, userId);

@@ -8,7 +8,7 @@ import { jsonError, requireOwned } from "@/lib/crud";
 type Ctx = { params: Promise<{ id: string; linkId: string }> };
 
 export async function DELETE(req: Request, { params }: Ctx) {
-  const userId = getUserIdFromRequest(req);
+  const userId = await getUserIdFromRequest(req);
   if (!userId) return jsonError(401, "unauthorized");
   const { id, linkId } = await params;
   const owner = await requireOwned<any>(notes, id, userId);

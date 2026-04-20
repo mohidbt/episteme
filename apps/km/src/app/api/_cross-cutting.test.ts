@@ -9,10 +9,10 @@ import { DELETE as DEL_PAPER } from "./papers/[id]/route";
 import { POST as POST_REF } from "./references/route";
 import { POST as POST_NOTE } from "./notes/route";
 import { POST as POST_LINK } from "./notes/[id]/links/route";
-import { createTestUser, deleteTestUser, params, req } from "./_test-utils";
+import { createTestUser, deleteTestUser, params, req, type TestUser } from "./_test-utils";
 
-let userA: string;
-let userB: string;
+let userA: TestUser;
+let userB: TestUser;
 
 beforeAll(async () => {
   userA = await createTestUser();
@@ -20,13 +20,13 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await deleteTestUser(userA);
-  await deleteTestUser(userB);
+  await deleteTestUser(userA.id);
+  await deleteTestUser(userB.id);
 });
 
-async function createLib(userId: string, name = "Lib"): Promise<number> {
+async function createLib(u: TestUser, name = "Lib"): Promise<number> {
   const r = await POST_LIB(
-    req("/api/libraries", { method: "POST", userId, body: JSON.stringify({ name }) }),
+    req("/api/libraries", { method: "POST", cookie: u.cookie, body: JSON.stringify({ name }) }),
   );
   return (await r.json()).id;
 }
@@ -38,7 +38,7 @@ describe("cascade delete library", () => {
     const paperR = await POST_PAPER(
       req("/api/papers", {
         method: "POST",
-        userId: userA,
+        cookie: userA.cookie,
         body: JSON.stringify({
           libraryId: libId,
           filename: "c.pdf",
@@ -52,7 +52,7 @@ describe("cascade delete library", () => {
     const refR = await POST_REF(
       req("/api/references", {
         method: "POST",
-        userId: userA,
+        cookie: userA.cookie,
         body: JSON.stringify({
           libraryId: libId,
           citationKey: `cas${Date.now()}`,
@@ -65,7 +65,7 @@ describe("cascade delete library", () => {
     const noteR = await POST_NOTE(
       req("/api/notes", {
         method: "POST",
-        userId: userA,
+        cookie: userA.cookie,
         body: JSON.stringify({ libraryId: libId, title: "Cascade Note" }),
       }),
     );
@@ -74,7 +74,7 @@ describe("cascade delete library", () => {
     const linkR = await POST_LINK(
       req(`/api/notes/${note.id}/links`, {
         method: "POST",
-        userId: userA,
+        cookie: userA.cookie,
         body: JSON.stringify({ targetKind: "note", targetTitleRaw: "X" }),
       }),
       params({ id: note.id }),
@@ -82,7 +82,7 @@ describe("cascade delete library", () => {
     const link = await linkR.json();
 
     const del = await DEL_LIB(
-      req(`/api/libraries/${libId}`, { method: "DELETE", userId: userA }),
+      req(`/api/libraries/${libId}`, { method: "DELETE", cookie: userA.cookie }),
       params({ id: String(libId) }),
     );
     expect(del.status).toBe(204);
@@ -111,7 +111,7 @@ describe("paper delete sets reference.paperId to null", () => {
     const paperR = await POST_PAPER(
       req("/api/papers", {
         method: "POST",
-        userId: userA,
+        cookie: userA.cookie,
         body: JSON.stringify({
           libraryId: libId,
           filename: "p.pdf",
@@ -125,7 +125,7 @@ describe("paper delete sets reference.paperId to null", () => {
     const refR = await POST_REF(
       req("/api/references", {
         method: "POST",
-        userId: userA,
+        cookie: userA.cookie,
         body: JSON.stringify({
           libraryId: libId,
           citationKey: `pd${Date.now()}`,
@@ -138,7 +138,7 @@ describe("paper delete sets reference.paperId to null", () => {
     expect(ref.paperId).toBe(paper.id);
 
     const del = await DEL_PAPER(
-      req(`/api/papers/${paper.id}`, { method: "DELETE", userId: userA }),
+      req(`/api/papers/${paper.id}`, { method: "DELETE", cookie: userA.cookie }),
       params({ id: paper.id }),
     );
     expect(del.status).toBe(204);
@@ -156,7 +156,7 @@ describe("polymorphic note_links", () => {
     const srcNote = await (await POST_NOTE(
       req("/api/notes", {
         method: "POST",
-        userId: userA,
+        cookie: userA.cookie,
         body: JSON.stringify({ libraryId: libId, title: "Source" }),
       }),
     )).json();
@@ -164,7 +164,7 @@ describe("polymorphic note_links", () => {
     const tgtNote = await (await POST_NOTE(
       req("/api/notes", {
         method: "POST",
-        userId: userA,
+        cookie: userA.cookie,
         body: JSON.stringify({ libraryId: libId, title: "TargetNote" }),
       }),
     )).json();
@@ -172,7 +172,7 @@ describe("polymorphic note_links", () => {
     const tgtPaper = await (await POST_PAPER(
       req("/api/papers", {
         method: "POST",
-        userId: userA,
+        cookie: userA.cookie,
         body: JSON.stringify({
           libraryId: libId,
           filename: "t.pdf",
@@ -185,7 +185,7 @@ describe("polymorphic note_links", () => {
     const tgtRef = await (await POST_REF(
       req("/api/references", {
         method: "POST",
-        userId: userA,
+        cookie: userA.cookie,
         body: JSON.stringify({
           libraryId: libId,
           citationKey: `pk${Date.now()}`,
@@ -205,7 +205,7 @@ describe("polymorphic note_links", () => {
       const r = await POST_LINK(
         req(`/api/notes/${srcNote.id}/links`, {
           method: "POST",
-          userId: userA,
+          cookie: userA.cookie,
           body: JSON.stringify(c),
         }),
         params({ id: srcNote.id }),
@@ -231,7 +231,7 @@ describe("cross-library ownership on POST", () => {
     const paperR = await POST_PAPER(
       req("/api/papers", {
         method: "POST",
-        userId: userA,
+        cookie: userA.cookie,
         body: JSON.stringify({
           libraryId: libB,
           filename: "x.pdf",
@@ -245,7 +245,7 @@ describe("cross-library ownership on POST", () => {
     const refR = await POST_REF(
       req("/api/references", {
         method: "POST",
-        userId: userA,
+        cookie: userA.cookie,
         body: JSON.stringify({
           libraryId: libB,
           citationKey: `xl${Date.now()}`,
@@ -258,7 +258,7 @@ describe("cross-library ownership on POST", () => {
     const noteR = await POST_NOTE(
       req("/api/notes", {
         method: "POST",
-        userId: userA,
+        cookie: userA.cookie,
         body: JSON.stringify({ libraryId: libB, title: "X-Note" }),
       }),
     );
@@ -273,7 +273,7 @@ describe("folder_path default and listing", () => {
     const noteR = await POST_NOTE(
       req("/api/notes", {
         method: "POST",
-        userId: userA,
+        cookie: userA.cookie,
         body: JSON.stringify({ libraryId: libId, title: "Root Note" }),
       }),
     );
@@ -283,13 +283,13 @@ describe("folder_path default and listing", () => {
     const { GET: GET_NOTES } = await import("./notes/route");
 
     const emptyList = await GET_NOTES(
-      req(`/api/notes?libraryId=${libId}&folderPath=`, { userId: userA }),
+      req(`/api/notes?libraryId=${libId}&folderPath=`, { cookie: userA.cookie }),
     );
     const emptyRows = await emptyList.json();
     expect(emptyRows.some((n: any) => n.id === note.id)).toBe(true);
 
     const otherList = await GET_NOTES(
-      req(`/api/notes?libraryId=${libId}&folderPath=other/`, { userId: userA }),
+      req(`/api/notes?libraryId=${libId}&folderPath=other/`, { cookie: userA.cookie }),
     );
     const otherRows = await otherList.json();
     expect(otherRows.some((n: any) => n.id === note.id)).toBe(false);

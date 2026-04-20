@@ -9,6 +9,11 @@ export default defineConfig({
       DATABASE_URL:
         process.env.DATABASE_URL ||
         "postgresql://episteme:episteme@localhost:5433/episteme",
+      BETTER_AUTH_SECRET:
+        process.env.BETTER_AUTH_SECRET ||
+        "test-secret-for-integration-tests-only-not-for-prod",
+      BETTER_AUTH_URL:
+        process.env.BETTER_AUTH_URL || "http://localhost:3001",
     },
   },
   resolve: {

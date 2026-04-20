@@ -1,3 +1,6 @@
-export function getUserIdFromRequest(req: Request): string | null {
-  return req.headers.get("x-user-id");
+import { auth } from "@episteme/auth";
+
+export async function getUserIdFromRequest(req: Request): Promise<string | null> {
+  const session = await auth.api.getSession({ headers: req.headers });
+  return session?.user?.id ?? null;
 }

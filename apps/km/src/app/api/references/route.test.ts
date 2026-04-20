@@ -11,24 +11,25 @@ import {
   deleteTestUser,
   params,
   req,
+  type TestUser,
 } from "../_test-utils";
 
-let userId: string;
-let otherId: string;
+let u: TestUser;
+let other: TestUser;
 let libraryId: number;
 
 beforeAll(async () => {
-  userId = await createTestUser();
-  otherId = await createTestUser();
+  u = await createTestUser();
+  other = await createTestUser();
   const r = await POST_LIB(
-    req("/api/libraries", { method: "POST", userId, body: JSON.stringify({ name: "Refs Lib" }) }),
+    req("/api/libraries", { method: "POST", cookie: u.cookie, body: JSON.stringify({ name: "Refs Lib" }) }),
   );
   libraryId = (await r.json()).id;
 });
 
 afterAll(async () => {
-  await deleteTestUser(userId);
-  await deleteTestUser(otherId);
+  await deleteTestUser(u.id);
+  await deleteTestUser(other.id);
 });
 
 let keyCounter = 0;
@@ -50,7 +51,7 @@ describe("references", () => {
     const r = await POST(
       req("/api/references", {
         method: "POST",
-        userId,
+        cookie: u.cookie,
         body: JSON.stringify(refBody({ citationKey: "has space" })),
       }),
     );
@@ -59,39 +60,39 @@ describe("references", () => {
 
   it("403 creating ref in other user's library", async () => {
     const r = await POST(
-      req("/api/references", { method: "POST", userId: otherId, body: JSON.stringify(refBody()) }),
+      req("/api/references", { method: "POST", cookie: other.cookie, body: JSON.stringify(refBody()) }),
     );
     expect(r.status).toBe(403);
   });
 
   it("golden path CRUD", async () => {
-    const c = await POST(req("/api/references", { method: "POST", userId, body: JSON.stringify(refBody()) }));
+    const c = await POST(req("/api/references", { method: "POST", cookie: u.cookie, body: JSON.stringify(refBody()) }));
     expect(c.status).toBe(201);
     const ref = await c.json();
 
-    const list = await GET(req(`/api/references?libraryId=${libraryId}`, { userId }));
+    const list = await GET(req(`/api/references?libraryId=${libraryId}`, { cookie: u.cookie }));
     const rows = await list.json();
     expect(rows.some((r: any) => r.id === ref.id)).toBe(true);
 
-    const one = await GET_ID(req(`/api/references/${ref.id}`, { userId }), params({ id: ref.id }));
+    const one = await GET_ID(req(`/api/references/${ref.id}`, { cookie: u.cookie }), params({ id: ref.id }));
     expect(one.status).toBe(200);
 
     const newKey = uniqueKey();
     const patched = await PATCH_ID(
-      req(`/api/references/${ref.id}`, { method: "PATCH", userId, body: JSON.stringify({ citationKey: newKey }) }),
+      req(`/api/references/${ref.id}`, { method: "PATCH", cookie: u.cookie, body: JSON.stringify({ citationKey: newKey }) }),
       params({ id: ref.id }),
     );
     expect((await patched.json()).citationKey).toBe(newKey);
 
-    const del = await DEL_ID(req(`/api/references/${ref.id}`, { method: "DELETE", userId }), params({ id: ref.id }));
+    const del = await DEL_ID(req(`/api/references/${ref.id}`, { method: "DELETE", cookie: u.cookie }), params({ id: ref.id }));
     expect(del.status).toBe(204);
   });
 
   it("ownership: other user cannot delete", async () => {
-    const c = await POST(req("/api/references", { method: "POST", userId, body: JSON.stringify(refBody()) }));
+    const c = await POST(req("/api/references", { method: "POST", cookie: u.cookie, body: JSON.stringify(refBody()) }));
     const ref = await c.json();
     const r = await DEL_ID(
-      req(`/api/references/${ref.id}`, { method: "DELETE", userId: otherId }),
+      req(`/api/references/${ref.id}`, { method: "DELETE", cookie: other.cookie }),
       params({ id: ref.id }),
     );
     expect(r.status).toBe(403);

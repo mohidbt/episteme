@@ -7,7 +7,7 @@ import { noteCreateSchema } from "@/lib/validators";
 import { jsonError, requireOwned, resolveNoteSlug } from "@/lib/crud";
 
 export async function GET(req: Request) {
-  const userId = getUserIdFromRequest(req);
+  const userId = await getUserIdFromRequest(req);
   if (!userId) return jsonError(401, "unauthorized");
   const url = new URL(req.url);
   const libraryIdStr = url.searchParams.get("libraryId");
@@ -22,7 +22,7 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const userId = getUserIdFromRequest(req);
+  const userId = await getUserIdFromRequest(req);
   if (!userId) return jsonError(401, "unauthorized");
   const body = await req.json().catch(() => null);
   const parsed = noteCreateSchema.safeParse(body);
