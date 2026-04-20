@@ -34,9 +34,10 @@ interface SidebarFolderProps {
   node: FolderNode<Item>;
   section: ContentSection;
   depth: number;
+  libraryId: number;
 }
 
-export function SidebarFolder({ node, section, depth }: SidebarFolderProps) {
+export function SidebarFolder({ node, section, depth, libraryId }: SidebarFolderProps) {
   if (depth === 0) {
     // Root — render items + children flat, no folder row.
     return (
@@ -47,6 +48,7 @@ export function SidebarFolder({ node, section, depth }: SidebarFolderProps) {
             node={child}
             section={section}
             depth={1}
+            libraryId={libraryId}
           />
         ))}
         {node.items.map((item) => (
@@ -55,17 +57,18 @@ export function SidebarFolder({ node, section, depth }: SidebarFolderProps) {
       </>
     );
   }
-  return <FolderRow node={node} section={section} depth={depth} />;
+  return <FolderRow node={node} section={section} depth={depth} libraryId={libraryId} />;
 }
 
 interface FolderRowProps {
   node: FolderNode<Item>;
   section: ContentSection;
   depth: number;
+  libraryId: number;
 }
 
-function FolderRow({ node, section, depth }: FolderRowProps) {
-  const storageKey = `${section}:${node.path}`;
+function FolderRow({ node, section, depth, libraryId }: FolderRowProps) {
+  const storageKey = `${libraryId}:${section}:${node.path}`;
   const [open, setOpen] = useExpanded(storageKey, false);
   const titleMuted = node.items.length === 0 && node.children.length === 0;
 
@@ -90,6 +93,7 @@ function FolderRow({ node, section, depth }: FolderRowProps) {
               node={child}
               section={section}
               depth={depth + 1}
+              libraryId={libraryId}
             />
           ))}
           {node.items.map((item) => (
@@ -103,8 +107,8 @@ function FolderRow({ node, section, depth }: FolderRowProps) {
   );
 }
 
-function FolderSubRow({ node, section, depth }: FolderRowProps) {
-  const storageKey = `${section}:${node.path}`;
+function FolderSubRow({ node, section, depth, libraryId }: FolderRowProps) {
+  const storageKey = `${libraryId}:${section}:${node.path}`;
   const [open, setOpen] = useExpanded(storageKey, false);
 
   return (
@@ -128,6 +132,7 @@ function FolderSubRow({ node, section, depth }: FolderRowProps) {
               node={child}
               section={section}
               depth={depth + 1}
+              libraryId={libraryId}
             />
           ))}
           {node.items.map((item) => (
@@ -141,8 +146,6 @@ function FolderSubRow({ node, section, depth }: FolderRowProps) {
   );
 }
 
-const LEAF_ACTIVE = "data-active:border-l-2 data-active:border-foreground data-active:rounded-l-none data-active:pl-[calc(0.5rem-2px)]";
-
 function LeafRow({ item, section }: { item: Item; section: ContentSection }) {
   const pathname = usePathname();
   const href = itemHref(section, item);
@@ -153,7 +156,7 @@ function LeafRow({ item, section }: { item: Item; section: ContentSection }) {
       <SidebarMenuButton
         render={<Link href={href} />}
         isActive={isActive}
-        className={`${LEAF_ACTIVE}${hasTitle ? "" : " text-muted-foreground italic"}`}
+        className={`data-[active=true]:bg-transparent data-[active=true]:border-l-2 data-[active=true]:border-foreground data-[active=true]:font-medium data-[active=true]:rounded-l-none data-[active=true]:pl-[calc(0.5rem-2px)]${hasTitle ? "" : " text-muted-foreground italic"}`}
       >
         <span>{itemTitle(item)}</span>
       </SidebarMenuButton>
@@ -170,7 +173,7 @@ function SubLeafLink({ item, section }: { item: Item; section: ContentSection })
     <SidebarMenuSubButton
       render={<Link href={href} />}
       isActive={isActive}
-      className={`${LEAF_ACTIVE}${hasTitle ? "" : " text-muted-foreground italic"}`}
+      className={`data-[active=true]:bg-transparent data-[active=true]:border-l-2 data-[active=true]:border-foreground data-[active=true]:font-medium data-[active=true]:rounded-l-none data-[active=true]:pl-[calc(0.5rem-2px)]${hasTitle ? "" : " text-muted-foreground italic"}`}
     >
       <span>{itemTitle(item)}</span>
     </SidebarMenuSubButton>

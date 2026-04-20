@@ -33,7 +33,7 @@ export function SidebarAgentSection() {
               <SidebarMenuButton
                 render={<Link href={href} />}
                 isActive={pathname === href}
-                className="data-active:border-l-2 data-active:border-foreground data-active:rounded-l-none data-active:pl-[calc(0.5rem-2px)]"
+                className="data-[active=true]:bg-transparent data-[active=true]:border-l-2 data-[active=true]:border-foreground data-[active=true]:font-medium data-[active=true]:rounded-l-none data-[active=true]:pl-[calc(0.5rem-2px)]"
               >
                 <Icon aria-hidden />
                 <span>{label}</span>

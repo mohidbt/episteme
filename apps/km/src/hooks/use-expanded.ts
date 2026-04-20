@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 const STORAGE_NS = "km.sidebar.expand.v1";
 
@@ -17,11 +17,12 @@ function readAll(): Record<string, boolean> {
 }
 
 export function useExpanded(key: string, initial = false): [boolean, (v: boolean) => void] {
-  const [open, setOpen] = useState<boolean>(() => {
-    if (typeof window === "undefined") return initial;
-    const obj = readAll();
-    return obj[key] ?? initial;
-  });
+  const [open, setOpen] = useState<boolean>(initial);
+
+  useEffect(() => {
+    const persisted = readAll()[key];
+    if (typeof persisted === "boolean" && persisted !== initial) setOpen(persisted);
+  }, [key, initial]);
 
   const set = useCallback(
     (v: boolean) => {

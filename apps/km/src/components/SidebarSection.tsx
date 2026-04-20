@@ -1,6 +1,6 @@
 "use client";
 
-import { FileText, NotebookPen, Quote } from "lucide-react";
+import { BookMarked, FileText, NotebookPen } from "lucide-react";
 import {
   SidebarGroup,
   SidebarGroupContent,
@@ -18,6 +18,7 @@ interface ContentProps {
   kind: ContentSection;
   label: string;
   items: (PaperItem | ReferenceItem | NoteItem)[];
+  libraryId: number;
 }
 
 interface AgentProps {
@@ -28,7 +29,7 @@ type Props = ContentProps | AgentProps;
 
 const SECTION_ICON = {
   papers: FileText,
-  references: Quote,
+  references: BookMarked,
   notes: NotebookPen,
 } as const;
 
@@ -46,7 +47,12 @@ export function SidebarSection(props: Props) {
       </SidebarGroupLabel>
       <SidebarGroupContent>
         <SidebarMenu>
-          <SidebarFolder node={tree} section={props.kind} depth={0} />
+          <SidebarFolder
+            node={tree}
+            section={props.kind}
+            depth={0}
+            libraryId={props.libraryId}
+          />
         </SidebarMenu>
       </SidebarGroupContent>
     </SidebarGroup>

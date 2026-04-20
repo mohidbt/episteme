@@ -29,16 +29,19 @@ export function SidebarShell({ library, tree }: SidebarShellProps) {
           kind="papers"
           label="Papers"
           items={tree.sections.papers.items}
+          libraryId={library.id}
         />
         <SidebarSection
           kind="references"
           label="References"
           items={tree.sections.references.items}
+          libraryId={library.id}
         />
         <SidebarSection
           kind="notes"
           label="Notes"
           items={tree.sections.notes.items}
+          libraryId={library.id}
         />
         <SidebarSection kind="agent" />
       </SidebarContent>
