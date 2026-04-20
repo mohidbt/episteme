@@ -1,5 +1,6 @@
 import { Mark } from "@tiptap/core";
 import StarterKit from "@tiptap/starter-kit";
+import Italic from "@tiptap/extension-italic";
 import TaskList from "@tiptap/extension-task-list";
 import TaskItem from "@tiptap/extension-task-item";
 import { Markdown } from "tiptap-markdown";
@@ -23,14 +24,35 @@ const Link = Mark.create({
   },
 });
 
+// Override italic's markdown serialize delimiters to use `_..._` instead of
+// the default `*...*`. tiptap-markdown merges an extension's
+// `storage.markdown` over its defaults (see getMarkdownSpec), so this
+// survives the StarterKit -> Italic chain without touching serialized output
+// post-hoc (which would corrupt `*` inside code spans / fenced blocks).
+const ItalicUnderscore = Italic.extend({
+  addStorage() {
+    return {
+      markdown: {
+        serialize: { open: "_", close: "_", mixable: true, expelEnclosingWhitespace: true },
+        parse: {},
+      },
+    };
+  },
+});
+
 export const createExtensions = () => {
   const exts = [
     StarterKit.configure({
       heading: { levels: [1, 2, 3] },
+      italic: false,
     }),
+    ItalicUnderscore,
     Link,
     TaskList,
     TaskItem.configure({ nested: true }),
+    // NOTE: Task 3's live editor will want `transformPastedText: true` so
+    // pasted markdown is parsed into nodes; keep it false here for headless
+    // round-tripping where we already pass a markdown string to setContent.
     Markdown.configure({
       html: false,
       tightLists: true,
@@ -43,5 +65,3 @@ export const createExtensions = () => {
   ];
   return exts;
 };
-
-export const coreExtensions = createExtensions();
