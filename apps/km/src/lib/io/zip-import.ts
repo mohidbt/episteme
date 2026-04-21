@@ -73,8 +73,17 @@ export async function importLibraryZip(
 
   // Validate all paths up front so we refuse the whole zip on traversal —
   // no partial mutation, no need to wait until the tx sees the bad entry.
+  const utf8Validator = new TextDecoder("utf-8", { fatal: true });
   for (const entry of dir.files) {
     if (!entry.path) throw new ZipImportError("invalid_filename");
+    const pathBuffer = (entry as unknown as { pathBuffer?: Buffer }).pathBuffer;
+    if (pathBuffer) {
+      try {
+        utf8Validator.decode(pathBuffer);
+      } catch {
+        throw new ZipImportError("invalid_filename", entry.path);
+      }
+    }
     validatePath(entry.path);
   }
 
