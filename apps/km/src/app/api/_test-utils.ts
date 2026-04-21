@@ -42,7 +42,9 @@ export function req(
   const { cookie, headers, ...rest } = init;
   const hdrs = new Headers(headers);
   if (cookie) hdrs.set("cookie", cookie);
-  if (init.body && !hdrs.has("content-type")) hdrs.set("content-type", "application/json");
+  if (init.body && !hdrs.has("content-type") && typeof init.body === "string") {
+    hdrs.set("content-type", "application/json");
+  }
   return new Request(`http://localhost${url}`, { ...rest, headers: hdrs });
 }
 

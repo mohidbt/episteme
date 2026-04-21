@@ -1,5 +1,8 @@
 // Helpers for /api/references: unique-collision suggestion + 23505 detection.
 
+import { db } from "./db";
+import { references_ } from "@episteme/db/schema";
+
 /**
  * Given a citation key, produce the next "-N" suggestion.
  * - "foo"     -> "foo-2"
@@ -32,4 +35,40 @@ export function isUniqueViolation(err: unknown): boolean {
     return true;
   }
   return false;
+}
+
+type InsertValues = {
+  libraryId: number;
+  folderPath: string;
+  citationKey: string;
+  cslJson: unknown;
+  paperId?: string | null;
+  userId: string;
+};
+
+/**
+ * Insert a reference row, retrying with bumped citation-key suffixes on 23505
+ * collisions. Returns the finally inserted row plus the key actually used
+ * (so callers can report bumps). Gives up after `maxAttempts` tries.
+ */
+export async function insertReferenceWithSuffixBump(
+  values: InsertValues,
+  maxAttempts = 20,
+): Promise<{ row: typeof references_.$inferSelect; finalKey: string; bumped: boolean }> {
+  let key = values.citationKey;
+  let bumped = false;
+  for (let i = 0; i < maxAttempts; i++) {
+    try {
+      const [row] = await db
+        .insert(references_)
+        .values({ ...values, citationKey: key })
+        .returning();
+      return { row, finalKey: key, bumped };
+    } catch (err) {
+      if (!isUniqueViolation(err)) throw err;
+      key = suggestNextCitationKey(key);
+      bumped = true;
+    }
+  }
+  throw new Error(`citation_key_suffix_exhausted after ${maxAttempts} attempts`);
 }
