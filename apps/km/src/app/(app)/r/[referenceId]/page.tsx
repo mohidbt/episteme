@@ -1,8 +1,10 @@
 import { headers } from "next/headers";
+import { notFound, redirect } from "next/navigation";
 import { auth } from "@episteme/auth";
-import { redirect } from "next/navigation";
 import { getDefaultLibrary } from "@/lib/default-library";
+import { getReference } from "@/lib/references-server";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
+import { ReferenceForm } from "@/components/ReferenceForm";
 
 export default async function ReferencePage({
   params,
@@ -12,19 +14,21 @@ export default async function ReferencePage({
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session?.user) redirect("/sign-in");
   const { referenceId } = await params;
+  const ref = await getReference(referenceId, session.user.id);
+  if (!ref) notFound();
   const library = await getDefaultLibrary(session.user.id);
+
   return (
     <div className="mx-auto max-w-3xl p-6">
       {library && (
         <Breadcrumbs
           libraryName={library.name}
           section="references"
-          folderPath=""
-          title={`Reference #${referenceId}`}
+          folderPath={ref.folderPath}
+          title={ref.citationKey}
         />
       )}
-      <h1 className="font-display text-2xl mb-3">Reference #{referenceId}</h1>
-      <p className="text-muted-foreground">Reference stub — Phase 0.4</p>
+      <ReferenceForm reference={ref} />
     </div>
   );
 }
