@@ -12,6 +12,7 @@
     "@tiptap/react": "^2.10.0",
     "@tiptap/pm": "^2.10.0",
     "@tiptap/extension-placeholder": "^2.10.0",
+    "@tiptap/suggestion": "^2.10.0",
     "tiptap-markdown": "^0.8.10"
   },
   "peerDependencies": {

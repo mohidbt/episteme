@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
-import { editorExtensions } from "./extensions";
+import { editorExtensions, type WikiLinkSuggestion } from "./extensions";
 import "./styles.css";
 
 export interface EditorProps {
@@ -10,11 +10,18 @@ export interface EditorProps {
   onChangeMd: (md: string) => void;
   placeholder?: string;
   autofocus?: boolean;
+  wikiLinkSuggestion?: WikiLinkSuggestion;
 }
 
-export function Editor({ initialMd, onChangeMd, placeholder, autofocus }: EditorProps) {
+export function Editor({
+  initialMd,
+  onChangeMd,
+  placeholder,
+  autofocus,
+  wikiLinkSuggestion,
+}: EditorProps) {
   const editor = useEditor({
-    extensions: editorExtensions({ placeholder }),
+    extensions: editorExtensions({ placeholder, wikiLinkSuggestion }),
     content: initialMd,
     autofocus: autofocus ?? false,
     immediatelyRender: false,

@@ -1,6 +1,8 @@
 "use client";
-import { Editor } from "@episteme/editor";
-import { useCallback, useEffect, useRef } from "react";
+import { Editor, type WikiLinkSuggestion } from "@episteme/editor";
+import { useCallback, useEffect, useMemo, useRef } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { WikiLinkTypeahead, type WikiLinkTypeaheadRef } from "@/components/WikiLinkTypeahead";
 
 export function NoteEditor({ id, initialMd }: { id: string; initialMd: string }) {
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -44,5 +46,104 @@ export function NoteEditor({ id, initialMd }: { id: string; initialMd: string })
     };
   }, [flush]);
 
-  return <Editor initialMd={initialMd} onChangeMd={onChangeMd} autofocus />;
+  const wikiLinkSuggestion = useMemo<WikiLinkSuggestion>(
+    () => ({
+      command: ({ editor, range, props }) => {
+        // Replace the `[[query` range with a wikiLink node + trailing space.
+        const p = props as {
+          title: string;
+          targetKind: "note";
+          targetId: string | null;
+        };
+        editor
+          .chain()
+          .focus()
+          .deleteRange(range)
+          .insertContent([
+            {
+              type: "wikiLink",
+              attrs: {
+                title: p.title,
+                alias: null,
+                targetKind: p.targetKind,
+                targetId: p.targetId,
+              },
+            },
+            { type: "text", text: " " },
+          ])
+          .run();
+      },
+      render: () => {
+        let root: Root | null = null;
+        let host: HTMLDivElement | null = null;
+        let refObj: { current: WikiLinkTypeaheadRef | null } = { current: null };
+
+        const place = (clientRect: (() => DOMRect | null) | null | undefined) => {
+          if (!host) return;
+          const rect = clientRect?.() ?? null;
+          if (!rect) {
+            host.style.display = "none";
+            return;
+          }
+          host.style.display = "block";
+          host.style.top = `${rect.bottom + window.scrollY + 4}px`;
+          host.style.left = `${rect.left + window.scrollX}px`;
+        };
+
+        return {
+          onStart: (props) => {
+            host = document.createElement("div");
+            host.style.position = "absolute";
+            host.style.zIndex = "50";
+            document.body.appendChild(host);
+            root = createRoot(host);
+            refObj = { current: null };
+            root.render(
+              <WikiLinkTypeahead
+                ref={(r) => {
+                  refObj.current = r;
+                }}
+                query={props.query}
+                onSelect={(payload) => props.command(payload as never)}
+              />,
+            );
+            place(props.clientRect);
+          },
+          onUpdate: (props) => {
+            if (!root) return;
+            root.render(
+              <WikiLinkTypeahead
+                ref={(r) => {
+                  refObj.current = r;
+                }}
+                query={props.query}
+                onSelect={(payload) => props.command(payload as never)}
+              />,
+            );
+            place(props.clientRect);
+          },
+          onKeyDown: (props) => {
+            if (props.event.key === "Escape") return true;
+            return refObj.current?.onKeyDown({ event: props.event }) ?? false;
+          },
+          onExit: () => {
+            root?.unmount();
+            host?.remove();
+            root = null;
+            host = null;
+          },
+        };
+      },
+    }),
+    [],
+  );
+
+  return (
+    <Editor
+      initialMd={initialMd}
+      onChangeMd={onChangeMd}
+      autofocus
+      wikiLinkSuggestion={wikiLinkSuggestion}
+    />
+  );
 }

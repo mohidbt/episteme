@@ -1,9 +1,30 @@
 import Placeholder from "@tiptap/extension-placeholder";
-import { createExtensions as baseExtensions } from "@episteme/markdown";
+import Suggestion, { type SuggestionOptions } from "@tiptap/suggestion";
+import { createExtensions as baseExtensions, WikiLink } from "@episteme/markdown";
 
-export function editorExtensions(opts?: { placeholder?: string }) {
+export type WikiLinkSuggestion = Omit<SuggestionOptions, "editor" | "pluginKey">;
+
+export function editorExtensions(opts?: {
+  placeholder?: string;
+  wikiLinkSuggestion?: WikiLinkSuggestion;
+}) {
+  const wikiLink = opts?.wikiLinkSuggestion
+    ? WikiLink.extend({
+        addProseMirrorPlugins() {
+          return [
+            Suggestion({
+              editor: this.editor,
+              char: "[[",
+              ...opts.wikiLinkSuggestion!,
+            }),
+          ];
+        },
+      })
+    : WikiLink;
+
   return [
     ...baseExtensions(),
+    wikiLink,
     Placeholder.configure({ placeholder: opts?.placeholder ?? "Start writing…" }),
   ];
 }

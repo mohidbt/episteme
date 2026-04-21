@@ -17,6 +17,7 @@
     "@tiptap/extension-italic": "^2.10.0",
     "@tiptap/extension-task-list": "^2.10.0",
     "@tiptap/extension-task-item": "^2.10.0",
+    "@tiptap/suggestion": "^2.10.0",
     "tiptap-markdown": "^0.8.10"
   },
   "devDependencies": {
