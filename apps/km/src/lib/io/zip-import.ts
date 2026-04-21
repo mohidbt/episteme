@@ -126,14 +126,18 @@ export async function importLibraryZip(
         let attempts = 0;
         while (true) {
           try {
-            await tx.insert(notes).values({
-              libraryId,
-              userId,
-              folderPath,
-              title,
-              slug,
-              filename,
-              contentMd: content,
+            // Nest in a SAVEPOINT: a 23505 inside an outer tx aborts the
+            // whole tx (SQLSTATE 25P02) unless we roll back to a savepoint.
+            await tx.transaction(async (sp) => {
+              await sp.insert(notes).values({
+                libraryId,
+                userId,
+                folderPath,
+                title,
+                slug,
+                filename,
+                contentMd: content,
+              });
             });
             break;
           } catch (err) {
@@ -181,12 +185,14 @@ export async function importLibraryZip(
         let attempts = 0;
         while (true) {
           try {
-            await tx.insert(references_).values({
-              libraryId,
-              userId,
-              folderPath,
-              citationKey: key,
-              cslJson: csl,
+            await tx.transaction(async (sp) => {
+              await sp.insert(references_).values({
+                libraryId,
+                userId,
+                folderPath,
+                citationKey: key,
+                cslJson: csl,
+              });
             });
             break;
           } catch (err) {
