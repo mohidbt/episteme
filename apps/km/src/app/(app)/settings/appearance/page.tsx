@@ -1,12 +1,10 @@
-import { redirect } from "next/navigation";
 import { getCurrentUserId } from "@/lib/session";
 import { getUserPreferences } from "@/lib/preferences-server";
 import { FontToggle } from "@/components/FontToggle";
 import { RuledLinesToggle } from "@/components/RuledLinesToggle";
 
 export default async function AppearanceSettingsPage() {
-  const userId = await getCurrentUserId();
-  if (!userId) redirect("/sign-in");
+  const userId = (await getCurrentUserId())!;
   const prefs = await getUserPreferences(userId);
 
   return (

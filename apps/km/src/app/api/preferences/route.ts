@@ -22,6 +22,9 @@ export async function PATCH(req: Request) {
     return jsonError(400, "validation", { issues: parsed.error.issues });
   }
   const patch = parsed.data;
+  if (patch.font === undefined && patch.ruledLines === undefined) {
+    return jsonError(400, "empty");
+  }
 
   const insertValues: typeof userPreferences.$inferInsert = {
     userId,

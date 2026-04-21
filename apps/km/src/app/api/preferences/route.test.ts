@@ -65,6 +65,28 @@ describe("PATCH /api/preferences", () => {
     expect(r.status).toBe(400);
   });
 
+  it("400 on empty body (does not touch DB)", async () => {
+    const before = await db
+      .select()
+      .from(userPreferences)
+      .where(eq(userPreferences.userId, fresh.id));
+
+    const r = await PATCH(
+      req("/api/preferences", {
+        method: "PATCH",
+        cookie: fresh.cookie,
+        body: JSON.stringify({}),
+      }),
+    );
+    expect(r.status).toBe(400);
+
+    const after = await db
+      .select()
+      .from(userPreferences)
+      .where(eq(userPreferences.userId, fresh.id));
+    expect(after.length).toBe(before.length);
+  });
+
   it("upserts and returns merged row; second PATCH updates in place", async () => {
     const r1 = await PATCH(
       req("/api/preferences", {
