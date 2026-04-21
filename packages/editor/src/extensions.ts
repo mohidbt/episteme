@@ -1,6 +1,6 @@
 import Placeholder from "@tiptap/extension-placeholder";
 import Suggestion, { type SuggestionOptions } from "@tiptap/suggestion";
-import { createExtensions as baseExtensions, WikiLink } from "@episteme/markdown";
+import { createExtensions as baseExtensions, WikiLink, TagMark } from "@episteme/markdown";
 
 export type WikiLinkSuggestion = Omit<SuggestionOptions, "editor" | "pluginKey">;
 
@@ -25,6 +25,7 @@ export function editorExtensions(opts?: {
   return [
     ...baseExtensions(),
     wikiLink,
+    TagMark,
     Placeholder.configure({ placeholder: opts?.placeholder ?? "Start writing…" }),
   ];
 }
