@@ -5,10 +5,8 @@ import { getUserIdFromRequest } from "@/lib/auth";
 import { paperUploadInitSchema } from "@/lib/validators";
 import { jsonError, requireOwned } from "@/lib/crud";
 import { storage, paperSourceKey } from "@/lib/storage";
-import { filenameToTitle, sanitizeFilename } from "@/lib/pdf-extract";
+import { filenameToTitle, sanitizeFilename } from "@/lib/filename";
 
-// pdfjs-dist + @napi-rs/canvas need the Node runtime; finalize imports them
-// transitively via pdf-extract. Pin here so dev and prod agree.
 export const runtime = "nodejs";
 
 const UPLOAD_TTL_SEC = 600;

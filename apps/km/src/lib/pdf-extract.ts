@@ -60,61 +60,8 @@ const YEAR_RE = /\b(?:19|20)\d{2}\b/;
 const PUB_YEAR_RE =
   /(?:Conference|Proceedings|Published|NeurIPS|NIPS|ICML|ICLR|AAAI|ACL|EMNLP|NAACL|CVPR|ECCV|ICCV|JMLR|TACL)[^.\n]{0,80}?\b((?:19|20)\d{2})\b/;
 
-// Windows reserved basenames (case-insensitive). If the basename (sans ext)
-// matches, we prefix with "_" to keep the filename writable on Windows and
-// portable across object stores that reject these names.
-const WIN_RESERVED = new Set([
-  "CON", "PRN", "AUX", "NUL",
-  "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
-  "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
-]);
-
-// Maximum UTF-8 byte length for the basename portion (excluding extension).
-const MAX_BASENAME_BYTES = 200;
-
-/**
- * Sanitize a raw filename for safe use as a disk / object-store key:
- *   - strip path segments (both "/" and "\")
- *   - strip null bytes + ASCII control chars
- *   - prefix Windows-reserved basenames with "_"
- *   - cap the basename at 200 UTF-8 bytes, preserving a trailing `.pdf`
- *
- * Preserves unicode.
- */
-export function sanitizeFilename(raw: string): string {
-  const trimmed = raw.trim();
-  // Take only the final path segment — handles both "/" and "\".
-  const lastSlash = Math.max(trimmed.lastIndexOf("/"), trimmed.lastIndexOf("\\"));
-  let base = lastSlash >= 0 ? trimmed.slice(lastSlash + 1) : trimmed;
-
-  // Drop null bytes and C0/C1-ish ASCII control chars (0x00–0x1f, 0x7f).
-  base = base.replace(/[\x00-\x1f\x7f]/g, "");
-
-  // Separate extension (only treat `.pdf` specially — the field everything
-  // else downstream uses is the basename).
-  const pdfMatch = base.match(/\.pdf$/i);
-  const ext = pdfMatch ? pdfMatch[0] : "";
-  let stem = ext ? base.slice(0, -ext.length) : base;
-
-  // Windows-reserved basename — case-insensitive — prefix with "_".
-  if (WIN_RESERVED.has(stem.toUpperCase())) {
-    stem = `_${stem}`;
-  }
-
-  // Cap stem at 200 UTF-8 bytes. Drop chars (not bytes) so we don't split a
-  // multi-byte sequence. `.pdf` is always ASCII so we don't count it.
-  while (Buffer.byteLength(stem, "utf8") > MAX_BASENAME_BYTES) {
-    stem = stem.slice(0, -1);
-  }
-
-  return stem + ext;
-}
-
-/** Convert a raw filename into a fallback title: sanitize then drop a trailing .pdf. */
-export function filenameToTitle(raw: string): string {
-  const clean = sanitizeFilename(raw);
-  return clean.replace(/\.pdf$/i, "");
-}
+import { filenameToTitle } from "./filename";
+export { sanitizeFilename, filenameToTitle } from "./filename";
 
 interface PositionedItem {
   str: string;

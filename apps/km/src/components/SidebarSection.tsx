@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { BookMarked, FileText, NotebookPen } from "lucide-react";
 import {
   DndContext,
@@ -164,10 +165,17 @@ function ContentSectionWithDnd(props: ContentProps) {
     }
   };
 
+  const sectionHref = props.kind === "papers" ? "/papers" : null;
   const label = (
     <SidebarGroupLabel className="gap-2 text-[11px] font-medium tracking-[0.14em] uppercase text-muted-foreground">
       <Icon data-icon="inline-start" aria-hidden />
-      {props.label}
+      {sectionHref ? (
+        <Link href={sectionHref} className="hover:text-foreground">
+          {props.label}
+        </Link>
+      ) : (
+        props.label
+      )}
     </SidebarGroupLabel>
   );
 

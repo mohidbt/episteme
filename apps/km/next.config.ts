@@ -8,6 +8,7 @@ const config: NextConfig = {
     "@episteme/editor",
     "@episteme/markdown",
   ],
+  serverExternalPackages: ["@napi-rs/canvas", "pdfjs-dist"],
 };
 
 export default config;
