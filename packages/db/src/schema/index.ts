@@ -25,3 +25,4 @@ export * from "./note-revisions";
 export * from "./note-embeddings";
 export * from "./agent-configs";
 export * from "./agent-memories";
+export * from "./user-preferences";

@@ -78,6 +78,13 @@
       "when": 1776690966945,
       "tag": "0010_lowly_cerise",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1776776752931,
+      "tag": "0011_faithful_gambit",
+      "breakpoints": true
     }
   ]
 }
