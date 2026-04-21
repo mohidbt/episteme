@@ -8,3 +8,23 @@
 .episteme-prose ul, .episteme-prose ol { padding-left: 1.5em; }
 .episteme-prose [data-type="taskList"] { list-style: none; padding-left: 0; }
 .episteme-prose [data-type="taskItem"] { display: flex; gap: 0.5em; align-items: start; }
+
+/* Appearance modifiers: applied via data attributes on the <main> ancestor
+   in apps/km so the editor package stays unaware of the preference surface. */
+main[data-prose-font="serif"] .episteme-prose {
+  font-family: var(--font-prose-serif), Georgia, ui-serif, serif;
+}
+main[data-prose-font="mono"] .episteme-prose {
+  font-family: var(--font-prose-mono), ui-monospace, SFMono-Regular, monospace;
+}
+main[data-prose-ruled="true"] .episteme-prose {
+  background-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent calc(1.7em - 1px),
+    var(--border) calc(1.7em - 1px),
+    var(--border) 1.7em
+  );
+  background-size: 100% 1.7em;
+  background-attachment: local;
+}

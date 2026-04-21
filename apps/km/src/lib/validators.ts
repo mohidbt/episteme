@@ -113,3 +113,10 @@ export const paperHighlightCreateSchema = z.object({
   color: z.string().max(32).nullable().optional(),
   noteMd: z.string().max(10_000).nullable().optional(),
 });
+
+export const preferencesPatchSchema = z
+  .object({
+    font: z.enum(["sans", "serif", "mono"]).optional(),
+    ruledLines: z.boolean().optional(),
+  })
+  .strict();
