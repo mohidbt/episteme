@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { notes } from "@episteme/db/schema";
 import { getDefaultLibrary } from "@/lib/default-library";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
+import { BacklinksPanel } from "@/components/BacklinksPanel";
 import { NoteEditor } from "./NoteEditor";
 
 export default async function NotePage({
@@ -39,6 +40,7 @@ export default async function NotePage({
         {note.title}
       </h1>
       <NoteEditor id={note.id} initialMd={note.contentMd ?? ""} />
+      <BacklinksPanel noteId={note.id} />
     </div>
   );
 }
