@@ -93,7 +93,7 @@ export function ReferenceDoiInput({ libraryId, folderPath }: ReferenceDoiInputPr
   const preview = state.kind === "found" ? denormaliseForList(state.csl) : null;
 
   return (
-    <div className="mb-6 flex flex-col gap-2">
+    <div className="flex flex-col gap-2">
       <div className="flex items-center gap-2">
         <Input
           value={value}

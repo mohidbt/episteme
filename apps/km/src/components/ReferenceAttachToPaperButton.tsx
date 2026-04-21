@@ -83,7 +83,7 @@ export function ReferenceAttachToPaperButton({
           </Button>
         }
       />
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="w-[min(480px,calc(100vw-2rem))] overflow-hidden grid-cols-1 sm:max-w-[480px]">
         <DialogHeader>
           <DialogTitle>Attach to a paper</DialogTitle>
         </DialogHeader>
@@ -93,7 +93,7 @@ export function ReferenceAttachToPaperButton({
             No papers in this library yet. Upload a PDF first.
           </p>
         ) : (
-          <div className="flex flex-col gap-3">
+          <div className="flex min-w-0 flex-col gap-2">
             <Input
               placeholder="Search by title or filename…"
               value={query}
@@ -102,23 +102,21 @@ export function ReferenceAttachToPaperButton({
             />
 
             {currentPaperId && (
-              <Button
-                variant="ghost"
-                size="sm"
+              <button
                 type="button"
                 disabled={pending}
                 onClick={() => setPaperId(null)}
-                className="w-full justify-start text-destructive hover:text-destructive"
+                className="flex items-center gap-2 self-start rounded-md px-2 py-1 text-xs text-destructive hover:bg-destructive/10 disabled:opacity-60"
               >
-                <Link2Off className="h-4 w-4" aria-hidden />
+                <Link2Off className="h-3.5 w-3.5" aria-hidden />
                 Detach from current paper
-              </Button>
+              </button>
             )}
 
-            <ul className="max-h-[60vh] overflow-y-auto rounded-md border border-border/60 divide-y divide-border/60">
+            <ul className="max-h-[50vh] overflow-y-auto rounded-md border border-border/60 divide-y divide-border/60">
               {filtered.length === 0 ? (
-                <li className="px-3 py-6 text-center text-sm text-muted-foreground">
-                  No papers match “{query}”.
+                <li className="px-3 py-4 text-center text-sm text-muted-foreground">
+                  No papers match &quot;{query}&quot;.
                 </li>
               ) : (
                 filtered.map((p) => {
@@ -130,23 +128,23 @@ export function ReferenceAttachToPaperButton({
                         type="button"
                         disabled={pending || isCurrent}
                         onClick={() => setPaperId(p.id)}
-                        className="flex w-full items-start gap-2 px-3 py-2 text-left hover:bg-muted/60 disabled:opacity-60"
+                        className="flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-muted/60 disabled:opacity-60"
                       >
                         <span className="flex-1 min-w-0">
-                          <span className="block truncate text-sm">{display}</span>
+                          <span className="block truncate text-sm leading-tight">{display}</span>
                           {p.title && (
-                            <span className="block truncate text-xs text-muted-foreground">
+                            <span className="block truncate text-xs leading-tight text-muted-foreground">
                               {p.filename}
                             </span>
                           )}
                         </span>
                         {p.year != null && (
-                          <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
+                          <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
                             {p.year}
                           </span>
                         )}
                         {isCurrent && (
-                          <span className="shrink-0 text-xs text-muted-foreground">current</span>
+                          <span className="shrink-0 text-[11px] text-muted-foreground">current</span>
                         )}
                       </button>
                     </li>

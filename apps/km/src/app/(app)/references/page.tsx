@@ -6,6 +6,7 @@ import { listReferences } from "@/lib/references-server";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { ReferenceTable } from "@/components/ReferenceTable";
 import { ReferenceDoiInput } from "@/components/ReferenceDoiInput";
+import { ReferenceImportButton } from "@/components/ReferenceImportButton";
 
 export default async function ReferencesPage() {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -17,7 +18,15 @@ export default async function ReferencesPage() {
   return (
     <div className="p-6">
       <Breadcrumbs libraryName={library.name} section="references" folderPath="" />
-      <ReferenceDoiInput libraryId={library.id} folderPath="" />
+      <div className="mb-6 flex flex-col gap-3">
+        <ReferenceDoiInput libraryId={library.id} folderPath="" />
+        <div className="flex items-center gap-2">
+          <ReferenceImportButton libraryId={library.id} folderPath="" />
+          <p className="text-xs text-muted-foreground">
+            Bulk-import a BibTeX, RIS, or CSL-JSON file.
+          </p>
+        </div>
+      </div>
       {rows.length === 0 ? (
         <div className="flex flex-1 items-center justify-center p-10">
           <div className="text-center">

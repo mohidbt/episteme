@@ -17,6 +17,12 @@ const SECTION_LABEL: Record<Section, string> = {
   notes: "Notes",
 };
 
+const SECTION_HREF: Record<Section, string> = {
+  papers: "/papers",
+  references: "/references",
+  notes: "/",
+};
+
 export function Breadcrumbs({ libraryName, section, folderPath, title }: BreadcrumbsProps) {
   const segments = splitFolderPath(folderPath);
   return (
@@ -28,7 +34,7 @@ export function Breadcrumbs({ libraryName, section, folderPath, title }: Breadcr
         {libraryName}
       </Link>
       <ChevronRight className="size-3" aria-hidden />
-      <Link href="/" className="hover:text-foreground">
+      <Link href={SECTION_HREF[section]} className="hover:text-foreground">
         {SECTION_LABEL[section]}
       </Link>
       {segments.map((seg) => (

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { BookMarked, FileText, NotebookPen } from "lucide-react";
 import {
@@ -74,6 +74,11 @@ function ContentSectionWithDnd(props: ContentProps) {
   const tree = buildFolderTree(props.items);
   const canOpenHeaderMenu = props.kind === "notes";
   const [active, setActive] = useState<ActiveDrag | null>(null);
+  // dnd-kit generates incremental aria-describedby IDs that diverge between
+  // server and client renders. Gate the DndContext behind a mounted flag so
+  // SSR emits plain rows and drag wiring attaches only after hydration.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
@@ -165,7 +170,12 @@ function ContentSectionWithDnd(props: ContentProps) {
     }
   };
 
-  const sectionHref = props.kind === "papers" ? "/papers" : null;
+  const sectionHref =
+    props.kind === "papers"
+      ? "/papers"
+      : props.kind === "references"
+        ? "/references"
+        : null;
   const label = (
     <SidebarGroupLabel className="gap-2 text-[11px] font-medium tracking-[0.14em] uppercase text-muted-foreground">
       <Icon data-icon="inline-start" aria-hidden />
@@ -193,12 +203,32 @@ function ContentSectionWithDnd(props: ContentProps) {
         label
       )}
       <SidebarGroupContent>
-        <DndContext
-          sensors={sensors}
-          onDragStart={onDragStart}
-          onDragCancel={onDragCancel}
-          onDragEnd={onDragEnd}
-        >
+        {mounted ? (
+          <DndContext
+            sensors={sensors}
+            onDragStart={onDragStart}
+            onDragCancel={onDragCancel}
+            onDragEnd={onDragEnd}
+          >
+            <SidebarMenu>
+              <SidebarFolder
+                node={tree}
+                section={props.kind}
+                depth={0}
+                libraryId={props.libraryId}
+                onMutate={props.onMutate}
+              />
+              <SectionRootDroppable section={props.kind} />
+            </SidebarMenu>
+            <DragOverlay>
+              {active ? (
+                <div className="pointer-events-none rounded-md bg-sidebar-accent/80 px-2 py-1 text-sm text-sidebar-foreground ring-1 ring-foreground/20 shadow-sm">
+                  {active.label}
+                </div>
+              ) : null}
+            </DragOverlay>
+          </DndContext>
+        ) : (
           <SidebarMenu>
             <SidebarFolder
               node={tree}
@@ -207,16 +237,8 @@ function ContentSectionWithDnd(props: ContentProps) {
               libraryId={props.libraryId}
               onMutate={props.onMutate}
             />
-            <SectionRootDroppable section={props.kind} />
           </SidebarMenu>
-          <DragOverlay>
-            {active ? (
-              <div className="pointer-events-none rounded-md bg-sidebar-accent/80 px-2 py-1 text-sm text-sidebar-foreground ring-1 ring-foreground/20 shadow-sm">
-                {active.label}
-              </div>
-            ) : null}
-          </DragOverlay>
-        </DndContext>
+        )}
       </SidebarGroupContent>
     </SidebarGroup>
   );
