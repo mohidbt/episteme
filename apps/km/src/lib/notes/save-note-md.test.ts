@@ -40,7 +40,7 @@ afterAll(async () => {
 
 describe("saveNoteMd", () => {
   it("updates contentMd and bumps updatedAt in Node runtime (contentJson null until DOM-free converter lands)", async () => {
-    await saveNoteMd(noteId, "# Updated");
+    await saveNoteMd(noteId, "# Updated", u.id);
     const [row] = await db.select().from(notes).where(eq(notes.id, noteId));
     expect(row.contentMd).toBe("# Updated");
     // TODO(phase-0.2 follow-up): once we have a DOM-free md→PM JSON converter,

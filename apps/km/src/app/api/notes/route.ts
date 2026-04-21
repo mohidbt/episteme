@@ -5,6 +5,7 @@ import { libraries } from "@episteme/db/schema";
 import { getUserIdFromRequest } from "@/lib/auth";
 import { noteCreateSchema } from "@/lib/validators";
 import { jsonError, requireOwned, resolveNoteSlug } from "@/lib/crud";
+import { resolveUnresolvedNoteLinks } from "@/lib/notes/rebuild-links";
 
 export async function GET(req: Request) {
   const userId = await getUserIdFromRequest(req);
@@ -34,5 +35,9 @@ export async function POST(req: Request) {
     .insert(notes)
     .values({ ...parsed.data, userId, slug })
     .returning();
+  // Retro-resolve any previously-unresolved [[title]] note-links whose raw
+  // identifier now matches this new note. Scoped to note-kind only; paper
+  // and reference retro-resolution belongs to their own create flows.
+  await resolveUnresolvedNoteLinks(row.id, row.title, userId);
   return Response.json(row, { status: 201 });
 }

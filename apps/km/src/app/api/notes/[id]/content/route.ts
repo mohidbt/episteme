@@ -24,6 +24,6 @@ export async function PATCH(
   const parsed = body.safeParse(await req.json().catch(() => null));
   if (!parsed.success)
     return jsonError(400, "validation", { issues: parsed.error.issues });
-  await saveNoteMd(id, parsed.data.contentMd);
+  await saveNoteMd(id, parsed.data.contentMd, userId);
   return new NextResponse(null, { status: 204 });
 }
