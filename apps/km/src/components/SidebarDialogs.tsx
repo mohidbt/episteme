@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useState, type KeyboardEvent, type ReactNode } from "react";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -25,6 +25,16 @@ interface BaseProps {
 
 function FieldRow({ children }: { children: ReactNode }) {
   return <div className="grid gap-2">{children}</div>;
+}
+
+function onEnter(fn: () => void, disabled = false) {
+  return (e: KeyboardEvent<HTMLInputElement>) => {
+    if (disabled) return;
+    if (e.nativeEvent.isComposing) return;
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    fn();
+  };
 }
 
 async function jsonFetch(url: string, init: RequestInit): Promise<Response> {
@@ -88,6 +98,7 @@ export function RenameFolderDialog({
             id="rename-folder-name"
             value={name}
             onChange={(e) => setName(e.currentTarget.value)}
+            onKeyDown={onEnter(submit, busy)}
             autoFocus
           />
         </FieldRow>
@@ -204,6 +215,7 @@ export function RenameLeafDialog({
             id="rename-leaf"
             value={value}
             onChange={(e) => setValue(e.currentTarget.value)}
+            onKeyDown={onEnter(submit, busy)}
             autoFocus
           />
         </FieldRow>
@@ -317,6 +329,7 @@ export function NewNoteDialog({
             id="new-note-title"
             value={title}
             onChange={(e) => setTitle(e.currentTarget.value)}
+            onKeyDown={onEnter(submit, busy)}
             autoFocus
           />
         </FieldRow>
@@ -381,6 +394,7 @@ export function NewFolderDialog({
             id="new-folder-name"
             value={name}
             onChange={(e) => setName(e.currentTarget.value)}
+            onKeyDown={onEnter(submit, busy)}
             autoFocus
           />
         </FieldRow>
@@ -448,6 +462,7 @@ export function MoveDialog({
             id="move-path"
             value={value}
             onChange={(e) => setValue(e.currentTarget.value)}
+            onKeyDown={onEnter(submit, busy)}
             placeholder="projects/phd/"
             autoFocus
           />
@@ -516,6 +531,7 @@ export function MoveFolderDialog({
             id="move-path"
             value={value}
             onChange={(e) => setValue(e.currentTarget.value)}
+            onKeyDown={onEnter(submit, busy)}
             placeholder="projects/phd/"
             autoFocus
           />
