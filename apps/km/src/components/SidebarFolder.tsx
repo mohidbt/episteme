@@ -15,6 +15,7 @@ import { useExpanded } from "@/hooks/use-expanded";
 import type { FolderNode } from "@/lib/tree";
 import type { NoteItem, PaperItem, ReferenceItem } from "@/lib/tree-server";
 import { SidebarContextMenu } from "./SidebarContextMenu";
+import { NewNoteTrigger } from "./NewNoteTrigger";
 import type { DragData } from "./SidebarSection";
 
 type ContentSection = "papers" | "references" | "notes";
@@ -145,6 +146,14 @@ function FolderRow({ node, section, depth, libraryId, onMutate }: FolderRowProps
           <span>{node.folder}</span>
         </SidebarMenuButton>
       </SidebarContextMenu>
+      {section === "notes" && (
+        <NewNoteTrigger
+          libraryId={libraryId}
+          folderPath={node.path}
+          onMutate={onMutate}
+          variant="menu-item"
+        />
+      )}
       {open && (node.children.length > 0 || node.items.length > 0) && (
         <SidebarMenuSub>
           {node.children.map((child) => (
@@ -231,6 +240,14 @@ function FolderSubRow({ node, section, depth, libraryId, onMutate }: FolderRowPr
           <span>{node.folder}</span>
         </SidebarMenuSubButton>
       </SidebarContextMenu>
+      {section === "notes" && (
+        <NewNoteTrigger
+          libraryId={libraryId}
+          folderPath={node.path}
+          onMutate={onMutate}
+          variant="sub-menu-item"
+        />
+      )}
       {open && (node.children.length > 0 || node.items.length > 0) && (
         <SidebarMenuSub>
           {node.children.map((child) => (

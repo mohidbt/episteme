@@ -26,6 +26,7 @@ import type { NoteItem, PaperItem, ReferenceItem } from "@/lib/tree-server";
 import { SidebarFolder } from "./SidebarFolder";
 import { SidebarAgentSection } from "./SidebarAgentSection";
 import { SidebarContextMenu } from "./SidebarContextMenu";
+import { NewNoteTrigger } from "./NewNoteTrigger";
 
 type ContentSection = "papers" | "references" | "notes";
 
@@ -201,6 +202,14 @@ function ContentSectionWithDnd(props: ContentProps) {
         </SidebarContextMenu>
       ) : (
         label
+      )}
+      {props.kind === "notes" && (
+        <NewNoteTrigger
+          libraryId={props.libraryId}
+          folderPath=""
+          onMutate={props.onMutate}
+          variant="group"
+        />
       )}
       <SidebarGroupContent>
         {mounted ? (
