@@ -51,7 +51,7 @@ export function PaperCard({ id, title, filename, authors, year }: PaperCardProps
         </div>
         <CardContent className="flex flex-col gap-1 px-3 pb-3">
           <div className="flex items-start justify-between gap-2">
-            <h3 className="font-display text-sm leading-snug line-clamp-2">
+            <h3 className="min-w-0 flex-1 font-display text-sm leading-snug line-clamp-2">
               {displayTitle}
             </h3>
             {year != null && (
