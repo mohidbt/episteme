@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type KeyboardEvent, type ReactNode } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -184,11 +185,23 @@ export function RenameLeafDialog({
   const [busy, setBusy] = useState(false);
   const field = section === "references" ? "citationKey" : "title";
   const label = section === "references" ? "Citation key" : "Title";
+  const pathname = usePathname();
+  const router = useRouter();
 
   async function submit() {
     const trimmed = value.trim();
     if (!trimmed) return;
     setBusy(true);
+
+    let oldSlug: string | null = null;
+    if (section === "notes") {
+      const pre = await fetch(`/api/notes/${id}`);
+      if (pre.ok) {
+        const row = (await pre.json().catch(() => null)) as { slug?: string } | null;
+        oldSlug = row?.slug ?? null;
+      }
+    }
+
     const r = await jsonFetch(`/api/${section}/${id}`, {
       method: "PATCH",
       body: JSON.stringify({ [field]: trimmed }),
@@ -198,9 +211,20 @@ export function RenameLeafDialog({
       toast.error("Rename failed");
       return;
     }
+    const updated = (await r.json().catch(() => null)) as { slug?: string } | null;
     toast.success("Renamed");
     onOpenChange(false);
     onMutate();
+
+    if (
+      section === "notes" &&
+      oldSlug &&
+      updated?.slug &&
+      updated.slug !== oldSlug &&
+      pathname === `/n/${oldSlug}`
+    ) {
+      router.replace(`/n/${updated.slug}`);
+    }
   }
 
   return (
