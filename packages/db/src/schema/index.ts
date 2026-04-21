@@ -23,6 +23,7 @@ export * from "./notes";
 export * from "./note-links";
 export * from "./note-revisions";
 export * from "./note-embeddings";
+export * from "./note-tags";
 export * from "./agent-configs";
 export * from "./agent-memories";
 export * from "./user-preferences";
