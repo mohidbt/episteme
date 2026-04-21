@@ -85,3 +85,11 @@ export const noteLinkCreateSchema = z.object({
   targetId: z.string().nullable().optional(),
   targetTitleRaw: nonEmptyTrimmed(1000),
 });
+
+export const paperHighlightCreateSchema = z.object({
+  paperId: z.string().uuid(),
+  page: z.number().int().positive(),
+  bbox: z.unknown().optional().nullable(),
+  color: z.string().max(32).nullable().optional(),
+  noteMd: z.string().max(10_000).nullable().optional(),
+});
