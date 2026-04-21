@@ -13,9 +13,9 @@ export function editorExtensions(opts?: {
         addProseMirrorPlugins() {
           return [
             Suggestion({
+              ...opts.wikiLinkSuggestion,
               editor: this.editor,
               char: "[[",
-              ...opts.wikiLinkSuggestion!,
             }),
           ];
         },

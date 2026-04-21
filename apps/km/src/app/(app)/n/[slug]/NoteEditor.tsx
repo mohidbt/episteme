@@ -123,7 +123,6 @@ export function NoteEditor({ id, initialMd }: { id: string; initialMd: string })
             place(props.clientRect);
           },
           onKeyDown: (props) => {
-            if (props.event.key === "Escape") return true;
             return refObj.current?.onKeyDown({ event: props.event }) ?? false;
           },
           onExit: () => {
