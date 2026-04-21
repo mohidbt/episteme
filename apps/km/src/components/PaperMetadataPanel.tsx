@@ -46,7 +46,9 @@ function arraysEqual(a: string[], b: string[]): boolean {
 }
 
 // Build a minimal PATCH body containing only changed fields. Matches
-// paperUpdateSchema (strict) exactly: title/authors/year/doi/folderPath.
+// paperUpdateSchema (strict): title/authors/year/doi/folderPath.
+// Empty-string semantics vary per schema: title keeps-on-empty (NOT NULL + min 1),
+// year keeps-on-empty (schema disallows null), doi/authors/folderPath clear-on-empty.
 function diffPatch(
   form: FormState,
   paper: PaperRow,

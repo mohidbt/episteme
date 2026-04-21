@@ -232,39 +232,49 @@ function statusLabel(status: UploadStatus): string {
 
 function UploadRow({ item, onOpen }: { item: UploadItem; onOpen: () => void }) {
   const clickable = item.status === "done";
-  return (
-    <div
-      onClick={clickable ? onOpen : undefined}
-      className={cn(
-        "flex items-center gap-3 rounded-md border border-border/60 px-3 py-2",
-        clickable && "cursor-pointer hover:border-border",
-      )}
-    >
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <p className="min-w-0 flex-1 truncate text-sm">{item.file.name}</p>
-          <span className="shrink-0 text-[11px] tracking-[0.14em] uppercase text-muted-foreground">
-            {statusLabel(item.status)}
-          </span>
-        </div>
-        <div className="mt-1 flex items-center gap-2">
-          <div className="h-1 flex-1 overflow-hidden rounded-sm bg-muted">
-            <div
-              className={cn(
-                "h-full transition-all",
-                item.status === "failed" ? "bg-destructive" : "bg-foreground/70",
-              )}
-              style={{ width: `${item.progress}%` }}
-            />
-          </div>
-          <span className="shrink-0 text-[11px] text-muted-foreground">
-            {humanSize(item.file.size)}
-          </span>
-        </div>
-        {item.status === "failed" && item.error && (
-          <p className="mt-1 text-xs text-destructive">{item.error}</p>
-        )}
+  const rowClass = cn(
+    "flex w-full items-center gap-3 rounded-md border border-border/60 px-3 py-2 text-left",
+    clickable && "cursor-pointer hover:border-border",
+  );
+  const body = (
+    <div className="min-w-0 flex-1">
+      <div className="flex items-center gap-2">
+        <p className="min-w-0 flex-1 truncate text-sm">{item.file.name}</p>
+        <span className="shrink-0 text-[11px] tracking-[0.14em] uppercase text-muted-foreground">
+          {statusLabel(item.status)}
+        </span>
       </div>
+      <div className="mt-1 flex items-center gap-2">
+        <div
+          role="progressbar"
+          aria-valuenow={item.progress}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-label={`${item.file.name} ${statusLabel(item.status)}`}
+          className="h-1 flex-1 overflow-hidden rounded-sm bg-muted"
+        >
+          <div
+            className={cn(
+              "h-full transition-all",
+              item.status === "failed" ? "bg-destructive" : "bg-foreground/70",
+            )}
+            style={{ width: `${item.progress}%` }}
+          />
+        </div>
+        <span className="shrink-0 text-[11px] text-muted-foreground">
+          {humanSize(item.file.size)}
+        </span>
+      </div>
+      {item.status === "failed" && item.error && (
+        <p className="mt-1 text-xs text-destructive">{item.error}</p>
+      )}
     </div>
+  );
+  return clickable ? (
+    <button type="button" onClick={onOpen} className={rowClass}>
+      {body}
+    </button>
+  ) : (
+    <div className={rowClass}>{body}</div>
   );
 }
