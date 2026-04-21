@@ -57,6 +57,26 @@ export const referenceCreateSchema = z.object({
   paperId: z.string().nullable().optional(),
 });
 
+export const referenceCreateFromCslSchema = z
+  .object({
+    libraryId: z.number().int(),
+    folderPath: folderPathSchema.default(""),
+    cslJson: z.unknown(),
+    citationKey: citationKey.optional(),
+    paperId: z.string().nullable().optional(),
+  })
+  .strict();
+
+export const referenceCreateFromDoiSchema = z
+  .object({
+    libraryId: z.number().int(),
+    folderPath: folderPathSchema.default(""),
+    doi: z.string().min(1).max(500),
+    citationKey: citationKey.optional(),
+    paperId: z.string().nullable().optional(),
+  })
+  .strict();
+
 export const referenceUpdateSchema = z.object({
   folderPath: folderPathSchema.optional(),
   citationKey: citationKey.optional(),
