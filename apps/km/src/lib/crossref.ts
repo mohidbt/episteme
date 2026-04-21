@@ -45,11 +45,7 @@ export function crossRefToCsl(message: unknown): CslItem {
     DOI: m.DOI,
   };
 
-  if (m.title?.[0] !== undefined) {
-    csl.title = m.title[0];
-  } else {
-    csl.title = "";
-  }
+  if (m.title?.[0]) csl.title = m.title[0];
 
   if (m.URL) csl.URL = m.URL;
   if (m["container-title"]?.[0]) csl["container-title"] = m["container-title"][0];

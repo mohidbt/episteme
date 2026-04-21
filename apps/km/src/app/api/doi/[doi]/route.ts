@@ -5,6 +5,15 @@ export const runtime = "nodejs";
 
 const cache = new Map<string, { csl: CslItem; expiresAt: number }>();
 const TTL_MS = 60 * 60 * 1000; // 1 hour
+const MAX_CACHE_ENTRIES = 500;
+
+function setCached(doi: string, csl: CslItem): void {
+  if (cache.size >= MAX_CACHE_ENTRIES) {
+    const oldest = cache.keys().next().value;
+    if (oldest !== undefined) cache.delete(oldest);
+  }
+  cache.set(doi, { csl, expiresAt: Date.now() + TTL_MS });
+}
 
 export async function GET(
   _req: Request,
@@ -23,6 +32,6 @@ export async function GET(
     return Response.json({ error: "not_found" }, { status: 404 });
   }
 
-  cache.set(doi, { csl, expiresAt: Date.now() + TTL_MS });
+  setCached(doi, csl);
   return Response.json(csl);
 }
