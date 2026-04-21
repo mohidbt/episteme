@@ -39,16 +39,19 @@ export function PaperHighlightsList({ paperId }: PaperHighlightsListProps) {
   }, [paperId]);
 
   async function onDelete(id: string) {
-    const prev = rows ?? [];
-    setRows(prev.filter((r) => r.id !== id));
+    let snapshot: HighlightRow[] | null = null;
+    setRows((curr) => {
+      snapshot = curr;
+      return (curr ?? []).filter((r) => r.id !== id);
+    });
     try {
       const res = await fetch(`/api/paper-highlights/${id}`, { method: "DELETE" });
       if (!res.ok) {
-        setRows(prev);
+        if (snapshot) setRows(snapshot);
         toast.error("Failed to delete highlight", { description: `HTTP ${res.status}` });
       }
     } catch (e) {
-      setRows(prev);
+      if (snapshot) setRows(snapshot);
       toast.error("Failed to delete highlight", { description: (e as Error).message });
     }
   }

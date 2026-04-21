@@ -50,7 +50,7 @@ export async function POST(req: Request) {
       paperId: parsed.data.paperId,
       userId,
       page: parsed.data.page,
-      bbox: (parsed.data.bbox ?? null) as any,
+      bbox: (parsed.data.bbox ?? null) as typeof paperHighlights.$inferInsert["bbox"],
       color: parsed.data.color ?? null,
       noteMd: parsed.data.noteMd ?? null,
     })
