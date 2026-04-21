@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { references_, libraries } from "@episteme/db/schema";
 import { getUserIdFromRequest } from "@/lib/auth";
 import { jsonError, requireOwned } from "@/lib/crud";
-import { deriveCitationKey, validateCslJson, type CslItem } from "@/lib/csl";
+import { deriveCitationKey, type CslItem } from "@/lib/csl";
 import { detectFormat, parseCsl } from "@/lib/csl-import";
 import { insertReferenceWithSuffixBump } from "@/lib/references";
 
@@ -51,21 +51,12 @@ export async function POST(req: Request) {
     return jsonError(400, "parse_failed", { message: (err as Error).message });
   }
 
-  // Validate every item up front; collect DOIs for dedup.
-  const prepared: Array<{ csl: CslItem; citationKey: string; doi: string | null }> = [];
-  for (let i = 0; i < items.length; i++) {
-    let csl: CslItem;
-    try {
-      csl = validateCslJson(items[i]);
-    } catch (err) {
-      return jsonError(400, "parse_failed", { message: `item ${i}: ${(err as Error).message}` });
-    }
-    prepared.push({
-      csl,
-      citationKey: deriveCitationKey(csl),
-      doi: typeof csl.DOI === "string" ? csl.DOI : null,
-    });
-  }
+  // Collect DOIs for dedup. parseCsl already validated every item.
+  const prepared = items.map((csl) => ({
+    csl,
+    citationKey: deriveCitationKey(csl),
+    doi: typeof csl.DOI === "string" ? csl.DOI : null,
+  }));
 
   // Fetch existing DOIs in this library for duplicate detection.
   const existing = await db

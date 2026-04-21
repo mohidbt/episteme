@@ -41,11 +41,18 @@ export function parseCsl(content: string, format: DetectedFormat): CslItem[] {
     const parsed = JSON.parse(text);
     const arr: unknown[] = Array.isArray(parsed) ? parsed : [parsed];
     // CSL-JSON is strict: every entry must validate as-is (including `id`).
-    return arr.map((entry) => validateCslJson(entry));
+    // Strip _graph in case the JSON was round-tripped through citation-js.
+    return arr.map((entry) => {
+      const { _graph, ...rest } = entry as Record<string, unknown>;
+      return validateCslJson(rest);
+    });
   }
 
-  // bibtex / ris → citation-js. Derive `id` if the parser didn't assign one.
+  // bibtex / ris → citation-js. Strip _graph (full source blob) before storing.
   const cite = new Cite(text);
   const data = (cite.data ?? []) as Array<Record<string, unknown>>;
-  return data.map((entry) => validateCslJson(deriveIdIfMissing(entry)));
+  return data.map((entry) => {
+    const { _graph, ...rest } = entry;
+    return validateCslJson(deriveIdIfMissing(rest));
+  });
 }
