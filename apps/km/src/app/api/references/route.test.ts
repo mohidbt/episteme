@@ -15,7 +15,7 @@ import {
   type TestUser,
 } from "../_test-utils";
 import { db } from "@/lib/db";
-import { notes, noteLinks } from "@episteme/db/schema";
+import { notes, noteLinks, papers } from "@episteme/db/schema";
 import { deriveCitationKey } from "@/lib/csl";
 
 let u: TestUser;
@@ -331,6 +331,60 @@ describe("references GET ?q=", () => {
     expect(returnedKeys).toContain(key1);
     expect(returnedKeys).toContain(key2);
     expect(returnedKeys).not.toContain(key3);
+  });
+});
+
+// ── PATCH { paperId } attaches/detaches a paper ─────────────────────────────
+
+describe("references PATCH { paperId }", () => {
+  it("attaches to paper, then detaches with null", async () => {
+    const [paper] = await db
+      .insert(papers)
+      .values({
+        libraryId,
+        userId: u.id,
+        filename: `attach-${Date.now()}.pdf`,
+        title: "Attach Target",
+      })
+      .returning({ id: papers.id });
+
+    const c = await POST(
+      req("/api/references", {
+        method: "POST",
+        cookie: u.cookie,
+        body: JSON.stringify(refBody()),
+      }),
+    );
+    expect(c.status).toBe(201);
+    const ref = await c.json();
+
+    const attach = await PATCH_ID(
+      req(`/api/references/${ref.id}`, {
+        method: "PATCH",
+        cookie: u.cookie,
+        body: JSON.stringify({ paperId: paper.id }),
+      }),
+      params({ id: ref.id }),
+    );
+    expect(attach.status).toBe(200);
+    expect((await attach.json()).paperId).toBe(paper.id);
+
+    const got = await GET_ID(
+      req(`/api/references/${ref.id}`, { cookie: u.cookie }),
+      params({ id: ref.id }),
+    );
+    expect((await got.json()).paperId).toBe(paper.id);
+
+    const detach = await PATCH_ID(
+      req(`/api/references/${ref.id}`, {
+        method: "PATCH",
+        cookie: u.cookie,
+        body: JSON.stringify({ paperId: null }),
+      }),
+      params({ id: ref.id }),
+    );
+    expect(detach.status).toBe(200);
+    expect((await detach.json()).paperId).toBe(null);
   });
 });
 

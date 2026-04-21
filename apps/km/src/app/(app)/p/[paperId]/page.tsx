@@ -1,11 +1,15 @@
 import { cache } from "react";
 import { and, eq } from "drizzle-orm";
+import Link from "next/link";
 import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
+import { BookMarked } from "lucide-react";
 import { auth } from "@episteme/auth";
 import { db } from "@/lib/db";
 import { papers } from "@episteme/db/schema";
 import { getDefaultLibrary } from "@/lib/default-library";
+import { getReferencesForPaper } from "@/lib/references-server";
+import { denormaliseForList, validateCslJson } from "@/lib/csl";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { PaperMetadataPanel } from "@/components/PaperMetadataPanel";
 import { PaperHighlightsList } from "@/components/PaperHighlightsList";
@@ -21,6 +25,14 @@ const loadPaper = cache(async (paperId: string, userId: string): Promise<PaperRo
   return rows[0] ?? null;
 });
 
+function refYear(cslJson: unknown): number | null {
+  try {
+    return denormaliseForList(validateCslJson(cslJson)).year;
+  } catch {
+    return null;
+  }
+}
+
 export default async function PaperPage({
   params,
 }: {
@@ -33,8 +45,13 @@ export default async function PaperPage({
   const paper = await loadPaper(paperId, session.user.id);
   if (!paper) notFound();
 
-  const library = await getDefaultLibrary(session.user.id);
+  const [library, refs] = await Promise.all([
+    getDefaultLibrary(session.user.id),
+    getReferencesForPaper(paper.id, session.user.id),
+  ]);
   const displayTitle = paper.title && paper.title.trim().length > 0 ? paper.title : paper.filename;
+  const firstRef = refs[0];
+  const firstRefYear = firstRef ? refYear(firstRef.cslJson) : null;
 
   return (
     <div className="flex min-h-dvh flex-col">
@@ -46,6 +63,16 @@ export default async function PaperPage({
             folderPath={paper.folderPath}
             title={displayTitle}
           />
+        )}
+        {firstRef && (
+          <Link
+            href={`/r/${firstRef.id}`}
+            className="mb-2 inline-flex items-center gap-2 rounded-md border border-border/60 bg-muted/40 px-2 py-1 text-xs text-muted-foreground hover:bg-muted"
+          >
+            <BookMarked className="h-3 w-3" aria-hidden />
+            <span>{firstRef.citationKey}</span>
+            {firstRefYear != null && <span>· {firstRefYear}</span>}
+          </Link>
         )}
         <h1 className="font-display text-2xl leading-tight">{displayTitle}</h1>
       </div>
