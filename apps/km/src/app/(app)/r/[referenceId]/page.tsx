@@ -14,9 +14,11 @@ export default async function ReferencePage({
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session?.user) redirect("/sign-in");
   const { referenceId } = await params;
-  const ref = await getReference(referenceId, session.user.id);
+  const [ref, library] = await Promise.all([
+    getReference(referenceId, session.user.id),
+    getDefaultLibrary(session.user.id),
+  ]);
   if (!ref) notFound();
-  const library = await getDefaultLibrary(session.user.id);
 
   return (
     <div className="mx-auto max-w-3xl p-6">

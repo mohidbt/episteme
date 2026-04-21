@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, X } from "lucide-react";
 import { toast } from "sonner";
@@ -112,11 +112,8 @@ function deepEqual(a: unknown, b: unknown): boolean {
 
 export function ReferenceForm({ reference }: ReferenceFormProps) {
   const router = useRouter();
-  const initialCsl = useMemo(
-    () => (reference.cslJson ?? { id: reference.id, type: "article" }) as CslItem,
-    [reference],
-  );
   const [initial, setInitial] = useState<ReferenceRow>(reference);
+  const initialCsl = (initial.cslJson ?? { id: initial.id, type: "article" }) as CslItem;
   const [form, setForm] = useState<FormState>(() => toForm(reference));
   const [tab, setTab] = useState<"form" | "json">("form");
   const [jsonText, setJsonText] = useState(() =>

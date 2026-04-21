@@ -108,7 +108,7 @@ export function ReferenceTable({ rows }: ReferenceTableProps) {
               dir={sortDir}
               onClick={() => toggleSort("title")}
             />
-            <th className="px-3 py-2 text-left font-medium">Authors</th>
+            <th scope="col" className="px-3 py-2 text-left font-medium">Authors</th>
             <SortHeader
               label="Year"
               active={sortKey === "year"}
@@ -116,8 +116,8 @@ export function ReferenceTable({ rows }: ReferenceTableProps) {
               onClick={() => toggleSort("year")}
               align="right"
             />
-            <th className="px-3 py-2 text-left font-medium">Folder</th>
-            <th className="w-10 px-3 py-2" />
+            <th scope="col" className="px-3 py-2 text-left font-medium">Folder</th>
+            <th scope="col" className="w-10 px-3 py-2" />
           </tr>
         </thead>
         <tbody>
@@ -180,7 +180,7 @@ function SortHeader({
   align?: "left" | "right";
 }) {
   return (
-    <th className={cn("px-3 py-2 font-medium", align === "right" ? "text-right" : "text-left")}>
+    <th scope="col" className={cn("px-3 py-2 font-medium", align === "right" ? "text-right" : "text-left")}>
       <button
         type="button"
         onClick={onClick}
