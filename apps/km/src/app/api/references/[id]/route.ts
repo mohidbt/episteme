@@ -47,7 +47,9 @@ export async function DELETE(req: Request, { params }: Ctx) {
   const res = await requireOwned<any>(references_, id, userId);
   if (!res.ok) return jsonError(res.status, res.status === 404 ? "not_found" : "forbidden");
   // Cascade: note_links has no FK on targetId (polymorphic). Manually wipe references before the row.
-  await db.delete(noteLinks).where(and(eq(noteLinks.targetKind, "reference"), eq(noteLinks.targetId, id)));
-  await db.delete(references_).where(eq(references_.id, id));
+  await db.transaction(async (tx) => {
+    await tx.delete(noteLinks).where(and(eq(noteLinks.targetKind, "reference"), eq(noteLinks.targetId, id)));
+    await tx.delete(references_).where(eq(references_.id, id));
+  });
   return new Response(null, { status: 204 });
 }
