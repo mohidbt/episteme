@@ -1,4 +1,5 @@
 import { Node, mergeAttributes } from "@tiptap/core";
+import type { MdLike } from "./markdown-it-types";
 
 export type WikiLinkTargetKind = "note" | "reference" | "paper" | null;
 
@@ -88,7 +89,59 @@ export const WikiLink = Node.create({
           const { title, alias } = node.attrs;
           state.write(alias ? `[[${title}|${alias}]]` : `[[${title}]]`);
         },
-        parse: {},
+        // Inline markdown-it rule for `[[Title]]` / `[[Title|Alias]]`. The
+        // renderer emits the same `span[data-type="wiki-link"]` HTML that
+        // parseHTML above matches, so tiptap-markdown's pipeline
+        // (setContent(md) -> md.render -> parseHTML) converts the token back
+        // into a wikiLink node. Because this is emitted via our custom token
+        // type (not markdown-it's html_inline), Markdown.configure({ html:
+        // false }) does NOT filter it.
+        parse: {
+          setup(md: MdLike) {
+            const TOKEN = "wiki_link";
+            md.inline.ruler.after("emphasis", TOKEN, (state, silent) => {
+              if (state.src.charCodeAt(state.pos) !== 0x5b /* [ */) return false;
+              if (state.src.charCodeAt(state.pos + 1) !== 0x5b) return false;
+              const start = state.pos + 2;
+              let end = start;
+              while (end < state.posMax) {
+                const c = state.src.charCodeAt(end);
+                if (c === 0x0a /* \n */) return false;
+                if (
+                  c === 0x5d /* ] */ &&
+                  state.src.charCodeAt(end + 1) === 0x5d
+                )
+                  break;
+                end += 1;
+              }
+              if (end >= state.posMax) return false;
+              const raw = state.src.slice(start, end);
+              if (raw.length === 0 || raw.includes("[[")) return false;
+              const pipeIdx = raw.indexOf("|");
+              const title = (pipeIdx === -1 ? raw : raw.slice(0, pipeIdx)).trim();
+              const alias =
+                pipeIdx === -1 ? null : raw.slice(pipeIdx + 1).trim() || null;
+              if (!title) return false;
+              if (silent) return true;
+              const token = state.push(TOKEN, "", 0);
+              token.meta = { title, alias };
+              state.pos = end + 2;
+              return true;
+            });
+            md.renderer.rules[TOKEN] = (tokens, idx) => {
+              const meta = tokens[idx].meta as {
+                title: string;
+                alias: string | null;
+              };
+              const label = meta.alias ?? meta.title;
+              const titleAttr = md.utils.escapeHtml(meta.title);
+              const aliasAttr = meta.alias
+                ? ` data-alias="${md.utils.escapeHtml(meta.alias)}"`
+                : "";
+              return `<span data-type="wiki-link" data-title="${titleAttr}"${aliasAttr} data-resolved="false">${md.utils.escapeHtml(label)}</span>`;
+            };
+          },
+        },
       },
     };
   },

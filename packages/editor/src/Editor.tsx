@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import { editorExtensions, type WikiLinkSuggestion } from "./extensions";
+import { hydrateWikiLinkResolutions, type ResolvedLinksMap } from "./hydrate-wiki-links";
 import "./styles.css";
 
 export interface EditorProps {
@@ -11,6 +12,7 @@ export interface EditorProps {
   placeholder?: string;
   autofocus?: boolean;
   wikiLinkSuggestion?: WikiLinkSuggestion;
+  resolvedLinks?: ResolvedLinksMap;
 }
 
 export function Editor({
@@ -19,6 +21,7 @@ export function Editor({
   placeholder,
   autofocus,
   wikiLinkSuggestion,
+  resolvedLinks,
 }: EditorProps) {
   const editor = useEditor({
     extensions: editorExtensions({ placeholder, wikiLinkSuggestion }),
@@ -43,6 +46,11 @@ export function Editor({
     if (currentMd === initialMd) return;
     editor.commands.setContent(initialMd, false);
   }, [initialMd, editor]);
+
+  useEffect(() => {
+    if (!editor || !resolvedLinks) return;
+    hydrateWikiLinkResolutions(editor, resolvedLinks);
+  }, [editor, resolvedLinks]);
 
   return <EditorContent editor={editor} />;
 }
