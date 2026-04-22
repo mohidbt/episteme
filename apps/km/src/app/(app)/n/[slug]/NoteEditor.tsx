@@ -9,6 +9,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, type RefObject } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { WikiLinkTypeahead, type WikiLinkTypeaheadRef } from "@/components/WikiLinkTypeahead";
+import { runSlashAi, SLASH_AI_REGEX } from "./run-slash-ai";
 
 export function NoteEditor({
   id,
@@ -191,11 +192,64 @@ export function NoteEditor({
         .run();
     };
 
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== "Enter" || e.shiftKey || e.isComposing) return;
+      const editor = editorRef.current;
+      if (!editor) return;
+      const { state } = editor;
+      const { $from } = state.selection;
+      // Current paragraph node (depth 1 on a flat doc).
+      const para = $from.parent;
+      if (para.type.name !== "paragraph") return;
+      const paraText = para.textContent;
+      const match = paraText.match(SLASH_AI_REGEX);
+      if (!match) return;
+      const prompt = match[1];
+
+      e.preventDefault();
+
+      // Compute paragraph start/end positions.
+      const paraStart = $from.start($from.depth);
+      const paraEnd = $from.end($from.depth);
+
+      // Derive context from the previous paragraph, if any.
+      let context: string | undefined;
+      const beforeResolved = state.doc.resolve(Math.max(0, paraStart - 1));
+      const before = beforeResolved.nodeBefore;
+      if (before && before.type.name === "paragraph") {
+        const prevText = before.textContent.trim();
+        if (prevText) context = prevText;
+      }
+
+      // Clear the `/ai <prompt>` line and place the cursor at its start.
+      editor
+        .chain()
+        .focus()
+        .command(({ tr }) => {
+          tr.delete(paraStart, paraEnd);
+          return true;
+        })
+        .run();
+
+      void runSlashAi({
+        prompt,
+        context,
+        onToken: (chunk) => {
+          editor.chain().focus().insertContent(chunk).run();
+        },
+        onError: (message) => {
+          editor.chain().focus().insertContent(`[ai error: ${message}]`).run();
+        },
+      });
+    };
+
     host.addEventListener("click", onClick);
     host.addEventListener("dblclick", onDblClick);
+    host.addEventListener("keydown", onKeyDown);
     return () => {
       host.removeEventListener("click", onClick);
       host.removeEventListener("dblclick", onDblClick);
+      host.removeEventListener("keydown", onKeyDown);
       cancelPendingNav();
     };
   }, [router, flush, resolvedLinks]);
