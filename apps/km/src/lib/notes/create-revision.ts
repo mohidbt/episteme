@@ -1,6 +1,7 @@
 import { desc, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { noteRevisions, notes } from "@episteme/db/schema";
+import { pruneRevisions } from "./prune-revisions";
 
 const DELTA_MIN = 50;
 const AGE_MIN_MS = 5 * 60 * 1000;
@@ -34,4 +35,7 @@ export async function createRevisionIfNeeded(input: {
     contentMd: input.newMd,
     reason: input.reason,
   });
+  if (input.reason === "autosave") {
+    await pruneRevisions(input.noteId);
+  }
 }

@@ -226,4 +226,34 @@ describe("createRevisionIfNeeded", () => {
     });
     expect(await countRevs(noteId)).toBe(1);
   });
+
+  it("createRevisionIfNeeded calls pruneRevisions on autosave insert", async () => {
+    const noteId = await makeNote("seed");
+    const base = Date.now();
+    const rows = Array.from({ length: 250 }, (_, i) => ({
+      noteId,
+      authorId: u.id,
+      contentMd: `a${i}`,
+      reason: "autosave" as const,
+      createdAt: new Date(base - (250 - i) * 1000),
+    }));
+    await db.insert(noteRevisions).values(rows);
+    expect(await countRevs(noteId)).toBe(250);
+
+    // New autosave with delta > 50 to force an insert
+    const newMd = "seed" + "x".repeat(100);
+    await createRevisionIfNeeded({
+      noteId,
+      authorId: u.id,
+      newMd,
+      reason: "autosave",
+    });
+
+    // 250 existing + 1 new = 251, prune keeps latest 200 → 200
+    const autosaveRows = await db
+      .select({ id: noteRevisions.id })
+      .from(noteRevisions)
+      .where(and(eq(noteRevisions.noteId, noteId), eq(noteRevisions.reason, "autosave")));
+    expect(autosaveRows.length).toBe(200);
+  });
 });
