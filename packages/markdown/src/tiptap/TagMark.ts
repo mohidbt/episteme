@@ -1,11 +1,11 @@
-import { Mark, markInputRule } from "@tiptap/core";
+import { InputRule, Mark } from "@tiptap/core";
 
-// Matches `#tag` where tag = [a-z][a-z0-9_-]*, preceded by start-of-text or
-// whitespace. Single capture group holding the full `#tag` — markInputRule
-// uses the LAST capture as the wrap range, so wrapping must include the `#`
-// (otherwise the `#` is deleted between match-start and wrap-start).
-// InputRule fires when the user types a non-word character after a valid tag.
-const TAG_INPUT_RULE = /(?:^|\s)(#[a-z][a-z0-9_-]*)(?=[^\w]|$)/;
+// Fires when the user types a trailing space after a `#tag`. The trailing
+// space is the trigger — without it, `markInputRule` would fire on each
+// typed letter (via `$` end-of-input), and ProseMirror's InputRule plugin
+// would replace the default text insertion with the mark-only transform,
+// swallowing the typed character.
+const TAG_INPUT_RULE = /(?:^|[^\w])(#[a-z][a-z0-9_-]*)( )$/;
 
 export const TagMark = Mark.create({
   name: "tag",
@@ -56,11 +56,23 @@ export const TagMark = Mark.create({
   },
 
   addInputRules() {
+    const type = this.type;
     return [
-      markInputRule({
+      new InputRule({
         find: TAG_INPUT_RULE,
-        type: this.type,
-        getAttributes: (match) => ({ tag: match[1].slice(1) }),
+        handler: ({ state, range, match }) => {
+          const tagToken = match[1];
+          const tag = tagToken.slice(1);
+          const tokenOffset = match[0].indexOf(tagToken);
+          const markFrom = range.from + tokenOffset;
+          const markTo = markFrom + tagToken.length;
+          const { tr } = state;
+          // The rule's transform REPLACES the default space insertion, so we
+          // re-insert the space ourselves before marking the `#tag` range.
+          tr.insertText(" ", markTo);
+          tr.addMark(markFrom, markTo, type.create({ tag }));
+          tr.removeStoredMark(type);
+        },
       }),
     ];
   },
