@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
-import { and, desc, eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { notes, noteRevisions } from "@episteme/db/schema";
+import { notes } from "@episteme/db/schema";
 import { getUserIdFromRequest } from "@/lib/auth";
 import { jsonError } from "@/lib/crud";
 import { createRevisionIfNeeded } from "@/lib/notes/create-revision";
@@ -27,23 +27,16 @@ export async function POST(
     .where(and(eq(notes.id, id), eq(notes.userId, userId)));
   if (!row) return jsonError(404, "not_found");
 
-  await createRevisionIfNeeded({
+  const inserted = await createRevisionIfNeeded({
     noteId: id,
     authorId: userId,
     newMd: row.contentMd ?? "",
     reason: parsed.data,
   });
+  if (!inserted) return jsonError(500, "revision_not_created");
 
-  const [inserted] = await db
-    .select({
-      id: noteRevisions.id,
-      createdAt: noteRevisions.createdAt,
-      reason: noteRevisions.reason,
-    })
-    .from(noteRevisions)
-    .where(eq(noteRevisions.noteId, id))
-    .orderBy(desc(noteRevisions.createdAt), desc(noteRevisions.id))
-    .limit(1);
-
-  return NextResponse.json(inserted, { status: 201 });
+  return NextResponse.json(
+    { id: inserted.id, createdAt: inserted.createdAt, reason: inserted.reason },
+    { status: 201 },
+  );
 }

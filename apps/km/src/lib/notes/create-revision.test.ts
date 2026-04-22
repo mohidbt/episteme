@@ -240,6 +240,83 @@ describe("createRevisionIfNeeded", () => {
     expect(preAi[0].authorId).toBe(u.id);
   });
 
+  it("returns the inserted row on manual insert", async () => {
+    const noteId = await makeNote("starting content");
+    const result = await createRevisionIfNeeded({
+      noteId,
+      authorId: u.id,
+      newMd: "manual snapshot body",
+      reason: "manual",
+    });
+    expect(result).not.toBeNull();
+    if (!result) throw new Error("expected non-null result");
+    expect(typeof result.id).toBe("string");
+    expect(result.id).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+    );
+    expect(result.noteId).toBe(noteId);
+    expect(result.contentMd).toBe("manual snapshot body");
+    expect(result.reason).toBe("manual");
+    expect(result.authorId).toBe(u.id);
+    expect(result.createdAt).toBeInstanceOf(Date);
+  });
+
+  it("returns null when autosave skips due to threshold", async () => {
+    const noteId = await makeNote("hello");
+    await db.insert(noteRevisions).values({
+      noteId,
+      authorId: u.id,
+      contentMd: "hello",
+      reason: "autosave",
+      createdAt: new Date(Date.now() - 60 * 1000),
+    });
+    const before = await countRevs(noteId);
+    expect(before).toBe(1);
+
+    const result = await createRevisionIfNeeded({
+      noteId,
+      authorId: u.id,
+      newMd: "hella", // tiny delta
+      reason: "autosave",
+    });
+
+    expect(result).toBeNull();
+    const after = await countRevs(noteId);
+    expect(after).toBe(1);
+  });
+
+  it("returns the inserted row when autosave does insert", async () => {
+    const noteId = await makeNote("hello");
+    // Pre-seed an old revision (>5min) so age gate forces insert even with tiny delta.
+    await db.insert(noteRevisions).values({
+      noteId,
+      authorId: u.id,
+      contentMd: "hello",
+      reason: "autosave",
+      createdAt: new Date(Date.now() - 6 * 60 * 1000),
+    });
+
+    const result = await createRevisionIfNeeded({
+      noteId,
+      authorId: u.id,
+      newMd: "hella",
+      reason: "autosave",
+    });
+
+    expect(result).not.toBeNull();
+    if (!result) throw new Error("expected non-null result");
+    expect(result.reason).toBe("autosave");
+    expect(result.contentMd).toBe("hella");
+    const [dbRow] = await db
+      .select()
+      .from(noteRevisions)
+      .where(eq(noteRevisions.id, result.id));
+    expect(dbRow).toBeDefined();
+    expect(dbRow.id).toBe(result.id);
+    expect(dbRow.contentMd).toBe(result.contentMd);
+    expect(dbRow.noteId).toBe(result.noteId);
+  });
+
   it("createRevisionIfNeeded calls pruneRevisions on autosave insert", async () => {
     const noteId = await makeNote("seed");
     const base = Date.now();

@@ -61,21 +61,15 @@ export async function POST(req: Request, { params }: Ctx) {
     return jsonError(400, "validation", { issues: parsed.error.issues });
   const reason = parsed.data?.reason ?? "manual";
   const currentContentMd = owned.contentMd ?? "";
-  await createRevisionIfNeeded({
+  const inserted = await createRevisionIfNeeded({
     noteId: id,
     authorId: userId,
     newMd: currentContentMd,
     reason,
   });
-  const [row] = await db
-    .select({
-      id: noteRevisions.id,
-      createdAt: noteRevisions.createdAt,
-      reason: noteRevisions.reason,
-    })
-    .from(noteRevisions)
-    .where(eq(noteRevisions.noteId, id))
-    .orderBy(desc(noteRevisions.createdAt), desc(noteRevisions.id))
-    .limit(1);
-  return Response.json(row, { status: 201 });
+  if (!inserted) return jsonError(500, "revision_not_created");
+  return Response.json(
+    { id: inserted.id, createdAt: inserted.createdAt, reason: inserted.reason },
+    { status: 201 },
+  );
 }
