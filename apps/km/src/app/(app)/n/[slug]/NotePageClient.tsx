@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import type { ResolvedLinksMap } from "@episteme/editor";
 import { NoteEditor } from "./NoteEditor";
 import { VersionDrawer } from "@/components/VersionDrawer";
+import { SummarizeAction } from "@/components/SummarizeAction";
 
 export function NotePageClient({
   id,
@@ -31,18 +32,34 @@ export function NotePageClient({
     router.refresh();
   }, [router]);
 
+  const onBeforeInsert = useCallback(async () => {
+    await flushRef.current?.();
+  }, []);
+
+  const onAfterInsert = useCallback(() => {
+    router.refresh();
+  }, [router]);
+
   return (
     <>
       <div className="mb-3 flex items-center justify-between gap-3">
         <h1 className="text-2xl font-semibold" data-testid="note-title">
           {title}
         </h1>
-        <VersionDrawer
-          noteId={id}
-          currentMd={initialMd}
-          onBeforeRestore={onBeforeRestore}
-          onAfterRestore={onAfterRestore}
-        />
+        <div className="flex items-center gap-1">
+          <SummarizeAction
+            noteId={id}
+            contentMd={initialMd}
+            onBeforeInsert={onBeforeInsert}
+            onAfterInsert={onAfterInsert}
+          />
+          <VersionDrawer
+            noteId={id}
+            currentMd={initialMd}
+            onBeforeRestore={onBeforeRestore}
+            onAfterRestore={onAfterRestore}
+          />
+        </div>
       </div>
       <NoteEditor
         id={id}
