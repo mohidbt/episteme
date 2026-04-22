@@ -7,17 +7,26 @@ import { NoteEditor } from "./NoteEditor";
 import { VersionDrawer } from "@/components/VersionDrawer";
 import { SummarizeAction } from "@/components/SummarizeAction";
 import { AskNotesPanel } from "@/components/AskNotesPanel";
+import { PublishDialog } from "@/components/PublishDialog";
 
 export function NotePageClient({
   id,
   title,
   initialMd,
   resolvedLinks,
+  initialUsername,
+  initialIsPublic,
+  initialPublicSlug,
+  noteSlug,
 }: {
   id: string;
   title: string;
   initialMd: string;
   resolvedLinks?: ResolvedLinksMap;
+  initialUsername: string | null;
+  initialIsPublic: boolean;
+  initialPublicSlug: string | null;
+  noteSlug: string;
 }) {
   const router = useRouter();
   const flushRef = useRef<(() => Promise<void>) | null>(null);
@@ -54,6 +63,13 @@ export function NotePageClient({
             contentMd={initialMd}
             onBeforeInsert={onBeforeInsert}
             onAfterInsert={onAfterInsert}
+          />
+          <PublishDialog
+            noteId={id}
+            initialUsername={initialUsername}
+            initialIsPublic={initialIsPublic}
+            initialPublicSlug={initialPublicSlug}
+            defaultSlug={noteSlug}
           />
           <VersionDrawer
             noteId={id}

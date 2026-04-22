@@ -3,7 +3,7 @@ import { auth } from "@episteme/auth";
 import { and, eq } from "drizzle-orm";
 import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db";
-import { noteLinks, notes } from "@episteme/db/schema";
+import { noteLinks, notes, user } from "@episteme/db/schema";
 import { getDefaultLibrary } from "@/lib/default-library";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { BacklinksPanel } from "@/components/BacklinksPanel";
@@ -22,6 +22,11 @@ export default async function NotePage({
     .from(notes)
     .where(and(eq(notes.userId, session.user.id), eq(notes.slug, slug)));
   if (!note) notFound();
+
+  const [me] = await db
+    .select({ username: user.username })
+    .from(user)
+    .where(eq(user.id, session.user.id));
 
   const linkRows = await db
     .select({
@@ -79,6 +84,10 @@ export default async function NotePage({
         title={note.title}
         initialMd={note.contentMd ?? ""}
         resolvedLinks={resolvedLinks}
+        initialUsername={me?.username ?? null}
+        initialIsPublic={note.isPublic}
+        initialPublicSlug={note.publicSlug ?? null}
+        noteSlug={slug}
       />
       <BacklinksPanel noteId={note.id} />
     </div>
