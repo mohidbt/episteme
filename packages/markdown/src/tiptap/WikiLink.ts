@@ -1,30 +1,5 @@
 import { Node, mergeAttributes } from "@tiptap/core";
-
-// Minimal markdown-it surface we touch from parse.setup. We avoid pulling in
-// @types/markdown-it for a single hook; only the members below are used.
-interface MdInlineState {
-  src: string;
-  pos: number;
-  posMax: number;
-  push(type: string, tag: string, nesting: number): { meta: unknown };
-}
-interface MdInlineRuler {
-  after(
-    before: string,
-    name: string,
-    rule: (state: MdInlineState, silent: boolean) => boolean,
-  ): void;
-}
-interface MdToken {
-  meta: unknown;
-}
-interface MdLike {
-  inline: { ruler: MdInlineRuler };
-  renderer: {
-    rules: Record<string, (tokens: MdToken[], idx: number) => string>;
-  };
-  utils: { escapeHtml: (s: string) => string };
-}
+import type { MdLike } from "./markdown-it-types";
 
 export type WikiLinkTargetKind = "note" | "reference" | "paper" | null;
 
