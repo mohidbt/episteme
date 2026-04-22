@@ -51,10 +51,12 @@ function ReasonBadge({ reason }: { reason: string }) {
 export function VersionDrawer({
   noteId,
   currentMd,
+  onBeforeRestore,
   onAfterRestore,
 }: {
   noteId: string;
   currentMd: string;
+  onBeforeRestore?: () => Promise<void> | void;
   onAfterRestore?: () => void;
 }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -127,6 +129,7 @@ export function VersionDrawer({
     if (!selected) return;
     setIsRestoring(true);
     try {
+      await onBeforeRestore?.();
       await fetch(`/api/notes/${noteId}/revisions/${selected}/restore`, {
         method: "POST",
       });
@@ -136,7 +139,7 @@ export function VersionDrawer({
     } finally {
       setIsRestoring(false);
     }
-  }, [noteId, selected, onAfterRestore]);
+  }, [noteId, selected, onBeforeRestore, onAfterRestore]);
 
   return (
     <>

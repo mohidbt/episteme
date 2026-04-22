@@ -19,7 +19,7 @@ export function NoteEditor({
   id: string;
   initialMd: string;
   resolvedLinks?: ResolvedLinksMap;
-  flushRef?: RefObject<(() => void) | null>;
+  flushRef?: RefObject<(() => Promise<void>) | null>;
 }) {
   const router = useRouter();
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -31,22 +31,24 @@ export function NoteEditor({
     editorRef.current = editor;
   }, []);
 
-  const flush = useCallback(() => {
+  const flush = useCallback((): Promise<void> => {
     const md = pendingMdRef.current;
-    if (md == null) return;
+    if (md == null) return Promise.resolve();
     pendingMdRef.current = null;
     if (timer.current) {
       clearTimeout(timer.current);
       timer.current = null;
     }
-    fetch(`/api/notes/${id}/content`, {
+    return fetch(`/api/notes/${id}/content`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ contentMd: md }),
       keepalive: true,
-    }).catch((err) => {
-      console.warn("[autosave] failed", err);
-    });
+    })
+      .then(() => undefined)
+      .catch((err) => {
+        console.warn("[autosave] failed", err);
+      });
   }, [id]);
 
   const onChangeMd = useCallback(

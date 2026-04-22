@@ -18,13 +18,16 @@ export function NotePageClient({
   resolvedLinks?: ResolvedLinksMap;
 }) {
   const router = useRouter();
-  const flushRef = useRef<(() => void) | null>(null);
+  const flushRef = useRef<(() => Promise<void>) | null>(null);
+
+  const onBeforeRestore = useCallback(async () => {
+    // Flush any pending autosave BEFORE the restore POST so its PATCH cannot
+    // race the restore and clobber it.
+    await flushRef.current?.();
+  }, []);
 
   const onAfterRestore = useCallback(() => {
-    // Flush any pending autosave first so it does not clobber the restore,
-    // then have Next refetch server props -> NoteEditor re-mounts with fresh
-    // initialMd.
-    flushRef.current?.();
+    // Refetch server props -> NoteEditor re-mounts with fresh initialMd.
     router.refresh();
   }, [router]);
 
@@ -37,6 +40,7 @@ export function NotePageClient({
         <VersionDrawer
           noteId={id}
           currentMd={initialMd}
+          onBeforeRestore={onBeforeRestore}
           onAfterRestore={onAfterRestore}
         />
       </div>

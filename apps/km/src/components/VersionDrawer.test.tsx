@@ -166,6 +166,86 @@ describe("VersionDrawer", () => {
     await waitFor(() => expect(listCallCount).toBe(2));
   });
 
+  it("awaits onBeforeRestore before firing the restore POST", async () => {
+    const order: string[] = [];
+    let resolveBefore!: () => void;
+    const beforePromise = new Promise<void>((r) => {
+      resolveBefore = r;
+    });
+    const onBeforeRestore = vi.fn(async () => {
+      order.push("before:start");
+      await beforePromise;
+      order.push("before:end");
+    });
+
+    mockFetch((url, init) => {
+      if (
+        url === "/api/notes/n-1/revisions" &&
+        (!init || init.method === undefined || init.method === "GET")
+      ) {
+        return new Response(JSON.stringify([rev1]), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      if (
+        url === "/api/notes/n-1/revisions/r-1" &&
+        (!init || init.method === undefined || init.method === "GET")
+      ) {
+        return new Response(JSON.stringify({ contentMd: "old body" }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      if (
+        url === "/api/notes/n-1/revisions/r-1/restore" &&
+        init?.method === "POST"
+      ) {
+        order.push("restore:fetch");
+        return new Response(null, { status: 204 });
+      }
+      return new Response("not found", { status: 404 });
+    });
+
+    render(
+      <VersionDrawer
+        noteId="n-1"
+        currentMd="new body"
+        onBeforeRestore={onBeforeRestore}
+        onAfterRestore={() => {}}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /versions/i }));
+    await waitFor(() =>
+      expect(screen.getAllByRole("listitem").length).toBe(1),
+    );
+    fireEvent.click(screen.getByRole("listitem"));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /^restore$/i })).toBeTruthy(),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /^restore$/i }));
+    const confirmButton = await waitFor(() => {
+      const dialogs = screen.getAllByRole("dialog");
+      for (const d of dialogs) {
+        const btn = within(d).queryByRole("button", {
+          name: /confirm restore|restore version/i,
+        });
+        if (btn) return btn;
+      }
+      throw new Error("confirm button not found");
+    });
+    fireEvent.click(confirmButton);
+
+    // onBeforeRestore should be in flight; restore fetch must NOT have happened yet.
+    await waitFor(() => expect(onBeforeRestore).toHaveBeenCalledTimes(1));
+    expect(order).toEqual(["before:start"]);
+
+    resolveBefore();
+    await waitFor(() => {
+      expect(order).toEqual(["before:start", "before:end", "restore:fetch"]);
+    });
+  });
+
   it("Restore button opens confirm dialog; on confirm POSTs restore and calls onAfterRestore", async () => {
     const onAfterRestore = vi.fn();
     const fetchMock = mockFetch((url, init) => {
