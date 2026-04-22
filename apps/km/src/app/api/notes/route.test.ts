@@ -1,4 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { eq } from "drizzle-orm";
+import { db } from "@/lib/db";
+import { noteRevisions } from "@episteme/db/schema";
 import { GET, POST } from "./route";
 import {
   DELETE as DEL_ID,
@@ -54,6 +57,22 @@ describe("notes", () => {
       req("/api/notes", { method: "POST", cookie: u.cookie, body: JSON.stringify({ libraryId }) }),
     );
     expect(r.status).toBe(400);
+  });
+
+  it("creates an initial manual revision so history isn't empty", async () => {
+    const r = await POST(
+      req("/api/notes", { method: "POST", cookie: u.cookie, body: JSON.stringify(noteBody({ title: "Seeded Rev Note" })) }),
+    );
+    expect(r.status).toBe(201);
+    const note = await r.json();
+    const revs = await db
+      .select()
+      .from(noteRevisions)
+      .where(eq(noteRevisions.noteId, note.id));
+    expect(revs.length).toBe(1);
+    expect(revs[0].reason).toBe("manual");
+    expect(revs[0].contentMd).toBe(note.contentMd);
+    expect(revs[0].authorId).toBe(u.id);
   });
 
   it("creates with slug from title", async () => {
