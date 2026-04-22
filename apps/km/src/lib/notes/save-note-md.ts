@@ -32,10 +32,13 @@ export async function saveNoteMd(
     );
     contentJson = null;
   }
+  // Compute revision delta against the OLD notes.contentMd — must run BEFORE
+  // the update below, otherwise the delta gate always sees delta=0 and only
+  // the age gate (>5min) can trigger an autosave revision.
+  await createRevisionIfNeeded({ noteId: id, authorId: userId, newMd: contentMd, reason });
   await db
     .update(notes)
     .set({ contentMd, contentJson, updatedAt: new Date() })
     .where(eq(notes.id, id));
   await rebuildLinks(id, contentMd, userId);
-  await createRevisionIfNeeded({ noteId: id, authorId: userId, newMd: contentMd, reason });
 }

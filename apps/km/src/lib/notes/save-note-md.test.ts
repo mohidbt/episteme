@@ -138,6 +138,41 @@ describe("saveNoteMd", () => {
     expect(rows[0].reason).toBe("autosave");
   });
 
+  it("saveNoteMd autosave with large delta creates a revision even when a recent revision exists", async () => {
+    const [lib] = await db
+      .insert(libraries)
+      .values({ userId: u.id, name: "Delta Lib" })
+      .returning();
+    const [note] = await db
+      .insert(notes)
+      .values({
+        userId: u.id,
+        libraryId: lib.id,
+        title: "delta-test",
+        slug: `delta-test-${Date.now()}`,
+        contentMd: "short",
+      })
+      .returning();
+
+    // seed a recent revision (1 min ago) so age gate does NOT fire
+    await db.insert(noteRevisions).values({
+      noteId: note.id,
+      authorId: u.id,
+      contentMd: "short",
+      reason: "manual",
+      createdAt: new Date(Date.now() - 60_000),
+    });
+
+    // large-delta autosave — delta = |5 - 105| = 100, > 50
+    const bigMd = "short" + "x".repeat(100);
+    await saveNoteMd(note.id, bigMd, u.id, "autosave");
+
+    const rows = await db.select().from(noteRevisions).where(eq(noteRevisions.noteId, note.id));
+    const autosaveRows = rows.filter((r) => r.reason === "autosave");
+    expect(autosaveRows).toHaveLength(1);
+    expect(autosaveRows[0].contentMd).toBe(bigMd);
+  });
+
   it("snapshot reflects the updated notes.content_md", async () => {
     const [lib] = await db
       .insert(libraries)
