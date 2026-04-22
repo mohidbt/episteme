@@ -1,0 +1,24 @@
+import { and, eq } from "drizzle-orm";
+import { db } from "@/lib/db";
+import { notes, noteRevisions } from "@episteme/db/schema";
+import { getUserIdFromRequest } from "@/lib/auth";
+import { jsonError } from "@/lib/crud";
+
+type Ctx = { params: Promise<{ id: string; rev: string }> };
+
+export async function GET(req: Request, { params }: Ctx) {
+  const userId = await getUserIdFromRequest(req);
+  if (!userId) return jsonError(401, "unauthorized");
+  const { id, rev } = await params;
+  const [owned] = await db
+    .select({ id: notes.id })
+    .from(notes)
+    .where(and(eq(notes.id, id), eq(notes.userId, userId)));
+  if (!owned) return jsonError(404, "not_found");
+  const [row] = await db
+    .select({ contentMd: noteRevisions.contentMd })
+    .from(noteRevisions)
+    .where(and(eq(noteRevisions.id, rev), eq(noteRevisions.noteId, id)));
+  if (!row) return jsonError(404, "not_found");
+  return Response.json({ contentMd: row.contentMd });
+}
