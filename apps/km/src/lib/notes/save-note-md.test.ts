@@ -1,8 +1,8 @@
 // @vitest-environment node
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { notes, libraries } from "@episteme/db/schema";
+import { notes, noteRevisions, libraries } from "@episteme/db/schema";
 import { createTestUser, deleteTestUser, type TestUser } from "@/app/api/_test-utils";
 import { saveNoteMd } from "./save-note-md";
 
@@ -49,5 +49,121 @@ describe("saveNoteMd", () => {
     // route handler currently catches and persists null.
     expect(row.contentJson).toBeNull();
     expect(row.updatedAt.getTime()).toBeGreaterThan(originalUpdatedAt.getTime());
+  });
+
+  it("with reason=manual creates a note_revisions row with the new content", async () => {
+    const [lib] = await db
+      .insert(libraries)
+      .values({ userId: u.id, name: "Manual Rev Lib" })
+      .returning();
+    const [note] = await db
+      .insert(notes)
+      .values({
+        userId: u.id,
+        libraryId: lib.id,
+        title: "Manual Rev",
+        slug: `manual-rev-${Date.now()}`,
+        contentMd: "initial",
+      })
+      .returning();
+    const before = await db
+      .select()
+      .from(noteRevisions)
+      .where(eq(noteRevisions.noteId, note.id));
+    expect(before.length).toBe(0);
+
+    await saveNoteMd(note.id, "new content", u.id, "manual");
+
+    const after = await db
+      .select()
+      .from(noteRevisions)
+      .where(eq(noteRevisions.noteId, note.id));
+    expect(after.length).toBe(1);
+    expect(after[0].contentMd).toBe("new content");
+    expect(after[0].reason).toBe("manual");
+    expect(after[0].authorId).toBe(u.id);
+    expect(after[0].noteId).toBe(note.id);
+  });
+
+  it("with reason=autosave and tiny delta and no prior revision inserts a row", async () => {
+    const [lib] = await db
+      .insert(libraries)
+      .values({ userId: u.id, name: "Autosave Lib" })
+      .returning();
+    const [note] = await db
+      .insert(notes)
+      .values({
+        userId: u.id,
+        libraryId: lib.id,
+        title: "Autosave Note",
+        slug: `autosave-${Date.now()}`,
+        contentMd: "xx",
+      })
+      .returning();
+
+    await saveNoteMd(note.id, "xy", u.id, "autosave");
+
+    const rows = await db
+      .select()
+      .from(noteRevisions)
+      .where(eq(noteRevisions.noteId, note.id));
+    expect(rows.length).toBe(1);
+    expect(rows[0].reason).toBe("autosave");
+    expect(rows[0].contentMd).toBe("xy");
+  });
+
+  it("defaults to autosave when reason omitted", async () => {
+    const [lib] = await db
+      .insert(libraries)
+      .values({ userId: u.id, name: "Default Lib" })
+      .returning();
+    const [note] = await db
+      .insert(notes)
+      .values({
+        userId: u.id,
+        libraryId: lib.id,
+        title: "Default Note",
+        slug: `default-${Date.now()}`,
+        contentMd: "a",
+      })
+      .returning();
+
+    await saveNoteMd(note.id, "b", u.id);
+
+    const rows = await db
+      .select()
+      .from(noteRevisions)
+      .where(eq(noteRevisions.noteId, note.id));
+    expect(rows.length).toBe(1);
+    expect(rows[0].reason).toBe("autosave");
+  });
+
+  it("snapshot reflects the updated notes.content_md", async () => {
+    const [lib] = await db
+      .insert(libraries)
+      .values({ userId: u.id, name: "Snapshot Lib" })
+      .returning();
+    const [note] = await db
+      .insert(notes)
+      .values({
+        userId: u.id,
+        libraryId: lib.id,
+        title: "Snapshot Note",
+        slug: `snapshot-${Date.now()}`,
+        contentMd: "old",
+      })
+      .returning();
+
+    await saveNoteMd(note.id, "brand new body", u.id, "manual");
+
+    const [row] = await db.select().from(notes).where(eq(notes.id, note.id));
+    expect(row.contentMd).toBe("brand new body");
+    const [latest] = await db
+      .select()
+      .from(noteRevisions)
+      .where(eq(noteRevisions.noteId, note.id))
+      .orderBy(desc(noteRevisions.createdAt))
+      .limit(1);
+    expect(latest.contentMd).toBe("brand new body");
   });
 });
