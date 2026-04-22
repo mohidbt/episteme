@@ -39,3 +39,11 @@ export async function createRevisionIfNeeded(input: {
     await pruneRevisions(input.noteId);
   }
 }
+
+export function createPreAIEditRevision(
+  noteId: string,
+  authorId: string | null,
+  currentMd: string,
+): Promise<void> {
+  return createRevisionIfNeeded({ noteId, authorId, newMd: currentMd, reason: "pre-ai-edit" });
+}

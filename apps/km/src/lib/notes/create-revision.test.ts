@@ -4,7 +4,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { libraries, noteRevisions, notes } from "@episteme/db/schema";
 import { createTestUser, deleteTestUser, type TestUser } from "@/app/api/_test-utils";
-import { createRevisionIfNeeded } from "./create-revision";
+import { createPreAIEditRevision, createRevisionIfNeeded } from "./create-revision";
 
 let u: TestUser;
 let libraryId: number;
@@ -225,6 +225,19 @@ describe("createRevisionIfNeeded", () => {
       reason: "autosave",
     });
     expect(await countRevs(noteId)).toBe(1);
+  });
+
+  it("createPreAIEditRevision inserts a pre-ai-edit row", async () => {
+    const noteId = await makeNote("current content");
+    await createPreAIEditRevision(noteId, u.id, "current content");
+    const rows = await db
+      .select()
+      .from(noteRevisions)
+      .where(eq(noteRevisions.noteId, noteId));
+    const preAi = rows.filter((r) => r.reason === "pre-ai-edit");
+    expect(preAi).toHaveLength(1);
+    expect(preAi[0].contentMd).toBe("current content");
+    expect(preAi[0].authorId).toBe(u.id);
   });
 
   it("createRevisionIfNeeded calls pruneRevisions on autosave insert", async () => {
