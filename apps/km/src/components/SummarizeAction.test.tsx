@@ -279,4 +279,180 @@ describe("SummarizeAction", () => {
     }) as HTMLButtonElement;
     expect(topBtn.disabled).toBe(true);
   });
+
+  it("does NOT restart stream when contentMd prop changes while open", async () => {
+    const fetchMock = mockFetch((url) => {
+      if (url === "/api/ai/complete") {
+        return streamResponse([
+          'data: {"type":"token","content":"FIRST"}\n\n',
+          "data: [DONE]\n\n",
+        ]);
+      }
+      return new Response("not found", { status: 404 });
+    });
+
+    const { rerender } = render(
+      <SummarizeAction noteId="n-1" contentMd="orig" />,
+    );
+    openPanel();
+    await waitFor(() => {
+      expect(screen.getByTestId("summary-text").textContent).toBe("FIRST");
+    });
+
+    // Re-render with updated contentMd while panel is open.
+    rerender(<SummarizeAction noteId="n-1" contentMd="updated" />);
+
+    // Give any possible restart time to fire.
+    await new Promise((r) => setTimeout(r, 30));
+
+    const aiCalls = fetchMock.mock.calls.filter((c) => {
+      const u = typeof c[0] === "string" ? c[0] : String(c[0]);
+      return u === "/api/ai/complete";
+    });
+    expect(aiCalls.length).toBe(1);
+    expect(screen.getByTestId("summary-text").textContent).toBe("FIRST");
+  });
+
+  it("surfaces error when snapshot POST fails", async () => {
+    const onAfterInsert = vi.fn();
+    const fetchMock = mockFetch((url, init) => {
+      if (url === "/api/ai/complete") {
+        return streamResponse([
+          'data: {"type":"token","content":"S"}\n\n',
+          "data: [DONE]\n\n",
+        ]);
+      }
+      if (
+        url === "/api/notes/n-1/revisions/snapshot?reason=pre-ai-edit" &&
+        init?.method === "POST"
+      ) {
+        return new Response("boom", { status: 500 });
+      }
+      return new Response("not found", { status: 404 });
+    });
+
+    render(
+      <SummarizeAction
+        noteId="n-1"
+        contentMd="x"
+        onAfterInsert={onAfterInsert}
+      />,
+    );
+    openPanel();
+    await waitFor(() => {
+      expect(screen.getByTestId("summary-text").textContent).toBe("S");
+    });
+    fireEvent.click(screen.getByRole("button", { name: /insert at top/i }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("insert-error")).toBeTruthy();
+    });
+    expect(screen.queryByRole("dialog")).not.toBeNull();
+    expect(onAfterInsert).not.toHaveBeenCalled();
+    const patchCalls = fetchMock.mock.calls.filter((c) => {
+      return c[1]?.method === "PATCH";
+    });
+    expect(patchCalls.length).toBe(0);
+  });
+
+  it("surfaces error when GET /api/notes/:id fails (no PATCH sent)", async () => {
+    const onAfterInsert = vi.fn();
+    const fetchMock = mockFetch((url, init) => {
+      if (url === "/api/ai/complete") {
+        return streamResponse([
+          'data: {"type":"token","content":"S"}\n\n',
+          "data: [DONE]\n\n",
+        ]);
+      }
+      if (
+        url === "/api/notes/n-1/revisions/snapshot?reason=pre-ai-edit" &&
+        init?.method === "POST"
+      ) {
+        return new Response(null, { status: 201 });
+      }
+      if (
+        url === "/api/notes/n-1" &&
+        (!init || init.method === undefined || init.method === "GET")
+      ) {
+        return new Response("boom", { status: 500 });
+      }
+      return new Response("not found", { status: 404 });
+    });
+
+    render(
+      <SummarizeAction
+        noteId="n-1"
+        contentMd="x"
+        onAfterInsert={onAfterInsert}
+      />,
+    );
+    openPanel();
+    await waitFor(() => {
+      expect(screen.getByTestId("summary-text").textContent).toBe("S");
+    });
+    fireEvent.click(screen.getByRole("button", { name: /insert at bottom/i }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("insert-error")).toBeTruthy();
+    });
+    expect(screen.queryByRole("dialog")).not.toBeNull();
+    expect(onAfterInsert).not.toHaveBeenCalled();
+    const patchCalls = fetchMock.mock.calls.filter((c) => {
+      return c[1]?.method === "PATCH";
+    });
+    expect(patchCalls.length).toBe(0);
+  });
+
+  it("surfaces error when PATCH fails", async () => {
+    const onAfterInsert = vi.fn();
+    mockFetch((url, init) => {
+      if (url === "/api/ai/complete") {
+        return streamResponse([
+          'data: {"type":"token","content":"S"}\n\n',
+          "data: [DONE]\n\n",
+        ]);
+      }
+      if (
+        url === "/api/notes/n-1/revisions/snapshot?reason=pre-ai-edit" &&
+        init?.method === "POST"
+      ) {
+        return new Response(null, { status: 201 });
+      }
+      if (
+        url === "/api/notes/n-1" &&
+        (!init || init.method === undefined || init.method === "GET")
+      ) {
+        return new Response(JSON.stringify({ contentMd: "ORIG" }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      if (
+        url === "/api/notes/n-1/content?reason=manual" &&
+        init?.method === "PATCH"
+      ) {
+        return new Response("boom", { status: 500 });
+      }
+      return new Response("not found", { status: 404 });
+    });
+
+    render(
+      <SummarizeAction
+        noteId="n-1"
+        contentMd="ORIG"
+        onAfterInsert={onAfterInsert}
+      />,
+    );
+    openPanel();
+    await waitFor(() => {
+      expect(screen.getByTestId("summary-text").textContent).toBe("S");
+    });
+    fireEvent.click(screen.getByRole("button", { name: /insert at top/i }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("insert-error")).toBeTruthy();
+    });
+    expect(screen.queryByRole("dialog")).not.toBeNull();
+    expect(onAfterInsert).not.toHaveBeenCalled();
+  });
 });

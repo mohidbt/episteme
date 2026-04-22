@@ -32,7 +32,9 @@ export function SummarizeAction({
   const [status, setStatus] = useState<Status>("idle");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isInserting, setIsInserting] = useState(false);
+  const [insertError, setInsertError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const contentMdRef = useRef(contentMd);
 
   // When panel opens, fire the stream.
   useEffect(() => {
@@ -43,15 +45,18 @@ export function SummarizeAction({
       return;
     }
 
+    // Freeze contentMd at open-time so parent re-renders don't restart stream.
+    contentMdRef.current = contentMd;
     const controller = new AbortController();
     abortRef.current = controller;
     setSummary("");
     setStatus("streaming");
     setErrorMsg(null);
+    setInsertError(null);
 
     void runSlashAi({
       prompt: SUMMARIZE_PROMPT,
-      context: contentMd,
+      context: contentMdRef.current,
       signal: controller.signal,
       onToken: (chunk) => {
         setSummary((prev) => prev + chunk);
@@ -68,7 +73,8 @@ export function SummarizeAction({
     return () => {
       controller.abort();
     };
-  }, [isOpen, contentMd]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
 
   const canInsert = status === "done" && summary.trim().length > 0 && !isInserting;
 
@@ -81,16 +87,25 @@ export function SummarizeAction({
     async (position: "top" | "bottom") => {
       if (!canInsert) return;
       setIsInserting(true);
+      setInsertError(null);
       try {
         // 1. Snapshot pre-insert state
-        await fetch(
+        const snap = await fetch(
           `/api/notes/${noteId}/revisions/snapshot?reason=pre-ai-edit`,
           { method: "POST" },
         );
+        if (!snap.ok) {
+          setInsertError("Failed to snapshot note before insert.");
+          return;
+        }
         // 2. Flush pending autosave
         await onBeforeInsert?.();
         // 3. Fetch current content
         const getRes = await fetch(`/api/notes/${noteId}`);
+        if (!getRes.ok) {
+          setInsertError("Failed to fetch current note content.");
+          return;
+        }
         const note = (await getRes.json()) as { contentMd?: string };
         const current = note.contentMd ?? "";
         // 4. Compose
@@ -100,11 +115,18 @@ export function SummarizeAction({
             ? `${trimmed}\n\n${current}`
             : `${current}\n\n${trimmed}`;
         // 5. PATCH
-        await fetch(`/api/notes/${noteId}/content?reason=manual`, {
-          method: "PATCH",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ contentMd: body }),
-        });
+        const patch = await fetch(
+          `/api/notes/${noteId}/content?reason=manual`,
+          {
+            method: "PATCH",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ contentMd: body }),
+          },
+        );
+        if (!patch.ok) {
+          setInsertError("Failed to save inserted summary.");
+          return;
+        }
         // 6. Refresh + close
         onAfterInsert?.();
         setIsOpen(false);
@@ -152,6 +174,14 @@ export function SummarizeAction({
             </div>
           )}
         </div>
+        {insertError && (
+          <div
+            data-testid="insert-error"
+            className="mx-4 mb-2 text-xs text-destructive"
+          >
+            {insertError}
+          </div>
+        )}
         <div className="flex items-center justify-end gap-2 border-t p-3">
           <Button
             variant="outline"
