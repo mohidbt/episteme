@@ -1,5 +1,10 @@
 "use client";
-import { Editor, type ResolvedLinksMap, type WikiLinkSuggestion } from "@episteme/editor";
+import {
+  Editor,
+  type ResolvedLinksMap,
+  type TiptapEditor,
+  type WikiLinkSuggestion,
+} from "@episteme/editor";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -18,6 +23,11 @@ export function NoteEditor({
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingMdRef = useRef<string | null>(null);
   const editorHostRef = useRef<HTMLDivElement>(null);
+  const editorRef = useRef<TiptapEditor | null>(null);
+
+  const onReady = useCallback((editor: TiptapEditor) => {
+    editorRef.current = editor;
+  }, []);
 
   const flush = useCallback(() => {
     const md = pendingMdRef.current;
@@ -60,30 +70,141 @@ export function NoteEditor({
   useEffect(() => {
     const host = editorHostRef.current;
     if (!host) return;
-    const onClick = (e: MouseEvent) => {
-      const el = (e.target as HTMLElement | null)?.closest?.(
-        '[data-type="tag"]',
-      ) as HTMLElement | null;
-      if (!el) return;
-      const tag = el.getAttribute("data-tag");
-      if (!tag) return;
-      e.preventDefault();
-      flush();
-      router.push(`/tags/${encodeURIComponent(tag)}`);
+
+    // Click/dblclick coordination: dblclick fires after two click events, so
+    // naive navigation on single click steals the second click and the pill
+    // never gets edited. We defer navigation by the browser's dblclick
+    // threshold (~250ms) and cancel it if a dblclick arrives in time.
+    let pendingNav: ReturnType<typeof setTimeout> | null = null;
+    let pendingNavKey = 0;
+    const cancelPendingNav = () => {
+      if (pendingNav) {
+        clearTimeout(pendingNav);
+        pendingNav = null;
+      }
     };
+
+    const routeWikiLink = (wikiEl: HTMLElement) => {
+      const kind = wikiEl.getAttribute("data-target-kind") as
+        | "note"
+        | "reference"
+        | "paper"
+        | null;
+      const id = wikiEl.getAttribute("data-target-id");
+      const title = wikiEl.getAttribute("data-title") ?? "";
+      flush();
+      if (kind === "reference" && id) {
+        router.push(`/r/${id}`);
+        return;
+      }
+      if (kind === "paper" && id) {
+        router.push(`/p/${id}`);
+        return;
+      }
+      // Notes: we need the slug, which the pill doesn't carry. Fall back to
+      // the server-hydrated resolvedLinks map (keyed by lowercased title).
+      const hit = resolvedLinks?.[title.toLowerCase()];
+      if (hit?.targetKind === "note" && hit.targetSlug) {
+        router.push(`/n/${encodeURIComponent(hit.targetSlug)}`);
+      }
+    };
+
+    const onClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement | null;
+      const tagEl = target?.closest?.('[data-type="tag"]') as HTMLElement | null;
+      if (tagEl) {
+        const tag = tagEl.getAttribute("data-tag");
+        if (!tag) return;
+        e.preventDefault();
+        flush();
+        router.push(`/tags/${encodeURIComponent(tag)}`);
+        return;
+      }
+      const wikiEl = target?.closest?.(
+        '[data-type="wiki-link"]',
+      ) as HTMLElement | null;
+      if (!wikiEl) return;
+      e.preventDefault();
+      cancelPendingNav();
+      const key = ++pendingNavKey;
+      pendingNav = setTimeout(() => {
+        pendingNav = null;
+        if (key !== pendingNavKey) return;
+        routeWikiLink(wikiEl);
+      }, 250);
+    };
+
+    const onDblClick = (e: MouseEvent) => {
+      const editor = editorRef.current;
+      if (!editor) return;
+      const target = e.target as HTMLElement | null;
+      const wikiEl = target?.closest?.(
+        '[data-type="wiki-link"]',
+      ) as HTMLElement | null;
+      if (!wikiEl) return;
+      // Cancel the pending single-click navigation the two clicks scheduled.
+      cancelPendingNav();
+      pendingNavKey++;
+      e.preventDefault();
+      const pos = editor.view.posAtDOM(wikiEl, 0);
+      if (pos < 0) return;
+      const node = editor.state.doc.nodeAt(pos);
+      if (!node || node.type.name !== "wikiLink") return;
+      // Replace the pill with `[[<title-without-prefix>` and drop the cursor
+      // at the end. The Suggestion plugin (trigger char `[[`) re-opens the
+      // typeahead with the stripped title as the query so the user can pick
+      // a different target — or re-confirm the same one.
+      const rawTitle = (node.attrs.title as string) ?? "";
+      const stripped = rawTitle.startsWith("@")
+        ? rawTitle.slice(1)
+        : rawTitle.startsWith("pdf:")
+          ? rawTitle.slice(4)
+          : rawTitle;
+      const insertText = `[[${stripped}`;
+      const caretOffset = insertText.length;
+      // Use a raw schema text node (not `insertContentAt`) so tiptap-markdown
+      // does NOT re-parse `[[...]]` into a new unresolved wikiLink atom.
+      editor
+        .chain()
+        .focus()
+        .command(({ tr, state }) => {
+          tr.replaceWith(
+            pos,
+            pos + node.nodeSize,
+            state.schema.text(insertText),
+          );
+          return true;
+        })
+        .setTextSelection(pos + caretOffset)
+        .run();
+    };
+
     host.addEventListener("click", onClick);
-    return () => host.removeEventListener("click", onClick);
-  }, [router, flush]);
+    host.addEventListener("dblclick", onDblClick);
+    return () => {
+      host.removeEventListener("click", onClick);
+      host.removeEventListener("dblclick", onDblClick);
+      cancelPendingNav();
+    };
+  }, [router, flush, resolvedLinks]);
 
   const wikiLinkSuggestion = useMemo<WikiLinkSuggestion>(
     () => ({
       command: ({ editor, range, props }) => {
-        // Replace the `[[query` range with a wikiLink node + trailing space.
         const p = props as {
           title: string;
-          targetKind: "note";
+          targetKind: "note" | "reference" | "paper";
           targetId: string | null;
         };
+        // Match the markdown prefixes used by extractLinks():
+        //   [[@key]]     → reference
+        //   [[pdf:name]] → paper
+        const titleWithPrefix =
+          p.targetKind === "reference"
+            ? `@${p.title}`
+            : p.targetKind === "paper"
+              ? `pdf:${p.title}`
+              : p.title;
         editor
           .chain()
           .focus()
@@ -92,7 +213,7 @@ export function NoteEditor({
             {
               type: "wikiLink",
               attrs: {
-                title: p.title,
+                title: titleWithPrefix,
                 alias: null,
                 targetKind: p.targetKind,
                 targetId: p.targetId,
@@ -181,6 +302,7 @@ export function NoteEditor({
         autofocus
         wikiLinkSuggestion={wikiLinkSuggestion}
         resolvedLinks={resolvedLinks}
+        onReady={onReady}
       />
     </div>
   );

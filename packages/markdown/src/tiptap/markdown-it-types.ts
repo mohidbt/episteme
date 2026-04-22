@@ -16,6 +16,11 @@ export interface MdInlineRuler {
     name: string,
     rule: (state: MdInlineState, silent: boolean) => boolean,
   ): void;
+  before(
+    after: string,
+    name: string,
+    rule: (state: MdInlineState, silent: boolean) => boolean,
+  ): void;
 }
 
 export interface MdToken {

@@ -3,6 +3,9 @@ import type { Editor } from "@tiptap/core";
 export type WikiLinkResolution = {
   targetKind: "note" | "reference" | "paper";
   targetId: string | null;
+  // Slug is carried only for note targets so the UI can route to `/n/<slug>`
+  // without a separate id→slug fetch.
+  targetSlug?: string | null;
 };
 
 export type ResolvedLinksMap = Record<string, WikiLinkResolution>;

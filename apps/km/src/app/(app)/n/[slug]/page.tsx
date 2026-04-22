@@ -28,17 +28,39 @@ export default async function NotePage({
       title: noteLinks.targetTitleRaw,
       targetKind: noteLinks.targetKind,
       targetId: noteLinks.targetId,
+      targetSlug: notes.slug,
     })
     .from(noteLinks)
+    .leftJoin(notes, eq(notes.id, noteLinks.targetId))
     .where(eq(noteLinks.sourceNoteId, note.id));
+  // `note_links.target_title_raw` is stored STRIPPED of the `@` / `pdf:`
+  // prefix (see `classify()` in packages/markdown). But the WikiLink node's
+  // `title` attr round-trips WITH the prefix. Re-add the prefix here so the
+  // hydration lookup key matches node.title (lowercased).
   const resolvedLinks: Record<
     string,
-    { targetKind: "note" | "reference" | "paper"; targetId: string | null }
+    {
+      targetKind: "note" | "reference" | "paper";
+      targetId: string | null;
+      targetSlug: string | null;
+    }
   > = Object.fromEntries(
-    linkRows.map((r) => [
-      r.title.toLowerCase(),
-      { targetKind: r.targetKind, targetId: r.targetId },
-    ]),
+    linkRows.map((r) => {
+      const prefix =
+        r.targetKind === "reference"
+          ? "@"
+          : r.targetKind === "paper"
+            ? "pdf:"
+            : "";
+      return [
+        `${prefix}${r.title}`.toLowerCase(),
+        {
+          targetKind: r.targetKind,
+          targetId: r.targetId,
+          targetSlug: r.targetKind === "note" ? r.targetSlug ?? null : null,
+        },
+      ];
+    }),
   );
 
   const library = await getDefaultLibrary(session.user.id);

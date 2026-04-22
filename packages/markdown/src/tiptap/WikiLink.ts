@@ -1,4 +1,4 @@
-import { Node, mergeAttributes } from "@tiptap/core";
+import { InputRule, Node, mergeAttributes } from "@tiptap/core";
 import type { MdLike } from "./markdown-it-types";
 
 export type WikiLinkTargetKind = "note" | "reference" | "paper" | null;
@@ -76,6 +76,35 @@ export const WikiLink = Node.create({
     ];
   },
 
+  // Fires the moment the user types the closing `]]` of a `[[Title]]` or
+  // `[[Title|Alias]]`. Converts the range into a wikiLink node so the pill
+  // appears inline without waiting for a reload. Resolution stays null; the
+  // next autosave's rebuildLinks + reload hydration will fill targetId.
+  addInputRules() {
+    const type = this.type;
+    return [
+      new InputRule({
+        find: /\[\[([^\[\]|\n]+)(?:\|([^\[\]\n]+))?\]\]$/,
+        handler: ({ state, range, match }) => {
+          const rawTitle = match[1].trim();
+          const rawAlias = match[2]?.trim() || null;
+          if (!rawTitle) return;
+          const { tr } = state;
+          tr.replaceWith(
+            range.from,
+            range.to,
+            type.create({
+              title: rawTitle,
+              alias: rawAlias,
+              targetKind: null,
+              targetId: null,
+            }),
+          );
+        },
+      }),
+    ];
+  },
+
   addStorage() {
     return {
       markdown: {
@@ -99,23 +128,61 @@ export const WikiLink = Node.create({
         parse: {
           setup(md: MdLike) {
             const TOKEN = "wiki_link";
-            md.inline.ruler.after("emphasis", TOKEN, (state, silent) => {
-              if (state.src.charCodeAt(state.pos) !== 0x5b /* [ */) return false;
-              if (state.src.charCodeAt(state.pos + 1) !== 0x5b) return false;
-              const start = state.pos + 2;
+            // Registered BEFORE the built-in `escape` rule so we get first
+            // crack at `\[\[..\]\]`. Otherwise markdown-it's escape rule
+            // would consume each `\[` as a text `[` and our opener scan
+            // would never match. Content stored from before the typeahead
+            // existed is saved in the escaped form by tiptap-markdown's
+            // default serializer — we still want those to render as pills.
+            md.inline.ruler.before("escape", TOKEN, (state, silent) => {
+              const src = state.src;
+              let p = state.pos;
+              let escaped: boolean;
+              // Unescaped opener: `[[`
+              if (
+                src.charCodeAt(p) === 0x5b /* [ */ &&
+                src.charCodeAt(p + 1) === 0x5b
+              ) {
+                escaped = false;
+                p += 2;
+              }
+              // Escaped opener: `\[\[`
+              else if (
+                src.charCodeAt(p) === 0x5c /* \ */ &&
+                src.charCodeAt(p + 1) === 0x5b &&
+                src.charCodeAt(p + 2) === 0x5c &&
+                src.charCodeAt(p + 3) === 0x5b
+              ) {
+                escaped = true;
+                p += 4;
+              } else {
+                return false;
+              }
+
+              const start = p;
               let end = start;
               while (end < state.posMax) {
-                const c = state.src.charCodeAt(end);
+                const c = src.charCodeAt(end);
                 if (c === 0x0a /* \n */) return false;
-                if (
-                  c === 0x5d /* ] */ &&
-                  state.src.charCodeAt(end + 1) === 0x5d
-                )
-                  break;
+                if (escaped) {
+                  if (
+                    c === 0x5c /* \ */ &&
+                    src.charCodeAt(end + 1) === 0x5d /* ] */ &&
+                    src.charCodeAt(end + 2) === 0x5c &&
+                    src.charCodeAt(end + 3) === 0x5d
+                  )
+                    break;
+                } else {
+                  if (
+                    c === 0x5d /* ] */ &&
+                    src.charCodeAt(end + 1) === 0x5d
+                  )
+                    break;
+                }
                 end += 1;
               }
               if (end >= state.posMax) return false;
-              const raw = state.src.slice(start, end);
+              const raw = src.slice(start, end);
               if (raw.length === 0 || raw.includes("[[")) return false;
               const pipeIdx = raw.indexOf("|");
               const title = (pipeIdx === -1 ? raw : raw.slice(0, pipeIdx)).trim();
@@ -125,7 +192,7 @@ export const WikiLink = Node.create({
               if (silent) return true;
               const token = state.push(TOKEN, "", 0);
               token.meta = { title, alias };
-              state.pos = end + 2;
+              state.pos = end + (escaped ? 4 : 2);
               return true;
             });
             md.renderer.rules[TOKEN] = (tokens, idx) => {
