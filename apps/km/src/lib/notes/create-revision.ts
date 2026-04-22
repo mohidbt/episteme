@@ -26,7 +26,7 @@ export async function createRevisionIfNeeded(input: {
       .orderBy(desc(noteRevisions.createdAt))
       .limit(1);
     const age = last ? Date.now() - last.createdAt.getTime() : Infinity;
-    if (delta < DELTA_MIN && age < AGE_MIN_MS) return;
+    if (delta <= DELTA_MIN && age <= AGE_MIN_MS) return;
   }
   await db.insert(noteRevisions).values({
     noteId: input.noteId,

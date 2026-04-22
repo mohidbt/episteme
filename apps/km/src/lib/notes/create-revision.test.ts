@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { libraries, noteRevisions, notes } from "@episteme/db/schema";
@@ -158,6 +158,60 @@ describe("createRevisionIfNeeded", () => {
     });
     const after = await countRevs(noteId);
     expect(after).toBe(2);
+  });
+
+  it("autosave with delta exactly 50 and recent last revision does NOT create a row", async () => {
+    const noteId = await makeNote("a".repeat(10));
+    await db.insert(noteRevisions).values({
+      noteId,
+      authorId: u.id,
+      contentMd: "a".repeat(10),
+      reason: "autosave",
+      createdAt: new Date(Date.now() - 60 * 1000),
+    });
+    const before = await countRevs(noteId);
+    expect(before).toBe(1);
+
+    await createRevisionIfNeeded({
+      noteId,
+      authorId: u.id,
+      newMd: "a".repeat(60), // delta exactly 50
+      reason: "autosave",
+    });
+
+    const after = await countRevs(noteId);
+    expect(after).toBe(1);
+  });
+
+  it("autosave with age exactly 5min and tiny delta does NOT create a row", async () => {
+    const noteId = await makeNote("hello");
+    const seedAt = new Date(Date.now() - 5 * 60 * 1000);
+    await db.insert(noteRevisions).values({
+      noteId,
+      authorId: u.id,
+      contentMd: "hello",
+      reason: "autosave",
+      createdAt: seedAt,
+    });
+    const before = await countRevs(noteId);
+    expect(before).toBe(1);
+
+    // Freeze Date only (not setTimeout) so DB driver timers keep working.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(seedAt.getTime() + 5 * 60 * 1000);
+    try {
+      await createRevisionIfNeeded({
+        noteId,
+        authorId: u.id,
+        newMd: "hella", // tiny delta
+        reason: "autosave",
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+
+    const after = await countRevs(noteId);
+    expect(after).toBe(1);
   });
 
   it("autosave with no prior revisions creates a row", async () => {
