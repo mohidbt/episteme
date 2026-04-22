@@ -24,6 +24,10 @@ export async function PATCH(
   const parsed = body.safeParse(await req.json().catch(() => null));
   if (!parsed.success)
     return jsonError(400, "validation", { issues: parsed.error.issues });
-  await saveNoteMd(id, parsed.data.contentMd, userId);
+  const reasonRaw = new URL(req.url).searchParams.get("reason");
+  const reason = reasonRaw ?? "autosave";
+  if (reason !== "autosave" && reason !== "manual")
+    return jsonError(400, "validation", { message: "invalid reason" });
+  await saveNoteMd(id, parsed.data.contentMd, userId, reason);
   return new NextResponse(null, { status: 204 });
 }
