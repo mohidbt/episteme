@@ -6,6 +6,7 @@ import type { ResolvedLinksMap } from "@episteme/editor";
 import { NoteEditor } from "./NoteEditor";
 import { VersionDrawer } from "@/components/VersionDrawer";
 import { SummarizeAction } from "@/components/SummarizeAction";
+import { AskNotesPanel } from "@/components/AskNotesPanel";
 
 export function NotePageClient({
   id,
@@ -47,6 +48,7 @@ export function NotePageClient({
           {title}
         </h1>
         <div className="flex items-center gap-1">
+          <AskNotesPanel />
           <SummarizeAction
             noteId={id}
             contentMd={initialMd}
