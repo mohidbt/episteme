@@ -49,6 +49,14 @@ export default defineConfig({
         __dirname,
         "../../packages/storage/src/index.ts",
       ),
+      "@episteme/auth/byok": path.resolve(
+        __dirname,
+        "../../packages/auth/src/byok.ts",
+      ),
+      "@episteme/auth": path.resolve(
+        __dirname,
+        "../../packages/auth/src/index.ts",
+      ),
     },
   },
 });

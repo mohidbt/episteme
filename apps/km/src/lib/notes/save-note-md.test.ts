@@ -1,9 +1,15 @@
 // @vitest-environment node
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { desc, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { notes, noteRevisions, libraries } from "@episteme/db/schema";
 import { createTestUser, deleteTestUser, type TestUser } from "@/app/api/_test-utils";
+
+vi.mock("@/lib/ai/embed-on-save", () => ({
+  embedOnSave: vi.fn(() => new Promise(() => {})),
+}));
+
+import { embedOnSave } from "@/lib/ai/embed-on-save";
 import { saveNoteMd } from "./save-note-md";
 
 let u: TestUser;
@@ -171,6 +177,56 @@ describe("saveNoteMd", () => {
     const autosaveRows = rows.filter((r) => r.reason === "autosave");
     expect(autosaveRows).toHaveLength(1);
     expect(autosaveRows[0].contentMd).toBe(bigMd);
+  });
+
+  it("kicks off embedOnSave but does not await it", async () => {
+    vi.mocked(embedOnSave).mockClear();
+    vi.mocked(embedOnSave).mockImplementation(() => new Promise(() => {}));
+    const [lib] = await db
+      .insert(libraries)
+      .values({ userId: u.id, name: "Embed Dispatch Lib" })
+      .returning();
+    const [note] = await db
+      .insert(notes)
+      .values({
+        userId: u.id,
+        libraryId: lib.id,
+        title: "Embed Dispatch",
+        slug: `embed-dispatch-${Date.now()}`,
+        contentMd: "old",
+      })
+      .returning();
+
+    const start = Date.now();
+    await saveNoteMd(note.id, "new body", u.id, "manual");
+    const elapsed = Date.now() - start;
+    expect(elapsed).toBeLessThan(2000);
+    expect(embedOnSave).toHaveBeenCalledTimes(1);
+    expect(embedOnSave).toHaveBeenCalledWith(note.id, "new body", u.id);
+  });
+
+  it("resolves even if embedOnSave throws synchronously", async () => {
+    vi.mocked(embedOnSave).mockClear();
+    vi.mocked(embedOnSave).mockImplementation(() => {
+      throw new Error("sync boom");
+    });
+    const [lib] = await db
+      .insert(libraries)
+      .values({ userId: u.id, name: "Embed Throw Lib" })
+      .returning();
+    const [note] = await db
+      .insert(notes)
+      .values({
+        userId: u.id,
+        libraryId: lib.id,
+        title: "Embed Throw",
+        slug: `embed-throw-${Date.now()}`,
+        contentMd: "x",
+      })
+      .returning();
+
+    await expect(saveNoteMd(note.id, "y", u.id, "manual")).resolves.toBeUndefined();
+    expect(embedOnSave).toHaveBeenCalledTimes(1);
   });
 
   it("snapshot reflects the updated notes.content_md", async () => {

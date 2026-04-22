@@ -4,6 +4,7 @@ import { notes } from "@episteme/db/schema";
 import { mdToProseMirror, type JSONContent } from "@episteme/markdown";
 import { rebuildLinks } from "./rebuild-links";
 import { createRevisionIfNeeded, type RevisionReason } from "./create-revision";
+import { embedOnSave } from "@/lib/ai/embed-on-save";
 
 // TODO(phase-0.2 follow-up): Tiptap's `new Editor(...)` requires a DOM (reads
 // `document` at construction), and Next.js Node route handlers have no DOM.
@@ -41,4 +42,11 @@ export async function saveNoteMd(
     .set({ contentMd, contentJson, updatedAt: new Date() })
     .where(eq(notes.id, id));
   await rebuildLinks(id, contentMd, userId);
+  try {
+    void embedOnSave(id, contentMd, userId).catch((err) => {
+      console.warn("[saveNoteMd] embed dispatch", err);
+    });
+  } catch (err) {
+    console.warn("[saveNoteMd] embed dispatch sync", err);
+  }
 }
