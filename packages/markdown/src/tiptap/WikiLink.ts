@@ -9,11 +9,10 @@ export interface WikiLinkAttrs {
   targetId: string | null;
 }
 
-// Pill classes — Tailwind utilities; red-dashed when unresolved.
-const PILL_RESOLVED =
-  "inline bg-muted rounded-sm px-1 text-sm";
-const PILL_UNRESOLVED =
-  "inline bg-muted rounded-sm px-1 text-sm border border-dashed border-red-500";
+// Pill class — static; resolved/unresolved styling is driven by the
+// `data-resolved` attribute via CSS in packages/editor/src/styles.css
+// (Tailwind v4 doesn't scan workspace package sources by default).
+const PILL_CLASS = "wiki-link";
 
 // Inline atom node: a `[[Title]]` pill. The text the user sees is the alias
 // (if any) or the title; attrs are preserved for round-tripping and for the
@@ -70,7 +69,7 @@ export const WikiLink = Node.create({
       mergeAttributes(HTMLAttributes, {
         "data-type": "wiki-link",
         "data-resolved": resolved ? "true" : "false",
-        class: resolved ? PILL_RESOLVED : PILL_UNRESOLVED,
+        class: PILL_CLASS,
       }),
       label,
     ];

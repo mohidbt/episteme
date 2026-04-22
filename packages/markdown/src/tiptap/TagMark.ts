@@ -1,10 +1,11 @@
 import { Mark, markInputRule } from "@tiptap/core";
 
 // Matches `#tag` where tag = [a-z][a-z0-9_-]*, preceded by start-of-text or
-// whitespace. The capture group (1) holds the full `#tag` text we wrap in the
-// mark; capture group (2) holds just the tag name for the attribute.
+// whitespace. Single capture group holding the full `#tag` — markInputRule
+// uses the LAST capture as the wrap range, so wrapping must include the `#`
+// (otherwise the `#` is deleted between match-start and wrap-start).
 // InputRule fires when the user types a non-word character after a valid tag.
-const TAG_INPUT_RULE = /(?:^|\s)(#([a-z][a-z0-9_-]*))(?=[^\w]|$)/;
+const TAG_INPUT_RULE = /(?:^|\s)(#[a-z][a-z0-9_-]*)(?=[^\w]|$)/;
 
 export const TagMark = Mark.create({
   name: "tag",
@@ -59,7 +60,7 @@ export const TagMark = Mark.create({
       markInputRule({
         find: TAG_INPUT_RULE,
         type: this.type,
-        getAttributes: (match) => ({ tag: match[2] }),
+        getAttributes: (match) => ({ tag: match[1].slice(1) }),
       }),
     ];
   },

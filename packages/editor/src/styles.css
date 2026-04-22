@@ -9,6 +9,31 @@
 .episteme-prose [data-type="taskList"] { list-style: none; padding-left: 0; }
 .episteme-prose [data-type="taskItem"] { display: flex; gap: 0.5em; align-items: start; }
 
+/* Wiki-link pill — static chrome from the resolved attr. */
+.episteme-prose .wiki-link {
+  display: inline;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: var(--muted);
+  font-size: 0.95em;
+}
+.episteme-prose .wiki-link[data-resolved="false"] {
+  background: transparent;
+  border: 1px dashed oklch(0.58 0.18 27);
+  color: oklch(0.52 0.18 27);
+}
+
+/* Tag pill — clickable to navigate to /tags/:tag. */
+.episteme-prose [data-type="tag"] {
+  color: var(--primary);
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.9em;
+  cursor: pointer;
+}
+.episteme-prose [data-type="tag"]:hover {
+  text-decoration: underline;
+}
+
 /* Appearance modifiers: applied via data attributes on the <main> ancestor
    in apps/km so the editor package stays unaware of the preference surface. */
 main[data-prose-font="serif"] .episteme-prose {

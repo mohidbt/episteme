@@ -1,12 +1,15 @@
 "use client";
 import { Editor, type WikiLinkSuggestion } from "@episteme/editor";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { WikiLinkTypeahead, type WikiLinkTypeaheadRef } from "@/components/WikiLinkTypeahead";
 
 export function NoteEditor({ id, initialMd }: { id: string; initialMd: string }) {
+  const router = useRouter();
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingMdRef = useRef<string | null>(null);
+  const editorHostRef = useRef<HTMLDivElement>(null);
 
   const flush = useCallback(() => {
     const md = pendingMdRef.current;
@@ -45,6 +48,24 @@ export function NoteEditor({ id, initialMd }: { id: string; initialMd: string })
       flush();
     };
   }, [flush]);
+
+  useEffect(() => {
+    const host = editorHostRef.current;
+    if (!host) return;
+    const onClick = (e: MouseEvent) => {
+      const el = (e.target as HTMLElement | null)?.closest?.(
+        '[data-type="tag"]',
+      ) as HTMLElement | null;
+      if (!el) return;
+      const tag = el.getAttribute("data-tag");
+      if (!tag) return;
+      e.preventDefault();
+      flush();
+      router.push(`/tags/${encodeURIComponent(tag)}`);
+    };
+    host.addEventListener("click", onClick);
+    return () => host.removeEventListener("click", onClick);
+  }, [router, flush]);
 
   const wikiLinkSuggestion = useMemo<WikiLinkSuggestion>(
     () => ({
@@ -123,6 +144,13 @@ export function NoteEditor({ id, initialMd }: { id: string; initialMd: string })
             place(props.clientRect);
           },
           onKeyDown: (props) => {
+            if (props.event.key === "Escape") {
+              root?.unmount();
+              host?.remove();
+              root = null;
+              host = null;
+              return true;
+            }
             return refObj.current?.onKeyDown({ event: props.event }) ?? false;
           },
           onExit: () => {
@@ -138,11 +166,13 @@ export function NoteEditor({ id, initialMd }: { id: string; initialMd: string })
   );
 
   return (
-    <Editor
-      initialMd={initialMd}
-      onChangeMd={onChangeMd}
-      autofocus
-      wikiLinkSuggestion={wikiLinkSuggestion}
-    />
+    <div ref={editorHostRef}>
+      <Editor
+        initialMd={initialMd}
+        onChangeMd={onChangeMd}
+        autofocus
+        wikiLinkSuggestion={wikiLinkSuggestion}
+      />
+    </div>
   );
 }
