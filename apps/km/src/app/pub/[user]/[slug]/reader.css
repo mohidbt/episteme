@@ -1,0 +1,17 @@
+.epistaime-reader { font-size: 1.0625rem; line-height: 1.7; }
+.epistaime-reader h1 { font-size: 2.25rem; line-height: 1.2; margin-top: 2.5rem; }
+.epistaime-reader h2 { font-size: 1.5rem; line-height: 1.3; margin-top: 2rem; margin-bottom: 0.5rem; }
+.epistaime-reader h3 { font-size: 1.25rem; margin-top: 1.5rem; margin-bottom: 0.4rem; }
+.epistaime-reader p { margin-bottom: 1rem; }
+.epistaime-reader p:first-of-type::first-letter { font-size: 2.5em; font-weight: 500; float: left; line-height: 0.9; padding-right: 0.1em; padding-top: 0.08em; }
+.epistaime-reader a { text-decoration: underline; text-decoration-color: rgba(0,0,0,0.25); text-underline-offset: 3px; }
+.epistaime-reader a:hover { text-decoration-color: currentColor; }
+.epistaime-reader ul, .epistaime-reader ol { margin-bottom: 1rem; padding-left: 1.5rem; }
+.epistaime-reader li { margin-bottom: 0.3rem; }
+.epistaime-reader code { background: rgba(0,0,0,0.05); padding: 0.15em 0.35em; border-radius: 4px; font-size: 0.95em; }
+.epistaime-reader pre { background: rgba(0,0,0,0.04); padding: 1rem; border-radius: 6px; overflow-x: auto; margin-bottom: 1rem; }
+.epistaime-reader pre code { background: transparent; padding: 0; }
+.epistaime-reader blockquote { border-left: 3px solid rgba(0,0,0,0.15); padding-left: 1rem; color: rgba(0,0,0,0.7); margin-bottom: 1rem; }
+.epistaime-reader hr { border: none; border-top: 1px solid rgba(0,0,0,0.1); margin: 2rem 0; }
+.epistaime-reader table { border-collapse: collapse; margin-bottom: 1rem; }
+.epistaime-reader th, .epistaime-reader td { border: 1px solid rgba(0,0,0,0.15); padding: 0.4rem 0.7rem; }
