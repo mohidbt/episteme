@@ -27,6 +27,7 @@ export function NoteEditor({
   const pendingMdRef = useRef<string | null>(null);
   const editorHostRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<TiptapEditor | null>(null);
+  const aiAbortRef = useRef<AbortController | null>(null);
 
   const onReady = useCallback((editor: TiptapEditor) => {
     editorRef.current = editor;
@@ -231,15 +232,24 @@ export function NoteEditor({
         })
         .run();
 
+      // Abort any in-flight call before starting a new one.
+      aiAbortRef.current?.abort();
+      const controller = new AbortController();
+      aiAbortRef.current = controller;
+
       void runSlashAi({
         prompt,
         context,
+        signal: controller.signal,
         onToken: (chunk) => {
           editor.chain().focus().insertContent(chunk).run();
         },
         onError: (message) => {
           editor.chain().focus().insertContent(`[ai error: ${message}]`).run();
         },
+      }).finally(() => {
+        // Clear only if still the current controller.
+        if (aiAbortRef.current === controller) aiAbortRef.current = null;
       });
     };
 
@@ -251,6 +261,8 @@ export function NoteEditor({
       host.removeEventListener("dblclick", onDblClick);
       host.removeEventListener("keydown", onKeyDown);
       cancelPendingNav();
+      aiAbortRef.current?.abort();
+      aiAbortRef.current = null;
     };
   }, [router, flush, resolvedLinks]);
 

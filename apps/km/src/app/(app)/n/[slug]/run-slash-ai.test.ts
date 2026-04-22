@@ -100,6 +100,67 @@ describe("runSlashAi", () => {
 
     expect(capturedBody).toBe(JSON.stringify({ prompt: "hi" }));
   });
+
+  it("handles an SSE event split across two fetch chunks", async () => {
+    // First chunk: header + start of JSON
+    // Second chunk: end of JSON + \n\n + [DONE]
+    const chunks = [
+      'data: {"type":"tok',
+      'en","content":"hello"}\n\ndata: [DONE]\n\n',
+    ];
+    const encoder = new TextEncoder();
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (const c of chunks) controller.enqueue(encoder.encode(c));
+        controller.close();
+      },
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response(body, { status: 200 })),
+    );
+
+    const tokens: string[] = [];
+    await runSlashAi({
+      prompt: "x",
+      onToken: (t) => tokens.push(t),
+      onError: () => {
+        /* no-op */
+      },
+    });
+    expect(tokens).toEqual(["hello"]);
+  });
+
+  it("aborts in-flight fetch when signal is aborted", async () => {
+    const controller = new AbortController();
+    const fetchMock = vi.fn((_url: RequestInfo | URL, init?: RequestInit) => {
+      return new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => {
+          const err = new Error("aborted");
+          err.name = "AbortError";
+          reject(err);
+        });
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const onToken = vi.fn();
+    const onError = vi.fn();
+    const promise = runSlashAi({
+      prompt: "x",
+      onToken,
+      onError,
+      signal: controller.signal,
+    });
+
+    controller.abort();
+    await promise;
+
+    // On abort, no tokens should have been emitted
+    expect(onToken).not.toHaveBeenCalled();
+    // An AbortError should NOT be reported via onError — abort is not a user-facing error
+    expect(onError).not.toHaveBeenCalled();
+  });
 });
 
 describe("SLASH_AI_REGEX", () => {

@@ -35,6 +35,8 @@ export async function runSlashAi(args: RunSlashAiArgs): Promise<void> {
       signal,
     });
   } catch (err) {
+    // Abort is a silent cancellation — not a user-facing error.
+    if ((err as Error)?.name === "AbortError") return;
     onError((err as Error)?.message ?? "network error");
     return;
   }
@@ -50,7 +52,22 @@ export async function runSlashAi(args: RunSlashAiArgs): Promise<void> {
   let halted = false;
 
   while (!halted) {
-    const { value, done } = await reader.read();
+    let readResult: ReadableStreamReadResult<Uint8Array>;
+    try {
+      readResult = await reader.read();
+    } catch (err) {
+      // Abort is a silent cancellation — not a user-facing error.
+      if ((err as Error)?.name === "AbortError") {
+        try {
+          reader.releaseLock();
+        } catch {
+          /* noop */
+        }
+        return;
+      }
+      throw err;
+    }
+    const { value, done } = readResult;
     if (done) break;
     buf += decoder.decode(value, { stream: true });
 
