@@ -1,11 +1,19 @@
 "use client";
-import { Editor, type WikiLinkSuggestion } from "@episteme/editor";
+import { Editor, type ResolvedLinksMap, type WikiLinkSuggestion } from "@episteme/editor";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { WikiLinkTypeahead, type WikiLinkTypeaheadRef } from "@/components/WikiLinkTypeahead";
 
-export function NoteEditor({ id, initialMd }: { id: string; initialMd: string }) {
+export function NoteEditor({
+  id,
+  initialMd,
+  resolvedLinks,
+}: {
+  id: string;
+  initialMd: string;
+  resolvedLinks?: ResolvedLinksMap;
+}) {
   const router = useRouter();
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingMdRef = useRef<string | null>(null);
@@ -172,6 +180,7 @@ export function NoteEditor({ id, initialMd }: { id: string; initialMd: string })
         onChangeMd={onChangeMd}
         autofocus
         wikiLinkSuggestion={wikiLinkSuggestion}
+        resolvedLinks={resolvedLinks}
       />
     </div>
   );
