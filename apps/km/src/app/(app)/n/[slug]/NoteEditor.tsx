@@ -6,7 +6,7 @@ import {
   type WikiLinkSuggestion,
 } from "@episteme/editor";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, type RefObject } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { WikiLinkTypeahead, type WikiLinkTypeaheadRef } from "@/components/WikiLinkTypeahead";
 
@@ -14,10 +14,12 @@ export function NoteEditor({
   id,
   initialMd,
   resolvedLinks,
+  flushRef,
 }: {
   id: string;
   initialMd: string;
   resolvedLinks?: ResolvedLinksMap;
+  flushRef?: RefObject<(() => void) | null>;
 }) {
   const router = useRouter();
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -66,6 +68,14 @@ export function NoteEditor({
       flush();
     };
   }, [flush]);
+
+  useEffect(() => {
+    if (!flushRef) return;
+    flushRef.current = flush;
+    return () => {
+      if (flushRef.current === flush) flushRef.current = null;
+    };
+  }, [flush, flushRef]);
 
   useEffect(() => {
     const host = editorHostRef.current;

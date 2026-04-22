@@ -7,7 +7,7 @@ import { noteLinks, notes } from "@episteme/db/schema";
 import { getDefaultLibrary } from "@/lib/default-library";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { BacklinksPanel } from "@/components/BacklinksPanel";
-import { NoteEditor } from "./NoteEditor";
+import { NotePageClient } from "./NotePageClient";
 
 export default async function NotePage({
   params,
@@ -74,14 +74,9 @@ export default async function NotePage({
           title={note.title}
         />
       )}
-      <h1
-        className="text-2xl font-semibold mb-3"
-        data-testid="note-title"
-      >
-        {note.title}
-      </h1>
-      <NoteEditor
+      <NotePageClient
         id={note.id}
+        title={note.title}
         initialMd={note.contentMd ?? ""}
         resolvedLinks={resolvedLinks}
       />
