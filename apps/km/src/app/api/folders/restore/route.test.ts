@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { folders, notes } from "@episteme/db/schema";
 import { POST } from "./route";
@@ -37,15 +37,13 @@ beforeAll(async () => {
   );
   otherLibraryId = (await rOther.json()).id;
 
+  // POST /api/libraries auto-seeds a Trash folder — look it up.
   const [tr] = await db
-    .insert(folders)
-    .values({ libraryId, userId: u.id, parentId: null, name: "Trash", isTrash: true })
-    .returning({ id: folders.id });
+    .select({ id: folders.id })
+    .from(folders)
+    .where(and(eq(folders.libraryId, libraryId), eq(folders.isTrash, true)))
+    .limit(1);
   trashId = tr.id;
-
-  await db
-    .insert(folders)
-    .values({ libraryId: otherLibraryId, userId: other.id, parentId: null, name: "Trash", isTrash: true });
 
   const fRes = await POST_FOLDER(
     req("/api/folders", {

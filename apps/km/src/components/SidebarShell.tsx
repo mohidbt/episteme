@@ -6,7 +6,10 @@ import {
   SidebarContent,
   SidebarHeader,
 } from "@/components/ui/sidebar";
-import { SidebarSection } from "./SidebarSection";
+import { DriveTree } from "./DriveTree";
+import { ByTypeNav } from "./ByTypeNav";
+import { SidebarAgentSection } from "./SidebarAgentSection";
+import { SidebarSettingsSection } from "./SidebarSettingsSection";
 import type { TreeResponse } from "@/lib/tree-server";
 
 interface SidebarShellProps {
@@ -17,6 +20,7 @@ interface SidebarShellProps {
 export function SidebarShell({ library, tree }: SidebarShellProps) {
   const router = useRouter();
   const onMutate = () => router.refresh();
+  const trashFolder = tree.folders.find((f) => f.isTrash) ?? null;
   return (
     <ShadcnSidebar collapsible="none" className="border-r">
       <SidebarHeader className="px-4 pt-5 pb-3">
@@ -28,31 +32,18 @@ export function SidebarShell({ library, tree }: SidebarShellProps) {
         </h1>
       </SidebarHeader>
       <SidebarContent>
-        <SidebarSection
-          kind="papers"
-          label="Papers"
-          folders={tree.folders}
-          items={tree.papers}
+        <DriveTree
           libraryId={library.id}
+          folders={tree.folders}
+          papers={tree.papers}
+          references={tree.references}
+          notes={tree.notes}
+          trashId={trashFolder?.id ?? null}
           onMutate={onMutate}
         />
-        <SidebarSection
-          kind="references"
-          label="References"
-          folders={tree.folders}
-          items={tree.references}
-          libraryId={library.id}
-          onMutate={onMutate}
-        />
-        <SidebarSection
-          kind="notes"
-          label="Notes"
-          folders={tree.folders}
-          items={tree.notes}
-          libraryId={library.id}
-          onMutate={onMutate}
-        />
-        <SidebarSection kind="agent" />
+        <ByTypeNav />
+        <SidebarAgentSection />
+        <SidebarSettingsSection />
       </SidebarContent>
     </ShadcnSidebar>
   );

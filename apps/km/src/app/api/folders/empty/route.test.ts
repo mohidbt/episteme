@@ -21,10 +21,12 @@ beforeAll(async () => {
   );
   libraryId = (await r.json()).id;
 
+  // POST /api/libraries auto-seeds a Trash folder — look it up.
   const [tr] = await db
-    .insert(folders)
-    .values({ libraryId, userId: u.id, parentId: null, name: "Trash", isTrash: true })
-    .returning({ id: folders.id });
+    .select({ id: folders.id })
+    .from(folders)
+    .where(and(eq(folders.libraryId, libraryId), eq(folders.isTrash, true)))
+    .limit(1);
   trashId = tr.id;
 });
 
