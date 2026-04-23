@@ -36,6 +36,7 @@ export const paperUploadInitSchema = z.object({
 export const paperUpdateSchema = z
   .object({
     folderPath: folderPathSchema.optional(),
+    folderId: z.string().uuid().nullable().optional(),
     title: nonEmptyTrimmed(1000).optional(),
     authors: z.array(z.string()).optional(),
     year: yearSchema.optional(),
@@ -79,6 +80,7 @@ export const referenceCreateFromDoiSchema = z
 
 export const referenceUpdateSchema = z.object({
   folderPath: folderPathSchema.optional(),
+  folderId: z.string().uuid().nullable().optional(),
   citationKey: citationKey.optional(),
   cslJson: z.unknown().optional(),
   paperId: z.string().nullable().optional(),
@@ -94,6 +96,7 @@ export const noteCreateSchema = z.object({
 
 export const noteUpdateSchema = z.object({
   folderPath: folderPathSchema.optional(),
+  folderId: z.string().uuid().nullable().optional(),
   title: nonEmptyTrimmed(500).optional(),
   contentMd: z.string().optional(),
   noteType: z.enum(["md", "latex", "pdf-ref"]).optional(),

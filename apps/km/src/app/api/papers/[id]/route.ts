@@ -4,6 +4,7 @@ import { papers } from "@episteme/db/schema";
 import { getUserIdFromRequest } from "@/lib/auth";
 import { paperUpdateSchema } from "@/lib/validators";
 import { jsonError, requireOwned } from "@/lib/crud";
+import { moveItemToFolder } from "@/lib/folders-server";
 import { storage, paperSourceKey, paperCoverKey } from "@/lib/storage";
 
 export const runtime = "nodejs";
@@ -29,7 +30,25 @@ export async function PATCH(req: Request, { params }: Ctx) {
   if (!parsed.success) return jsonError(400, "validation", { issues: parsed.error.issues });
   const res = await requireOwned<PaperRow>(papers, id, userId);
   if (!res.ok) return jsonError(res.status, res.status === 404 ? "not_found" : "forbidden");
-  const [row] = await db.update(papers).set(parsed.data).where(eq(papers.id, id)).returning();
+  const { folderId, ...rest } = parsed.data;
+  if (folderId !== undefined) {
+    if (rest.folderPath !== undefined) {
+      console.warn("papers PATCH: folderPath ignored when folderId is present");
+    }
+    try {
+      await moveItemToFolder({ kind: "paper", itemId: id, userId, targetFolderId: folderId });
+    } catch (err) {
+      const status = (err as { status?: number }).status ?? 500;
+      if (status === 404) return jsonError(404, "folder_not_found");
+      throw err;
+    }
+  }
+  const hasOtherUpdates = Object.keys(rest).length > 0;
+  if (hasOtherUpdates) {
+    const [row] = await db.update(papers).set(rest).where(eq(papers.id, id)).returning();
+    return Response.json(row);
+  }
+  const [row] = await db.select().from(papers).where(eq(papers.id, id));
   return Response.json(row);
 }
 

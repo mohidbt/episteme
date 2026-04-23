@@ -17,7 +17,7 @@ import {
 import { ensureMinIOReady } from "../../_minio-setup";
 import { storage, paperSourceKey, paperCoverKey } from "@/lib/storage";
 import { db } from "@/lib/db";
-import { paperHighlights } from "@episteme/db/schema";
+import { folders, libraries, paperHighlights, papers } from "@episteme/db/schema";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SAMPLE_PDF_PATH = path.join(
@@ -222,6 +222,60 @@ describe("PATCH /api/papers/:id", () => {
     expect(row.year).toBe(2024);
     expect(row.doi).toBe("10.1000/xyz");
     expect(row.folderPath).toBe("papers/");
+  });
+
+  it("200 sets folderId to owned folder", async () => {
+    const paperId = await initPaper();
+    const [f] = await db.insert(folders).values({
+      libraryId, userId: u.id, parentId: null, name: `pf-${Date.now()}`,
+    }).returning({ id: folders.id });
+    const r = await PATCH(
+      req(`/api/papers/${paperId}`, {
+        method: "PATCH",
+        cookie: u.cookie,
+        body: JSON.stringify({ folderId: f.id }),
+      }),
+      params({ id: paperId }),
+    );
+    expect(r.status).toBe(200);
+    const [row] = await db.select({ folderId: papers.folderId }).from(papers).where(eq(papers.id, paperId));
+    expect(row.folderId).toBe(f.id);
+  });
+
+  it("200 clears folderId when null", async () => {
+    const paperId = await initPaper();
+    const [f] = await db.insert(folders).values({
+      libraryId, userId: u.id, parentId: null, name: `pf2-${Date.now()}`,
+    }).returning({ id: folders.id });
+    await db.update(papers).set({ folderId: f.id }).where(eq(papers.id, paperId));
+    const r = await PATCH(
+      req(`/api/papers/${paperId}`, {
+        method: "PATCH",
+        cookie: u.cookie,
+        body: JSON.stringify({ folderId: null }),
+      }),
+      params({ id: paperId }),
+    );
+    expect(r.status).toBe(200);
+    const [row] = await db.select({ folderId: papers.folderId }).from(papers).where(eq(papers.id, paperId));
+    expect(row.folderId).toBe(null);
+  });
+
+  it("404 cross-user folderId", async () => {
+    const paperId = await initPaper();
+    const [otherLib] = await db.insert(libraries).values({ userId: other.id, name: "other lib" }).returning({ id: libraries.id });
+    const [otherFolder] = await db.insert(folders).values({
+      libraryId: otherLib.id, userId: other.id, parentId: null, name: `otherf-${Date.now()}`,
+    }).returning({ id: folders.id });
+    const r = await PATCH(
+      req(`/api/papers/${paperId}`, {
+        method: "PATCH",
+        cookie: u.cookie,
+        body: JSON.stringify({ folderId: otherFolder.id }),
+      }),
+      params({ id: paperId }),
+    );
+    expect(r.status).toBe(404);
   });
 
   it("200 clears doi when null", async () => {

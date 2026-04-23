@@ -4,6 +4,7 @@ import { references_, noteLinks } from "@episteme/db/schema";
 import { getUserIdFromRequest } from "@/lib/auth";
 import { referenceUpdateSchema } from "@/lib/validators";
 import { jsonError, requireOwned } from "@/lib/crud";
+import { moveItemToFolder } from "@/lib/folders-server";
 import { isUniqueViolation, suggestNextCitationKey } from "@/lib/references";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -26,13 +27,31 @@ export async function PATCH(req: Request, { params }: Ctx) {
   if (!parsed.success) return jsonError(400, "validation", { issues: parsed.error.issues });
   const res = await requireOwned<any>(references_, id, userId);
   if (!res.ok) return jsonError(res.status, res.status === 404 ? "not_found" : "forbidden");
+  const { folderId, ...rest } = parsed.data;
+  if (folderId !== undefined) {
+    if (rest.folderPath !== undefined) {
+      console.warn("references PATCH: folderPath ignored when folderId is present");
+    }
+    try {
+      await moveItemToFolder({ kind: "reference", itemId: id, userId, targetFolderId: folderId });
+    } catch (err) {
+      const status = (err as { status?: number }).status ?? 500;
+      if (status === 404) return jsonError(404, "folder_not_found");
+      throw err;
+    }
+  }
+  const hasOtherUpdates = Object.keys(rest).length > 0;
   try {
-    const [row] = await db.update(references_).set(parsed.data).where(eq(references_.id, id)).returning();
+    if (hasOtherUpdates) {
+      const [row] = await db.update(references_).set(rest).where(eq(references_.id, id)).returning();
+      return Response.json(row);
+    }
+    const [row] = await db.select().from(references_).where(eq(references_.id, id));
     return Response.json(row);
   } catch (err) {
-    if (isUniqueViolation(err) && typeof parsed.data.citationKey === "string") {
+    if (isUniqueViolation(err) && typeof rest.citationKey === "string") {
       return Response.json(
-        { error: "citation_key_conflict", suggestion: suggestNextCitationKey(parsed.data.citationKey) },
+        { error: "citation_key_conflict", suggestion: suggestNextCitationKey(rest.citationKey) },
         { status: 409 },
       );
     }
