@@ -3,11 +3,18 @@ import { db } from "@/lib/db";
 import { folders, papers, notes, references_ } from "@episteme/db/schema";
 import { isDescendantOf } from "./folders";
 
+/**
+ * `updatedAt` is widened to `Date | number | string` because pages serialize
+ * Date → number across the RSC boundary before handing contents to the client
+ * FileBrowser. The DB-reading `listFolderContents` always returns Date.
+ */
+export type SerializableDate = Date | number | string;
+
 export interface FolderContents {
-  folders: { id: string; name: string; isTrash: boolean; sortOrder: number; updatedAt: Date }[];
-  papers:     { kind: "paper";     id: string; title: string | null; folderId: string | null; updatedAt: Date }[];
-  references: { kind: "reference"; id: string; title: string;        folderId: string | null; citationKey: string; updatedAt: Date }[];
-  notes:      { kind: "note";      id: string; title: string;        folderId: string | null; slug: string; updatedAt: Date }[];
+  folders: { id: string; name: string; isTrash: boolean; sortOrder: number; updatedAt: SerializableDate }[];
+  papers:     { kind: "paper";     id: string; title: string | null; folderId: string | null; updatedAt: SerializableDate }[];
+  references: { kind: "reference"; id: string; title: string;        folderId: string | null; citationKey: string; updatedAt: SerializableDate }[];
+  notes:      { kind: "note";      id: string; title: string;        folderId: string | null; slug: string; updatedAt: SerializableDate }[];
 }
 
 async function assertFolder(libraryId: number, userId: string, folderId: string | null) {
@@ -17,6 +24,24 @@ async function assertFolder(libraryId: number, userId: string, folderId: string 
   if (!row || row.libraryId !== libraryId || row.userId !== userId) {
     throw Object.assign(new Error("folder not found"), { status: 404 });
   }
+}
+
+/**
+ * Lean fetch of every folder in a library scoped to the user. Returns only
+ * the columns FileBrowser needs for its cycle-check drag guard.
+ */
+export async function listAllFolders(
+  libraryId: number, userId: string,
+): Promise<{ id: string; parentId: string | null; name: string; isTrash: boolean }[]> {
+  return db.select({
+    id: folders.id,
+    parentId: folders.parentId,
+    name: folders.name,
+    isTrash: folders.isTrash,
+  }).from(folders).where(and(
+    eq(folders.libraryId, libraryId),
+    eq(folders.userId, userId),
+  ));
 }
 
 export async function listFolderContents(
