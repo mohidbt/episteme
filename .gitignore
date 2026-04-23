@@ -23,3 +23,4 @@ test-results
 **/__pycache__
 **/*.egg-info
 **/uploads
+.worktrees/
