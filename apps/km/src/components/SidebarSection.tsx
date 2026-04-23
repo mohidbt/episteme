@@ -32,7 +32,7 @@ import type {
 import { SidebarFolder } from "./SidebarFolder";
 import { SidebarAgentSection } from "./SidebarAgentSection";
 import { SidebarContextMenu } from "./SidebarContextMenu";
-import { NewNoteTrigger } from "./NewNoteTrigger";
+import { NewItemTrigger } from "./NewItemTrigger";
 
 type ContentSection = "papers" | "references" | "notes";
 type ItemKind = "paper" | "reference" | "note";
@@ -245,9 +245,9 @@ function ContentSectionWithDnd(props: ContentProps) {
         label
       )}
       {props.kind === "notes" && (
-        <NewNoteTrigger
+        <NewItemTrigger
           libraryId={props.libraryId}
-          folderPath=""
+          folderId={null}
           onMutate={props.onMutate}
           variant="group"
         />

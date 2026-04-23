@@ -15,7 +15,7 @@ import { useExpanded } from "@/hooks/use-expanded";
 import type { FolderNode, TreeItem } from "@/lib/tree";
 import type { FolderRow } from "@/lib/folders";
 import { SidebarContextMenu } from "./SidebarContextMenu";
-import { NewNoteTrigger } from "./NewNoteTrigger";
+import { NewItemTrigger } from "./NewItemTrigger";
 import type { DragData } from "./SidebarSection";
 
 type ContentSection = "papers" | "references" | "notes";
@@ -185,9 +185,9 @@ function FolderRowView({
         </ButtonComp>
       </SidebarContextMenu>
       {section === "notes" && (
-        <NewNoteTrigger
+        <NewItemTrigger
           libraryId={libraryId}
-          folderPath={node.path}
+          folderId={folder.id}
           onMutate={onMutate}
           variant={depth === 1 ? "menu-item" : "sub-menu-item"}
         />

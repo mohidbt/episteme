@@ -53,6 +53,7 @@ const citationKey = z
 export const referenceCreateSchema = z.object({
   libraryId: z.number().int(),
   folderPath: folderPathSchema.default(""),
+  folderId: z.string().uuid().nullable().optional(),
   citationKey,
   cslJson: z.unknown(),
   paperId: z.string().nullable().optional(),
@@ -89,6 +90,7 @@ export const referenceUpdateSchema = z.object({
 export const noteCreateSchema = z.object({
   libraryId: z.number().int(),
   folderPath: folderPathSchema.default(""),
+  folderId: z.string().uuid().nullable().optional(),
   title: nonEmptyTrimmed(500),
   contentMd: z.string().optional(),
   noteType: z.enum(["md", "latex", "pdf-ref"]).default("md"),
