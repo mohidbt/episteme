@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { notes, papers } from "@episteme/db/schema";
+import { POST } from "./route";
 import { POST as POST_RENAME } from "./rename/route";
 import { POST as POST_DELETE } from "./delete/route";
 import { POST as POST_LIB } from "../libraries/route";
@@ -318,5 +319,45 @@ describe("folders/delete", () => {
     expect(await getNoteFolderPath(nC)).toBe("z/");
 
     await db.delete(notes).where(and(eq(notes.userId, u.id), eq(notes.libraryId, libraryId)));
+  });
+});
+
+describe("POST /api/folders", () => {
+  it("creates a folder under the library root", async () => {
+    const res = await POST(req("/api/folders", {
+      method: "POST",
+      cookie: u.cookie,
+      body: JSON.stringify({ libraryId, parentId: null, name: "Research" }),
+    }));
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.id).toMatch(/^[0-9a-f-]{36}$/);
+  });
+
+  it("rejects duplicate sibling name", async () => {
+    const res = await POST(req("/api/folders", {
+      method: "POST",
+      cookie: u.cookie,
+      body: JSON.stringify({ libraryId, parentId: null, name: "Research" }),
+    }));
+    expect(res.status).toBe(409);
+  });
+
+  it("rejects reserved name 'Trash'", async () => {
+    const res = await POST(req("/api/folders", {
+      method: "POST",
+      cookie: u.cookie,
+      body: JSON.stringify({ libraryId, parentId: null, name: "Trash" }),
+    }));
+    expect(res.status).toBe(400);
+  });
+
+  it("rejects when the user does not own the library", async () => {
+    const res = await POST(req("/api/folders", {
+      method: "POST",
+      cookie: other.cookie,
+      body: JSON.stringify({ libraryId, parentId: null, name: "X" }),
+    }));
+    expect(res.status).toBe(404);
   });
 });
