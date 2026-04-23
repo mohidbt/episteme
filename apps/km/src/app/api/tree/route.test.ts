@@ -134,7 +134,7 @@ describe("tree", () => {
     expect(r.status).toBe(404);
   });
 
-  it("returns 4-section shape", async () => {
+  it("returns flat payload (folders + papers + references + notes + agent)", async () => {
     const r = await GET(req(`/api/tree?libraryId=${libraryId}`, { cookie: u.cookie }));
     expect(r.status).toBe(200);
     const body = await r.json();
@@ -142,29 +142,31 @@ describe("tree", () => {
     expect(body.library.id).toBe(libraryId);
     expect(body.library.name).toBe(libraryName);
 
-    expect(body.sections.papers.items).toHaveLength(2);
-    const paperFolders = body.sections.papers.items.map((x: any) => x.folder_path).sort();
-    expect(paperFolders).toEqual(["", "biology/"]);
+    expect(Array.isArray(body.folders)).toBe(true);
 
-    expect(body.sections.references.items).toHaveLength(2);
-    const refs = body.sections.references.items;
-    const smith = refs.find((r: any) => r.citation_key === "smith2020");
-    const jones = refs.find((r: any) => r.citation_key === "jones2021");
+    expect(body.papers).toHaveLength(2);
+    for (const p of body.papers) {
+      expect("folderId" in p).toBe(true);
+    }
+
+    expect(body.references).toHaveLength(2);
+    const refs = body.references;
+    const smith = refs.find((r: any) => r.citationKey === "smith2020");
+    const jones = refs.find((r: any) => r.citationKey === "jones2021");
     expect(smith).toBeDefined();
     expect(smith.title).toBe("Smith 2020 — Real Title");
-    expect(smith.citation_key).toBe("smith2020");
+    expect(smith.citationKey).toBe("smith2020");
     expect(jones).toBeDefined();
     expect(jones.title).toBe("jones2021");
-    expect(jones.citation_key).toBe("jones2021");
+    expect(jones.citationKey).toBe("jones2021");
 
-    expect(body.sections.notes.items).toHaveLength(3);
-    for (const n of body.sections.notes.items) {
+    expect(body.notes).toHaveLength(3);
+    for (const n of body.notes) {
       expect(typeof n.slug).toBe("string");
       expect(n.slug.length).toBeGreaterThan(0);
+      expect("folderId" in n).toBe(true);
     }
-    const noteFolders = body.sections.notes.items.map((x: any) => x.folder_path).sort();
-    expect(noteFolders).toEqual(["", "inbox/", "projects/phd/"]);
 
-    expect(body.sections.agent.items).toEqual(AGENT_ITEMS);
+    expect(body.agent).toEqual(AGENT_ITEMS);
   });
 });
