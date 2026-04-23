@@ -31,21 +31,24 @@ export function SidebarShell({ library, tree }: SidebarShellProps) {
         <SidebarSection
           kind="papers"
           label="Papers"
-          items={tree.sections.papers.items}
+          folders={tree.folders}
+          items={tree.papers}
           libraryId={library.id}
           onMutate={onMutate}
         />
         <SidebarSection
           kind="references"
           label="References"
-          items={tree.sections.references.items}
+          folders={tree.folders}
+          items={tree.references}
           libraryId={library.id}
           onMutate={onMutate}
         />
         <SidebarSection
           kind="notes"
           label="Notes"
-          items={tree.sections.notes.items}
+          folders={tree.folders}
+          items={tree.notes}
           libraryId={library.id}
           onMutate={onMutate}
         />

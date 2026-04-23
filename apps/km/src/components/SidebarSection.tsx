@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { BookMarked, FileText, NotebookPen } from "lucide-react";
 import {
@@ -21,18 +21,26 @@ import {
   SidebarGroupLabel,
   SidebarMenu,
 } from "@/components/ui/sidebar";
-import { buildFolderTree, computeFolderRename, computeMovePatch } from "@/lib/tree";
-import type { NoteItem, PaperItem, ReferenceItem } from "@/lib/tree-server";
+import { buildFolderTree, type TreeItem } from "@/lib/tree";
+import { isDescendantOf, type FolderRow } from "@/lib/folders";
+import type {
+  FolderRowOut,
+  NoteItem,
+  PaperItem,
+  ReferenceItem,
+} from "@/lib/tree-server";
 import { SidebarFolder } from "./SidebarFolder";
 import { SidebarAgentSection } from "./SidebarAgentSection";
 import { SidebarContextMenu } from "./SidebarContextMenu";
 import { NewNoteTrigger } from "./NewNoteTrigger";
 
 type ContentSection = "papers" | "references" | "notes";
+type ItemKind = "paper" | "reference" | "note";
 
 interface ContentProps {
   kind: ContentSection;
   label: string;
+  folders: FolderRowOut[];
   items: (PaperItem | ReferenceItem | NoteItem)[];
   libraryId: number;
   onMutate: () => void;
@@ -50,11 +58,26 @@ const SECTION_ICON = {
   notes: NotebookPen,
 } as const;
 
+const SECTION_TO_ITEM_KIND: Record<ContentSection, ItemKind> = {
+  papers: "paper",
+  references: "reference",
+  notes: "note",
+};
+
+const SECTION_TO_ROUTE: Record<ContentSection, string> = {
+  papers: "papers",
+  references: "references",
+  notes: "notes",
+};
+
 export interface DragData {
-  section: ContentSection;
   kind: "leaf" | "folder" | "section-root";
+  /** For leaf drags: which item kind (paper/reference/note). */
+  itemKind?: ItemKind;
+  /** Leaf drag: item uuid. Folder drag: folder uuid. */
   id?: string;
-  folderPath: string;
+  /** Leaf drag: current folderId (or null = root). Folder drag: own folder id. Droppable: target folderId (null = root). */
+  folderId?: string | null;
   title?: string;
 }
 
@@ -72,7 +95,45 @@ export function SidebarSection(props: Props) {
 
 function ContentSectionWithDnd(props: ContentProps) {
   const Icon = SECTION_ICON[props.kind];
-  const tree = buildFolderTree(props.items);
+  const itemKind = SECTION_TO_ITEM_KIND[props.kind];
+
+  // Convert typed items → TreeItem[] for the builder.
+  // Preserve slug for notes so the leaf renderer can build /n/:slug hrefs.
+  const treeItems: TreeItem[] = useMemo(
+    () =>
+      props.items.map((it) => {
+        const slug = (it as { slug?: string }).slug;
+        return {
+          id: it.id,
+          title: it.title ?? null,
+          folderId: it.folderId ?? null,
+          kind: itemKind,
+          ...(slug ? { slug } : {}),
+        } as TreeItem;
+      }),
+    [props.items, itemKind],
+  );
+
+  // For notes, show folder rows. For papers/references, folders still show up
+  // via the same `folders` table (post-unification), but items only carry
+  // folderId for notes today — ok, same shape.
+  const tree = useMemo(
+    () => buildFolderTree(props.folders, treeItems),
+    [props.folders, treeItems],
+  );
+
+  // Flat FolderRow[] for isDescendantOf cycle check.
+  const allFolderRows: FolderRow[] = useMemo(
+    () =>
+      props.folders.map((f) => ({
+        id: f.id,
+        parentId: f.parentId,
+        name: f.name,
+        isTrash: f.isTrash,
+      })),
+    [props.folders],
+  );
+
   const canOpenHeaderMenu = props.kind === "notes";
   const [active, setActive] = useState<ActiveDrag | null>(null);
   // dnd-kit generates incremental aria-describedby IDs that diverge between
@@ -90,9 +151,7 @@ function ContentSectionWithDnd(props: ContentProps) {
     const data = e.active.data.current as DragData | undefined;
     if (!data) return;
     const label =
-      data.kind === "folder"
-        ? folderLeafName(data.folderPath)
-        : (data.title && data.title.trim().length > 0 ? data.title : "Untitled");
+      data.title && data.title.trim().length > 0 ? data.title : "Untitled";
     setActive({ data, label });
   };
 
@@ -104,28 +163,16 @@ function ContentSectionWithDnd(props: ContentProps) {
     const overData = e.over?.data.current as DragData | undefined;
     if (!activeData || !overData) return;
 
-    // Safeguard: same-section only. Section-scoped DndContext should already
-    // prevent cross-section drags, but be defensive.
-    if (activeData.section !== overData.section) {
-      toast.error("Cross-section moves are not supported");
-      return;
-    }
-
     if (activeData.kind === "leaf") {
-      if (!activeData.id) return;
-      const patch = computeMovePatch({
-        draggedSection: activeData.section,
-        targetSection: overData.section,
-        currentFolderPath: activeData.folderPath,
-        targetFolderPath: overData.folderPath,
-        draggedKind: "leaf",
-      });
-      if (!patch) return;
+      if (!activeData.id || !activeData.itemKind) return;
+      const targetFolderId = overData.folderId ?? null;
+      if ((activeData.folderId ?? null) === targetFolderId) return;
       try {
-        const res = await fetch(`/api/${activeData.section}/${activeData.id}`, {
+        const route = SECTION_TO_ROUTE[itemKindToSection(activeData.itemKind)];
+        const res = await fetch(`/api/${route}/${activeData.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ folderPath: patch.folder_path }),
+          body: JSON.stringify({ folderId: targetFolderId }),
         });
         if (!res.ok) throw new Error(`status ${res.status}`);
         props.onMutate();
@@ -137,35 +184,29 @@ function ContentSectionWithDnd(props: ContentProps) {
     }
 
     if (activeData.kind === "folder") {
-      const result = computeFolderRename({
-        currentFolderPath: activeData.folderPath,
-        newParentPath: overData.folderPath,
-      });
-      if (!result) {
-        // Most common reason here is cycle or no-op; silently ignore no-op,
-        // surface cycle.
-        const cur = activeData.folderPath;
-        const tgt = overData.folderPath;
-        if (cur && tgt && tgt.startsWith(cur)) {
-          toast.error("Cannot move a folder into itself");
+      if (!activeData.id) return;
+      const subjectId = activeData.id;
+      const targetParentId = overData.folderId ?? null;
+      // No-op: dropping on own parent.
+      const subject = allFolderRows.find((f) => f.id === subjectId);
+      if (subject && (subject.parentId ?? null) === targetParentId) return;
+      // Cycle guard: target must not be the subject itself, nor a descendant.
+      if (targetParentId != null) {
+        if (targetParentId === subjectId || isDescendantOf(allFolderRows, subjectId, targetParentId)) {
+          toast.error("Cannot move folder into itself");
+          return;
         }
-        return;
       }
       try {
-        const res = await fetch(`/api/folders/rename`, {
+        const res = await fetch("/api/folders/move", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            libraryId: props.libraryId,
-            section: activeData.section,
-            oldPath: result.oldPrefix,
-            newPath: result.newPrefix,
-          }),
+          body: JSON.stringify({ folderId: subjectId, targetParentId }),
         });
         if (!res.ok) throw new Error(`status ${res.status}`);
         props.onMutate();
       } catch (err) {
-        toast.error(`Failed to move folder`);
+        toast.error("Failed to move folder");
         console.error(err);
       }
     }
@@ -225,6 +266,7 @@ function ContentSectionWithDnd(props: ContentProps) {
                 section={props.kind}
                 depth={0}
                 libraryId={props.libraryId}
+                allFolders={allFolderRows}
                 onMutate={props.onMutate}
               />
               <SectionRootDroppable section={props.kind} />
@@ -244,6 +286,7 @@ function ContentSectionWithDnd(props: ContentProps) {
               section={props.kind}
               depth={0}
               libraryId={props.libraryId}
+              allFolders={allFolderRows}
               onMutate={props.onMutate}
             />
           </SidebarMenu>
@@ -254,7 +297,7 @@ function ContentSectionWithDnd(props: ContentProps) {
 }
 
 function SectionRootDroppable({ section }: { section: ContentSection }) {
-  const data: DragData = { section, kind: "section-root", folderPath: "" };
+  const data: DragData = { kind: "section-root", folderId: null };
   const { setNodeRef, isOver } = useDroppable({
     id: `section-root:${section}`,
     data,
@@ -269,12 +312,13 @@ function SectionRootDroppable({ section }: { section: ContentSection }) {
   );
 }
 
-function folderLeafName(path: string): string {
-  const segs = path.split("/").filter((s) => s.length > 0);
-  return segs.length === 0 ? "" : segs[segs.length - 1];
+function itemKindToSection(k: ItemKind): ContentSection {
+  if (k === "paper") return "papers";
+  if (k === "reference") return "references";
+  return "notes";
 }
 
 function describeLeaf(d: DragData): string {
   if (d.title && d.title.trim().length > 0) return d.title;
-  return d.section.slice(0, -1);
+  return d.itemKind ?? "item";
 }

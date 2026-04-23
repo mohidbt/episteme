@@ -12,30 +12,27 @@ import {
   SidebarMenuSubItem,
 } from "@/components/ui/sidebar";
 import { useExpanded } from "@/hooks/use-expanded";
-import type { FolderNode } from "@/lib/tree";
-import type { NoteItem, PaperItem, ReferenceItem } from "@/lib/tree-server";
+import type { FolderNode, TreeItem } from "@/lib/tree";
+import type { FolderRow } from "@/lib/folders";
 import { SidebarContextMenu } from "./SidebarContextMenu";
 import { NewNoteTrigger } from "./NewNoteTrigger";
 import type { DragData } from "./SidebarSection";
 
 type ContentSection = "papers" | "references" | "notes";
-type Item = PaperItem | ReferenceItem | NoteItem;
 
-function itemHref(section: ContentSection, item: Item): string {
+function itemHref(section: ContentSection, item: TreeItem): string {
   if (section === "papers") return `/p/${item.id}`;
   if (section === "references") return `/r/${item.id}`;
-  // notes uses slug
-  return `/n/${(item as NoteItem).slug}`;
+  // Notes uses slug; TreeItem doesn't carry slug, so fall back to id.
+  // (NoteItem does carry slug, which we stash via an extended shape below.)
+  const slug = (item as TreeItem & { slug?: string }).slug;
+  return `/n/${slug ?? item.id}`;
 }
 
-function itemTitle(item: Item): string {
+function itemTitle(item: TreeItem): string {
   const t = item.title;
   if (typeof t === "string" && t.trim().length > 0) return t;
   return "Untitled";
-}
-
-function itemFolderPath(item: Item): string {
-  return (item as { folder_path?: string }).folder_path ?? "";
 }
 
 function mergeRefs<T>(...refs: Array<React.Ref<T> | undefined>) {
@@ -49,25 +46,34 @@ function mergeRefs<T>(...refs: Array<React.Ref<T> | undefined>) {
 }
 
 interface SidebarFolderProps {
-  node: FolderNode<Item>;
+  node: FolderNode;
   section: ContentSection;
   depth: number;
   libraryId: number;
+  allFolders: FolderRow[];
   onMutate: () => void;
 }
 
-export function SidebarFolder({ node, section, depth, libraryId, onMutate }: SidebarFolderProps) {
+export function SidebarFolder({
+  node,
+  section,
+  depth,
+  libraryId,
+  allFolders,
+  onMutate,
+}: SidebarFolderProps) {
   if (depth === 0) {
-    // Root — render items + children flat, no folder row.
+    // Root — render children + items flat, no folder row.
     return (
       <>
         {node.children.map((child) => (
-          <FolderRow
-            key={`folder:${section}:${child.path}`}
+          <FolderRowView
+            key={`folder:${section}:${child.folder?.id ?? "root"}`}
             node={child}
             section={section}
             depth={1}
             libraryId={libraryId}
+            allFolders={allFolders}
             onMutate={onMutate}
           />
         ))}
@@ -83,49 +89,81 @@ export function SidebarFolder({ node, section, depth, libraryId, onMutate }: Sid
       </>
     );
   }
-  return <FolderRow node={node} section={section} depth={depth} libraryId={libraryId} onMutate={onMutate} />;
+  return (
+    <FolderRowView
+      node={node}
+      section={section}
+      depth={depth}
+      libraryId={libraryId}
+      allFolders={allFolders}
+      onMutate={onMutate}
+    />
+  );
 }
 
 interface FolderRowProps {
-  node: FolderNode<Item>;
+  node: FolderNode;
   section: ContentSection;
   depth: number;
   libraryId: number;
+  allFolders: FolderRow[];
   onMutate: () => void;
 }
 
-function FolderRow({ node, section, depth, libraryId, onMutate }: FolderRowProps) {
-  const storageKey = `${libraryId}:${section}:${node.path}`;
+function FolderRowView({
+  node,
+  section,
+  depth,
+  libraryId,
+  allFolders,
+  onMutate,
+}: FolderRowProps) {
+  // Every non-root FolderNode has a concrete folder.
+  const folder = node.folder!;
+  const storageKey = `${libraryId}:${section}:${folder.id}`;
   const [open, setOpen] = useExpanded(storageKey, false);
   const titleMuted = node.items.length === 0 && node.children.length === 0;
 
   const dragData: DragData = {
-    section,
     kind: "folder",
-    folderPath: node.path,
-    title: node.folder,
+    id: folder.id,
+    folderId: folder.id,
+    title: folder.name,
   };
-  const dropData: DragData = { section, kind: "folder", folderPath: node.path };
+  const dropData: DragData = {
+    kind: "folder",
+    id: folder.id,
+    folderId: folder.id,
+  };
   const {
     setNodeRef: setDragRef,
     attributes,
     listeners,
     isDragging,
-  } = useDraggable({ id: `drag:folder:${section}:${node.path}`, data: dragData });
+  } = useDraggable({ id: `drag:folder:${section}:${folder.id}`, data: dragData });
   const { setNodeRef: setDropRef, isOver } = useDroppable({
-    id: `drop:folder:${section}:${node.path}`,
+    id: `drop:folder:${section}:${folder.id}`,
     data: dropData,
   });
   const setRef = mergeRefs<HTMLButtonElement>(setDragRef, setDropRef);
 
+  const ButtonComp = depth === 1 ? SidebarMenuButton : SidebarMenuSubButton;
+  const Wrapper = depth === 1 ? SidebarMenuItem : SidebarMenuSubItem;
+
   return (
-    <SidebarMenuItem>
+    <Wrapper>
       <SidebarContextMenu
-        target={{ kind: "folder", section, folderPath: node.path }}
+        target={{
+          kind: "folder",
+          section,
+          folderId: folder.id,
+          folderName: folder.name,
+          folderPath: node.path,
+        }}
         libraryId={libraryId}
         onMutate={onMutate}
       >
-        <SidebarMenuButton
+        <ButtonComp
           render={
             <button
               type="button"
@@ -143,26 +181,27 @@ function FolderRow({ node, section, depth, libraryId, onMutate }: FolderRowProps
             className={`transition-transform ${open ? "rotate-90" : ""}`}
             aria-hidden
           />
-          <span>{node.folder}</span>
-        </SidebarMenuButton>
+          <span>{folder.name}</span>
+        </ButtonComp>
       </SidebarContextMenu>
       {section === "notes" && (
         <NewNoteTrigger
           libraryId={libraryId}
           folderPath={node.path}
           onMutate={onMutate}
-          variant="menu-item"
+          variant={depth === 1 ? "menu-item" : "sub-menu-item"}
         />
       )}
       {open && (node.children.length > 0 || node.items.length > 0) && (
         <SidebarMenuSub>
           {node.children.map((child) => (
-            <FolderSubRow
-              key={`folder:${section}:${child.path}`}
+            <FolderRowView
+              key={`folder:${section}:${child.folder?.id ?? "x"}`}
               node={child}
               section={section}
               depth={depth + 1}
               libraryId={libraryId}
+              allFolders={allFolders}
               onMutate={onMutate}
             />
           ))}
@@ -173,7 +212,7 @@ function FolderRow({ node, section, depth, libraryId, onMutate }: FolderRowProps
                   kind: "leaf",
                   section,
                   id: item.id,
-                  folderPath: itemFolderPath(item),
+                  folderId: item.folderId,
                   title: item.title,
                 }}
                 libraryId={libraryId}
@@ -185,106 +224,12 @@ function FolderRow({ node, section, depth, libraryId, onMutate }: FolderRowProps
           ))}
         </SidebarMenuSub>
       )}
-    </SidebarMenuItem>
-  );
-}
-
-function FolderSubRow({ node, section, depth, libraryId, onMutate }: FolderRowProps) {
-  const storageKey = `${libraryId}:${section}:${node.path}`;
-  const [open, setOpen] = useExpanded(storageKey, false);
-
-  const dragData: DragData = {
-    section,
-    kind: "folder",
-    folderPath: node.path,
-    title: node.folder,
-  };
-  const dropData: DragData = { section, kind: "folder", folderPath: node.path };
-  const {
-    setNodeRef: setDragRef,
-    attributes,
-    listeners,
-    isDragging,
-  } = useDraggable({ id: `drag:folder:${section}:${node.path}`, data: dragData });
-  const { setNodeRef: setDropRef, isOver } = useDroppable({
-    id: `drop:folder:${section}:${node.path}`,
-    data: dropData,
-  });
-  const setRef = mergeRefs<HTMLButtonElement>(setDragRef, setDropRef);
-
-  return (
-    <SidebarMenuSubItem>
-      <SidebarContextMenu
-        target={{ kind: "folder", section, folderPath: node.path }}
-        libraryId={libraryId}
-        onMutate={onMutate}
-      >
-        <SidebarMenuSubButton
-          render={
-            <button
-              type="button"
-              ref={setRef}
-              {...attributes}
-              {...listeners}
-            />
-          }
-          onClick={() => setOpen(!open)}
-          aria-expanded={open}
-          data-over={isOver ? "true" : undefined}
-          className={`${isDragging ? "opacity-50 " : ""}data-[over=true]:ring-1 data-[over=true]:ring-foreground/20 data-[over=true]:bg-sidebar-accent/50`}
-        >
-          <ChevronRight
-            className={`transition-transform ${open ? "rotate-90" : ""}`}
-            aria-hidden
-          />
-          <span>{node.folder}</span>
-        </SidebarMenuSubButton>
-      </SidebarContextMenu>
-      {section === "notes" && (
-        <NewNoteTrigger
-          libraryId={libraryId}
-          folderPath={node.path}
-          onMutate={onMutate}
-          variant="sub-menu-item"
-        />
-      )}
-      {open && (node.children.length > 0 || node.items.length > 0) && (
-        <SidebarMenuSub>
-          {node.children.map((child) => (
-            <FolderSubRow
-              key={`folder:${section}:${child.path}`}
-              node={child}
-              section={section}
-              depth={depth + 1}
-              libraryId={libraryId}
-              onMutate={onMutate}
-            />
-          ))}
-          {node.items.map((item) => (
-            <SidebarMenuSubItem key={`leaf:${section}:${item.id}`}>
-              <SidebarContextMenu
-                target={{
-                  kind: "leaf",
-                  section,
-                  id: item.id,
-                  folderPath: itemFolderPath(item),
-                  title: item.title,
-                }}
-                libraryId={libraryId}
-                onMutate={onMutate}
-              >
-                <SubLeafLink item={item} section={section} />
-              </SidebarContextMenu>
-            </SidebarMenuSubItem>
-          ))}
-        </SidebarMenuSub>
-      )}
-    </SidebarMenuSubItem>
+    </Wrapper>
   );
 }
 
 interface LeafRowProps {
-  item: Item;
+  item: TreeItem;
   section: ContentSection;
   libraryId: number;
   onMutate: () => void;
@@ -297,10 +242,10 @@ function LeafRow({ item, section, libraryId, onMutate }: LeafRowProps) {
   const hasTitle = typeof item.title === "string" && item.title.trim().length > 0;
 
   const dragData: DragData = {
-    section,
     kind: "leaf",
-    id: String(item.id),
-    folderPath: itemFolderPath(item),
+    itemKind: item.kind,
+    id: item.id,
+    folderId: item.folderId,
     title: item.title ?? undefined,
   };
   const {
@@ -317,7 +262,7 @@ function LeafRow({ item, section, libraryId, onMutate }: LeafRowProps) {
           kind: "leaf",
           section,
           id: item.id,
-          folderPath: itemFolderPath(item),
+          folderId: item.folderId,
           title: item.title,
         }}
         libraryId={libraryId}
@@ -342,17 +287,17 @@ function LeafRow({ item, section, libraryId, onMutate }: LeafRowProps) {
   );
 }
 
-function SubLeafLink({ item, section }: { item: Item; section: ContentSection }) {
+function SubLeafLink({ item, section }: { item: TreeItem; section: ContentSection }) {
   const pathname = usePathname();
   const href = itemHref(section, item);
   const isActive = pathname === href;
   const hasTitle = typeof item.title === "string" && item.title.trim().length > 0;
 
   const dragData: DragData = {
-    section,
     kind: "leaf",
-    id: String(item.id),
-    folderPath: itemFolderPath(item),
+    itemKind: item.kind,
+    id: item.id,
+    folderId: item.folderId,
     title: item.title ?? undefined,
   };
   const {

@@ -35,19 +35,22 @@ export function renderContextDialog({
   };
 
   if (dialog === "new-folder") {
-    const parentPath = target.kind === "folder" ? target.folderPath : "";
+    const parentId = target.kind === "folder" ? target.folderId : null;
+    const parentName = target.kind === "folder" ? target.folderName : null;
     return (
       <NewFolderDialog
         open={open}
         onOpenChange={onOpenChange}
         onMutate={onMutate}
         libraryId={libraryId}
-        parentPath={parentPath}
+        parentId={parentId}
+        parentName={parentName}
       />
     );
   }
 
   if (dialog === "new-note") {
+    // /api/notes POST still takes folderPath (legacy shim); T14 unifies.
     const folderPath = target.kind === "folder" ? target.folderPath : "";
     return (
       <NewNoteDialog
@@ -66,9 +69,8 @@ export function renderContextDialog({
         open={open}
         onOpenChange={onOpenChange}
         onMutate={onMutate}
-        libraryId={libraryId}
-        section={target.section}
-        folderPath={target.folderPath}
+        folderId={target.folderId}
+        currentName={target.folderName}
       />
     );
   }
@@ -80,8 +82,8 @@ export function renderContextDialog({
         onOpenChange={onOpenChange}
         onMutate={onMutate}
         libraryId={libraryId}
-        section={target.section}
-        folderPath={target.folderPath}
+        folderId={target.folderId}
+        folderName={target.folderName}
       />
     );
   }
@@ -105,6 +107,7 @@ export function renderContextDialog({
         open={open}
         onOpenChange={onOpenChange}
         onMutate={onMutate}
+        libraryId={libraryId}
         section={target.section}
         id={target.id}
         title={target.title}
@@ -114,14 +117,15 @@ export function renderContextDialog({
 
   if (dialog === "move") {
     if (target.kind === "folder") {
+      // currentParentId not surfaced to the context target — pass null as the
+      // default; the dialog is a raw-uuid input (T14 replaces with a picker).
       return (
         <MoveFolderDialog
           open={open}
           onOpenChange={onOpenChange}
           onMutate={onMutate}
-          libraryId={libraryId}
-          section={target.section}
-          folderPath={target.folderPath}
+          folderId={target.folderId}
+          currentParentId={null}
         />
       );
     }
@@ -133,7 +137,7 @@ export function renderContextDialog({
           onMutate={onMutate}
           section={target.section}
           id={target.id}
-          currentFolderPath={target.folderPath}
+          currentFolderId={target.folderId}
         />
       );
     }
