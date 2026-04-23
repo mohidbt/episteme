@@ -12,6 +12,8 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "migrate": "drizzle-kit migrate",
     "generate": "drizzle-kit generate",
     "studio": "drizzle-kit studio"
@@ -24,6 +26,8 @@
     "@types/node": "^20.14.0",
     "dotenv": "^16.4.5",
     "drizzle-kit": "^0.31.10",
-    "typescript": "^5.6.3"
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3",
+    "vitest": "^4.1.4"
   }
 }

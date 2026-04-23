@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { pgTable, uuid, text, timestamp, integer, boolean, jsonb, customType, pgEnum, uniqueIndex, index } from "drizzle-orm/pg-core";
 import { libraries } from "./libraries";
+import { folders } from "./folders";
 import { user } from "./auth";
 
 const bytea = customType<{ data: Uint8Array; notNull: false }>({
@@ -27,6 +28,8 @@ export const notes = pgTable(
     libraryId: integer("library_id").notNull().references(() => libraries.id, { onDelete: "cascade" }),
     userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
     folderPath: text("folder_path").default("").notNull(),
+    folderId: uuid("folder_id").references(() => folders.id, { onDelete: "set null" }),
+    prevFolderId: uuid("prev_folder_id").references(() => folders.id, { onDelete: "set null" }),
     filename: text("filename"),
     title: text("title").notNull(),
     slug: text("slug").notNull(),
