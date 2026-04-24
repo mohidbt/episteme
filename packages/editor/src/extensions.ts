@@ -2,6 +2,7 @@ import Placeholder from "@tiptap/extension-placeholder";
 import Suggestion, { type SuggestionOptions } from "@tiptap/suggestion";
 import { Extension } from "@tiptap/core";
 import { PluginKey } from "@tiptap/pm/state";
+import type { EditorState } from "@tiptap/pm/state";
 import { createExtensions as baseExtensions, WikiLink, TagMark, Citation } from "@episteme/markdown";
 import { BibliographyHeading } from "./slash/BibliographyHeading";
 
@@ -14,6 +15,30 @@ export const SlashCommand = Extension.create({
 });
 
 export type SlashCommandSuggestion = Omit<SuggestionOptions, "editor" | "pluginKey">;
+
+/**
+ * Returns true when the cursor is inside a `code_block` node.
+ * Used by the slash-command Suggestion `allow` predicate to suppress the menu
+ * inside code fences.
+ */
+export function isInsideCodeBlock(state: EditorState): boolean {
+  const { $from } = state.selection;
+  for (let d = $from.depth; d >= 0; d--) {
+    if ($from.node(d).type.name === "codeBlock") return true;
+  }
+  return false;
+}
+
+/**
+ * Returns true when the character immediately before the cursor is `\`.
+ * Used by the slash-command Suggestion `allow` predicate so that `\/cite`
+ * is treated as literal text rather than a slash command trigger.
+ */
+export function isPrecededByBackslash(state: EditorState): boolean {
+  const { $from } = state.selection;
+  const textBefore = $from.nodeBefore?.text ?? "";
+  return textBefore.endsWith("\\");
+}
 
 export function editorExtensions(opts?: {
   placeholder?: string;
@@ -39,6 +64,9 @@ export function editorExtensions(opts?: {
         addProseMirrorPlugins() {
           return [
             Suggestion({
+              // Default allow predicate: suppress inside code blocks and after backslash
+              allow: ({ state }) =>
+                !isInsideCodeBlock(state) && !isPrecededByBackslash(state),
               ...opts.slashCommandSuggestion,
               editor: this.editor,
               pluginKey: SlashCommandPluginKey,
