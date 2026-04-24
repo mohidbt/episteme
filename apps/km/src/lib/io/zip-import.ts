@@ -7,6 +7,7 @@ import { extractMetadata } from "@/lib/pdf-extract";
 import { isUniqueViolation, suggestNextCitationKey } from "@/lib/references";
 import { resolveNoteSlug } from "@/lib/crud";
 import { parseFrontmatter } from "./md-frontmatter";
+import { getOrCreateFolder } from "@/lib/folders-server";
 
 export interface ImportConflict {
   section: "notes" | "references" | "papers";
@@ -59,6 +60,7 @@ export async function importLibraryZip(
   userId: string,
   libraryId: number,
   buf: Buffer,
+  rootFolderId: string | null = null,
 ): Promise<ImportResult> {
   let dir: unzipper.CentralDirectory;
   try {
@@ -85,6 +87,23 @@ export async function importLibraryZip(
       }
     }
     validatePath(entry.path);
+  }
+
+  /**
+   * Walk the sub-path segments (e.g. ["a", "b"]) starting from rootFolderId,
+   * creating any missing folder rows along the way. Returns the id of the
+   * deepest folder, or rootFolderId when segments is empty.
+   *
+   * Called outside the main DB transaction because getOrCreateFolder uses
+   * ON CONFLICT DO NOTHING which needs its own savepoint semantics.
+   */
+  async function resolveLeafFolderId(segments: string[]): Promise<string | null> {
+    let parentId = rootFolderId;
+    for (const name of segments) {
+      const { id } = await getOrCreateFolder({ libraryId, userId, parentId, name });
+      parentId = id;
+    }
+    return parentId;
   }
 
   await db.transaction(async (tx) => {
@@ -123,6 +142,10 @@ export async function importLibraryZip(
             : baseName;
         const baseSlug = toSlug(slugSeed);
         let slug = await resolveNoteSlug(userId, slugSeed);
+
+        // Resolve folder_id: walk/create sub-folder rows for the zip path.
+        const folderId = await resolveLeafFolderId(parts);
+
         let attempts = 0;
         while (true) {
           try {
@@ -133,6 +156,7 @@ export async function importLibraryZip(
                 libraryId,
                 userId,
                 folderPath,
+                folderId,
                 title,
                 slug,
                 filename,

@@ -127,6 +127,40 @@ export async function createFolder(opts: {
   return { id: row.id };
 }
 
+/**
+ * Returns the id of the folder matching (libraryId, parentId, name), creating
+ * it if it doesn't exist yet. Safe to call concurrently — uses ON CONFLICT DO
+ * NOTHING + a follow-up SELECT so duplicate calls return the same row.
+ */
+export async function getOrCreateFolder(opts: {
+  libraryId: number; userId: string; parentId: string | null; name: string;
+}): Promise<{ id: string }> {
+  // Try insert; ignore unique-violation (library_id, parent_id, name).
+  const parentCond = opts.parentId == null
+    ? isNull(folders.parentId)
+    : eq(folders.parentId, opts.parentId);
+
+  await db.insert(folders).values({
+    libraryId: opts.libraryId,
+    userId: opts.userId,
+    parentId: opts.parentId,
+    name: opts.name,
+  }).onConflictDoNothing();
+
+  const [row] = await db.select({ id: folders.id })
+    .from(folders)
+    .where(and(
+      eq(folders.libraryId, opts.libraryId),
+      eq(folders.userId, opts.userId),
+      parentCond,
+      eq(folders.name, opts.name),
+    ))
+    .limit(1);
+
+  if (!row) throw new Error(`getOrCreateFolder: unexpected missing row for ${opts.name}`);
+  return { id: row.id };
+}
+
 export async function renameFolder(opts: {
   folderId: string; userId: string; newName: string;
 }): Promise<void> {

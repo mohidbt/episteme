@@ -51,7 +51,7 @@ export async function POST(req: Request, { params }: Ctx) {
     if (file.size > MAX_ZIP_BYTES) return jsonError(413, "file_too_large");
     const buf = Buffer.from(await file.arrayBuffer());
     try {
-      const result = await importLibraryZip(userId, libId, buf);
+      const result = await importLibraryZip(userId, libId, buf, folderId);
       return Response.json(result);
     } catch (err) {
       if (err instanceof ZipImportError) {

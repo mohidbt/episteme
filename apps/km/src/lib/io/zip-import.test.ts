@@ -1,8 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import archiver from "archiver";
-import { eq, and } from "drizzle-orm";
+import { eq, and, count } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { libraries, notes, references_, papers } from "@episteme/db/schema";
+import { libraries, notes, references_, papers, folders } from "@episteme/db/schema";
 import { storage, paperSourceKey } from "@/lib/storage";
 import {
   createTestUser,
@@ -219,4 +219,196 @@ describe("importLibraryZip", () => {
     const result = await importLibraryZip(u.id, libraryId, zipBuf);
     expect(result.imported).toBe(0);
   });
+});
+
+describe("importLibraryZip — folder_id population (T22)", () => {
+  let u2: TestUser;
+  let lib2Id: number;
+
+  beforeAll(async () => {
+    await ensureMinIOReady();
+    u2 = await createTestUser();
+    const [lib] = await db
+      .insert(libraries)
+      .values({ userId: u2.id, name: "T22Lib" })
+      .returning();
+    lib2Id = lib.id;
+  }, 60_000);
+
+  afterAll(async () => {
+    await deleteTestUser(u2.id);
+  });
+
+  it("nested entry a/b/note.md under rootFolderId creates folder rows and sets note.folder_id to deepest", async () => {
+    // Create a root folder X
+    const [rootFolder] = await db
+      .insert(folders)
+      .values({ libraryId: lib2Id, userId: u2.id, parentId: null, name: "Root" })
+      .returning();
+    const rootFolderId = rootFolder.id;
+
+    const zipBuf = await buildZip({
+      entries: [
+        {
+          type: "file",
+          name: "T22Lib/notes/a/b/note.md",
+          body: "hello nested",
+        },
+      ],
+    });
+
+    await importLibraryZip(u2.id, lib2Id, zipBuf, rootFolderId);
+
+    // Folder "a" should be under rootFolderId
+    const [folderA] = await db
+      .select()
+      .from(folders)
+      .where(and(eq(folders.libraryId, lib2Id), eq(folders.userId, u2.id), eq(folders.name, "a")));
+    expect(folderA).toBeTruthy();
+    expect(folderA.parentId).toBe(rootFolderId);
+
+    // Folder "b" should be under "a"
+    const [folderB] = await db
+      .select()
+      .from(folders)
+      .where(and(eq(folders.libraryId, lib2Id), eq(folders.userId, u2.id), eq(folders.name, "b")));
+    expect(folderB).toBeTruthy();
+    expect(folderB.parentId).toBe(folderA.id);
+
+    // The note's folder_id should be folder "b"
+    const [noteRow] = await db
+      .select()
+      .from(notes)
+      .where(and(eq(notes.libraryId, lib2Id), eq(notes.userId, u2.id)));
+    expect(noteRow.folderId).toBe(folderB.id);
+  }, 60_000);
+
+  it("top-level entry note.md under rootFolderId sets folder_id = rootFolderId without creating sub-folders", async () => {
+    const lib2Folders = await db
+      .select({ id: folders.id })
+      .from(folders)
+      .where(and(eq(folders.libraryId, lib2Id), eq(folders.userId, u2.id)));
+    const folderCountBefore = lib2Folders.length;
+
+    // Create a separate library to isolate
+    const [lib3] = await db
+      .insert(libraries)
+      .values({ userId: u2.id, name: "T22LibToplevel" })
+      .returning();
+    const [rootFolder] = await db
+      .insert(folders)
+      .values({ libraryId: lib3.id, userId: u2.id, parentId: null, name: "RootToplevel" })
+      .returning();
+    const rootFolderId = rootFolder.id;
+
+    const zipBuf = await buildZip({
+      entries: [
+        {
+          type: "file",
+          name: "T22LibToplevel/notes/note.md",
+          body: "top-level note",
+        },
+      ],
+    });
+
+    await importLibraryZip(u2.id, lib3.id, zipBuf, rootFolderId);
+
+    // No new sub-folders created under rootFolderId
+    const subFolders = await db
+      .select()
+      .from(folders)
+      .where(and(eq(folders.libraryId, lib3.id), eq(folders.userId, u2.id), eq(folders.parentId, rootFolderId)));
+    expect(subFolders).toHaveLength(0);
+
+    // Note's folder_id = rootFolderId
+    const [noteRow] = await db
+      .select()
+      .from(notes)
+      .where(and(eq(notes.libraryId, lib3.id), eq(notes.userId, u2.id)));
+    expect(noteRow.folderId).toBe(rootFolderId);
+  }, 60_000);
+
+  it("null rootFolderId with entry a/note.md creates folder at library root (parentId=null)", async () => {
+    const [lib4] = await db
+      .insert(libraries)
+      .values({ userId: u2.id, name: "T22LibNullRoot" })
+      .returning();
+
+    const zipBuf = await buildZip({
+      entries: [
+        {
+          type: "file",
+          name: "T22LibNullRoot/notes/a/note.md",
+          body: "note with null root",
+        },
+      ],
+    });
+
+    await importLibraryZip(u2.id, lib4.id, zipBuf, null);
+
+    // Folder "a" created at library root (parentId = null)
+    const [folderA] = await db
+      .select()
+      .from(folders)
+      .where(and(eq(folders.libraryId, lib4.id), eq(folders.userId, u2.id), eq(folders.name, "a")));
+    expect(folderA).toBeTruthy();
+    expect(folderA.parentId).toBeNull();
+
+    // Note's folder_id = folder "a"
+    const [noteRow] = await db
+      .select()
+      .from(notes)
+      .where(and(eq(notes.libraryId, lib4.id), eq(notes.userId, u2.id)));
+    expect(noteRow.folderId).toBe(folderA.id);
+  }, 60_000);
+
+  it("re-importing the same zip under the same rootFolderId reuses existing folders (idempotent)", async () => {
+    const [lib5] = await db
+      .insert(libraries)
+      .values({ userId: u2.id, name: "T22LibIdempotent" })
+      .returning();
+    const [rootFolder] = await db
+      .insert(folders)
+      .values({ libraryId: lib5.id, userId: u2.id, parentId: null, name: "RootIdempotent" })
+      .returning();
+    const rootFolderId = rootFolder.id;
+
+    const zipBuf = await buildZip({
+      entries: [
+        {
+          type: "file",
+          name: "T22LibIdempotent/notes/x/y/note.md",
+          body: "idempotency test",
+        },
+      ],
+    });
+
+    // First import
+    await importLibraryZip(u2.id, lib5.id, zipBuf, rootFolderId);
+
+    const folderCountAfterFirst = await db
+      .select({ count: count() })
+      .from(folders)
+      .where(and(eq(folders.libraryId, lib5.id), eq(folders.userId, u2.id)));
+
+    // Second import (different note slug, same folder structure)
+    const zipBuf2 = await buildZip({
+      entries: [
+        {
+          type: "file",
+          name: "T22LibIdempotent/notes/x/y/note-second.md",
+          body: "second note in same folder",
+        },
+      ],
+    });
+    await importLibraryZip(u2.id, lib5.id, zipBuf2, rootFolderId);
+
+    const folderCountAfterSecond = await db
+      .select({ count: count() })
+      .from(folders)
+      .where(and(eq(folders.libraryId, lib5.id), eq(folders.userId, u2.id)));
+
+    // Folder count must be unchanged
+    expect(folderCountAfterSecond[0].count).toBe(folderCountAfterFirst[0].count);
+  }, 60_000);
 });
