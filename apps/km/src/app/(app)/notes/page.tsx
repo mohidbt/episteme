@@ -1,71 +1,12 @@
-import Link from "next/link";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { auth } from "@episteme/auth";
 import { getDefaultLibrary } from "@/lib/default-library";
-import { listNotes, type NoteRow } from "@/lib/notes-server";
+import { listNotes } from "@/lib/notes-server";
 import { listAllFolders } from "@/lib/folders-server";
-import { resolveChain, breadcrumbFromChain, type FolderRow } from "@/lib/folders";
+import { resolveChain } from "@/lib/folders";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
-import { Badge } from "@/components/ui/badge";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-
-function NotesList({
-  notes,
-  folderById,
-}: {
-  notes: NoteRow[];
-  folderById: Map<string, FolderRow>;
-}) {
-  const allFolders = Array.from(folderById.values());
-
-  return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>Title</TableHead>
-          <TableHead>Folder</TableHead>
-          <TableHead>Updated</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {notes.map((note) => {
-          const chain = resolveChain(allFolders, note.folderId);
-          const crumb = breadcrumbFromChain(chain);
-          return (
-            <TableRow key={note.id}>
-              <TableCell>
-                <Link
-                  href={`/n/${note.slug}`}
-                  className="text-foreground hover:underline"
-                >
-                  {note.title}
-                </Link>
-              </TableCell>
-              <TableCell>
-                {crumb ? (
-                  <Badge variant="secondary">{crumb}</Badge>
-                ) : (
-                  <span className="text-muted-foreground text-xs">—</span>
-                )}
-              </TableCell>
-              <TableCell className="text-muted-foreground text-xs">
-                {new Date(note.updatedAt).toLocaleDateString("en-US")}
-              </TableCell>
-            </TableRow>
-          );
-        })}
-      </TableBody>
-    </Table>
-  );
-}
+import NotesTable from "@/components/NotesTable";
 
 export default async function NotesPage() {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -99,7 +40,7 @@ export default async function NotesPage() {
           </div>
         </div>
       ) : (
-        <NotesList notes={rows} folderById={folderById} />
+        <NotesTable notes={rows} folderById={folderById} />
       )}
     </div>
   );

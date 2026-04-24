@@ -25,7 +25,7 @@ export function SidebarShell({ library, tree }: SidebarShellProps) {
   return (
     <ShadcnSidebar
       collapsible="none"
-      className="border border-foreground rounded-xl overflow-hidden"
+      className="border border-foreground rounded-r-xl overflow-hidden shadow-[4px_4px_20px_rgba(0,0,0,0.08)]"
     >
       <SidebarHeader className="px-4 pt-5 pb-3">
         <Link

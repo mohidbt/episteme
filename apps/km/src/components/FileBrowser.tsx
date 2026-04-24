@@ -21,6 +21,7 @@ import {
   type DragStartEvent,
 } from "@dnd-kit/core";
 import { toast } from "sonner";
+import { ChevronDown, ChevronUp } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -184,6 +185,45 @@ export async function resolveDrop(
   }
 }
 
+type SortKey = "title" | "kind" | "updatedAt";
+
+function SortHeader({
+  label,
+  column,
+  sortKey,
+  sortDir,
+  onClick,
+}: {
+  label: string;
+  column: SortKey;
+  sortKey: SortKey;
+  sortDir: "asc" | "desc";
+  onClick: (key: SortKey) => void;
+}) {
+  const active = sortKey === column;
+  return (
+    <button
+      type="button"
+      onClick={() => onClick(column)}
+      className="inline-flex items-center gap-1 text-left font-medium hover:text-foreground"
+      aria-sort={active ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
+    >
+      <span>{label}</span>
+      <span className="inline-flex size-3 items-center justify-center">
+        {active ? (
+          sortDir === "asc" ? (
+            <ChevronUp className="size-3" aria-hidden />
+          ) : (
+            <ChevronDown className="size-3" aria-hidden />
+          )
+        ) : (
+          <ChevronUp className="size-3 opacity-0" aria-hidden />
+        )}
+      </span>
+    </button>
+  );
+}
+
 export function FileBrowser({
   libraryId,
   libraryName,
@@ -223,12 +263,53 @@ export function FileBrowser({
   const [moveTarget, setMoveTarget] = useState<FileBrowserItemData | null>(null);
 
   const items = useMemo(() => flatten(contents), [contents]);
+
+  // ── List-view sort ───────────────────────────────────────────────────────
+  const [sortKey, setSortKey] = useState<"title" | "kind" | "updatedAt">("title");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+
+  const sortedItems = useMemo(() => {
+    const kindOrder: Record<ItemKind, number> = {
+      folder: 0,
+      paper: 1,
+      reference: 2,
+      note: 3,
+      data: 4,
+    };
+    const copy = [...items];
+    copy.sort((a, b) => {
+      let cmp = 0;
+      if (sortKey === "title") {
+        cmp = a.title.localeCompare(b.title, undefined, { sensitivity: "base" });
+      } else if (sortKey === "kind") {
+        cmp = kindOrder[a.kind] - kindOrder[b.kind];
+      } else {
+        cmp = a.updatedAt - b.updatedAt;
+      }
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+    return copy;
+  }, [items, sortKey, sortDir]);
+
+  const displayItems = view === "list" ? sortedItems : items;
+
+  const toggleSort = useCallback((key: "title" | "kind" | "updatedAt") => {
+    setSortKey((prev) => {
+      if (prev === key) {
+        setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+        return prev;
+      }
+      setSortDir("asc");
+      return key;
+    });
+  }, []);
+
   const itemsById = useMemo(() => {
     const map = new Map<string, FileBrowserItemData>();
-    for (const i of items) map.set(i.id, i);
+    for (const i of displayItems) map.set(i.id, i);
     return map;
-  }, [items]);
-  const orderedIds = useMemo(() => items.map((i) => i.id), [items]);
+  }, [displayItems]);
+  const orderedIds = useMemo(() => displayItems.map((i) => i.id), [displayItems]);
 
   const handleOpen = useCallback(
     (item: FileBrowserItemData) => {
@@ -601,13 +682,37 @@ export function FileBrowser({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Type</TableHead>
-              <TableHead>Updated</TableHead>
+              <TableHead>
+                <SortHeader
+                  label="Name"
+                  column="title"
+                  sortKey={sortKey}
+                  sortDir={sortDir}
+                  onClick={toggleSort}
+                />
+              </TableHead>
+              <TableHead>
+                <SortHeader
+                  label="Type"
+                  column="kind"
+                  sortKey={sortKey}
+                  sortDir={sortDir}
+                  onClick={toggleSort}
+                />
+              </TableHead>
+              <TableHead>
+                <SortHeader
+                  label="Updated"
+                  column="updatedAt"
+                  sortKey={sortKey}
+                  sortDir={sortDir}
+                  onClick={toggleSort}
+                />
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {items.map((item, i) => (
+            {sortedItems.map((item, i) => (
               <FileBrowserItem
                 key={item.id}
                 item={item}

@@ -96,15 +96,15 @@ afterEach(() => {
 });
 
 describe("Sidebar", () => {
-  it("renders 4 top-level group labels: Drive, By type, Agent, Settings", () => {
+  it("renders 4 top-level group labels: Drive, Collections, Agent, Settings", () => {
     renderShell(baseTree());
     expect(screen.getByText("Drive")).toBeTruthy();
-    expect(screen.getByText("By type")).toBeTruthy();
+    expect(screen.getByText("Collections")).toBeTruthy();
     expect(screen.getByText("Agent")).toBeTruthy();
     expect(screen.getByText("Settings")).toBeTruthy();
   });
 
-  it("By type exposes 4 links with correct hrefs", () => {
+  it("Collections exposes 4 links with correct hrefs", () => {
     const { container } = renderShell(baseTree());
     const byHref = (h: string) =>
       container.querySelector(`a[href="${h}"]`) as HTMLAnchorElement | null;
