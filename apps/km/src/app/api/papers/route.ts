@@ -48,6 +48,7 @@ export async function POST(req: Request) {
       libraryId: parsed.data.libraryId,
       userId,
       folderPath: parsed.data.folderPath,
+      folderId: parsed.data.folderId ?? null,
       filename: cleanFilename,
       title: placeholderTitle,
     })

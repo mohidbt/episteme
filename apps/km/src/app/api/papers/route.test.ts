@@ -243,4 +243,61 @@ describe("papers", () => {
     await trashAndDelete(firstId);
     await trashAndDelete(secondId);
   });
+
+  it("POST with folderId stores paper with that folderId", async () => {
+    // Create a real folder to satisfy the FK
+    const { POST: POST_FOLDER } = await import("../folders/route");
+    const folderRes = await POST_FOLDER(
+      req("/api/folders", {
+        method: "POST",
+        cookie: u.cookie,
+        body: JSON.stringify({ libraryId, parentId: null, name: "PaperTarget" }),
+      }),
+    );
+    expect(folderRes.status).toBe(201);
+    const folderId: string = (await folderRes.json()).id;
+
+    const r = await POST(
+      req("/api/papers", {
+        method: "POST",
+        cookie: u.cookie,
+        body: JSON.stringify({
+          ...initUpload({ filename: "foldered.pdf" }),
+          folderId,
+        }),
+      }),
+    );
+    expect(r.status).toBe(201);
+    const { paperId } = await r.json();
+    createdPaperIds.push(paperId);
+
+    const [row] = await db
+      .select()
+      .from(papers)
+      .where(eq(papers.id, paperId));
+    expect(row.folderId).toBe(folderId);
+
+    await trashAndDelete(paperId);
+  });
+
+  it("POST without folderId stores paper with folderId null", async () => {
+    const r = await POST(
+      req("/api/papers", {
+        method: "POST",
+        cookie: u.cookie,
+        body: JSON.stringify(initUpload({ filename: "no-folder.pdf" })),
+      }),
+    );
+    expect(r.status).toBe(201);
+    const { paperId } = await r.json();
+    createdPaperIds.push(paperId);
+
+    const [row] = await db
+      .select()
+      .from(papers)
+      .where(eq(papers.id, paperId));
+    expect(row.folderId).toBeNull();
+
+    await trashAndDelete(paperId);
+  });
 });

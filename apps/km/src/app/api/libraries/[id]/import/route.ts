@@ -40,6 +40,11 @@ export async function POST(req: Request, { params }: Ctx) {
     return jsonError(400, "validation", { message: "file required" });
   }
 
+  const rawFolderId = form.get("folderId");
+  const folderId = typeof rawFolderId === "string" && rawFolderId.length > 0
+    ? rawFolderId
+    : null;
+
   const lowerName = file.name.toLowerCase();
 
   if (lowerName.endsWith(".zip")) {
@@ -77,6 +82,7 @@ export async function POST(req: Request, { params }: Ctx) {
       libraryId: libId,
       userId,
       folderPath,
+      folderId,
       title,
       slug,
       filename: file.name,

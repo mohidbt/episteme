@@ -28,6 +28,7 @@ const MAX_PDF_BYTES = 50 * 1024 * 1024; // 50 MB cap
 export const paperUploadInitSchema = z.object({
   libraryId: z.number().int(),
   folderPath: folderPathSchema.default(""),
+  folderId: z.string().uuid().nullable().optional(),
   filename: nonEmptyTrimmed(500),
   contentType: z.literal(PDF_CONTENT_TYPE),
   sizeBytes: z.number().int().positive().max(MAX_PDF_BYTES),
