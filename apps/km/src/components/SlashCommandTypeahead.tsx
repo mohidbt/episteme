@@ -1,6 +1,7 @@
 "use client";
 
-import { forwardRef, useImperativeHandle, useMemo, useState } from "react";
+import { forwardRef, useImperativeHandle, useMemo, useRef, useState } from "react";
+import { CitationTypeahead, type CitationTypeaheadRef, type CitationPick } from "./CitationTypeahead";
 
 export interface SlashCommandTypeaheadRef {
   onKeyDown: (props: { event: KeyboardEvent }) => boolean;
@@ -8,6 +9,7 @@ export interface SlashCommandTypeaheadRef {
 
 export interface SlashCommandPick {
   title: string;
+  citation?: CitationPick;
 }
 
 export interface SlashCommandTypeaheadProps {
@@ -29,6 +31,12 @@ const COMMANDS: SlashCommandItem[] = [
     keywords: ["ai", "ask", "write", "edit", "rephrase", "generate"],
     icon: "✨",
   },
+  {
+    title: "Cite",
+    description: "Insert a citation from your library",
+    keywords: ["cite", "citation", "reference", "paper", "bib"],
+    icon: "📚",
+  },
 ];
 
 export const SlashCommandTypeahead = forwardRef<
@@ -36,25 +44,51 @@ export const SlashCommandTypeahead = forwardRef<
   SlashCommandTypeaheadProps
 >(function SlashCommandTypeahead({ query, onSelect }, ref) {
   const [selected, setSelected] = useState(0);
+  // Mode: "commands" (default slash menu) or "cite" (citation search sub-menu)
+  const [mode, setMode] = useState<"commands" | "cite">("commands");
+  // Query within citation mode — typed after selecting Cite
+  const [citeQuery, setCiteQuery] = useState("");
+  const citationRef = useRef<CitationTypeaheadRef | null>(null);
 
   const filtered = useMemo(() => {
+    if (mode === "cite") return [];
     const q = query.toLowerCase().trim();
     if (!q) return COMMANDS;
     return COMMANDS.filter((cmd) => {
       const haystack = `${cmd.title} ${cmd.description} ${cmd.keywords.join(" ")}`.toLowerCase();
       return haystack.includes(q);
     });
-  }, [query]);
+  }, [query, mode]);
 
   // Reset selection when filtered list changes
   useMemo(() => {
-    setSelected(0);
-  }, [filtered.length]);
+    if (mode === "commands") setSelected(0);
+  }, [filtered.length, mode]);
 
   useImperativeHandle(
     ref,
     () => ({
       onKeyDown: ({ event }) => {
+        if (mode === "cite") {
+          // Backspace when citeQuery empty → go back to command list
+          if (event.key === "Backspace" && citeQuery === "") {
+            setMode("commands");
+            setCiteQuery("");
+            return true;
+          }
+          // Alpha/digit keys extend the citeQuery
+          if (event.key.length === 1 && !event.ctrlKey && !event.metaKey) {
+            setCiteQuery((q) => q + event.key);
+            return true;
+          }
+          if (event.key === "Backspace") {
+            setCiteQuery((q) => q.slice(0, -1));
+            return true;
+          }
+          // Delegate navigation/enter to CitationTypeahead
+          return citationRef.current?.onKeyDown({ event }) ?? false;
+        }
+
         if (event.key === "ArrowUp") {
           setSelected((i) =>
             filtered.length === 0 ? 0 : (i + filtered.length - 1) % filtered.length,
@@ -67,7 +101,13 @@ export const SlashCommandTypeahead = forwardRef<
         }
         if (event.key === "Enter") {
           if (filtered.length > 0) {
-            onSelect({ title: filtered[selected].title });
+            const cmd = filtered[selected];
+            if (cmd.title === "Cite") {
+              setMode("cite");
+              setCiteQuery("");
+              return true;
+            }
+            onSelect({ title: cmd.title });
           }
           return true;
         }
@@ -77,8 +117,20 @@ export const SlashCommandTypeahead = forwardRef<
         return false;
       },
     }),
-    [filtered, selected, onSelect],
+    [filtered, selected, onSelect, mode, citeQuery],
   );
+
+  if (mode === "cite") {
+    return (
+      <CitationTypeahead
+        ref={citationRef}
+        query={citeQuery}
+        onSelect={(citation: CitationPick) => {
+          onSelect({ title: "Cite", citation });
+        }}
+      />
+    );
+  }
 
   if (filtered.length === 0) {
     return (
@@ -96,6 +148,11 @@ export const SlashCommandTypeahead = forwardRef<
           type="button"
           onMouseDown={(e) => {
             e.preventDefault();
+            if (cmd.title === "Cite") {
+              setMode("cite");
+              setCiteQuery("");
+              return;
+            }
             onSelect({ title: cmd.title });
           }}
           className={`w-full rounded px-2 py-1.5 text-left flex items-center gap-2 ${

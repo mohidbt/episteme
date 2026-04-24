@@ -6,3 +6,5 @@ export { editorExtensions, SlashCommand, SlashCommandPluginKey } from "./extensi
 export type { WikiLinkSuggestion, SlashCommandSuggestion } from "./extensions";
 export { hydrateWikiLinkResolutions } from "./hydrate-wiki-links";
 export type { ResolvedLinksMap, WikiLinkResolution } from "./hydrate-wiki-links";
+export { parseSlashCommand, insertCitation } from "./slash/index";
+export type { ParsedSlashCommand, CiteCommandPayload } from "./slash/index";
