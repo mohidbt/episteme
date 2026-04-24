@@ -95,6 +95,7 @@ describe("GET /api/citations/search", () => {
     expect(first).toHaveProperty("title");
     expect(first).toHaveProperty("authors");
     expect(first).toHaveProperty("year");
+    expect(first).toHaveProperty("doi");
     expect(typeof first.citekey).toBe("string");
     expect(first.citekey.length).toBeGreaterThan(0);
   });
