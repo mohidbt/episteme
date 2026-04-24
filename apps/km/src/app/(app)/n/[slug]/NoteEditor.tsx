@@ -2,14 +2,16 @@
 import {
   Editor,
   type ResolvedLinksMap,
-  type TiptapEditor,
   type WikiLinkSuggestion,
+  type SlashCommandSuggestion,
+  type TiptapEditor,
 } from "@episteme/editor";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, type RefObject } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { WikiLinkTypeahead, type WikiLinkTypeaheadRef } from "@/components/WikiLinkTypeahead";
-import { runSlashAi, SLASH_AI_REGEX } from "./run-slash-ai";
+import { SlashCommandTypeahead, type SlashCommandTypeaheadRef } from "@/components/SlashCommandTypeahead";
+import { AiBubbleMenu } from "@/components/AiBubbleMenu";
 
 export function NoteEditor({
   id,
@@ -27,10 +29,12 @@ export function NoteEditor({
   const pendingMdRef = useRef<string | null>(null);
   const editorHostRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<TiptapEditor | null>(null);
-  const aiAbortRef = useRef<AbortController | null>(null);
+  const [editorInstance, setEditorInstance] = useState<TiptapEditor | null>(null);
+  const [aiTriggerCount, setAiTriggerCount] = useState(0);
 
   const onReady = useCallback((editor: TiptapEditor) => {
     editorRef.current = editor;
+    setEditorInstance(editor);
   }, []);
 
   const flush = useCallback((): Promise<void> => {
@@ -193,76 +197,12 @@ export function NoteEditor({
         .run();
     };
 
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== "Enter" || e.shiftKey || e.isComposing) return;
-      const editor = editorRef.current;
-      if (!editor) return;
-      const { state } = editor;
-      const { $from } = state.selection;
-      // Current paragraph node (depth 1 on a flat doc).
-      const para = $from.parent;
-      if (para.type.name !== "paragraph") return;
-      const paraText = para.textContent;
-      const match = paraText.match(SLASH_AI_REGEX);
-      if (!match) return;
-      const prompt = match[1];
-
-      e.preventDefault();
-
-      // Compute paragraph start/end positions.
-      const paraStart = $from.start($from.depth);
-      const paraEnd = $from.end($from.depth);
-
-      // Derive context from the previous paragraph, if any.
-      let context: string | undefined;
-      const beforeResolved = state.doc.resolve(Math.max(0, paraStart - 1));
-      const before = beforeResolved.nodeBefore;
-      if (before && before.type.name === "paragraph") {
-        const prevText = before.textContent.trim();
-        if (prevText) context = prevText;
-      }
-
-      // Clear the `/ai <prompt>` line and place the cursor at its start.
-      editor
-        .chain()
-        .focus()
-        .command(({ tr }) => {
-          tr.delete(paraStart, paraEnd);
-          return true;
-        })
-        .run();
-
-      // Abort any in-flight call before starting a new one.
-      aiAbortRef.current?.abort();
-      const controller = new AbortController();
-      aiAbortRef.current = controller;
-
-      void runSlashAi({
-        prompt,
-        context,
-        signal: controller.signal,
-        onToken: (chunk) => {
-          editor.chain().focus().insertContent(chunk).run();
-        },
-        onError: (message) => {
-          editor.chain().focus().insertContent(`[ai error: ${message}]`).run();
-        },
-      }).finally(() => {
-        // Clear only if still the current controller.
-        if (aiAbortRef.current === controller) aiAbortRef.current = null;
-      });
-    };
-
     host.addEventListener("click", onClick);
     host.addEventListener("dblclick", onDblClick);
-    host.addEventListener("keydown", onKeyDown);
     return () => {
       host.removeEventListener("click", onClick);
       host.removeEventListener("dblclick", onDblClick);
-      host.removeEventListener("keydown", onKeyDown);
       cancelPendingNav();
-      aiAbortRef.current?.abort();
-      aiAbortRef.current = null;
     };
   }, [router, flush, resolvedLinks]);
 
@@ -361,12 +301,98 @@ export function NoteEditor({
             return refObj.current?.onKeyDown({ event: props.event }) ?? false;
           },
           onExit: () => {
-            root?.unmount();
-            host?.remove();
+            try { root?.unmount(); } catch (_) { /* portal already removed by DOM mutation */ }
+            try { host?.remove(); } catch (_) { /* already detached */ }
             root = null;
             host = null;
           },
         };
+      },
+    }),
+    [],
+  );
+
+  const slashCommandSuggestion = useMemo<SlashCommandSuggestion>(
+    () => ({
+      command: ({ editor, range, props }) => {
+        // Delete the `/` trigger and any typed query characters
+        editor.chain().focus().deleteRange(range).run();
+
+        const p = props as { title: string };
+        if (p.title === "AI") {
+          // Trigger the AI Rephrase portal — increment counter to force re-render
+          setAiTriggerCount((c) => c + 1);
+        }
+      },
+      render: () => {
+        let root: Root | null = null;
+        let host: HTMLDivElement | null = null;
+        let refObj: { current: SlashCommandTypeaheadRef | null } = { current: null };
+
+        const place = (clientRect: (() => DOMRect | null) | null | undefined) => {
+          if (!host) return;
+          const rect = clientRect?.() ?? null;
+          if (!rect) {
+            host.style.display = "none";
+            return;
+          }
+          host.style.display = "block";
+          host.style.top = `${rect.bottom + window.scrollY + 4}px`;
+          host.style.left = `${rect.left + window.scrollX}px`;
+        };
+
+        const onStart = (props: any) => {
+          host = document.createElement("div");
+          host.style.position = "absolute";
+          host.style.zIndex = "50";
+          document.body.appendChild(host);
+          root = createRoot(host);
+          refObj = { current: null };
+          root.render(
+            <SlashCommandTypeahead
+              ref={(r) => {
+                refObj.current = r;
+              }}
+              query={props.query}
+              onSelect={(payload) => props.command(payload as never)}
+            />,
+          );
+          place(props.clientRect);
+        };
+
+        const onUpdate = (props: any) => {
+          if (!root) return;
+          root.render(
+            <SlashCommandTypeahead
+              ref={(r) => {
+                refObj.current = r;
+              }}
+              query={props.query}
+              onSelect={(payload) => props.command(payload as never)}
+            />,
+          );
+          place(props.clientRect);
+        };
+
+        const onKeyDown = (props: any) => {
+          if (props.event.key === "Escape") {
+            root?.unmount();
+            host?.remove();
+            root = null;
+            host = null;
+            return true;
+          }
+          return refObj.current?.onKeyDown({ event: props.event }) ?? false;
+        };
+
+        const onExit = () => {
+          try { root?.unmount(); } catch (_) { /* portal already removed by DOM mutation */ }
+          try { host?.remove(); } catch (_) { /* already detached */ }
+          root = null;
+          host = null;
+        };
+
+        return { onStart, onUpdate, onKeyDown, onExit };
       },
     }),
     [],
@@ -379,9 +405,14 @@ export function NoteEditor({
         onChangeMd={onChangeMd}
         autofocus
         wikiLinkSuggestion={wikiLinkSuggestion}
+        slashCommandSuggestion={slashCommandSuggestion}
         resolvedLinks={resolvedLinks}
         onReady={onReady}
-      />
+      >
+        {editorInstance && (
+          <AiBubbleMenu editor={editorInstance} aiTriggerCount={aiTriggerCount} />
+        )}
+      </Editor>
     </div>
   );
 }

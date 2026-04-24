@@ -1,8 +1,12 @@
 "use client";
 
-import { useEffect } from "react";
+import { type ReactNode, useEffect } from "react";
 import { useEditor, EditorContent, type Editor as TiptapEditor } from "@tiptap/react";
-import { editorExtensions, type WikiLinkSuggestion } from "./extensions";
+import {
+  editorExtensions,
+  type WikiLinkSuggestion,
+  type SlashCommandSuggestion,
+} from "./extensions";
 import { hydrateWikiLinkResolutions, type ResolvedLinksMap } from "./hydrate-wiki-links";
 import "./styles.css";
 
@@ -12,8 +16,10 @@ export interface EditorProps {
   placeholder?: string;
   autofocus?: boolean;
   wikiLinkSuggestion?: WikiLinkSuggestion;
+  slashCommandSuggestion?: SlashCommandSuggestion;
   resolvedLinks?: ResolvedLinksMap;
   onReady?: (editor: TiptapEditor) => void;
+  children?: ReactNode;
 }
 
 export function Editor({
@@ -22,11 +28,17 @@ export function Editor({
   placeholder,
   autofocus,
   wikiLinkSuggestion,
+  slashCommandSuggestion,
   resolvedLinks,
   onReady,
+  children,
 }: EditorProps) {
   const editor = useEditor({
-    extensions: editorExtensions({ placeholder, wikiLinkSuggestion }),
+    extensions: editorExtensions({
+      placeholder,
+      wikiLinkSuggestion,
+      slashCommandSuggestion,
+    }),
     content: initialMd,
     autofocus: autofocus ?? false,
     immediatelyRender: false,
@@ -59,5 +71,10 @@ export function Editor({
     onReady(editor);
   }, [editor, onReady]);
 
-  return <EditorContent editor={editor} />;
+  return (
+    <>
+      <EditorContent editor={editor} />
+      {children}
+    </>
+  );
 }

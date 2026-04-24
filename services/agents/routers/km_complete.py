@@ -16,17 +16,14 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/agents/km", tags=["km-complete"])
 
 
-SYSTEM_PROMPT = (
-    "You are a concise writing assistant embedded in a note editor. "
-    "Follow the user's instruction. If context is provided, treat it as the "
-    "surrounding text where your output will be inserted. Output only the "
-    "requested content — no preambles, no meta-commentary."
-)
+GENERATE_SYSTEM = "You assist scientists in their writing notes."
+REPHRASE_SYSTEM = "You rephrase text. Output only the rewritten version."
 
 
 class CompleteBody(BaseModel):
     prompt: str = Field(min_length=1)
     context: str | None = None
+    mode: str | None = None  # "rephrase" | "generate"
 
 
 def _sse(obj) -> str:
@@ -61,10 +58,11 @@ async def complete(body: CompleteBody, auth: InternalAuthDep):
         if body.context
         else body.prompt
     )
+    system = REPHRASE_SYSTEM if body.mode == "rephrase" else GENERATE_SYSTEM
 
     async def event_stream():
         try:
-            async for tok in _stream_tokens(api_key, SYSTEM_PROMPT, user_msg):
+            async for tok in _stream_tokens(api_key, system, user_msg):
                 yield _sse({"type": "token", "content": tok})
         except Exception as e:  # noqa: BLE001
             logger.exception("km_complete upstream failed")

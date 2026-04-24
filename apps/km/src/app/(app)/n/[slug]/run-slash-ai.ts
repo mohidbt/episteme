@@ -5,6 +5,7 @@ export const SLASH_AI_REGEX = /^\/ai\s+(.+)$/;
 export type RunSlashAiArgs = {
   prompt: string;
   context?: string;
+  mode?: "rephrase" | "generate";
   onToken: (chunk: string) => void;
   onError: (message: string) => void;
   signal?: AbortSignal;
@@ -20,11 +21,12 @@ type SseEvent =
  * invokes onToken for each token event. Halts on error event. Stops on [DONE].
  */
 export async function runSlashAi(args: RunSlashAiArgs): Promise<void> {
-  const { prompt, context, onToken, onError, signal } = args;
+  const { prompt, context, mode, onToken, onError, signal } = args;
   const doFetch = args.fetchImpl ?? globalThis.fetch;
 
-  const payload: { prompt: string; context?: string } = { prompt };
+  const payload: { prompt: string; context?: string; mode?: string } = { prompt };
   if (context !== undefined) payload.context = context;
+  if (mode !== undefined) payload.mode = mode;
 
   let res: Response;
   try {
