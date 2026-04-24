@@ -1,4 +1,5 @@
 {
+  "//": "Standalone Node service (no bundler) — uses NodeNext instead of the monorepo-wide Bundler resolution.",
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "module": "NodeNext",
