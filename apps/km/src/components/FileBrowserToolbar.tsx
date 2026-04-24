@@ -52,6 +52,7 @@ export function FileBrowserToolbar({
   return (
     <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-2">
       <PathPill
+        segmentDropTargets
         segments={[
           { id: "root", label: libraryName, href: "/" },
           ...folderChain.map((c, i) => ({

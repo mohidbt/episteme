@@ -79,10 +79,32 @@ export interface FbDragActive {
   id: string;
   title?: string;
   currentFolderId: string | null;
+  /** When present, this drag represents a batch move of multiple selected ids. */
+  ids?: string[];
 }
-export interface FbDragOver {
-  kind: "folder";
-  id: string;
+export type FbDragOver =
+  | { kind: "folder"; id: string }
+  | { kind: "ancestor"; folderId: string | null };
+
+/**
+ * Axis-aligned rectangle intersection test. Exported for unit tests.
+ * Both rects are {x0, y0, x1, y1} where x0<=x1 and y0<=y1 is NOT required —
+ * the helper normalizes. Returns true if rectangles share any area (edge-only
+ * contact counts as no overlap).
+ */
+export function rectsIntersect(
+  a: { x0: number; y0: number; x1: number; y1: number },
+  b: { x0: number; y0: number; x1: number; y1: number },
+): boolean {
+  const aL = Math.min(a.x0, a.x1);
+  const aR = Math.max(a.x0, a.x1);
+  const aT = Math.min(a.y0, a.y1);
+  const aB = Math.max(a.y0, a.y1);
+  const bL = Math.min(b.x0, b.x1);
+  const bR = Math.max(b.x0, b.x1);
+  const bT = Math.min(b.y0, b.y1);
+  const bB = Math.max(b.y0, b.y1);
+  return aL < bR && aR > bL && aT < bB && aB > bT;
 }
 
 function toMs(v: Date | number | string): number {
@@ -143,17 +165,22 @@ export async function resolveDrop(
   over: FbDragOver,
   folders: FolderRow[],
 ): Promise<boolean> {
+  // Target folder id (null = library root). For a folder drop, this is over.id;
+  // for an ancestor (breadcrumb) drop, over.folderId (may be null).
+  const targetFolderId: string | null =
+    over.kind === "folder" ? over.id : over.folderId;
+
   if (active.kind === "leaf") {
     if (!active.itemKind) return false;
     const route = apiRouteForKind(active.itemKind);
     if (!route) return false;
     // No-op if already in that folder.
-    if ((active.currentFolderId ?? null) === over.id) return false;
+    if ((active.currentFolderId ?? null) === targetFolderId) return false;
     try {
       const res = await fetch(`/api/${route}/${active.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ folderId: over.id }),
+        body: JSON.stringify({ folderId: targetFolderId }),
       });
       if (!res.ok) throw new Error(`status ${res.status}`);
       return true;
@@ -164,9 +191,12 @@ export async function resolveDrop(
     }
   }
 
-  // Folder → folder.
-  if (active.id === over.id) return false;
-  if (isDescendantOf(folders, active.id, over.id)) {
+  // Folder → (folder | ancestor).
+  if (over.kind === "folder" && active.id === over.id) return false;
+  if (
+    over.kind === "folder" &&
+    isDescendantOf(folders, active.id, over.id)
+  ) {
     toast.error("Cannot move folder into itself");
     return false;
   }
@@ -174,7 +204,10 @@ export async function resolveDrop(
     const res = await fetch("/api/folders/move", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ folderId: active.id, targetParentId: over.id }),
+      body: JSON.stringify({
+        folderId: active.id,
+        targetParentId: targetFolderId,
+      }),
     });
     if (!res.ok) throw new Error(`status ${res.status}`);
     return true;
@@ -534,6 +567,7 @@ export function FileBrowser({
 
   const handleRootClick = useCallback(
     (ev: ReactMouseEvent<HTMLDivElement>) => {
+      if (suppressClickRef.current) return;
       if (ev.target === ev.currentTarget) {
         setSelected(new Set());
         anchorRef.current = null;
@@ -629,38 +663,206 @@ export function FileBrowser({
     useSensor(KeyboardSensor),
   );
 
+  const selectedRef = useRef(selected);
+  useEffect(() => {
+    selectedRef.current = selected;
+  }, [selected]);
+
   const onDragStart = useCallback((e: DragStartEvent) => {
     const data = e.active.data.current as FbDragActive | undefined;
     if (!data) return;
-    setActiveDrag(data);
+    // Finder behavior: if dragging an unselected item, auto-select just it.
+    // If dragging a selected item with >1 selected, batch-move all selected.
+    const current = selectedRef.current;
+    let enriched: FbDragActive = data;
+    if (!current.has(data.id)) {
+      const only = new Set([data.id]);
+      setSelected(only);
+      selectedRef.current = only;
+      anchorRef.current = data.id;
+    } else if (current.size > 1) {
+      enriched = { ...data, ids: Array.from(current) };
+    }
+    setActiveDrag(enriched);
   }, []);
 
   const onDragCancel = useCallback(() => setActiveDrag(null), []);
 
   const onDragEnd = useCallback(
     async (e: DragEndEvent) => {
+      const active = activeDrag;
       setActiveDrag(null);
       const activeData = e.active.data.current as FbDragActive | undefined;
       const overData = e.over?.data.current as FbDragOver | undefined;
       if (!activeData || !overData) return;
+
+      // Batch path: move every selected id.
+      const batchIds = active?.ids ?? activeData.ids;
+      if (batchIds && batchIds.length > 1) {
+        const targetFolderId: string | null =
+          overData.kind === "folder" ? overData.id : overData.folderId;
+        const results = await Promise.all(
+          batchIds.map(async (id) => {
+            const item = itemsById.get(id);
+            if (!item) return false;
+            if (item.kind === "folder") {
+              return resolveDrop(
+                {
+                  kind: "folder",
+                  id: item.id,
+                  title: item.title,
+                  currentFolderId: folderId,
+                },
+                overData,
+                folders,
+              );
+            }
+            return resolveDrop(
+              {
+                kind: "leaf",
+                itemKind: item.kind,
+                id: item.id,
+                title: item.title,
+                currentFolderId: folderId,
+              },
+              overData,
+              folders,
+            );
+          }),
+        );
+        // Avoid unused targetFolderId lint (used implicitly through resolveDrop).
+        void targetFolderId;
+        if (results.some(Boolean)) router.refresh();
+        return;
+      }
+
       const ok = await resolveDrop(activeData, overData, folders);
       if (ok) router.refresh();
     },
-    [folders, router],
+    [activeDrag, folders, folderId, itemsById, router],
   );
+
+  // ── Marquee (rubber-band) multi-selection ──────────────────────────────
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const [marquee, setMarquee] = useState<
+    { x0: number; y0: number; x1: number; y1: number } | null
+  >(null);
+  const marqueeStartRef = useRef<
+    | {
+        x0: number;
+        y0: number;
+        rootLeft: number;
+        rootTop: number;
+        base: Set<string>;
+        additive: boolean;
+        moved: boolean;
+      }
+    | null
+  >(null);
+  const suppressClickRef = useRef(false);
+
+  const computeMarqueeSelection = useCallback(
+    (viewportRect: { x0: number; y0: number; x1: number; y1: number }) => {
+      if (!rootRef.current) return;
+      const start = marqueeStartRef.current;
+      if (!start) return;
+      const nodes = rootRef.current.querySelectorAll<HTMLElement>(
+        "[data-testid^='fb-item-']",
+      );
+      const hit = new Set<string>();
+      for (const el of Array.from(nodes)) {
+        const rect = el.getBoundingClientRect();
+        const elR = { x0: rect.left, y0: rect.top, x1: rect.right, y1: rect.bottom };
+        if (rectsIntersect(viewportRect, elR)) {
+          const id = el.getAttribute("data-testid")!.slice("fb-item-".length);
+          hit.add(id);
+        }
+      }
+      const next = start.additive ? new Set([...start.base, ...hit]) : hit;
+      setSelected(next);
+    },
+    [],
+  );
+
+  const handleRootMouseDown = useCallback(
+    (ev: ReactMouseEvent<HTMLDivElement>) => {
+      // Only start marquee on empty background — not on a tile.
+      if (ev.target !== ev.currentTarget) return;
+      if (ev.button !== 0) return;
+      const root = ev.currentTarget;
+      const box = root.getBoundingClientRect();
+      marqueeStartRef.current = {
+        x0: ev.clientX,
+        y0: ev.clientY,
+        rootLeft: box.left,
+        rootTop: box.top,
+        base: new Set(selectedRef.current),
+        additive: ev.shiftKey || ev.metaKey || ev.ctrlKey,
+        moved: false,
+      };
+    },
+    [],
+  );
+
+  useEffect(() => {
+    function onMove(ev: MouseEvent) {
+      const s = marqueeStartRef.current;
+      if (!s) return;
+      const dx = ev.clientX - s.x0;
+      const dy = ev.clientY - s.y0;
+      if (!s.moved && Math.hypot(dx, dy) < 3) return;
+      s.moved = true;
+      const viewport = {
+        x0: s.x0,
+        y0: s.y0,
+        x1: ev.clientX,
+        y1: ev.clientY,
+      };
+      // Render rectangle in root-local coords.
+      setMarquee({
+        x0: s.x0 - s.rootLeft,
+        y0: s.y0 - s.rootTop,
+        x1: ev.clientX - s.rootLeft,
+        y1: ev.clientY - s.rootTop,
+      });
+      computeMarqueeSelection(viewport);
+    }
+    function onUp() {
+      const s = marqueeStartRef.current;
+      marqueeStartRef.current = null;
+      setMarquee(null);
+      if (s?.moved) {
+        // Suppress the click that fires after a drag — otherwise handleRootClick
+        // would clear the selection we just built.
+        suppressClickRef.current = true;
+        // Reset on next tick so only the immediately-following click is muted.
+        setTimeout(() => {
+          suppressClickRef.current = false;
+        }, 0);
+      }
+    }
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+  }, [computeMarqueeSelection]);
 
   const itemView = view === "tile" ? "tile" : "list";
 
   const grid = (
     <div
+      ref={rootRef}
       data-testid="fb-root"
       tabIndex={0}
       onClick={handleRootClick}
+      onMouseDown={handleRootMouseDown}
       onKeyDown={handleKeyDown}
       className={
         itemView === "tile"
-          ? "grid flex-1 auto-rows-min grid-cols-[repeat(auto-fill,minmax(120px,1fr))] gap-x-4 gap-y-6 overflow-y-auto p-4 outline-hidden"
-          : "flex-1 overflow-y-auto outline-hidden"
+          ? "relative grid flex-1 auto-rows-min grid-cols-[repeat(auto-fill,minmax(120px,1fr))] gap-x-4 gap-y-6 overflow-y-auto p-4 outline-hidden"
+          : "relative flex-1 overflow-y-auto outline-hidden"
       }
     >
       {itemView === "tile" ? (
@@ -671,6 +873,7 @@ export function FileBrowser({
             view="tile"
             index={i}
             selected={selected.has(item.id)}
+            selectedIds={selected}
             currentFolderId={folderId}
             isInTrash={isTrashView}
             onSelect={handleSelect}
@@ -719,6 +922,7 @@ export function FileBrowser({
                 view="list"
                 index={i}
                 selected={selected.has(item.id)}
+                selectedIds={selected}
                 currentFolderId={folderId}
                 isInTrash={isTrashView}
                 onSelect={handleSelect}
@@ -729,37 +933,54 @@ export function FileBrowser({
           </TableBody>
         </Table>
       )}
+      {marquee ? (
+        <div
+          data-testid="fb-marquee"
+          className="pointer-events-none absolute z-10 rounded-sm border-2 border-primary/50 bg-primary/10"
+          style={{
+            left: Math.min(marquee.x0, marquee.x1),
+            top: Math.min(marquee.y0, marquee.y1),
+            width: Math.abs(marquee.x1 - marquee.x0),
+            height: Math.abs(marquee.y1 - marquee.y0),
+          }}
+        />
+      ) : null}
     </div>
+  );
+
+  const toolbar = (
+    <FileBrowserToolbar
+      libraryId={libraryId}
+      libraryName={libraryName}
+      folderId={folderId}
+      folderChain={folderChain}
+      view={view}
+      onViewChange={setViewPersist}
+      onMutate={onMutate}
+      isTrashView={isTrashView}
+      onEmptyTrash={onEmptyTrashProp ?? handleEmptyTrash}
+      trashCount={items.length}
+    />
   );
 
   return (
     <>
       <div className="flex h-full flex-col">
-        <FileBrowserToolbar
-          libraryId={libraryId}
-          libraryName={libraryName}
-          folderId={folderId}
-          folderChain={folderChain}
-          view={view}
-          onViewChange={setViewPersist}
-          onMutate={onMutate}
-          isTrashView={isTrashView}
-          onEmptyTrash={onEmptyTrashProp ?? handleEmptyTrash}
-          trashCount={items.length}
-        />
-
         {items.length === 0 ? (
-          <div className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center text-sm text-muted-foreground">
-            <p>
-              Drop files here, or click <strong className="text-foreground">New</strong>.
-            </p>
-            <NewItemTrigger
-              libraryId={libraryId}
-              folderId={folderId}
-              variant="toolbar"
-              onMutate={onMutate}
-            />
-          </div>
+          <>
+            {toolbar}
+            <div className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center text-sm text-muted-foreground">
+              <p>
+                Drop files here, or click <strong className="text-foreground">New</strong>.
+              </p>
+              <NewItemTrigger
+                libraryId={libraryId}
+                folderId={folderId}
+                variant="toolbar"
+                onMutate={onMutate}
+              />
+            </div>
+          </>
         ) : mounted ? (
           <DndContext
             sensors={sensors}
@@ -767,17 +988,23 @@ export function FileBrowser({
             onDragCancel={onDragCancel}
             onDragEnd={onDragEnd}
           >
+            {toolbar}
             {grid}
             <DragOverlay>
               {activeDrag ? (
                 <div className="pointer-events-none rounded-md bg-accent/80 px-2 py-1 text-sm text-foreground ring-1 ring-foreground/20 shadow-sm">
-                  {activeDrag.title ?? "Untitled"}
+                  {activeDrag.ids && activeDrag.ids.length > 1
+                    ? `${activeDrag.ids.length} items`
+                    : (activeDrag.title ?? "Untitled")}
                 </div>
               ) : null}
             </DragOverlay>
           </DndContext>
         ) : (
-          grid
+          <>
+            {toolbar}
+            {grid}
+          </>
         )}
       </div>
 

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Fragment } from "react";
 import { ChevronRight } from "lucide-react";
+import { useDroppable } from "@dnd-kit/core";
 import { cn } from "@/lib/utils";
 
 export interface PathPillSegment {
@@ -20,12 +21,70 @@ interface Props {
   className?: string;
   /** aria-label on the outer nav. Defaults to "Breadcrumbs". */
   "aria-label"?: string;
+  /**
+   * When true, each linkable segment becomes a dnd-kit droppable so that
+   * dragging a Drive item onto an ancestor segment moves it to that folder.
+   * Safe to use outside a DndContext (never becomes an over-target).
+   */
+  segmentDropTargets?: boolean;
+}
+
+/**
+ * Per-segment droppable wrapper. Split out so the hook runs the same number of
+ * times regardless of which segment renders (stable hook order within the map).
+ */
+function SegmentLink({
+  seg,
+  isLast,
+  labelClass,
+  segmentDropTargets,
+}: {
+  seg: PathPillSegment;
+  isLast: boolean;
+  labelClass: string;
+  segmentDropTargets: boolean;
+}) {
+  // Map "root" segment to library root (null folder id).
+  const folderId = seg.id === "root" ? null : seg.id;
+  const { setNodeRef, isOver } = useDroppable({
+    id: `pill-drop:${seg.id}`,
+    data: { kind: "ancestor", folderId },
+    disabled: !segmentDropTargets || seg.href == null,
+  });
+
+  if (seg.href != null) {
+    return (
+      <Link
+        ref={setNodeRef}
+        href={seg.href}
+        data-over={segmentDropTargets && isOver ? "true" : undefined}
+        className={cn(
+          "rounded-md px-2 py-1 hover:bg-accent",
+          isLast ? "text-foreground" : "text-foreground",
+          "data-[over=true]:bg-primary/15 data-[over=true]:ring-1 data-[over=true]:ring-primary/60",
+        )}
+      >
+        <span className={labelClass}>{seg.label}</span>
+      </Link>
+    );
+  }
+  return (
+    <span
+      className={cn(
+        "px-2 py-1",
+        isLast ? "text-foreground" : "text-muted-foreground",
+      )}
+    >
+      <span className={labelClass}>{seg.label}</span>
+    </span>
+  );
 }
 
 export function PathPill({
   segments,
   className,
   "aria-label": ariaLabel = "Breadcrumbs",
+  segmentDropTargets = false,
 }: Props) {
   return (
     <nav
@@ -43,7 +102,6 @@ export function PathPill({
           !isFirst && "truncate max-w-[200px]",
           isLast && "font-medium text-foreground",
         );
-        const content = <span className={labelClass}>{seg.label}</span>;
         return (
           <Fragment key={seg.id}>
             {i > 0 && (
@@ -52,26 +110,12 @@ export function PathPill({
                 className="mx-0.5 size-3 shrink-0 text-muted-foreground"
               />
             )}
-            {seg.href != null ? (
-              <Link
-                href={seg.href}
-                className={cn(
-                  "rounded-md px-2 py-1 hover:bg-accent",
-                  isLast ? "text-foreground" : "text-foreground",
-                )}
-              >
-                {content}
-              </Link>
-            ) : (
-              <span
-                className={cn(
-                  "px-2 py-1",
-                  isLast ? "text-foreground" : "text-muted-foreground",
-                )}
-              >
-                {content}
-              </span>
-            )}
+            <SegmentLink
+              seg={seg}
+              isLast={isLast}
+              labelClass={labelClass}
+              segmentDropTargets={segmentDropTargets}
+            />
           </Fragment>
         );
       })}

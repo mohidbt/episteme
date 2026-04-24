@@ -29,7 +29,7 @@ vi.mock("sonner", () => ({
   },
 }));
 
-import { FileBrowser, resolveDrop } from "./FileBrowser";
+import { FileBrowser, rectsIntersect, resolveDrop } from "./FileBrowser";
 import type { FolderContents } from "@/lib/folders-server";
 import type { FolderRow } from "@/lib/folders";
 
@@ -306,6 +306,41 @@ describe("FileBrowser keyboard", () => {
     const calls = (global.fetch as unknown as { mock: { calls: unknown[][] } }).mock.calls;
     const trashCalls = calls.filter((c) => String(c[0]).includes("/api/folders/trash"));
     expect(trashCalls.length).toBe(2);
+  });
+});
+
+describe("rectsIntersect", () => {
+  it("overlapping rects return true", () => {
+    expect(
+      rectsIntersect(
+        { x0: 0, y0: 0, x1: 10, y1: 10 },
+        { x0: 5, y0: 5, x1: 15, y1: 15 },
+      ),
+    ).toBe(true);
+  });
+  it("disjoint rects return false", () => {
+    expect(
+      rectsIntersect(
+        { x0: 0, y0: 0, x1: 10, y1: 10 },
+        { x0: 20, y0: 20, x1: 30, y1: 30 },
+      ),
+    ).toBe(false);
+  });
+  it("edge-only contact returns false", () => {
+    expect(
+      rectsIntersect(
+        { x0: 0, y0: 0, x1: 10, y1: 10 },
+        { x0: 10, y0: 0, x1: 20, y1: 10 },
+      ),
+    ).toBe(false);
+  });
+  it("normalizes inverted coords (drag up-left)", () => {
+    expect(
+      rectsIntersect(
+        { x0: 10, y0: 10, x1: 0, y1: 0 },
+        { x0: 5, y0: 5, x1: 15, y1: 15 },
+      ),
+    ).toBe(true);
   });
 });
 

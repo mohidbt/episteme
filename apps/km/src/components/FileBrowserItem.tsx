@@ -137,6 +137,8 @@ interface Props {
   view: "tile" | "list";
   index: number;
   selected: boolean;
+  /** Full selection set — used to compose a batch drag payload. */
+  selectedIds: Set<string>;
   currentFolderId: string | null;
   isInTrash: boolean;
   onSelect: (
@@ -162,6 +164,7 @@ function FileBrowserItemImpl({
   view,
   index,
   selected,
+  selectedIds,
   currentFolderId,
   isInTrash,
   onSelect,
@@ -171,14 +174,18 @@ function FileBrowserItemImpl({
   const Icon = KIND_ICON[item.kind];
   const delayMs = Math.min(index * 30, 600);
 
-  // Drag payload.
+  // Drag payload. If this item is part of a multi-selection, attach the full
+  // id list so onDragEnd can issue a batch move.
   const isFolder = item.kind === "folder";
+  const batchIds =
+    selected && selectedIds.size > 1 ? Array.from(selectedIds) : undefined;
   const dragData: FbDragActive = isFolder
     ? {
         kind: "folder",
         id: item.id,
         title: item.title,
         currentFolderId,
+        ids: batchIds,
       }
     : {
         kind: "leaf",
@@ -186,6 +193,7 @@ function FileBrowserItemImpl({
         id: item.id,
         title: item.title,
         currentFolderId,
+        ids: batchIds,
       };
   const {
     setNodeRef: setDragRef,
@@ -360,6 +368,7 @@ export const FileBrowserItem = memo(
     a.view === b.view &&
     a.index === b.index &&
     a.selected === b.selected &&
+    a.selectedIds === b.selectedIds &&
     a.currentFolderId === b.currentFolderId &&
     a.isInTrash === b.isInTrash,
 );
