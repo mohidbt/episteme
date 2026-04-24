@@ -6,7 +6,6 @@ import { getDefaultLibrary } from "@/lib/default-library";
 import { listAllReferences } from "@/lib/references-server";
 import { listAllFolders } from "@/lib/folders-server";
 import { resolveChain } from "@/lib/folders";
-import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { ReferenceTable } from "@/components/ReferenceTable";
 import { ReferenceDoiInput } from "@/components/ReferenceDoiInput";
 import { ReferenceImportButton } from "@/components/ReferenceImportButton";
@@ -46,7 +45,9 @@ export default async function ReferencesPage({
 
   return (
     <div className="p-6">
-      <Breadcrumbs libraryName={library.name} section="references" folderPath="" />
+      <h1 className="mb-4 font-display text-3xl leading-none tracking-tight">
+        References
+      </h1>
       <div className="mb-6 flex flex-col gap-3">
         <ReferenceDoiInput libraryId={library.id} folderPath="" />
         <div className="flex items-center gap-2">

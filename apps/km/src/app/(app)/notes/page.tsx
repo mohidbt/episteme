@@ -5,7 +5,6 @@ import { getDefaultLibrary } from "@/lib/default-library";
 import { listNotes } from "@/lib/notes-server";
 import { listAllFolders } from "@/lib/folders-server";
 import { resolveChain } from "@/lib/folders";
-import { Breadcrumbs } from "@/components/Breadcrumbs";
 import NotesTable from "@/components/NotesTable";
 
 export default async function NotesPage() {
@@ -29,7 +28,9 @@ export default async function NotesPage() {
 
   return (
     <div className="p-6">
-      <Breadcrumbs libraryName={library.name} section="notes" folderPath="" />
+      <h1 className="mb-4 font-display text-3xl leading-none tracking-tight">
+        Notes
+      </h1>
       {rows.length === 0 ? (
         <div className="flex flex-1 items-center justify-center p-10">
           <div className="text-center">

@@ -6,7 +6,6 @@ import { getDefaultLibrary } from "@/lib/default-library";
 import { listAllPapers } from "@/lib/papers-server";
 import { listAllFolders } from "@/lib/folders-server";
 import { resolveChain } from "@/lib/folders";
-import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { PaperGrid } from "@/components/PaperGrid";
 import { PaperUploadDropzone } from "@/components/PaperUploadDropzone";
 import { FolderFilterDropdown } from "@/components/FolderFilterDropdown";
@@ -45,7 +44,9 @@ export default async function PapersPage({
 
   return (
     <div className="p-6">
-      <Breadcrumbs libraryName={library.name} section="papers" folderPath="" />
+      <h1 className="mb-4 font-display text-3xl leading-none tracking-tight">
+        Papers
+      </h1>
       <PaperUploadDropzone libraryId={library.id} folderPath="" />
       <div className="mb-4 flex items-center gap-3">
         <FolderFilterDropdown
