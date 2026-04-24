@@ -659,7 +659,7 @@ export function FileBrowser({
       onKeyDown={handleKeyDown}
       className={
         itemView === "tile"
-          ? "grid flex-1 auto-rows-min grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-3 overflow-y-auto p-4 outline-hidden"
+          ? "grid flex-1 auto-rows-min grid-cols-[repeat(auto-fill,minmax(120px,1fr))] gap-x-4 gap-y-6 overflow-y-auto p-4 outline-hidden"
           : "flex-1 overflow-y-auto outline-hidden"
       }
     >

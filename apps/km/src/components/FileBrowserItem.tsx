@@ -8,10 +8,10 @@ import {
   BookMarked,
   NotebookPen,
   Table as TableIcon,
+  Sheet,
   type LucideIcon,
 } from "lucide-react";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
-import { Card } from "@/components/ui/card";
 import { TableRow, TableCell } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import type { FbDragActive, FbDragOver } from "./FileBrowser";
@@ -29,6 +29,90 @@ export const KIND_ICON: Record<ItemKind, LucideIcon> = {
   note: NotebookPen,
   data: TableIcon,
 };
+
+// Finder-style large glyph for tile view. Per-kind color and shape.
+function KindGlyph({ kind }: { kind: ItemKind }) {
+  if (kind === "folder") {
+    // Inline folder with a tab — filled apple-blue translucent body.
+    return (
+      <svg
+        aria-hidden
+        viewBox="0 0 64 52"
+        className="h-16 w-16"
+        data-testid="kind-icon-folder"
+        fill="none"
+      >
+        <path
+          d="M4 12a4 4 0 0 1 4-4h15l5 5h28a4 4 0 0 1 4 4v27a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4V12Z"
+          className="fill-blue-400/30 stroke-blue-500/70"
+          strokeWidth={1.5}
+          strokeLinejoin="round"
+        />
+      </svg>
+    );
+  }
+  if (kind === "paper") {
+    // Document with a folded dog-ear corner.
+    return (
+      <svg
+        aria-hidden
+        viewBox="0 0 48 60"
+        className="h-16 w-16"
+        data-testid="kind-icon-paper"
+        fill="none"
+      >
+        <path
+          d="M6 4h24l12 12v36a4 4 0 0 1-4 4H10a4 4 0 0 1-4-4V8a4 4 0 0 1 4-4Z"
+          className="fill-rose-500/10 stroke-rose-500/70"
+          strokeWidth={1.5}
+          strokeLinejoin="round"
+        />
+        <path
+          d="M30 4v10a2 2 0 0 0 2 2h10"
+          className="stroke-rose-500/70"
+          strokeWidth={1.5}
+          strokeLinejoin="round"
+          fill="none"
+        />
+        <path
+          d="M14 32h20M14 40h20M14 48h14"
+          className="stroke-rose-500/50"
+          strokeWidth={1.5}
+          strokeLinecap="round"
+        />
+      </svg>
+    );
+  }
+  if (kind === "reference") {
+    return (
+      <BookMarked
+        aria-hidden
+        data-testid="kind-icon-reference"
+        className="h-16 w-16 text-amber-600/80"
+        strokeWidth={1.5}
+      />
+    );
+  }
+  if (kind === "note") {
+    return (
+      <NotebookPen
+        aria-hidden
+        data-testid="kind-icon-note"
+        className="h-16 w-16 text-emerald-600/70"
+        strokeWidth={1.5}
+      />
+    );
+  }
+  // data
+  return (
+    <Sheet
+      aria-hidden
+      data-testid="kind-icon-data"
+      className="h-16 w-16 text-green-600/80"
+      strokeWidth={1.5}
+    />
+  );
+}
 
 const KIND_LABEL: Record<ItemKind, string> = {
   folder: "Folder",
@@ -198,24 +282,25 @@ function FileBrowserItemImpl({
     );
   }
 
-  // Tile view.
-  const tile = (
-    <Card
-      className={`tile-enter flex aspect-[4/3] w-full cursor-pointer flex-col gap-2 border-border bg-card p-3 transition-all duration-150 hover:-translate-y-px hover:shadow-sm ${
-        isDragging ? "opacity-50" : ""
-      } data-[selected=true]:ring-2 data-[selected=true]:ring-ring data-[over=true]:outline data-[over=true]:outline-2 data-[over=true]:outline-ring`}
-      style={{ animationDelay: `${delayMs}ms` }}
-    >
-      <Icon aria-hidden className="size-4 text-muted-foreground" />
-      <div className="mt-auto flex flex-col gap-0.5">
-        <div className="font-display line-clamp-2 text-sm leading-snug text-card-foreground">
+  // Tile view — Finder-style: large glyph, title, date. No Card wrapper.
+  const tileClass = `tile-enter group/tile flex w-full cursor-pointer flex-col items-center gap-2 rounded-md p-2 outline-hidden transition-colors focus-visible:ring-2 focus-visible:ring-ring ${
+    isDragging ? "opacity-50" : ""
+  } data-[selected=true]:bg-accent/50 data-[over=true]:bg-accent/70 data-[over=true]:outline data-[over=true]:outline-2 data-[over=true]:outline-ring`;
+
+  const tileInner = (
+    <>
+      <div className="flex h-20 items-center justify-center transition-transform duration-150 group-hover/tile:-translate-y-0.5 group-hover/tile:drop-shadow-sm">
+        <KindGlyph kind={item.kind} />
+      </div>
+      <div className="flex w-full flex-col items-center gap-0.5">
+        <div className="font-display line-clamp-2 w-full text-center text-sm leading-snug text-foreground">
           {item.title}
         </div>
-        <div className="text-[11px] text-muted-foreground">
+        <div className="text-center text-[11px] text-muted-foreground">
           {formatUpdated(item.updatedAt)}
         </div>
       </div>
-    </Card>
+    </>
   );
 
   if (item.href != null) {
@@ -231,13 +316,14 @@ function FileBrowserItemImpl({
             {...attributes}
             {...listeners}
             {...commonData}
-            className="block outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
+            className={tileClass}
+            style={{ animationDelay: `${delayMs}ms` }}
             onClick={handleClick}
             onDoubleClick={handleDoubleClick}
           />
         }
       >
-        {tile}
+        {tileInner}
       </FileBrowserContextMenu>
     );
   }
@@ -255,12 +341,14 @@ function FileBrowserItemImpl({
           {...commonData}
           role="button"
           tabIndex={0}
+          className={tileClass}
+          style={{ animationDelay: `${delayMs}ms` }}
           onClick={handleClick}
           onDoubleClick={handleDoubleClick}
         />
       }
     >
-      {tile}
+      {tileInner}
     </FileBrowserContextMenu>
   );
 }
