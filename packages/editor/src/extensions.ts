@@ -14,7 +14,7 @@ export const SlashCommand = Extension.create({
   name: "slashCommand",
 });
 
-export type SlashCommandSuggestion = Omit<SuggestionOptions, "editor" | "pluginKey">;
+export type SlashCommandSuggestion = Omit<SuggestionOptions, "editor" | "pluginKey" | "allow">;
 
 /**
  * Returns true when the cursor is inside a `code_block` node.
@@ -64,13 +64,15 @@ export function editorExtensions(opts?: {
         addProseMirrorPlugins() {
           return [
             Suggestion({
-              // Default allow predicate: suppress inside code blocks and after backslash
-              allow: ({ state }) =>
-                !isInsideCodeBlock(state) && !isPrecededByBackslash(state),
               ...opts.slashCommandSuggestion,
               editor: this.editor,
               pluginKey: SlashCommandPluginKey,
               char: "/",
+              // Non-overrideable regression locks: suppress inside code blocks
+              // and after backslash escape. Type omits `allow` from
+              // SlashCommandSuggestion so callers cannot bypass these.
+              allow: ({ state }) =>
+                !isInsideCodeBlock(state) && !isPrecededByBackslash(state),
             }),
           ];
         },
