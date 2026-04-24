@@ -449,6 +449,9 @@ importers:
       '@hocuspocus/server':
         specifier: 2.15.0
         version: 2.15.0(y-protocols@1.0.7(yjs@13.6.20))(yjs@13.6.20)
+      drizzle-orm:
+        specifier: ^0.45.2
+        version: 0.45.2(@opentelemetry/api@1.9.1)(kysely@0.28.16)(postgres@3.4.9)
       y-prosemirror:
         specifier: 1.2.12
         version: 1.2.12(prosemirror-model@1.25.4)(prosemirror-state@1.4.4)(prosemirror-view@1.41.8)(y-protocols@1.0.7(yjs@13.6.20))(yjs@13.6.20)
@@ -459,9 +462,6 @@ importers:
       '@types/node':
         specifier: ^20.14.0
         version: 20.19.39
-      drizzle-orm:
-        specifier: ^0.45.2
-        version: 0.45.2(@opentelemetry/api@1.9.1)(kysely@0.28.16)(postgres@3.4.9)
       tsx:
         specifier: ^4.19.2
         version: 4.21.0

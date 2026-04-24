@@ -15,6 +15,7 @@
     "@episteme/db": "workspace:*",
     "@episteme/auth": "workspace:*",
     "@episteme/markdown": "workspace:*",
+    "drizzle-orm": "^0.45.2",
     "yjs": "13.6.20",
     "y-prosemirror": "1.2.12"
   },
@@ -22,7 +23,6 @@
     "tsx": "^4.19.2",
     "typescript": "^5.6.3",
     "vitest": "^4.1.4",
-    "@types/node": "^20.14.0",
-    "drizzle-orm": "^0.45.2"
+    "@types/node": "^20.14.0"
   }
 }

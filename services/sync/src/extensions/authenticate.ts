@@ -4,10 +4,6 @@ import { db } from "@episteme/db";
 import { notes } from "@episteme/db/schema";
 import { eq } from "drizzle-orm";
 
-// UUID v4 pattern — documentName format: "note:<uuid>"
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 export function authenticateExt(): Pick<Extension, "onAuthenticate"> {
   return {
     async onAuthenticate({
@@ -18,22 +14,21 @@ export function authenticateExt(): Pick<Extension, "onAuthenticate"> {
       if (!token) throw new Error("unauth: missing session token");
 
       const headers = new Headers();
-      headers.set("cookie", token);
       for (const [k, v] of Object.entries(requestHeaders ?? {})) {
-        if (typeof v === "string") headers.set(k, v);
+        if (k.toLowerCase() === "cookie") continue; // token is the trust anchor, don't let requestHeaders clobber it
+        const value = Array.isArray(v) ? v.join(", ") : v;
+        if (typeof value === "string") headers.set(k, value);
       }
+      headers.set("cookie", token);
 
       const session = await auth.api.getSession({ headers });
       if (!session?.user) throw new Error("unauth: invalid session");
 
-      const colonIdx = documentName.indexOf(":");
-      if (colonIdx === -1) {
+      const match = documentName.match(/^note:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i);
+      if (!match) {
         throw new Error("unauth: malformed documentName — expected 'note:<uuid>'");
       }
-      const idStr = documentName.slice(colonIdx + 1);
-      if (!UUID_RE.test(idStr)) {
-        throw new Error("unauth: malformed documentName — note id must be a UUID");
-      }
+      const idStr = match[1];
 
       const [row] = await db
         .select({ userId: notes.userId })
