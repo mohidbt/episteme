@@ -3,6 +3,21 @@ import { and, desc, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { papers, references_ } from "@episteme/db/schema";
 
+/** Returns all references for the library regardless of folder. Used by /references page. */
+export const listAllReferences = cache(
+  async (libraryId: number, userId: string) =>
+    db
+      .select()
+      .from(references_)
+      .where(
+        and(
+          eq(references_.libraryId, libraryId),
+          eq(references_.userId, userId),
+        ),
+      )
+      .orderBy(desc(references_.createdAt)),
+);
+
 export const listReferences = cache(
   async (libraryId: number, userId: string, folderPath: string) =>
     db
