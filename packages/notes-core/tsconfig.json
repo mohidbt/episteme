@@ -2,6 +2,7 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "outDir": "dist",
+    "declaration": true,
     "baseUrl": ".",
     "paths": {
       "@episteme/db": ["../../packages/db/src/index.ts"],
@@ -12,5 +13,5 @@
     }
   },
   "include": ["src/**/*.ts"],
-  "exclude": ["src/**/*.test.ts"]
+  "exclude": ["src/**/*.test.ts", "src/_test-utils.ts"]
 }

@@ -38,15 +38,6 @@ export default defineConfig({
         __dirname,
         "../../packages/auth/src/index.ts",
       ),
-      // Allow moved test files to use their original @/ imports via re-mapping
-      "@/lib/db": path.resolve(
-        __dirname,
-        "../../packages/db/src/index.ts",
-      ),
-      "@/app/api/_test-utils": path.resolve(
-        __dirname,
-        "src/_test-utils.ts",
-      ),
     },
   },
 });

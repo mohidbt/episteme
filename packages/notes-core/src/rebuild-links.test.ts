@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { and, asc, eq } from "drizzle-orm";
-import { db } from "@/lib/db";
+import { db } from "@episteme/db";
 import {
   libraries,
   noteLinks,
@@ -14,7 +14,7 @@ import {
   createTestUser,
   deleteTestUser,
   type TestUser,
-} from "@/app/api/_test-utils";
+} from "./_test-utils";
 import { rebuildLinks, resolveUnresolvedNoteLinks } from "./rebuild-links";
 
 let u: TestUser;

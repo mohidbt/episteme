@@ -1,8 +1,8 @@
 // @vitest-environment node
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { desc, eq } from "drizzle-orm";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { asc, desc, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { notes, noteRevisions, libraries } from "@episteme/db/schema";
+import { notes, noteRevisions, noteLinks, noteTags, libraries } from "@episteme/db/schema";
 import { createTestUser, deleteTestUser, type TestUser } from "@/app/api/_test-utils";
 
 vi.mock("@/lib/ai/embed-on-save", () => ({
@@ -256,5 +256,72 @@ describe("saveNoteMd", () => {
       .orderBy(desc(noteRevisions.createdAt))
       .limit(1);
     expect(latest.contentMd).toBe("brand new body");
+  });
+});
+
+describe("saveNoteMd integration", () => {
+  // Exercises the saveNoteMd → rebuildLinks pipeline end-to-end.
+  // Kept here (km) because saveNoteMd is a km-only function.
+  let intU: TestUser;
+  let intLibraryId: number;
+  let intSourceNoteId: string;
+  let intTargetNoteId: string;
+
+  beforeAll(async () => {
+    intU = await createTestUser();
+    const [lib] = await db
+      .insert(libraries)
+      .values({ userId: intU.id, name: "Integration Lib" })
+      .returning();
+    intLibraryId = lib.id;
+
+    const [target] = await db
+      .insert(notes)
+      .values({
+        userId: intU.id,
+        libraryId: intLibraryId,
+        title: "Transformers",
+        slug: `transformers-int-${Date.now()}`,
+        contentMd: "",
+      })
+      .returning();
+    intTargetNoteId = target.id;
+
+    const [source] = await db
+      .insert(notes)
+      .values({
+        userId: intU.id,
+        libraryId: intLibraryId,
+        title: "Source",
+        slug: `source-int-${Date.now()}`,
+        contentMd: "",
+      })
+      .returning();
+    intSourceNoteId = source.id;
+  });
+
+  afterAll(async () => {
+    await deleteTestUser(intU.id);
+  });
+
+  afterEach(async () => {
+    await db.delete(noteLinks).where(eq(noteLinks.sourceNoteId, intSourceNoteId));
+    await db.delete(noteTags).where(eq(noteTags.noteId, intSourceNoteId));
+  });
+
+  it("persists links and tags via saveNoteMd → rebuildLinks", async () => {
+    await saveNoteMd(intSourceNoteId, "see [[Transformers]] body #ml", intU.id);
+    const links = await db
+      .select({ targetId: noteLinks.targetId })
+      .from(noteLinks)
+      .where(eq(noteLinks.sourceNoteId, intSourceNoteId));
+    expect(links).toHaveLength(1);
+    expect(links[0].targetId).toBe(intTargetNoteId);
+    const tags = await db
+      .select({ tag: noteTags.tag })
+      .from(noteTags)
+      .where(eq(noteTags.noteId, intSourceNoteId))
+      .orderBy(asc(noteTags.tag));
+    expect(tags.map((r) => r.tag)).toEqual(["ml"]);
   });
 });

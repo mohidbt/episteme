@@ -1,9 +1,9 @@
 // @vitest-environment node
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { and, eq } from "drizzle-orm";
-import { db } from "@/lib/db";
+import { db } from "@episteme/db";
 import { libraries, noteRevisions, notes } from "@episteme/db/schema";
-import { createTestUser, deleteTestUser, type TestUser } from "@/app/api/_test-utils";
+import { createTestUser, deleteTestUser, type TestUser } from "./_test-utils";
 import { createPreAIEditRevision, createRevisionIfNeeded } from "./create-revision";
 
 let u: TestUser;
