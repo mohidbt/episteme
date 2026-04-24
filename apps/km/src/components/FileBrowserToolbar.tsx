@@ -1,8 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
-import { LayoutGrid, List, Upload, ChevronRight } from "lucide-react";
+import { LayoutGrid, List, Upload } from "lucide-react";
 import {
   ToggleGroup,
   ToggleGroupItem,
@@ -19,6 +18,7 @@ import {
 } from "@/components/ui/dialog";
 import { NewItemTrigger } from "@/components/NewItemTrigger";
 import { PaperUploadDropzone } from "@/components/PaperUploadDropzone";
+import { PathPill } from "@/components/PathPill";
 
 export type ViewMode = "tile" | "list";
 
@@ -51,36 +51,21 @@ export function FileBrowserToolbar({
   const folderPath = folderChain.map((c) => c.name).join("/");
   return (
     <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-2">
-      <nav
-        aria-label="Breadcrumbs"
-        className="flex min-w-0 items-center gap-1 text-sm text-muted-foreground"
-      >
-        <Link
-          href="/"
-          className="truncate font-medium text-foreground hover:underline"
-        >
-          {libraryName}
-        </Link>
-        {folderChain.map((c, i) => {
-          const path =
-            "/drive/" +
-            folderChain
-              .slice(0, i + 1)
-              .map((x) => encodeURIComponent(x.name))
-              .join("/");
-          return (
-            <span key={c.id} className="flex min-w-0 items-center gap-1">
-              <ChevronRight aria-hidden className="size-3.5 shrink-0" />
-              <Link
-                href={path}
-                className="truncate hover:text-foreground hover:underline"
-              >
-                {c.name}
-              </Link>
-            </span>
-          );
-        })}
-      </nav>
+      <PathPill
+        segments={[
+          { id: "root", label: libraryName, href: "/" },
+          ...folderChain.map((c, i) => ({
+            id: c.id,
+            label: c.name,
+            href:
+              "/drive/" +
+              folderChain
+                .slice(0, i + 1)
+                .map((x) => encodeURIComponent(x.name))
+                .join("/"),
+          })),
+        ]}
+      />
 
       <div className="flex items-center gap-2">
         <ToggleGroup

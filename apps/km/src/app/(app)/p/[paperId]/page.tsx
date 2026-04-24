@@ -10,7 +10,8 @@ import { papers } from "@episteme/db/schema";
 import { getDefaultLibrary } from "@/lib/default-library";
 import { getReferencesForPaper } from "@/lib/references-server";
 import { denormaliseForList, validateCslJson } from "@/lib/csl";
-import { Breadcrumbs } from "@/components/Breadcrumbs";
+import { PathPill, type PathPillSegment } from "@/components/PathPill";
+import { splitFolderPath } from "@/lib/tree";
 import { PaperMetadataPanel } from "@/components/PaperMetadataPanel";
 import { PaperHighlightsList } from "@/components/PaperHighlightsList";
 
@@ -53,17 +54,28 @@ export default async function PaperPage({
   const firstRef = refs[0];
   const firstRefYear = firstRef ? refYear(firstRef.cslJson) : null;
 
+  const folderSegs = splitFolderPath(paper.folderPath);
+  const pillSegments: PathPillSegment[] = library
+    ? [
+        { id: "root", label: library.name, href: "/" },
+        ...folderSegs.map((name, i) => ({
+          id: `folder-${i}`,
+          label: name,
+          href:
+            "/drive/" +
+            folderSegs
+              .slice(0, i + 1)
+              .map((x) => encodeURIComponent(x))
+              .join("/"),
+        })),
+        { id: "title", label: displayTitle, href: null },
+      ]
+    : [];
+
   return (
     <div className="flex h-full flex-col">
       <div className="px-6 pt-6">
-        {library && (
-          <Breadcrumbs
-            libraryName={library.name}
-            section="papers"
-            folderPath={paper.folderPath}
-            title={displayTitle}
-          />
-        )}
+        {library && <PathPill className="mb-4" segments={pillSegments} />}
         {firstRef && (
           <Link
             href={`/r/${firstRef.id}`}

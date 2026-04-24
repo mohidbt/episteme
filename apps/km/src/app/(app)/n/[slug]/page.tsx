@@ -5,7 +5,8 @@ import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { noteLinks, notes, user } from "@episteme/db/schema";
 import { getDefaultLibrary } from "@/lib/default-library";
-import { Breadcrumbs } from "@/components/Breadcrumbs";
+import { PathPill, type PathPillSegment } from "@/components/PathPill";
+import { splitFolderPath } from "@/lib/tree";
 import { BacklinksPanel } from "@/components/BacklinksPanel";
 import { NotePageClient } from "./NotePageClient";
 
@@ -69,16 +70,26 @@ export default async function NotePage({
   );
 
   const library = await getDefaultLibrary(session.user.id);
+  const folderSegs = splitFolderPath(note.folderPath ?? "");
+  const pillSegments: PathPillSegment[] = library
+    ? [
+        { id: "root", label: library.name, href: "/" },
+        ...folderSegs.map((name, i) => ({
+          id: `folder-${i}`,
+          label: name,
+          href:
+            "/drive/" +
+            folderSegs
+              .slice(0, i + 1)
+              .map((x) => encodeURIComponent(x))
+              .join("/"),
+        })),
+        { id: "title", label: note.title, href: null },
+      ]
+    : [];
   return (
     <div className="mx-auto max-w-3xl p-6">
-      {library && (
-        <Breadcrumbs
-          libraryName={library.name}
-          section="notes"
-          folderPath={note.folderPath ?? ""}
-          title={note.title}
-        />
-      )}
+      {library && <PathPill className="mb-4" segments={pillSegments} />}
       <NotePageClient
         id={note.id}
         title={note.title}
