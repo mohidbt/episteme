@@ -6,6 +6,8 @@ export { WikiLink } from "./tiptap/WikiLink";
 export { TagMark } from "./tiptap/TagMark";
 export { Citation } from "./tiptap/Citation";
 export type { CitationAttrs } from "./tiptap/Citation";
+export { PdfEmbed } from "./tiptap/PdfEmbed";
+export type { PdfEmbedAttrs } from "./tiptap/PdfEmbed";
 export type { JSONContent } from "@tiptap/core";
 export type { Link } from "./wiki-link-regex";
 export type { WikiLinkAttrs, WikiLinkTargetKind } from "./tiptap/WikiLink";
