@@ -8,3 +8,4 @@ export { hydrateWikiLinkResolutions } from "./hydrate-wiki-links";
 export type { ResolvedLinksMap, WikiLinkResolution } from "./hydrate-wiki-links";
 export { parseSlashCommand, insertCitation } from "./slash/index";
 export type { ParsedSlashCommand, CiteCommandPayload } from "./slash/index";
+export { BibliographyHeading } from "./slash/BibliographyHeading";
