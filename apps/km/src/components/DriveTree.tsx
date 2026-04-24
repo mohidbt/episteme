@@ -296,6 +296,7 @@ export function DriveTree({
 
   const driveKey = `${libraryId}:drive:root`;
   const [driveOpen, setDriveOpen] = useExpanded(driveKey, false);
+  const hasContent = root.children.length > 0 || root.items.length > 0;
 
   return (
     <SidebarGroup>
@@ -306,12 +307,14 @@ export function DriveTree({
           aria-expanded={driveOpen}
           className="flex w-full items-center gap-2 text-[11px] font-medium tracking-[0.14em] uppercase text-muted-foreground"
         >
-          <ChevronRight
-            className={`transition-transform ${driveOpen ? "rotate-90" : ""}`}
-            aria-hidden
-          />
           <FolderTree aria-hidden />
           Drive
+          {hasContent && (
+            <ChevronRight
+              className={`ml-auto size-3.5 transition-transform ${driveOpen ? "rotate-90" : ""}`}
+              aria-hidden
+            />
+          )}
         </button>
       </SidebarGroupLabel>
       {driveOpen && (

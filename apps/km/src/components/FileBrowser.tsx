@@ -196,6 +196,22 @@ export function FileBrowser({
 }: Props) {
   const router = useRouter();
   const [view, setView] = useState<ViewMode>("tile");
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem("km:fb:view");
+      if (stored === "tile" || stored === "list") setView(stored);
+    } catch {
+      /* SSR / disabled storage */
+    }
+  }, []);
+  const setViewPersist = useCallback((v: ViewMode) => {
+    setView(v);
+    try {
+      localStorage.setItem("km:fb:view", v);
+    } catch {
+      /* no-op */
+    }
+  }, []);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const anchorRef = useRef<string | null>(null);
 
@@ -217,12 +233,16 @@ export function FileBrowser({
   const handleOpen = useCallback(
     (item: FileBrowserItemData) => {
       if (item.kind === "folder") {
-        router.push(`/drive/${encodeURIComponent(item.title)}`);
+        const segments = [
+          ...folderChain.map((c) => c.name),
+          item.title,
+        ].map(encodeURIComponent);
+        router.push(`/drive/${segments.join("/")}`);
         return;
       }
       if (item.href) router.push(item.href);
     },
-    [router],
+    [router, folderChain],
   );
 
   const onMutate = useCallback(() => router.refresh(), [router]);
@@ -558,7 +578,7 @@ export function FileBrowser({
       onKeyDown={handleKeyDown}
       className={
         itemView === "tile"
-          ? "grid flex-1 auto-rows-min grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-4 overflow-y-auto p-4 outline-hidden"
+          ? "grid flex-1 auto-rows-min grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-3 overflow-y-auto p-4 outline-hidden"
           : "flex-1 overflow-y-auto outline-hidden"
       }
     >
@@ -617,7 +637,7 @@ export function FileBrowser({
           folderId={folderId}
           folderChain={folderChain}
           view={view}
-          onViewChange={setView}
+          onViewChange={setViewPersist}
           onMutate={onMutate}
           isTrashView={isTrashView}
           onEmptyTrash={onEmptyTrashProp ?? handleEmptyTrash}

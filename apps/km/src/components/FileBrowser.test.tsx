@@ -109,9 +109,8 @@ describe("FileBrowser", () => {
         folders={baseFolders}
       />,
     );
-    // Folder open is now a double-click (single click just selects).
     const folderEl = screen.getByTestId("fb-item-f1");
-    fireEvent.doubleClick(folderEl);
+    fireEvent.click(folderEl);
     expect(pushMock).toHaveBeenCalledWith(
       `/drive/${encodeURIComponent("Research")}`,
     );

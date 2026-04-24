@@ -44,7 +44,7 @@ export function FileBrowserToolbar({
         className="flex min-w-0 items-center gap-1 text-sm text-muted-foreground"
       >
         <Link
-          href="/drive"
+          href="/"
           className="truncate font-medium text-foreground hover:underline"
         >
           {libraryName}

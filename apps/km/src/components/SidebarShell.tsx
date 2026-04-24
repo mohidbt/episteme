@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Sidebar as ShadcnSidebar,
@@ -24,12 +25,13 @@ export function SidebarShell({ library, tree }: SidebarShellProps) {
   return (
     <ShadcnSidebar collapsible="none" className="border-r">
       <SidebarHeader className="px-4 pt-5 pb-3">
-        <h1
-          className="font-display text-[20px] leading-none tracking-tight text-sidebar-foreground"
+        <Link
+          href="/"
+          className="text-[15px] font-medium leading-none tracking-tight text-sidebar-foreground hover:underline"
           data-testid="km-sidebar-library-name"
         >
           {library.name}
-        </h1>
+        </Link>
       </SidebarHeader>
       <SidebarContent>
         <DriveTree

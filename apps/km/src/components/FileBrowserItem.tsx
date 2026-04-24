@@ -129,11 +129,18 @@ function FileBrowserItemImpl({
   };
 
   const handleClick = (ev: ReactMouseEvent<HTMLElement>) => {
-    // Selection click: always intercept. If a link is wrapping, also prevent
-    // navigation so single-click just selects; Enter / double-click navigates.
+    // Shift/meta click: multi-select only (suppress navigation).
+    if (ev.shiftKey || ev.metaKey || ev.ctrlKey) {
+      if (item.href != null) ev.preventDefault();
+      ev.stopPropagation();
+      onSelect(item.id, ev);
+      return;
+    }
+    // Plain click: open.
     if (item.href != null) ev.preventDefault();
     ev.stopPropagation();
     onSelect(item.id, ev);
+    onOpen(item);
   };
 
   const handleDoubleClick = (ev: ReactMouseEvent<HTMLElement>) => {
@@ -199,17 +206,17 @@ function FileBrowserItemImpl({
   // Tile view.
   const tile = (
     <Card
-      className={`tile-enter flex size-[180px] cursor-pointer flex-col justify-between gap-2 border-border bg-card p-4 transition-all duration-150 hover:-translate-y-px hover:shadow-sm ${
+      className={`tile-enter flex aspect-[4/3] w-full cursor-pointer flex-col gap-2 border-border bg-card p-3 transition-all duration-150 hover:-translate-y-px hover:shadow-sm ${
         isDragging ? "opacity-50" : ""
       } data-[selected=true]:ring-2 data-[selected=true]:ring-ring data-[over=true]:outline data-[over=true]:outline-2 data-[over=true]:outline-ring`}
       style={{ animationDelay: `${delayMs}ms` }}
     >
-      <Icon aria-hidden className="size-8 text-muted-foreground" />
-      <div className="flex flex-col gap-0.5">
-        <div className="font-display line-clamp-2 text-sm text-card-foreground">
+      <Icon aria-hidden className="size-4 text-muted-foreground" />
+      <div className="mt-auto flex flex-col gap-0.5">
+        <div className="font-display line-clamp-2 text-sm leading-snug text-card-foreground">
           {item.title}
         </div>
-        <div className="text-xs text-muted-foreground">
+        <div className="text-[11px] text-muted-foreground">
           {formatUpdated(item.updatedAt)}
         </div>
       </div>
