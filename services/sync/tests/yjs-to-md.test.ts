@@ -2,24 +2,29 @@
 import { describe, expect, it } from "vitest";
 import * as Y from "yjs";
 import { prosemirrorJSONToYDoc } from "y-prosemirror";
-import { mdToProseMirror } from "@episteme/markdown";
+import { Editor } from "@tiptap/core";
+import { mdToProseMirror, createExtensions } from "@episteme/markdown";
 import { yjsToMd } from "../src/yjs-to-md.js";
+
+/**
+ * Obtain the ProseMirror schema from a temporary Tiptap Editor.
+ * Tiptap needs a DOM context (provided by @vitest-environment jsdom).
+ */
+function getPmSchema() {
+  const editor = new Editor({ extensions: createExtensions() });
+  const schema = editor.schema;
+  editor.destroy();
+  return schema;
+}
 
 /**
  * Seed a Y.Doc from markdown by:
  *  1. mdToProseMirror → ProseMirror JSON
  *  2. prosemirrorJSONToYDoc(schema, json) → Y.Doc
- *
- * We use a minimal Tiptap editor to obtain the schema.
  */
 function mdToYDoc(md: string): Y.Doc {
-  const { Editor } = require("@tiptap/core");
-  const { createExtensions } = require("@episteme/markdown");
   const pmJson = mdToProseMirror(md);
-  const editor = new Editor({ extensions: createExtensions() });
-  const schema = editor.schema;
-  editor.destroy();
-  return prosemirrorJSONToYDoc(schema, pmJson);
+  return prosemirrorJSONToYDoc(getPmSchema(), pmJson);
 }
 
 describe("yjsToMd", () => {

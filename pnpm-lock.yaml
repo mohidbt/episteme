@@ -477,6 +477,9 @@ importers:
       '@hocuspocus/server':
         specifier: 2.15.0
         version: 2.15.0(y-protocols@1.0.7(yjs@13.6.20))(yjs@13.6.20)
+      '@tiptap/core':
+        specifier: ^2.10.0
+        version: 2.27.2(@tiptap/pm@2.27.2)
       drizzle-orm:
         specifier: ^0.45.2
         version: 0.45.2(@opentelemetry/api@1.9.1)(kysely@0.28.16)(postgres@3.4.9)

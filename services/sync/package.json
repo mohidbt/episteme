@@ -16,6 +16,7 @@
     "@episteme/auth": "workspace:*",
     "@episteme/markdown": "workspace:*",
     "@episteme/notes-core": "workspace:*",
+    "@tiptap/core": "^2.10.0",
     "drizzle-orm": "^0.45.2",
     "yjs": "13.6.20",
     "y-prosemirror": "1.2.12"

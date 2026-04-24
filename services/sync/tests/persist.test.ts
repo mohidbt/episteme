@@ -2,10 +2,12 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import * as Y from "yjs";
 import { prosemirrorJSONToYDoc } from "y-prosemirror";
+import { Editor } from "@tiptap/core";
 import { eq } from "drizzle-orm";
 import { db } from "@episteme/db";
 import { libraries, noteLinks, noteRevisions, notes, user } from "@episteme/db/schema";
 import { auth } from "@episteme/auth";
+import { mdToProseMirror, createExtensions } from "@episteme/markdown";
 import { persistExt } from "../src/extensions/persist.js";
 
 // ---------------------------------------------------------------------------
@@ -42,8 +44,6 @@ async function deleteTestUser(id: string): Promise<void> {
 
 /** Build a Y.Doc seeded from markdown via mdToProseMirror + prosemirrorJSONToYDoc. */
 function mdToYDoc(md: string): Y.Doc {
-  const { Editor } = require("@tiptap/core");
-  const { createExtensions, mdToProseMirror } = require("@episteme/markdown");
   const pmJson = mdToProseMirror(md);
   const editor = new Editor({ extensions: createExtensions() });
   const schema = editor.schema;
@@ -141,7 +141,8 @@ describe("persistExt — onStoreDocument", () => {
       .where(eq(notes.id, noteId));
 
     expect(row.yjsState).not.toBeNull();
-    expect(row.yjsState).toBeInstanceOf(Uint8Array);
+    // DB returns Buffer (Node.js), which is a Uint8Array subclass
+    expect(row.yjsState).toBeTruthy();
     expect((row.yjsState as Uint8Array).length).toBeGreaterThan(0);
     expect(row.contentMd).toContain("Hello");
   });
