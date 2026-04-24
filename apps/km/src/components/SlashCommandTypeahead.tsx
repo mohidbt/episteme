@@ -2,6 +2,7 @@
 
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { CitationTypeahead, type CitationTypeaheadRef, type CitationPick } from "./CitationTypeahead";
+import { PdfTypeahead, type PdfTypeaheadRef, type PdfPick } from "./PdfTypeahead";
 
 export interface SlashCommandTypeaheadRef {
   onKeyDown: (props: { event: KeyboardEvent }) => boolean;
@@ -10,6 +11,7 @@ export interface SlashCommandTypeaheadRef {
 export interface SlashCommandPick {
   title: string;
   citation?: CitationPick;
+  pdfEmbed?: PdfPick;
 }
 
 export interface SlashCommandTypeaheadProps {
@@ -37,6 +39,12 @@ const COMMANDS: SlashCommandItem[] = [
     keywords: ["cite", "citation", "reference", "paper", "bib"],
     icon: "📚",
   },
+  {
+    title: "Pdf",
+    description: "Embed a PDF from your library",
+    keywords: ["pdf", "embed", "paper", "reader", "document"],
+    icon: "📄",
+  },
 ];
 
 export const SlashCommandTypeahead = forwardRef<
@@ -44,14 +52,15 @@ export const SlashCommandTypeahead = forwardRef<
   SlashCommandTypeaheadProps
 >(function SlashCommandTypeahead({ query, onSelect }, ref) {
   const [selected, setSelected] = useState(0);
-  // Mode: "commands" (default slash menu) or "cite" (citation search sub-menu)
-  const [mode, setMode] = useState<"commands" | "cite">("commands");
-  // Query within citation mode — typed after selecting Cite
+  // Mode: "commands" | "cite" | "pdf"
+  const [mode, setMode] = useState<"commands" | "cite" | "pdf">("commands");
+  // Query within citation/pdf mode — typed after selecting the sub-command
   const [citeQuery, setCiteQuery] = useState("");
   const citationRef = useRef<CitationTypeaheadRef | null>(null);
+  const pdfRef = useRef<PdfTypeaheadRef | null>(null);
 
   const filtered = useMemo(() => {
-    if (mode === "cite") return [];
+    if (mode === "cite" || mode === "pdf") return [];
     const q = query.toLowerCase().trim();
     if (!q) return COMMANDS;
     return COMMANDS.filter((cmd) => {
@@ -89,6 +98,24 @@ export const SlashCommandTypeahead = forwardRef<
           return citationRef.current?.onKeyDown({ event }) ?? false;
         }
 
+        if (mode === "pdf") {
+          // Backspace when citeQuery empty → go back to command list
+          if (event.key === "Backspace" && citeQuery === "") {
+            setMode("commands");
+            setCiteQuery("");
+            return true;
+          }
+          if (event.key.length === 1 && !event.ctrlKey && !event.metaKey) {
+            setCiteQuery((q) => q + event.key);
+            return true;
+          }
+          if (event.key === "Backspace") {
+            setCiteQuery((q) => q.slice(0, -1));
+            return true;
+          }
+          return pdfRef.current?.onKeyDown({ event }) ?? false;
+        }
+
         if (event.key === "ArrowUp") {
           setSelected((i) =>
             filtered.length === 0 ? 0 : (i + filtered.length - 1) % filtered.length,
@@ -104,6 +131,11 @@ export const SlashCommandTypeahead = forwardRef<
             const cmd = filtered[selected];
             if (cmd.title === "Cite") {
               setMode("cite");
+              setCiteQuery("");
+              return true;
+            }
+            if (cmd.title === "Pdf") {
+              setMode("pdf");
               setCiteQuery("");
               return true;
             }
@@ -132,6 +164,18 @@ export const SlashCommandTypeahead = forwardRef<
     );
   }
 
+  if (mode === "pdf") {
+    return (
+      <PdfTypeahead
+        ref={pdfRef}
+        query={citeQuery}
+        onSelect={(pdfEmbed: PdfPick) => {
+          onSelect({ title: "Pdf", pdfEmbed });
+        }}
+      />
+    );
+  }
+
   if (filtered.length === 0) {
     return (
       <div className="z-50 min-w-[260px] rounded-md border bg-popover p-2 text-sm text-muted-foreground shadow-md">
@@ -150,6 +194,11 @@ export const SlashCommandTypeahead = forwardRef<
             e.preventDefault();
             if (cmd.title === "Cite") {
               setMode("cite");
+              setCiteQuery("");
+              return;
+            }
+            if (cmd.title === "Pdf") {
+              setMode("pdf");
               setCiteQuery("");
               return;
             }

@@ -6,6 +6,7 @@ import {
   type SlashCommandSuggestion,
   type TiptapEditor,
   insertCitation,
+  insertPdfEmbed,
 } from "@episteme/editor";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
@@ -319,12 +320,18 @@ export function NoteEditor({
         // Delete the `/` trigger and any typed query characters
         editor.chain().focus().deleteRange(range).run();
 
-        const p = props as { title: string; citation?: { citekey: string; title: string; authors: string[]; year: string | null } };
+        const p = props as {
+          title: string;
+          citation?: { citekey: string; title: string; authors: string[]; year: string | null };
+          pdfEmbed?: { pdfId: string; title: string; page: number | null };
+        };
         if (p.title === "AI") {
           // Trigger the AI Rephrase portal — increment counter to force re-render
           setAiTriggerCount((c) => c + 1);
         } else if (p.title === "Cite" && p.citation) {
           insertCitation(editor, p.citation);
+        } else if (p.title === "Pdf" && p.pdfEmbed) {
+          insertPdfEmbed(editor, p.pdfEmbed);
         }
       },
       render: () => {

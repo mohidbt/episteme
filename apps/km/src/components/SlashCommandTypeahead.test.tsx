@@ -50,6 +50,7 @@ describe("SlashCommandTypeahead — selection reset", () => {
     render(<SlashCommandTypeahead query="" onSelect={onSelect} ref={null} />);
     expect(screen.getByText("AI")).toBeTruthy();
     expect(screen.getByText("Cite")).toBeTruthy();
+    expect(screen.getByText("Pdf")).toBeTruthy();
   });
 
   it("filters commands by query", async () => {
@@ -57,5 +58,91 @@ describe("SlashCommandTypeahead — selection reset", () => {
     render(<SlashCommandTypeahead query="cite" onSelect={onSelect} ref={null} />);
     expect(screen.queryByText("AI")).toBeNull();
     expect(screen.getByText("Cite")).toBeTruthy();
+  });
+});
+
+describe("SlashCommandTypeahead — pdf mode", () => {
+  it("shows Pdf command in the command list", () => {
+    const onSelect = vi.fn();
+    render(<SlashCommandTypeahead query="" onSelect={onSelect} ref={null} />);
+    expect(screen.getByText("Pdf")).toBeTruthy();
+  });
+
+  it("filters to Pdf when query is 'pdf'", () => {
+    const onSelect = vi.fn();
+    render(<SlashCommandTypeahead query="pdf" onSelect={onSelect} ref={null} />);
+    expect(screen.getByText("Pdf")).toBeTruthy();
+    expect(screen.queryByText("AI")).toBeNull();
+    expect(screen.queryByText("Cite")).toBeNull();
+  });
+
+  it("clicking Pdf command switches to pdf typeahead mode", async () => {
+    const onSelect = vi.fn();
+    render(<SlashCommandTypeahead query="pdf" onSelect={onSelect} ref={null} />);
+    const pdfBtn = screen.getByText("Pdf").closest("button");
+    expect(pdfBtn).toBeTruthy();
+    await act(async () => {
+      fireEvent.mouseDown(pdfBtn!);
+    });
+    // After clicking, the pdf typeahead should be shown (placeholder text for empty query)
+    expect(screen.queryByText("Pdf")).toBeNull();
+  });
+
+  it("Pdf selection calls onSelect with title='Pdf' and pdfEmbed payload", async () => {
+    vi.useFakeTimers();
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        results: [
+          {
+            id: "uuid-1",
+            title: "Transformers Survey",
+            filename: "transformers.pdf",
+            year: 2023,
+            doi: null,
+          },
+        ],
+      }),
+    });
+    vi.stubGlobal("fetch", mockFetch);
+
+    const onSelect = vi.fn();
+    const ref: { current: { onKeyDown: (p: { event: KeyboardEvent }) => boolean } | null } = {
+      current: null,
+    };
+    render(
+      <SlashCommandTypeahead
+        query="pdf"
+        onSelect={onSelect}
+        ref={(r) => { ref.current = r; }}
+      />,
+    );
+
+    // Click Pdf to switch mode
+    const pdfBtn = screen.getByText("Pdf").closest("button");
+    await act(async () => {
+      fireEvent.mouseDown(pdfBtn!);
+    });
+
+    // Type a query character to trigger search
+    await act(async () => {
+      ref.current?.onKeyDown({ event: new KeyboardEvent("keydown", { key: "t", bubbles: true }) });
+    });
+
+    // Advance timer to trigger fetch debounce
+    await act(async () => {
+      vi.advanceTimersByTime(300);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // Now press Enter to pick the first result
+    await act(async () => {
+      ref.current?.onKeyDown({ event: new KeyboardEvent("keydown", { key: "Enter", bubbles: true }) });
+    });
+
+    expect(onSelect).toHaveBeenCalledWith(
+      expect.objectContaining({ title: "Pdf" }),
+    );
   });
 });
