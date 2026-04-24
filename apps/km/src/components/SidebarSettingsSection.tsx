@@ -21,7 +21,7 @@ export function SidebarSettingsSection() {
   const pathname = usePathname();
   return (
     <SidebarGroup>
-      <SidebarGroupLabel className="h-auto gap-2 bg-background border border-border/60 rounded-md px-2 py-1.5 text-[13px] font-semibold text-foreground">
+      <SidebarGroupLabel className="h-auto gap-2 bg-background border border-border/60 rounded-md px-2 py-1.5 text-[13px] font-semibold text-foreground [&>svg]:size-3 [&>svg]:text-foreground">
         <Cog data-icon="inline-start" aria-hidden className="size-3 text-foreground" />
         Settings
       </SidebarGroupLabel>

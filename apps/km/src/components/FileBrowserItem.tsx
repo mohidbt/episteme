@@ -46,8 +46,6 @@ export interface FileBrowserItemData {
   updatedAt: number;
   // for leaves: link href; folders have no href (onOpen is used instead)
   href: string | null;
-  // optional folder name breadcrumb shown in list view
-  folderName?: string | null;
 }
 
 interface Props {
@@ -192,9 +190,6 @@ function FileBrowserItemImpl({
         </TableCell>
         <TableCell>
           <Badge variant="secondary">{KIND_LABEL[item.kind]}</Badge>
-        </TableCell>
-        <TableCell className="text-muted-foreground">
-          {item.folderName ?? "—"}
         </TableCell>
         <TableCell className="text-muted-foreground">
           {formatUpdated(item.updatedAt)}

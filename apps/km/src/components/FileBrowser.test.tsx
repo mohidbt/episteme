@@ -134,7 +134,7 @@ describe("FileBrowser", () => {
     expect(anchor.getAttribute("href")).toBe("/n/my-note");
   });
 
-  it("toggling to list view renders a table with Name/Type/Folder/Updated columns", () => {
+  it("toggling to list view renders a table with Name/Type/Updated columns", () => {
     render(
       <FileBrowser
         libraryId={1}
@@ -149,7 +149,7 @@ describe("FileBrowser", () => {
     const table = screen.getByRole("table");
     const headers = within(table).getAllByRole("columnheader");
     const headerText = headers.map((h) => h.textContent);
-    expect(headerText).toEqual(["Name", "Type", "Folder", "Updated"]);
+    expect(headerText).toEqual(["Name", "Type", "Updated"]);
     expect(within(table).getByText("Research")).toBeTruthy();
     expect(within(table).getByText("On Attention")).toBeTruthy();
     expect(within(table).getByText("My note")).toBeTruthy();

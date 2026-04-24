@@ -603,7 +603,6 @@ export function FileBrowser({
             <TableRow>
               <TableHead>Name</TableHead>
               <TableHead>Type</TableHead>
-              <TableHead>Folder</TableHead>
               <TableHead>Updated</TableHead>
             </TableRow>
           </TableHeader>

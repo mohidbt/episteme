@@ -25,12 +25,12 @@ export function SidebarShell({ library, tree }: SidebarShellProps) {
   return (
     <ShadcnSidebar
       collapsible="none"
-      className="border-r border-foreground rounded-r-xl overflow-hidden"
+      className="border border-foreground rounded-xl overflow-hidden"
     >
       <SidebarHeader className="px-4 pt-5 pb-3">
         <Link
           href="/"
-          className="text-[15px] font-medium leading-none tracking-tight text-sidebar-foreground hover:underline"
+          className="font-display text-[20px] leading-none tracking-tight text-sidebar-foreground hover:underline"
           data-testid="km-sidebar-library-name"
         >
           {library.name}

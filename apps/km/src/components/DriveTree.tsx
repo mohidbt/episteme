@@ -299,7 +299,7 @@ export function DriveTree({
 
   return (
     <SidebarGroup>
-      <SidebarGroupLabel className="h-auto bg-background border border-border/60 rounded-md px-2 py-1.5 text-[13px] font-semibold text-foreground">
+      <SidebarGroupLabel className="h-auto bg-background border border-border/60 rounded-md px-2 py-1.5 text-[13px] font-semibold text-foreground [&>svg]:size-3 [&>svg]:text-foreground">
         <button
           type="button"
           onClick={() => setDriveOpen(!driveOpen)}
@@ -310,7 +310,7 @@ export function DriveTree({
           Drive
           {hasContent && (
             <ChevronRight
-              className={`ml-auto size-3 text-foreground transition-transform ${driveOpen ? "rotate-90" : ""}`}
+              className={`ml-auto !size-3.5 text-foreground transition-transform ${driveOpen ? "rotate-90" : ""}`}
               aria-hidden
             />
           )}
