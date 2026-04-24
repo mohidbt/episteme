@@ -1,8 +1,6 @@
 import type { Editor } from "@tiptap/core";
 import type { CitationAttrs } from "@episteme/markdown";
 
-/** Sentinel attribute name on the bibliography heading node. */
-const BIB_ATTR = "data-bib-heading";
 
 export interface CiteCommandPayload {
   citekey: string;
@@ -36,6 +34,7 @@ export function insertCitation(editor: Editor, payload: CiteCommandPayload): voi
     title,
     authors,
     year,
+    bibIndex: citationIndex, // stamp immediately; re-numbered later if needed
   };
 
   // Build the bibliography list item content
