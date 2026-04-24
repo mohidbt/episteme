@@ -15,6 +15,10 @@ import { Card } from "@/components/ui/card";
 import { TableRow, TableCell } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import type { FbDragActive, FbDragOver } from "./FileBrowser";
+import {
+  FileBrowserContextMenu,
+  type FileBrowserContextMenuHandlers,
+} from "./FileBrowserContextMenu";
 
 export type ItemKind = "folder" | "paper" | "reference" | "note" | "data";
 
@@ -52,12 +56,13 @@ interface Props {
   index: number;
   selected: boolean;
   currentFolderId: string | null;
+  isInTrash: boolean;
   onSelect: (
     id: string,
     ev: ReactMouseEvent<HTMLElement> | { shiftKey?: boolean; metaKey?: boolean; ctrlKey?: boolean },
   ) => void;
   onOpen: (item: FileBrowserItemData) => void;
-  // TODO(T19): right-click context menu
+  contextMenuHandlers: FileBrowserContextMenuHandlers;
 }
 
 const DATE_FMT = new Intl.DateTimeFormat(undefined, {
@@ -76,8 +81,10 @@ function FileBrowserItemImpl({
   index,
   selected,
   currentFolderId,
+  isInTrash,
   onSelect,
   onOpen,
+  contextMenuHandlers,
 }: Props) {
   const Icon = KIND_ICON[item.kind];
   const delayMs = Math.min(index * 30, 600);
@@ -143,42 +150,48 @@ function FileBrowserItemImpl({
 
   if (view === "list") {
     return (
-      <TableRow
-        ref={setRef as (el: HTMLTableRowElement | null) => void}
-        {...attributes}
-        {...listeners}
-        {...commonData}
-        className={`cursor-pointer ${
-          isDragging ? "opacity-50" : ""
-        } data-[selected=true]:bg-accent/60 data-[over=true]:outline data-[over=true]:outline-2 data-[over=true]:outline-ring`}
-        onClick={handleClick}
-        onDoubleClick={handleDoubleClick}
+      <FileBrowserContextMenu
+        item={item}
+        isInTrash={isInTrash}
+        handlers={contextMenuHandlers}
       >
-        <TableCell className="flex items-center gap-2 font-medium">
-          <Icon aria-hidden className="size-4 text-muted-foreground" />
-          {item.href != null ? (
-            <Link
-              href={item.href}
-              className="hover:underline"
-              onClick={(e) => e.preventDefault()}
-              tabIndex={-1}
-            >
-              {item.title}
-            </Link>
-          ) : (
-            <span className="text-left">{item.title}</span>
-          )}
-        </TableCell>
-        <TableCell>
-          <Badge variant="secondary">{KIND_LABEL[item.kind]}</Badge>
-        </TableCell>
-        <TableCell className="text-muted-foreground">
-          {item.folderName ?? "—"}
-        </TableCell>
-        <TableCell className="text-muted-foreground">
-          {formatUpdated(item.updatedAt)}
-        </TableCell>
-      </TableRow>
+        <TableRow
+          ref={setRef as (el: HTMLTableRowElement | null) => void}
+          {...attributes}
+          {...listeners}
+          {...commonData}
+          className={`cursor-pointer ${
+            isDragging ? "opacity-50" : ""
+          } data-[selected=true]:bg-accent/60 data-[over=true]:outline data-[over=true]:outline-2 data-[over=true]:outline-ring`}
+          onClick={handleClick}
+          onDoubleClick={handleDoubleClick}
+        >
+          <TableCell className="flex items-center gap-2 font-medium">
+            <Icon aria-hidden className="size-4 text-muted-foreground" />
+            {item.href != null ? (
+              <Link
+                href={item.href}
+                className="hover:underline"
+                onClick={(e) => e.preventDefault()}
+                tabIndex={-1}
+              >
+                {item.title}
+              </Link>
+            ) : (
+              <span className="text-left">{item.title}</span>
+            )}
+          </TableCell>
+          <TableCell>
+            <Badge variant="secondary">{KIND_LABEL[item.kind]}</Badge>
+          </TableCell>
+          <TableCell className="text-muted-foreground">
+            {item.folderName ?? "—"}
+          </TableCell>
+          <TableCell className="text-muted-foreground">
+            {formatUpdated(item.updatedAt)}
+          </TableCell>
+        </TableRow>
+      </FileBrowserContextMenu>
     );
   }
 
@@ -204,34 +217,46 @@ function FileBrowserItemImpl({
 
   if (item.href != null) {
     return (
-      <Link
-        href={item.href}
-        ref={setRef as (el: HTMLAnchorElement | null) => void}
-        {...attributes}
-        {...listeners}
-        {...commonData}
-        className="block outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
-        onClick={handleClick}
-        onDoubleClick={handleDoubleClick}
+      <FileBrowserContextMenu
+        item={item}
+        isInTrash={isInTrash}
+        handlers={contextMenuHandlers}
       >
-        {tile}
-      </Link>
+        <Link
+          href={item.href}
+          ref={setRef as (el: HTMLAnchorElement | null) => void}
+          {...attributes}
+          {...listeners}
+          {...commonData}
+          className="block outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
+          onClick={handleClick}
+          onDoubleClick={handleDoubleClick}
+        >
+          {tile}
+        </Link>
+      </FileBrowserContextMenu>
     );
   }
 
   return (
-    <div
-      ref={setRef as (el: HTMLDivElement | null) => void}
-      {...attributes}
-      {...listeners}
-      {...commonData}
-      role="button"
-      tabIndex={0}
-      onClick={handleClick}
-      onDoubleClick={handleDoubleClick}
+    <FileBrowserContextMenu
+      item={item}
+      isInTrash={isInTrash}
+      handlers={contextMenuHandlers}
     >
-      {tile}
-    </div>
+      <div
+        ref={setRef as (el: HTMLDivElement | null) => void}
+        {...attributes}
+        {...listeners}
+        {...commonData}
+        role="button"
+        tabIndex={0}
+        onClick={handleClick}
+        onDoubleClick={handleDoubleClick}
+      >
+        {tile}
+      </div>
+    </FileBrowserContextMenu>
   );
 }
 
@@ -242,5 +267,6 @@ export const FileBrowserItem = memo(
     a.view === b.view &&
     a.index === b.index &&
     a.selected === b.selected &&
-    a.currentFolderId === b.currentFolderId,
+    a.currentFolderId === b.currentFolderId &&
+    a.isInTrash === b.isInTrash,
 );

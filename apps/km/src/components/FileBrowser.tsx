@@ -28,6 +28,15 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { NewItemTrigger } from "@/components/NewItemTrigger";
 import {
   FileBrowserItem,
@@ -38,6 +47,8 @@ import {
   FileBrowserToolbar,
   type ViewMode,
 } from "@/components/FileBrowserToolbar";
+import { MoveToDialog } from "@/components/MoveToDialog";
+import type { FileBrowserContextMenuHandlers } from "@/components/FileBrowserContextMenu";
 import type { FolderContents } from "@/lib/folders-server";
 import { isDescendantOf, type FolderRow } from "@/lib/folders";
 
@@ -52,6 +63,8 @@ interface Props {
    * needed for cycle-check when dragging a folder onto another folder.
    */
   folders: FolderRow[];
+  /** True when the current folder is the Trash folder. T20 will wire from server. */
+  isInTrash?: boolean;
 }
 
 /**
@@ -176,11 +189,19 @@ export function FileBrowser({
   folderChain,
   contents,
   folders,
+  isInTrash = false,
 }: Props) {
   const router = useRouter();
   const [view, setView] = useState<ViewMode>("tile");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const anchorRef = useRef<string | null>(null);
+
+  // ── Rename dialog ─────────────────────────────────────────────────────────
+  const [renameTarget, setRenameTarget] = useState<FileBrowserItemData | null>(null);
+  const [renameDraft, setRenameDraft] = useState("");
+
+  // ── MoveToDialog ──────────────────────────────────────────────────────────
+  const [moveTarget, setMoveTarget] = useState<FileBrowserItemData | null>(null);
 
   const items = useMemo(() => flatten(contents), [contents]);
   const itemsById = useMemo(() => {
@@ -202,6 +223,175 @@ export function FileBrowser({
   );
 
   const onMutate = useCallback(() => router.refresh(), [router]);
+
+  // ── Context-menu handler implementations ─────────────────────────────────
+
+  const handleRename = useCallback((item: FileBrowserItemData) => {
+    setRenameTarget(item);
+    setRenameDraft(item.title);
+  }, []);
+
+  const handleRenameSave = useCallback(async () => {
+    if (!renameTarget) return;
+    const name = renameDraft.trim();
+    if (!name) return;
+    const kind = renameTarget.kind;
+    const id = renameTarget.id;
+    const body = kind === "folder" ? { name } : { title: name };
+    const route =
+      kind === "folder"
+        ? `folders/${id}`
+        : kind === "paper"
+          ? `papers/${id}`
+          : kind === "reference"
+            ? `references/${id}`
+            : `notes/${id}`;
+    try {
+      const res = await fetch(`/api/${route}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error(`status ${res.status}`);
+      setRenameTarget(null);
+      router.refresh();
+    } catch {
+      toast.error("Failed to rename");
+    }
+  }, [renameTarget, renameDraft, router]);
+
+  const handleMoveTo = useCallback((item: FileBrowserItemData) => {
+    setMoveTarget(item);
+  }, []);
+
+  const handleMoveConfirm = useCallback(
+    async (targetFolderId: string | null) => {
+      if (!moveTarget) return;
+      try {
+        if (moveTarget.kind === "folder") {
+          const res = await fetch("/api/folders/move", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              folderId: moveTarget.id,
+              targetParentId: targetFolderId,
+            }),
+          });
+          if (!res.ok) throw new Error(`status ${res.status}`);
+        } else {
+          const route =
+            moveTarget.kind === "paper"
+              ? "papers"
+              : moveTarget.kind === "reference"
+                ? "references"
+                : "notes";
+          const res = await fetch(`/api/${route}/${moveTarget.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ folderId: targetFolderId }),
+          });
+          if (!res.ok) throw new Error(`status ${res.status}`);
+        }
+        setMoveTarget(null);
+        router.refresh();
+      } catch {
+        toast.error("Failed to move item");
+      }
+    },
+    [moveTarget, router],
+  );
+
+  const handleTrash = useCallback(
+    async (item: FileBrowserItemData) => {
+      try {
+        const res = await fetch("/api/folders/trash", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ libraryId, target: { kind: item.kind, id: item.id } }),
+        });
+        if (!res.ok) throw new Error(`status ${res.status}`);
+        router.refresh();
+      } catch {
+        toast.error("Failed to move to trash");
+      }
+    },
+    [libraryId, router],
+  );
+
+  const handleRestore = useCallback(
+    async (item: FileBrowserItemData) => {
+      try {
+        const res = await fetch("/api/folders/restore", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ libraryId, target: { kind: item.kind, id: item.id } }),
+        });
+        if (!res.ok) throw new Error(`status ${res.status}`);
+        router.refresh();
+      } catch {
+        toast.error("Failed to restore item");
+      }
+    },
+    [libraryId, router],
+  );
+
+  const handleDeletePermanent = useCallback(
+    async (item: FileBrowserItemData) => {
+      if (!window.confirm(`Permanently delete "${item.title}"? This cannot be undone.`)) return;
+      const plural =
+        item.kind === "folder"
+          ? "folders"
+          : item.kind === "paper"
+            ? "papers"
+            : item.kind === "reference"
+              ? "references"
+              : "notes";
+      try {
+        const res = await fetch(`/api/${plural}/${item.id}`, { method: "DELETE" });
+        if (!res.ok) throw new Error(`status ${res.status}`);
+        router.refresh();
+      } catch {
+        toast.error("Failed to delete item permanently");
+      }
+    },
+    [router],
+  );
+
+  const handleEmptyTrash = useCallback(async () => {
+    if (!window.confirm("Empty trash? All items will be permanently deleted.")) return;
+    try {
+      const res = await fetch("/api/folders/empty", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ libraryId }),
+      });
+      if (!res.ok) throw new Error(`status ${res.status}`);
+      router.refresh();
+    } catch {
+      toast.error("Failed to empty trash");
+    }
+  }, [libraryId, router]);
+
+  const contextMenuHandlers: FileBrowserContextMenuHandlers = useMemo(
+    () => ({
+      onOpen: handleOpen,
+      onRename: handleRename,
+      onMoveTo: handleMoveTo,
+      onTrash: handleTrash,
+      onRestore: handleRestore,
+      onDeletePermanent: handleDeletePermanent,
+      onEmptyTrash: handleEmptyTrash,
+    }),
+    [
+      handleOpen,
+      handleRename,
+      handleMoveTo,
+      handleTrash,
+      handleRestore,
+      handleDeletePermanent,
+      handleEmptyTrash,
+    ],
+  );
 
   const handleSelect = useCallback(
     (
@@ -378,8 +568,10 @@ export function FileBrowser({
             index={i}
             selected={selected.has(item.id)}
             currentFolderId={folderId}
+            isInTrash={isInTrash}
             onSelect={handleSelect}
             onOpen={handleOpen}
+            contextMenuHandlers={contextMenuHandlers}
           />
         ))
       ) : (
@@ -401,8 +593,10 @@ export function FileBrowser({
                 index={i}
                 selected={selected.has(item.id)}
                 currentFolderId={folderId}
+                isInTrash={isInTrash}
                 onSelect={handleSelect}
                 onOpen={handleOpen}
+                contextMenuHandlers={contextMenuHandlers}
               />
             ))}
           </TableBody>
@@ -412,48 +606,90 @@ export function FileBrowser({
   );
 
   return (
-    <div className="flex h-full flex-col">
-      <FileBrowserToolbar
-        libraryId={libraryId}
-        libraryName={libraryName}
-        folderId={folderId}
-        folderChain={folderChain}
-        view={view}
-        onViewChange={setView}
-        onMutate={onMutate}
-      />
+    <>
+      <div className="flex h-full flex-col">
+        <FileBrowserToolbar
+          libraryId={libraryId}
+          libraryName={libraryName}
+          folderId={folderId}
+          folderChain={folderChain}
+          view={view}
+          onViewChange={setView}
+          onMutate={onMutate}
+        />
 
-      {items.length === 0 ? (
-        <div className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center text-sm text-muted-foreground">
-          <p>
-            Drop files here, or click <strong className="text-foreground">New</strong>.
-          </p>
-          <NewItemTrigger
-            libraryId={libraryId}
-            folderId={folderId}
-            variant="toolbar"
-            onMutate={onMutate}
+        {items.length === 0 ? (
+          <div className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center text-sm text-muted-foreground">
+            <p>
+              Drop files here, or click <strong className="text-foreground">New</strong>.
+            </p>
+            <NewItemTrigger
+              libraryId={libraryId}
+              folderId={folderId}
+              variant="toolbar"
+              onMutate={onMutate}
+            />
+          </div>
+        ) : mounted ? (
+          <DndContext
+            sensors={sensors}
+            onDragStart={onDragStart}
+            onDragCancel={onDragCancel}
+            onDragEnd={onDragEnd}
+          >
+            {grid}
+            <DragOverlay>
+              {activeDrag ? (
+                <div className="pointer-events-none rounded-md bg-accent/80 px-2 py-1 text-sm text-foreground ring-1 ring-foreground/20 shadow-sm">
+                  {activeDrag.title ?? "Untitled"}
+                </div>
+              ) : null}
+            </DragOverlay>
+          </DndContext>
+        ) : (
+          grid
+        )}
+      </div>
+
+      {/* Rename dialog */}
+      <Dialog
+        open={renameTarget !== null}
+        onOpenChange={(open) => { if (!open) setRenameTarget(null); }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Rename</DialogTitle>
+          </DialogHeader>
+          <Input
+            data-testid="rename-input"
+            value={renameDraft}
+            onChange={(e) => setRenameDraft(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") { void handleRenameSave(); } }}
+            autoFocus
           />
-        </div>
-      ) : mounted ? (
-        <DndContext
-          sensors={sensors}
-          onDragStart={onDragStart}
-          onDragCancel={onDragCancel}
-          onDragEnd={onDragEnd}
-        >
-          {grid}
-          <DragOverlay>
-            {activeDrag ? (
-              <div className="pointer-events-none rounded-md bg-accent/80 px-2 py-1 text-sm text-foreground ring-1 ring-foreground/20 shadow-sm">
-                {activeDrag.title ?? "Untitled"}
-              </div>
-            ) : null}
-          </DragOverlay>
-        </DndContext>
-      ) : (
-        grid
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRenameTarget(null)}>
+              Cancel
+            </Button>
+            <Button data-testid="rename-save" onClick={() => void handleRenameSave()}>
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* MoveToDialog */}
+      {moveTarget !== null && (
+        <MoveToDialog
+          libraryId={libraryId}
+          folders={folders}
+          currentFolderId={folderId}
+          excludeFolderId={moveTarget.kind === "folder" ? moveTarget.id : null}
+          open
+          onOpenChange={(open) => { if (!open) setMoveTarget(null); }}
+          onMove={handleMoveConfirm}
+        />
       )}
-    </div>
+    </>
   );
 }

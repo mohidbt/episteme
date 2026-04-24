@@ -6,6 +6,8 @@ import {
   cleanup,
   fireEvent,
   within,
+  waitFor,
+  act,
 } from "@testing-library/react";
 
 const pushMock = vi.fn();
@@ -343,5 +345,71 @@ describe("FileBrowser resolveDrop", () => {
     const opts = calls[0][1] as { method: string; body: string };
     expect(opts.method).toBe("POST");
     expect(JSON.parse(opts.body)).toEqual({ folderId: "a", targetParentId: "b" });
+  });
+});
+
+// ── Context-menu tests (T19) ─────────────────────────────────────────────────
+describe("FileBrowser context menu (T19)", () => {
+  beforeEach(() => {
+    // @ts-expect-error jsdom global
+    global.fetch = vi.fn(async () => ({ ok: true, status: 200, json: async () => ({}) }));
+  });
+
+  function renderFb(isInTrash = false) {
+    return render(
+      <FileBrowser
+        libraryId={1}
+        libraryName="Default"
+        folderId={null}
+        folderChain={[]}
+        contents={baseContents}
+        folders={baseFolders}
+        isInTrash={isInTrash}
+      />,
+    );
+  }
+
+  it("right-click on folder in non-trash context shows Rename and Move to…", async () => {
+    renderFb(false);
+    const folderEl = screen.getByTestId("fb-item-f1");
+    await act(async () => {
+      fireEvent.contextMenu(folderEl);
+    });
+    await waitFor(() => {
+      expect(screen.getByRole("menuitem", { name: "Rename" })).toBeTruthy();
+      expect(screen.getByRole("menuitem", { name: "Move to…" })).toBeTruthy();
+    });
+  });
+
+  it("clicking Move to… in context menu opens MoveToDialog with title 'Move to folder'", async () => {
+    renderFb(false);
+    const folderEl = screen.getByTestId("fb-item-f1");
+    await act(async () => {
+      fireEvent.contextMenu(folderEl);
+    });
+    await waitFor(() =>
+      expect(screen.getByRole("menuitem", { name: "Move to…" })).toBeTruthy(),
+    );
+    await act(async () => {
+      fireEvent.click(screen.getByRole("menuitem", { name: "Move to…" }));
+    });
+    await waitFor(() => {
+      expect(screen.getByText("Move to folder")).toBeTruthy();
+    });
+  });
+
+  it("right-click on paper inside trash shows Restore and Delete permanently instead of Rename/Move/Trash", async () => {
+    renderFb(true);
+    const paperEl = screen.getByTestId("fb-item-p1");
+    await act(async () => {
+      fireEvent.contextMenu(paperEl);
+    });
+    await waitFor(() => {
+      expect(screen.getByRole("menuitem", { name: "Restore" })).toBeTruthy();
+      expect(screen.getByRole("menuitem", { name: "Delete permanently" })).toBeTruthy();
+    });
+    expect(screen.queryByRole("menuitem", { name: "Rename" })).toBeNull();
+    expect(screen.queryByRole("menuitem", { name: "Move to…" })).toBeNull();
+    expect(screen.queryByRole("menuitem", { name: "Move to Trash" })).toBeNull();
   });
 });
