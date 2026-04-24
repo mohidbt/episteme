@@ -37,7 +37,6 @@ import type {
   PaperItem,
   ReferenceItem,
 } from "@/lib/tree-server";
-import { NewItemTrigger } from "./NewItemTrigger";
 
 interface Props {
   libraryId: number;
@@ -300,18 +299,18 @@ export function DriveTree({
 
   return (
     <SidebarGroup>
-      <SidebarGroupLabel className="gap-2 text-[11px] font-medium tracking-[0.14em] uppercase text-muted-foreground">
+      <SidebarGroupLabel className="h-auto bg-background border border-border/60 rounded-md px-2 py-1.5 text-[13px] font-semibold text-foreground">
         <button
           type="button"
           onClick={() => setDriveOpen(!driveOpen)}
           aria-expanded={driveOpen}
-          className="flex w-full items-center gap-2 text-[11px] font-medium tracking-[0.14em] uppercase text-muted-foreground"
+          className="flex w-full items-center gap-2 text-[13px] font-semibold text-foreground"
         >
-          <FolderTree aria-hidden />
+          <FolderTree aria-hidden className="size-3 text-foreground" />
           Drive
           {hasContent && (
             <ChevronRight
-              className={`ml-auto size-3.5 transition-transform ${driveOpen ? "rotate-90" : ""}`}
+              className={`ml-auto size-3 text-foreground transition-transform ${driveOpen ? "rotate-90" : ""}`}
               aria-hidden
             />
           )}
@@ -319,12 +318,6 @@ export function DriveTree({
       </SidebarGroupLabel>
       {driveOpen && (
         <SidebarGroupContent>
-          <NewItemTrigger
-            libraryId={libraryId}
-            folderId={null}
-            onMutate={onMutate}
-            variant="group"
-          />
           {mounted ? (
             <DndContext
               sensors={sensors}

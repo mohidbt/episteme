@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { LayoutGrid, List, Upload, ChevronRight } from "lucide-react";
 import {
@@ -8,7 +9,16 @@ import {
 } from "@/components/ui/toggle-group";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { NewItemTrigger } from "@/components/NewItemTrigger";
+import { PaperUploadDropzone } from "@/components/PaperUploadDropzone";
 
 export type ViewMode = "tile" | "list";
 
@@ -37,6 +47,8 @@ export function FileBrowserToolbar({
   onEmptyTrash,
   trashCount = 0,
 }: ToolbarProps) {
+  const [importOpen, setImportOpen] = useState(false);
+  const folderPath = folderChain.map((c) => c.name).join("/");
   return (
     <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-2">
       <nav
@@ -116,17 +128,40 @@ export function FileBrowserToolbar({
               onMutate={onMutate}
             />
 
-            {/* TODO(T21): wire to PaperUploadDropzone with folder target. */}
             <Button
               variant="outline"
               size="sm"
-              onClick={() => {
-                /* no-op in T16 */
-              }}
+              onClick={() => setImportOpen(true)}
             >
               <Upload aria-hidden className="size-3.5" />
               Import
             </Button>
+            <Dialog open={importOpen} onOpenChange={setImportOpen}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Import papers</DialogTitle>
+                  <DialogDescription>
+                    Drop or choose PDF files to upload into this folder.
+                  </DialogDescription>
+                </DialogHeader>
+                <PaperUploadDropzone
+                  libraryId={libraryId}
+                  folderPath={folderPath}
+                  folderId={folderId}
+                />
+                <DialogFooter>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setImportOpen(false);
+                      onMutate();
+                    }}
+                  >
+                    Done
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
           </>
         )}
       </div>

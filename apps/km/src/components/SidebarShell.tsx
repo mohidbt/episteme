@@ -23,7 +23,10 @@ export function SidebarShell({ library, tree }: SidebarShellProps) {
   const onMutate = () => router.refresh();
   const trashFolder = tree.folders.find((f) => f.isTrash) ?? null;
   return (
-    <ShadcnSidebar collapsible="none" className="border-r">
+    <ShadcnSidebar
+      collapsible="none"
+      className="border-r border-foreground rounded-r-xl overflow-hidden"
+    >
       <SidebarHeader className="px-4 pt-5 pb-3">
         <Link
           href="/"
