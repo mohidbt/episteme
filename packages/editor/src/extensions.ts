@@ -3,6 +3,7 @@ import Suggestion, { type SuggestionOptions } from "@tiptap/suggestion";
 import { Extension } from "@tiptap/core";
 import { PluginKey } from "@tiptap/pm/state";
 import { createExtensions as baseExtensions, WikiLink, TagMark, Citation } from "@episteme/markdown";
+import { BibliographyHeading } from "./slash/BibliographyHeading";
 
 export type WikiLinkSuggestion = Omit<SuggestionOptions, "editor" | "pluginKey">;
 
@@ -52,6 +53,7 @@ export function editorExtensions(opts?: {
     ...baseExtensions(),
     wikiLink,
     TagMark,
+    BibliographyHeading,
     Placeholder.configure({ placeholder: opts?.placeholder ?? "Start writing…" }),
     ...(slashCommand ? [slashCommand] : []),
   ];
