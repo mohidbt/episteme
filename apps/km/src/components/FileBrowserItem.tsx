@@ -37,7 +37,7 @@ function KindGlyph({ kind }: { kind: ItemKind }) {
     return (
       <svg
         aria-hidden
-        viewBox="0 0 64 52"
+        viewBox="0 -6 64 64"
         className="h-16 w-16"
         data-testid="kind-icon-folder"
         fill="none"
@@ -56,7 +56,7 @@ function KindGlyph({ kind }: { kind: ItemKind }) {
     return (
       <svg
         aria-hidden
-        viewBox="0 0 48 60"
+        viewBox="-8 -2 64 64"
         className="h-16 w-16"
         data-testid="kind-icon-paper"
         fill="none"
