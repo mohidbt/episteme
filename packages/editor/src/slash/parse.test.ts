@@ -31,4 +31,20 @@ describe("parseSlashCommand", () => {
     // but the trigger matcher test covers the suppression in code blocks
     expect(parseSlashCommand("/cite transformer")).toEqual({ cmd: "cite", args: "transformer" });
   });
+
+  it('"/link foo" -> { cmd: "link", args: "foo" }', () => {
+    expect(parseSlashCommand("/link foo")).toEqual({ cmd: "link", args: "foo" });
+  });
+
+  it('"/link" with no args -> { cmd: "link", args: "" }', () => {
+    expect(parseSlashCommand("/link")).toEqual({ cmd: "link", args: "" });
+  });
+
+  it('"/agent triage X" -> { cmd: "agent", args: "triage X" }', () => {
+    expect(parseSlashCommand("/agent triage X")).toEqual({ cmd: "agent", args: "triage X" });
+  });
+
+  it('"/agent" with no args -> { cmd: "agent", args: "" }', () => {
+    expect(parseSlashCommand("/agent")).toEqual({ cmd: "agent", args: "" });
+  });
 });
