@@ -4,6 +4,7 @@ import Italic from "@tiptap/extension-italic";
 import TaskList from "@tiptap/extension-task-list";
 import TaskItem from "@tiptap/extension-task-item";
 import { Markdown } from "tiptap-markdown";
+import { Citation } from "./tiptap/Citation";
 
 // Minimal Link mark so tiptap-markdown's link parser/serializer activates.
 // We don't need the full @tiptap/extension-link (click handling, paste rules)
@@ -50,6 +51,7 @@ export const createExtensions = () => {
     Link,
     TaskList,
     TaskItem.configure({ nested: true }),
+    Citation,
     // NOTE: Task 3's live editor will want `transformPastedText: true` so
     // pasted markdown is parsed into nodes; keep it false here for headless
     // round-tripping where we already pass a markdown string to setContent.
