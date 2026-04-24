@@ -1,6 +1,6 @@
 "use client";
 
-import { forwardRef, useImperativeHandle, useMemo, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { CitationTypeahead, type CitationTypeaheadRef, type CitationPick } from "./CitationTypeahead";
 
 export interface SlashCommandTypeaheadRef {
@@ -61,7 +61,7 @@ export const SlashCommandTypeahead = forwardRef<
   }, [query, mode]);
 
   // Reset selection when filtered list changes
-  useMemo(() => {
+  useEffect(() => {
     if (mode === "commands") setSelected(0);
   }, [filtered.length, mode]);
 
