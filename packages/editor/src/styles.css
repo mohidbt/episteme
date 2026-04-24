@@ -34,6 +34,42 @@
   text-decoration: underline;
 }
 
+/* PDF embed card */
+.pdf-embed {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 6px;
+  padding: 10px 14px;
+  margin: 8px 0;
+  background: var(--card, #fff);
+}
+.pdf-embed-thumb {
+  width: 40px;
+  height: 52px;
+  background: var(--muted, #f3f4f6);
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+.pdf-embed-title {
+  flex: 1;
+  font-weight: 500;
+  font-size: 0.95em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pdf-embed-open {
+  font-size: 0.85em;
+  color: var(--primary, #2563eb);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.pdf-embed-open:hover {
+  text-decoration: underline;
+}
+
 /* Appearance modifiers: applied via data attributes on the <main> ancestor
    in apps/km so the editor package stays unaware of the preference surface. */
 main[data-prose-font="serif"] .episteme-prose {
