@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { mdToProseMirror, proseMirrorToMd } from "../index.js";
+import { Editor, type Content } from "@tiptap/core";
+import { mdToProseMirror, proseMirrorToMd, createExtensions } from "../index.js";
 import type { JSONContent } from "@tiptap/core";
+import { Citation } from "./Citation";
+
+function makeEditor(content: Content) {
+  return new Editor({
+    extensions: [...createExtensions(), Citation],
+    content,
+  });
+}
 
 describe("Citation node", () => {
   it("MD serializes citation node -> [@citekey]", () => {
@@ -48,6 +57,88 @@ describe("Citation node", () => {
     const citation = inlineNodes.find((n: JSONContent) => n.type === "citation");
     expect(citation).toBeTruthy();
     expect(citation?.attrs?.citekey).toBe("doe2024");
+  });
+
+  it("renderHTML: citation with bibIndex=2 produces <sup> element with text [2]", () => {
+    const editor = makeEditor({
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          content: [
+            {
+              type: "citation",
+              attrs: {
+                citekey: "doe2024",
+                title: "A Great Paper",
+                authors: ["Doe, J."],
+                year: "2024",
+                bibIndex: 2,
+              },
+            },
+          ],
+        },
+      ],
+    });
+    const html = editor.getHTML();
+    editor.destroy();
+    expect(html).toContain("<sup");
+    expect(html).toContain("[2]");
+    expect(html).not.toContain("[@doe2024]");
+  });
+
+  it("renderHTML: citation with bibIndex=null renders [?]", () => {
+    const editor = makeEditor({
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          content: [
+            {
+              type: "citation",
+              attrs: {
+                citekey: "smith2020",
+                title: "Some Paper",
+                authors: ["Smith, J."],
+                year: "2020",
+                bibIndex: null,
+              },
+            },
+          ],
+        },
+      ],
+    });
+    const html = editor.getHTML();
+    editor.destroy();
+    expect(html).toContain("<sup");
+    expect(html).toContain("[?]");
+  });
+
+  it("MD serializer does NOT include bibIndex in markdown output", () => {
+    const doc: JSONContent = {
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          content: [
+            {
+              type: "citation",
+              attrs: {
+                citekey: "doe2024",
+                title: "A Great Paper",
+                authors: ["Doe, J."],
+                year: "2024",
+                bibIndex: 3,
+              },
+            },
+          ],
+        },
+      ],
+    };
+    const md = proseMirrorToMd(doc);
+    expect(md).toContain("[@doe2024]");
+    expect(md).not.toContain("bibIndex");
+    expect(md).not.toContain("[3]");
   });
 
   it("does NOT parse [@citekey] inside code fence as citation", () => {

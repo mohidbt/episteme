@@ -6,6 +6,8 @@ export interface CitationAttrs {
   title: string | null;
   authors: string[] | null;
   year: string | null;
+  /** 1-based bibliography index. Display-only — not serialized to MD. */
+  bibIndex: number | null;
 }
 
 /**
@@ -49,22 +51,44 @@ export const Citation = Node.create({
         renderHTML: (attrs) =>
           attrs.year ? { "data-year": attrs.year } : {},
       },
+      /**
+       * Display-only bibliography index (1-based). NOT serialized to MD.
+       * Stamped by insertCitation() after appending the bibliography list item.
+       * Null = not yet numbered (renders as [?]).
+       */
+      bibIndex: {
+        default: null,
+        // Not parsed from HTML (recomputed on load via renumberBibliography)
+        parseHTML: () => null,
+        // Not rendered as an HTML attribute (it's baked into the text content)
+        renderHTML: () => ({}),
+      },
     };
   },
 
   parseHTML() {
-    return [{ tag: 'span[data-type="citation"]' }];
+    return [{ tag: 'sup[data-type="citation"]' }];
   },
 
   renderHTML({ node, HTMLAttributes }) {
     const attrs = node.attrs as CitationAttrs;
+    const index = attrs.bibIndex ?? "?";
+    const hoverTitle = [
+      attrs.title,
+      attrs.authors?.join(", "),
+      attrs.year ? `(${attrs.year})` : null,
+    ]
+      .filter(Boolean)
+      .join(" — ");
+
     return [
-      "span",
+      "sup",
       mergeAttributes(HTMLAttributes, {
         "data-type": "citation",
         class: "citation",
+        ...(hoverTitle ? { title: hoverTitle } : {}),
       }),
-      `[@${attrs.citekey}]`,
+      `[${index}]`,
     ];
   },
 
@@ -117,7 +141,8 @@ export const Citation = Node.create({
             md.renderer.rules[TOKEN] = (tokens, idx) => {
               const meta = tokens[idx].meta as { citekey: string };
               const escaped = md.utils.escapeHtml(meta.citekey);
-              return `<span data-type="citation" data-citekey="${escaped}"></span>`;
+              // Emit <sup> to match parseHTML selector and Tiptap's renderHTML output.
+              return `<sup data-type="citation" data-citekey="${escaped}"></sup>`;
             };
           },
         },
