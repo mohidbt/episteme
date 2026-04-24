@@ -3,6 +3,7 @@ import { auth } from "@episteme/auth";
 import { db } from "@episteme/db";
 import { notes } from "@episteme/db/schema";
 import { eq } from "drizzle-orm";
+import { parseNoteDocumentName } from "./document-name.js";
 
 export function authenticateExt(): Pick<Extension, "onAuthenticate"> {
   return {
@@ -24,11 +25,10 @@ export function authenticateExt(): Pick<Extension, "onAuthenticate"> {
       const session = await auth.api.getSession({ headers });
       if (!session?.user) throw new Error("unauth: invalid session");
 
-      const match = documentName.match(/^note:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i);
-      if (!match) {
+      const idStr = parseNoteDocumentName(documentName);
+      if (!idStr) {
         throw new Error("unauth: malformed documentName — expected 'note:<uuid>'");
       }
-      const idStr = match[1];
 
       const [row] = await db
         .select({ userId: notes.userId })
