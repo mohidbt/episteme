@@ -155,4 +155,25 @@ describe("authenticateExt — onAuthenticate", () => {
       ),
     ).rejects.toThrow(/unauth/i);
   });
+
+  it("rejects when documentName has a non-note prefix (e.g. 'paper:<uuid>')", async () => {
+    await expect(
+      ext.onAuthenticate!(
+        payload({ token: userA.cookie, documentName: `paper:${noteIdA}` }),
+      ),
+    ).rejects.toThrow(/malformed/i);
+  });
+
+  it("token wins over requestHeaders.cookie (cookie precedence)", async () => {
+    // token = userA's session; requestHeaders.cookie = userB's session
+    // The note belongs to userA — should resolve, proving token is the trust anchor
+    const result = await ext.onAuthenticate!(
+      payload({
+        token: userA.cookie,
+        requestHeaders: { cookie: userB.cookie },
+        documentName: `note:${noteIdA}`,
+      }),
+    );
+    expect(result).toMatchObject({ user: { id: userA.id } });
+  });
 });
