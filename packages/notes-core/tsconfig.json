@@ -1,0 +1,16 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "baseUrl": ".",
+    "paths": {
+      "@episteme/db": ["../../packages/db/src/index.ts"],
+      "@episteme/db/schema": ["../../packages/db/src/schema/index.ts"],
+      "@episteme/db/client": ["../../packages/db/src/client.ts"],
+      "@episteme/markdown": ["../../packages/markdown/src/index.ts"],
+      "@episteme/auth": ["../../packages/auth/src/index.ts"]
+    }
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/**/*.test.ts"]
+}

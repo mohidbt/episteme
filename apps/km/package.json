@@ -20,6 +20,7 @@
     "@dnd-kit/sortable": "^10.0.0",
     "@episteme/auth": "workspace:*",
     "@episteme/db": "workspace:*",
+    "@episteme/notes-core": "workspace:*",
     "@episteme/editor": "workspace:*",
     "@episteme/markdown": "workspace:*",
     "@episteme/storage": "workspace:*",

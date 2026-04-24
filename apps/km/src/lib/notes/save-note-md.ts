@@ -2,8 +2,8 @@ import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { notes } from "@episteme/db/schema";
 import { mdToProseMirror, type JSONContent } from "@episteme/markdown";
-import { rebuildLinks } from "./rebuild-links";
-import { createRevisionIfNeeded, type RevisionReason } from "./create-revision";
+import { rebuildLinks } from "@episteme/notes-core";
+import { createRevisionIfNeeded, type RevisionReason } from "@episteme/notes-core";
 import { embedOnSave } from "@/lib/ai/embed-on-save";
 
 // TODO(phase-0.2 follow-up): Tiptap's `new Editor(...)` requires a DOM (reads

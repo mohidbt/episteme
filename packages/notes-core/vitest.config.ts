@@ -3,7 +3,7 @@ import path from "path";
 
 export default defineConfig({
   test: {
-    include: ["tests/**/*.test.ts"],
+    include: ["src/**/*.test.ts"],
     environment: "node",
     env: {
       DATABASE_URL:
@@ -30,17 +30,22 @@ export default defineConfig({
         __dirname,
         "../../packages/db/src/index.ts",
       ),
+      "@episteme/markdown": path.resolve(
+        __dirname,
+        "../../packages/markdown/src/index.ts",
+      ),
       "@episteme/auth": path.resolve(
         __dirname,
         "../../packages/auth/src/index.ts",
       ),
-      "@episteme/notes-core": path.resolve(
+      // Allow moved test files to use their original @/ imports via re-mapping
+      "@/lib/db": path.resolve(
         __dirname,
-        "../../packages/notes-core/src/index.ts",
+        "../../packages/db/src/index.ts",
       ),
-      "@episteme/markdown": path.resolve(
+      "@/app/api/_test-utils": path.resolve(
         __dirname,
-        "../../packages/markdown/src/index.ts",
+        "src/_test-utils.ts",
       ),
     },
   },

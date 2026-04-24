@@ -5,8 +5,7 @@ import { libraries } from "@episteme/db/schema";
 import { getUserIdFromRequest } from "@/lib/auth";
 import { noteCreateSchema } from "@/lib/validators";
 import { jsonError, requireOwned, resolveNoteSlug } from "@/lib/crud";
-import { resolveUnresolvedNoteLinks } from "@/lib/notes/rebuild-links";
-import { createRevisionIfNeeded } from "@/lib/notes/create-revision";
+import { resolveUnresolvedNoteLinks, createRevisionIfNeeded } from "@episteme/notes-core";
 
 export async function GET(req: Request) {
   const userId = await getUserIdFromRequest(req);
