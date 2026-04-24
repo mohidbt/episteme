@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
-import { render, screen, cleanup } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent, act } from "@testing-library/react";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import type { FolderRow } from "@/lib/folders";
 import { resolveSidebarDrop } from "./DriveTree";
@@ -25,6 +25,7 @@ afterEach(() => {
   toastErrorMock.mockReset();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
+  window.localStorage.clear();
 });
 
 // Stub localStorage / matchMedia for SidebarProvider
@@ -69,23 +70,61 @@ beforeEach(() => {
 
 import { DriveTree } from "./DriveTree";
 
+const STORAGE_NS = "km.sidebar.expand.v1";
+
+function makeDriveTree(overrides: Partial<Parameters<typeof DriveTree>[0]> = {}) {
+  return (
+    <SidebarProvider>
+      <DriveTree
+        libraryId={1}
+        folders={[{ id: "f1", name: "Research", isTrash: false, parentId: null, sortOrder: 0 }]}
+        papers={[{ id: "p1", title: "On Attention", folderId: null }]}
+        references={[]}
+        notes={[]}
+        trashId={null}
+        onMutate={() => {}}
+        {...overrides}
+      />
+    </SidebarProvider>
+  );
+}
+
 describe("DriveTree render", () => {
-  it("renders a folder and a root-level paper", () => {
-    render(
-      <SidebarProvider>
-        <DriveTree
-          libraryId={1}
-          folders={[{ id: "f1", name: "Research", isTrash: false, parentId: null, sortOrder: 0 }]}
-          papers={[{ id: "p1", title: "On Attention", folderId: null }]}
-          references={[]}
-          notes={[]}
-          trashId={null}
-          onMutate={() => {}}
-        />
-      </SidebarProvider>,
-    );
+  it("renders Drive label visible at all times", () => {
+    render(makeDriveTree());
+    expect(screen.getByText("Drive")).toBeTruthy();
+  });
+
+  it("is collapsed by default — body items are hidden", () => {
+    render(makeDriveTree());
+    expect(screen.queryByText("Research")).toBeNull();
+    expect(screen.queryByText("On Attention")).toBeNull();
+  });
+
+  it("Drive label is clickable and toggles expansion", () => {
+    render(makeDriveTree());
+    // Default: collapsed — content hidden
+    expect(screen.queryByText("Research")).toBeNull();
+    // Click the Drive label toggle button
+    const toggle = screen.getByRole("button", { name: /drive/i });
+    fireEvent.click(toggle);
+    // Now expanded — content visible
     expect(screen.getByText("Research")).toBeTruthy();
     expect(screen.getByText("On Attention")).toBeTruthy();
+  });
+
+  it("expansion state persists in localStorage", async () => {
+    const { unmount } = render(makeDriveTree());
+    const toggle = screen.getByRole("button", { name: /drive/i });
+    fireEvent.click(toggle);
+    // localStorage should have truthy value for drive:root key
+    const raw = window.localStorage.getItem(STORAGE_NS);
+    const stored = raw ? JSON.parse(raw) : {};
+    expect(stored["1:drive:root"]).toBe(true);
+    unmount();
+    // Remount — state should be restored (expanded) after effects fire
+    await act(async () => { render(makeDriveTree()); });
+    expect(screen.getByText("Research")).toBeTruthy();
   });
 });
 

@@ -294,39 +294,55 @@ export function DriveTree({
     </SidebarMenu>
   );
 
+  const driveKey = `${libraryId}:drive:root`;
+  const [driveOpen, setDriveOpen] = useExpanded(driveKey, false);
+
   return (
     <SidebarGroup>
       <SidebarGroupLabel className="gap-2 text-[11px] font-medium tracking-[0.14em] uppercase text-muted-foreground">
-        <FolderTree data-icon="inline-start" aria-hidden />
-        Drive
+        <button
+          type="button"
+          onClick={() => setDriveOpen(!driveOpen)}
+          aria-expanded={driveOpen}
+          className="flex w-full items-center gap-2 text-[11px] font-medium tracking-[0.14em] uppercase text-muted-foreground"
+        >
+          <ChevronRight
+            className={`transition-transform ${driveOpen ? "rotate-90" : ""}`}
+            aria-hidden
+          />
+          <FolderTree aria-hidden />
+          Drive
+        </button>
       </SidebarGroupLabel>
-      <NewItemTrigger
-        libraryId={libraryId}
-        folderId={null}
-        onMutate={onMutate}
-        variant="group"
-      />
-      <SidebarGroupContent>
-        {mounted ? (
-          <DndContext
-            sensors={sensors}
-            onDragStart={onDragStart}
-            onDragCancel={onDragCancel}
-            onDragEnd={onDragEnd}
-          >
-            {tree}
-            <DragOverlay>
-              {activeDrag ? (
-                <div className="pointer-events-none rounded-md bg-sidebar-accent/80 px-2 py-1 text-sm text-sidebar-foreground ring-1 ring-foreground/20 shadow-sm">
-                  {activeDrag.label}
-                </div>
-              ) : null}
-            </DragOverlay>
-          </DndContext>
-        ) : (
-          tree
-        )}
-      </SidebarGroupContent>
+      {driveOpen && (
+        <SidebarGroupContent>
+          <NewItemTrigger
+            libraryId={libraryId}
+            folderId={null}
+            onMutate={onMutate}
+            variant="group"
+          />
+          {mounted ? (
+            <DndContext
+              sensors={sensors}
+              onDragStart={onDragStart}
+              onDragCancel={onDragCancel}
+              onDragEnd={onDragEnd}
+            >
+              {tree}
+              <DragOverlay>
+                {activeDrag ? (
+                  <div className="pointer-events-none rounded-md bg-sidebar-accent/80 px-2 py-1 text-sm text-sidebar-foreground ring-1 ring-foreground/20 shadow-sm">
+                    {activeDrag.label}
+                  </div>
+                ) : null}
+              </DragOverlay>
+            </DndContext>
+          ) : (
+            tree
+          )}
+        </SidebarGroupContent>
+      )}
     </SidebarGroup>
   );
 }

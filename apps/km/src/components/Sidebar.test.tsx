@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, cleanup, within } from "@testing-library/react";
+import { render, screen, cleanup, within, fireEvent } from "@testing-library/react";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { SidebarShell } from "./SidebarShell";
 import type { TreeResponse } from "@/lib/tree-server";
@@ -92,6 +92,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  window.localStorage.clear();
 });
 
 describe("Sidebar", () => {
@@ -117,6 +118,8 @@ describe("Sidebar", () => {
 
   it("renders Trash row at bottom of Drive with sidebar-trash testid", () => {
     renderShell(baseTree());
+    // Drive is collapsed by default — expand it first
+    fireEvent.click(screen.getByRole("button", { name: /drive/i }));
     const trash = screen.getByTestId("sidebar-trash");
     expect(trash).toBeTruthy();
     expect(within(trash).getByText("Trash")).toBeTruthy();
@@ -134,6 +137,8 @@ describe("Sidebar", () => {
       ],
     });
     renderShell(tree);
+    // Drive is collapsed by default — expand it first
+    fireEvent.click(screen.getByRole("button", { name: /drive/i }));
     expect(screen.queryByTestId("sidebar-trash-badge")).toBeTruthy();
   });
 
