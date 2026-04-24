@@ -156,6 +156,28 @@ describe("FileBrowser", () => {
     expect(within(table).getByText("My note")).toBeTruthy();
   });
 
+  it("list view has no div between tbody and tr (regression: invalid HTML nesting)", () => {
+    const { container } = render(
+      <FileBrowser
+        libraryId={1}
+        libraryName="Default"
+        folderId={null}
+        folderChain={[]}
+        contents={baseContents}
+        folders={baseFolders}
+      />,
+    );
+    fireEvent.click(screen.getByTestId("fb-view-list"));
+    // There must be no div directly inside tbody — that would be invalid HTML.
+    expect(container.querySelector("tbody > div")).toBeNull();
+    // And items must still appear as rows inside tbody.
+    const tbody = container.querySelector("tbody");
+    expect(tbody).toBeTruthy();
+    const rows = tbody!.querySelectorAll("tr");
+    // 3 items in baseContents (folder f1, paper p1, note n1)
+    expect(rows.length).toBe(3);
+  });
+
   it("renders empty state when no items", () => {
     render(
       <FileBrowser

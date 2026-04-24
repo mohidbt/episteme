@@ -154,43 +154,44 @@ function FileBrowserItemImpl({
         item={item}
         isInTrash={isInTrash}
         handlers={contextMenuHandlers}
+        render={
+          <TableRow
+            ref={setRef as (el: HTMLTableRowElement | null) => void}
+            {...attributes}
+            {...listeners}
+            {...commonData}
+            className={`cursor-pointer ${
+              isDragging ? "opacity-50" : ""
+            } data-[selected=true]:bg-accent/60 data-[over=true]:outline data-[over=true]:outline-2 data-[over=true]:outline-ring`}
+            onClick={handleClick}
+            onDoubleClick={handleDoubleClick}
+          />
+        }
       >
-        <TableRow
-          ref={setRef as (el: HTMLTableRowElement | null) => void}
-          {...attributes}
-          {...listeners}
-          {...commonData}
-          className={`cursor-pointer ${
-            isDragging ? "opacity-50" : ""
-          } data-[selected=true]:bg-accent/60 data-[over=true]:outline data-[over=true]:outline-2 data-[over=true]:outline-ring`}
-          onClick={handleClick}
-          onDoubleClick={handleDoubleClick}
-        >
-          <TableCell className="flex items-center gap-2 font-medium">
-            <Icon aria-hidden className="size-4 text-muted-foreground" />
-            {item.href != null ? (
-              <Link
-                href={item.href}
-                className="hover:underline"
-                onClick={(e) => e.preventDefault()}
-                tabIndex={-1}
-              >
-                {item.title}
-              </Link>
-            ) : (
-              <span className="text-left">{item.title}</span>
-            )}
-          </TableCell>
-          <TableCell>
-            <Badge variant="secondary">{KIND_LABEL[item.kind]}</Badge>
-          </TableCell>
-          <TableCell className="text-muted-foreground">
-            {item.folderName ?? "—"}
-          </TableCell>
-          <TableCell className="text-muted-foreground">
-            {formatUpdated(item.updatedAt)}
-          </TableCell>
-        </TableRow>
+        <TableCell className="flex items-center gap-2 font-medium">
+          <Icon aria-hidden className="size-4 text-muted-foreground" />
+          {item.href != null ? (
+            <Link
+              href={item.href}
+              className="hover:underline"
+              onClick={(e) => e.preventDefault()}
+              tabIndex={-1}
+            >
+              {item.title}
+            </Link>
+          ) : (
+            <span className="text-left">{item.title}</span>
+          )}
+        </TableCell>
+        <TableCell>
+          <Badge variant="secondary">{KIND_LABEL[item.kind]}</Badge>
+        </TableCell>
+        <TableCell className="text-muted-foreground">
+          {item.folderName ?? "—"}
+        </TableCell>
+        <TableCell className="text-muted-foreground">
+          {formatUpdated(item.updatedAt)}
+        </TableCell>
       </FileBrowserContextMenu>
     );
   }
@@ -221,19 +222,20 @@ function FileBrowserItemImpl({
         item={item}
         isInTrash={isInTrash}
         handlers={contextMenuHandlers}
+        render={
+          <Link
+            href={item.href}
+            ref={setRef as (el: HTMLAnchorElement | null) => void}
+            {...attributes}
+            {...listeners}
+            {...commonData}
+            className="block outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
+            onClick={handleClick}
+            onDoubleClick={handleDoubleClick}
+          />
+        }
       >
-        <Link
-          href={item.href}
-          ref={setRef as (el: HTMLAnchorElement | null) => void}
-          {...attributes}
-          {...listeners}
-          {...commonData}
-          className="block outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
-          onClick={handleClick}
-          onDoubleClick={handleDoubleClick}
-        >
-          {tile}
-        </Link>
+        {tile}
       </FileBrowserContextMenu>
     );
   }
@@ -243,19 +245,20 @@ function FileBrowserItemImpl({
       item={item}
       isInTrash={isInTrash}
       handlers={contextMenuHandlers}
+      render={
+        <div
+          ref={setRef as (el: HTMLDivElement | null) => void}
+          {...attributes}
+          {...listeners}
+          {...commonData}
+          role="button"
+          tabIndex={0}
+          onClick={handleClick}
+          onDoubleClick={handleDoubleClick}
+        />
+      }
     >
-      <div
-        ref={setRef as (el: HTMLDivElement | null) => void}
-        {...attributes}
-        {...listeners}
-        {...commonData}
-        role="button"
-        tabIndex={0}
-        onClick={handleClick}
-        onDoubleClick={handleDoubleClick}
-      >
-        {tile}
-      </div>
+      {tile}
     </FileBrowserContextMenu>
   );
 }

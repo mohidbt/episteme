@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import type { ReactElement, ReactNode } from "react";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -24,20 +24,29 @@ interface Props {
   item: FileBrowserItemData;
   isInTrash: boolean;
   handlers: FileBrowserContextMenuHandlers;
-  children: ReactNode;
+  /**
+   * The element the ContextMenuTrigger should render AS (e.g. <tr>, <a>, <div>).
+   * Base UI's `render` prop replaces the default <div> wrapper with the provided
+   * element, merging all trigger handlers (onContextMenu, ref, etc.) into it.
+   * This avoids the invalid <div> between <tbody> and <tr> in list view.
+   */
+  render: ReactElement;
+  /** Content rendered inside the trigger element. */
+  children?: ReactNode;
 }
 
 export function FileBrowserContextMenu({
   item,
   isInTrash,
   handlers,
+  render,
   children,
 }: Props) {
   const isTrashFolder = item.kind === "folder" && item.id === "__trash__";
 
   return (
     <ContextMenu>
-      <ContextMenuTrigger>{children}</ContextMenuTrigger>
+      <ContextMenuTrigger render={render}>{children}</ContextMenuTrigger>
       <ContextMenuContent>
         {isTrashFolder ? (
           // Trash folder itself → "Empty trash"
