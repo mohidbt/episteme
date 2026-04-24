@@ -10,10 +10,10 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   if (!userId) redirect("/sign-in");
   const prefs = await getUserPreferences(userId);
   return (
-    <SidebarProvider className="min-h-screen">
+    <SidebarProvider className="h-dvh overflow-hidden">
       <Sidebar userId={userId} />
       <main
-        className="flex-1 min-w-0"
+        className="flex-1 min-w-0 h-dvh overflow-y-auto"
         data-prose-font={prefs.font}
         data-prose-ruled={prefs.ruledLines ? "true" : "false"}
       >

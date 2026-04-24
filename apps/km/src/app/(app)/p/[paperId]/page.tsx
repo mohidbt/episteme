@@ -54,7 +54,7 @@ export default async function PaperPage({
   const firstRefYear = firstRef ? refYear(firstRef.cslJson) : null;
 
   return (
-    <div className="flex min-h-dvh flex-col">
+    <div className="flex h-full flex-col">
       <div className="px-6 pt-6">
         {library && (
           <Breadcrumbs
