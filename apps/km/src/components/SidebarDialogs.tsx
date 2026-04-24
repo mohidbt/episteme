@@ -14,7 +14,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { splitFolderPath, normalizeFolderPath } from "@/lib/tree";
 
 type Section = "papers" | "references" | "notes";
 
@@ -46,21 +45,16 @@ async function jsonFetch(url: string, init: RequestInit): Promise<Response> {
 
 /** ---------- Rename Folder ---------- */
 interface RenameFolderDialogProps extends BaseProps {
-  libraryId: number;
-  section: Section;
-  folderPath: string;
+  folderId: string;
+  currentName: string;
 }
 export function RenameFolderDialog({
   open,
   onOpenChange,
   onMutate,
-  libraryId,
-  section,
-  folderPath,
+  folderId,
+  currentName,
 }: RenameFolderDialogProps) {
-  const segs = splitFolderPath(folderPath);
-  const parentPath = segs.slice(0, -1).join("/");
-  const currentName = segs[segs.length - 1] ?? "";
   const [name, setName] = useState(currentName);
   const [busy, setBusy] = useState(false);
 
@@ -71,10 +65,9 @@ export function RenameFolderDialog({
       return;
     }
     setBusy(true);
-    const newPath = normalizeFolderPath((parentPath ? parentPath + "/" : "") + trimmed);
-    const r = await jsonFetch("/api/folders/rename", {
-      method: "POST",
-      body: JSON.stringify({ libraryId, section, oldPath: folderPath, newPath }),
+    const r = await jsonFetch(`/api/folders/${folderId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ name: trimmed }),
     });
     setBusy(false);
     if (!r.ok) {
@@ -91,7 +84,7 @@ export function RenameFolderDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Rename folder</DialogTitle>
-          <DialogDescription>Rename {folderPath || "/"} and all descendants.</DialogDescription>
+          <DialogDescription>Rename {currentName}.</DialogDescription>
         </DialogHeader>
         <FieldRow>
           <Label htmlFor="rename-folder-name">Folder name</Label>
@@ -114,35 +107,37 @@ export function RenameFolderDialog({
   );
 }
 
-/** ---------- Delete Folder ---------- */
+/** ---------- Delete (Move-to-Trash) Folder ---------- */
 interface DeleteFolderDialogProps extends BaseProps {
   libraryId: number;
-  section: Section;
-  folderPath: string;
+  folderId: string;
+  folderName: string;
 }
 export function DeleteFolderDialog({
   open,
   onOpenChange,
   onMutate,
   libraryId,
-  section,
-  folderPath,
+  folderId,
+  folderName,
 }: DeleteFolderDialogProps) {
   const [busy, setBusy] = useState(false);
 
   async function submit() {
     setBusy(true);
-    const r = await jsonFetch("/api/folders/delete", {
+    const r = await jsonFetch("/api/folders/trash", {
       method: "POST",
-      body: JSON.stringify({ libraryId, section, path: folderPath }),
+      body: JSON.stringify({
+        libraryId,
+        target: { kind: "folder", id: folderId },
+      }),
     });
     setBusy(false);
     if (!r.ok) {
-      toast.error("Delete failed");
+      toast.error("Move to Trash failed");
       return;
     }
-    const j = await r.json();
-    toast.success(`Deleted ${j.deletedCount} item(s)`);
+    toast.success("Moved to Trash");
     onOpenChange(false);
     onMutate();
   }
@@ -151,16 +146,16 @@ export function DeleteFolderDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Delete folder</DialogTitle>
+          <DialogTitle>Move to Trash</DialogTitle>
           <DialogDescription>
-            Permanently delete {folderPath} and all items inside it.
+            Move folder &quot;{folderName}&quot; and all items inside it to Trash.
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>
             Cancel
           </Button>
-          <Button variant="destructive" onClick={submit} disabled={busy}>Delete</Button>
+          <Button variant="destructive" onClick={submit} disabled={busy}>Move to Trash</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -170,7 +165,7 @@ export function DeleteFolderDialog({
 /** ---------- Rename Leaf ---------- */
 interface RenameLeafDialogProps extends BaseProps {
   section: Section;
-  id: string | number;
+  id: string;
   currentTitle: string | null;
 }
 export function RenameLeafDialog({
@@ -254,16 +249,18 @@ export function RenameLeafDialog({
   );
 }
 
-/** ---------- Delete Leaf ---------- */
+/** ---------- Delete Leaf (Move-to-Trash) ---------- */
 interface DeleteLeafDialogProps extends BaseProps {
+  libraryId: number;
   section: Section;
-  id: string | number;
+  id: string;
   title: string | null;
 }
 export function DeleteLeafDialog({
   open,
   onOpenChange,
   onMutate,
+  libraryId,
   section,
   id,
   title,
@@ -272,13 +269,20 @@ export function DeleteLeafDialog({
 
   async function submit() {
     setBusy(true);
-    const r = await fetch(`/api/${section}/${id}`, { method: "DELETE" });
+    const kind = section === "papers" ? "paper" : section === "references" ? "reference" : "note";
+    const r = await jsonFetch("/api/folders/trash", {
+      method: "POST",
+      body: JSON.stringify({
+        libraryId,
+        target: { kind, id },
+      }),
+    });
     setBusy(false);
     if (!r.ok) {
-      toast.error("Delete failed");
+      toast.error("Move to Trash failed");
       return;
     }
-    toast.success("Deleted");
+    toast.success("Moved to Trash");
     onOpenChange(false);
     onMutate();
   }
@@ -287,14 +291,16 @@ export function DeleteLeafDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Delete</DialogTitle>
-          <DialogDescription>Permanently delete {title ?? "Untitled"}.</DialogDescription>
+          <DialogTitle>Move to Trash</DialogTitle>
+          <DialogDescription>
+            Move &quot;{title ?? "Untitled"}&quot; to Trash.
+          </DialogDescription>
         </DialogHeader>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>
             Cancel
           </Button>
-          <Button variant="destructive" onClick={submit} disabled={busy}>Delete</Button>
+          <Button variant="destructive" onClick={submit} disabled={busy}>Move to Trash</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -368,17 +374,19 @@ export function NewNoteDialog({
   );
 }
 
-/** ---------- New Folder (notes only — materializes with Untitled note) ---------- */
+/** ---------- New Folder (creates a real folder row) ---------- */
 interface NewFolderDialogProps extends BaseProps {
   libraryId: number;
-  parentPath: string;
+  parentId: string | null;
+  parentName: string | null;
 }
 export function NewFolderDialog({
   open,
   onOpenChange,
   onMutate,
   libraryId,
-  parentPath,
+  parentId,
+  parentName,
 }: NewFolderDialogProps) {
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
@@ -387,14 +395,17 @@ export function NewFolderDialog({
     const trimmed = name.trim();
     if (!trimmed) return;
     setBusy(true);
-    const folderPath = normalizeFolderPath((parentPath ? parentPath : "") + trimmed);
-    const r = await jsonFetch("/api/notes", {
+    const r = await jsonFetch("/api/folders", {
       method: "POST",
-      body: JSON.stringify({ libraryId, folderPath, title: "Untitled" }),
+      body: JSON.stringify({ libraryId, parentId, name: trimmed }),
     });
     setBusy(false);
     if (!r.ok) {
-      toast.error("Create folder failed");
+      if (r.status === 409) {
+        toast.error("A folder with that name already exists");
+      } else {
+        toast.error("Create folder failed");
+      }
       return;
     }
     toast.success("Folder created");
@@ -409,7 +420,7 @@ export function NewFolderDialog({
         <DialogHeader>
           <DialogTitle>New folder</DialogTitle>
           <DialogDescription>
-            {parentPath ? `inside ${parentPath}` : "in Notes"}. Materialized with an Untitled note.
+            {parentName ? `inside ${parentName}` : "at root"}.
           </DialogDescription>
         </DialogHeader>
         <FieldRow>
@@ -433,11 +444,11 @@ export function NewFolderDialog({
   );
 }
 
-/** ---------- Move (leaf item) ---------- */
+/** ---------- Move (leaf item) — sets folderId by uuid ---------- */
 interface MoveDialogProps extends BaseProps {
   section: Section;
-  id: string | number;
-  currentFolderPath: string;
+  id: string;
+  currentFolderId: string | null;
 }
 export function MoveDialog({
   open,
@@ -445,21 +456,22 @@ export function MoveDialog({
   onMutate,
   section,
   id,
-  currentFolderPath,
+  currentFolderId,
 }: MoveDialogProps) {
-  const [value, setValue] = useState(currentFolderPath);
+  const [value, setValue] = useState(currentFolderId ?? "");
   const [busy, setBusy] = useState(false);
 
   async function submit() {
-    const normalized = normalizeFolderPath(value);
-    if (normalized === currentFolderPath) {
+    const trimmed = value.trim();
+    const nextId = trimmed.length === 0 ? null : trimmed;
+    if (nextId === currentFolderId) {
       onOpenChange(false);
       return;
     }
     setBusy(true);
     const r = await jsonFetch(`/api/${section}/${id}`, {
       method: "PATCH",
-      body: JSON.stringify({ folderPath: normalized }),
+      body: JSON.stringify({ folderId: nextId }),
     });
     setBusy(false);
     if (!r.ok) {
@@ -477,17 +489,17 @@ export function MoveDialog({
         <DialogHeader>
           <DialogTitle>Move to…</DialogTitle>
           <DialogDescription>
-            Enter a folder path (e.g. projects/phd/). Empty = section root.
+            Enter a folder id (UUID). Empty = library root.
           </DialogDescription>
         </DialogHeader>
         <FieldRow>
-          <Label htmlFor="move-path">Folder path</Label>
+          <Label htmlFor="move-folder-id">Folder id</Label>
           <Input
-            id="move-path"
+            id="move-folder-id"
             value={value}
             onChange={(e) => setValue(e.currentTarget.value)}
             onKeyDown={onEnter(submit, busy)}
-            placeholder="projects/phd/"
+            placeholder="uuid or empty for root"
             autoFocus
           />
         </FieldRow>
@@ -502,33 +514,32 @@ export function MoveDialog({
   );
 }
 
-/** ---------- Move Folder (calls /api/folders/rename) ---------- */
+/** ---------- Move Folder (calls /api/folders/move) ---------- */
 interface MoveFolderDialogProps extends BaseProps {
-  libraryId: number;
-  section: Section;
-  folderPath: string;
+  folderId: string;
+  currentParentId: string | null;
 }
 export function MoveFolderDialog({
   open,
   onOpenChange,
   onMutate,
-  libraryId,
-  section,
-  folderPath,
+  folderId,
+  currentParentId,
 }: MoveFolderDialogProps) {
-  const [value, setValue] = useState(folderPath);
+  const [value, setValue] = useState(currentParentId ?? "");
   const [busy, setBusy] = useState(false);
 
   async function submit() {
-    const normalized = normalizeFolderPath(value);
-    if (!normalized || normalized === folderPath) {
+    const trimmed = value.trim();
+    const nextParentId = trimmed.length === 0 ? null : trimmed;
+    if (nextParentId === currentParentId) {
       onOpenChange(false);
       return;
     }
     setBusy(true);
-    const r = await jsonFetch("/api/folders/rename", {
+    const r = await jsonFetch("/api/folders/move", {
       method: "POST",
-      body: JSON.stringify({ libraryId, section, oldPath: folderPath, newPath: normalized }),
+      body: JSON.stringify({ folderId, targetParentId: nextParentId }),
     });
     setBusy(false);
     if (!r.ok) {
@@ -546,17 +557,17 @@ export function MoveFolderDialog({
         <DialogHeader>
           <DialogTitle>Move to…</DialogTitle>
           <DialogDescription>
-            Enter a folder path (e.g. projects/phd/). Empty = section root.
+            Enter a target parent folder id (UUID). Empty = library root.
           </DialogDescription>
         </DialogHeader>
         <FieldRow>
-          <Label htmlFor="move-path">Folder path</Label>
+          <Label htmlFor="move-folder-parent">Target parent id</Label>
           <Input
-            id="move-path"
+            id="move-folder-parent"
             value={value}
             onChange={(e) => setValue(e.currentTarget.value)}
             onKeyDown={onEnter(submit, busy)}
-            placeholder="projects/phd/"
+            placeholder="uuid or empty for root"
             autoFocus
           />
         </FieldRow>

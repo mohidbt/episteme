@@ -1,4 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { and, eq } from "drizzle-orm";
+import { db } from "@/lib/db";
+import { folders } from "@episteme/db/schema";
 import { GET, POST } from "./route";
 import {
   DELETE as DEL_ID,
@@ -68,6 +71,34 @@ describe("libraries", () => {
 
     const missing = await GET_ID(req(`/api/libraries/${lib.id}`, { cookie: u.cookie }), params({ id: String(lib.id) }));
     expect(missing.status).toBe(404);
+  });
+
+  it("auto-seeds a Trash folder when creating a library", async () => {
+    const c = await POST(
+      req("/api/libraries", {
+        method: "POST",
+        cookie: u.cookie,
+        body: JSON.stringify({ name: "Trash-Seeded Lib" }),
+      }),
+    );
+    expect(c.status).toBe(201);
+    const lib = await c.json();
+
+    const trashRows = await db
+      .select({
+        id: folders.id,
+        name: folders.name,
+        parentId: folders.parentId,
+        isTrash: folders.isTrash,
+        userId: folders.userId,
+      })
+      .from(folders)
+      .where(and(eq(folders.libraryId, lib.id), eq(folders.isTrash, true)));
+    expect(trashRows.length).toBe(1);
+    expect(trashRows[0].name).toBe("Trash");
+    expect(trashRows[0].parentId).toBeNull();
+    expect(trashRows[0].isTrash).toBe(true);
+    expect(trashRows[0].userId).toBe(u.id);
   });
 
   it("forbids other user mutation", async () => {

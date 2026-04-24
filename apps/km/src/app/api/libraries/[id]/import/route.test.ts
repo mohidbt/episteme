@@ -179,4 +179,95 @@ describe("POST /api/libraries/:id/import", () => {
     );
     expect(r.status).toBe(400);
   });
+
+  it("200 .md import with folderId sets note's folderId", async () => {
+    // Create a real folder first so the FK constraint is satisfied
+    const { POST: POST_FOLDER } = await import("../../../folders/route");
+    const POST_LIB2 = POST_LIB;
+    const libRes = await POST_LIB2(
+      req("/api/libraries", {
+        method: "POST",
+        cookie: u.cookie,
+        body: JSON.stringify({ name: "FolderIdLib" }),
+      }),
+    );
+    const folderLibId: number = (await libRes.json()).id;
+
+    const folderRes = await POST_FOLDER(
+      req("/api/folders", {
+        method: "POST",
+        cookie: u.cookie,
+        body: JSON.stringify({
+          libraryId: folderLibId,
+          parentId: null,
+          name: "ImportTarget",
+        }),
+      }),
+    );
+    expect(folderRes.status).toBe(201);
+    const folderId: string = (await folderRes.json()).id;
+
+    const form = new FormData();
+    form.set(
+      "file",
+      new File(
+        ['---\ntitle: "With FolderId"\n---\nbody'],
+        "with-folderid.md",
+        { type: "text/markdown" },
+      ),
+    );
+    form.set("folderId", folderId);
+
+    const r = await POST(
+      formRequest(`/api/libraries/${folderLibId}/import`, form, u.cookie),
+      params({ id: String(folderLibId) }),
+    );
+    expect(r.status).toBe(200);
+    const body = await r.json();
+    expect(body.imported).toBe(1);
+
+    const rows = await db
+      .select()
+      .from(notes)
+      .where(
+        and(
+          eq(notes.libraryId, folderLibId),
+          eq(notes.slug, "with-folderid"),
+        ),
+      );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].folderId).toBe(folderId);
+  });
+
+  it("200 .md import without folderId leaves note's folderId null", async () => {
+    const form = new FormData();
+    form.set(
+      "file",
+      new File(
+        ['---\ntitle: "No FolderId"\n---\nbody'],
+        "no-folderid.md",
+        { type: "text/markdown" },
+      ),
+    );
+    // no folderId field
+    const r = await POST(
+      formRequest(`/api/libraries/${libraryId}/import`, form, u.cookie),
+      params({ id: String(libraryId) }),
+    );
+    expect(r.status).toBe(200);
+    const body = await r.json();
+    expect(body.imported).toBe(1);
+
+    const rows = await db
+      .select()
+      .from(notes)
+      .where(
+        and(
+          eq(notes.libraryId, libraryId),
+          eq(notes.slug, "no-folderid"),
+        ),
+      );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].folderId).toBeNull();
+  });
 });

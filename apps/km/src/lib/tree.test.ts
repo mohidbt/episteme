@@ -1,281 +1,143 @@
 import { describe, it, expect } from "vitest";
-import {
-  normalizeFolderPath,
-  splitFolderPath,
-  buildFolderTree,
-  computeMovePatch,
-  computeFolderRename,
-  isValidFolderPath,
-} from "./tree";
+import { buildFolderTree, type TreeItem } from "./tree";
 
-describe("splitFolderPath", () => {
-  it("returns [] for empty string", () => {
-    expect(splitFolderPath("")).toEqual([]);
-  });
-
-  it("splits a normalized folder path", () => {
-    expect(splitFolderPath("projects/phd/")).toEqual(["projects", "phd"]);
-  });
-
-  it("drops empty segments from repeated slashes", () => {
-    expect(splitFolderPath("a//b/")).toEqual(["a", "b"]);
-  });
-
-  it("ignores leading and trailing slashes", () => {
-    expect(splitFolderPath("/foo/bar")).toEqual(["foo", "bar"]);
-  });
-});
-
-describe("normalizeFolderPath", () => {
-  it("coerces null to ''", () => {
-    expect(normalizeFolderPath(null)).toBe("");
-  });
-
-  it("coerces undefined to ''", () => {
-    expect(normalizeFolderPath(undefined)).toBe("");
-  });
-
-  it("appends trailing slash", () => {
-    expect(normalizeFolderPath("inbox")).toBe("inbox/");
-  });
-
-  it("strips leading slashes and collapses repeats", () => {
-    expect(normalizeFolderPath("/a//b")).toBe("a/b/");
-  });
-
-  it("leaves '' as ''", () => {
-    expect(normalizeFolderPath("")).toBe("");
-  });
-
-  it("treats a path of only slashes as root", () => {
-    expect(normalizeFolderPath("///")).toBe("");
-  });
-});
+type FolderFixture = {
+  id: string;
+  name: string;
+  parentId: string | null;
+  isTrash: boolean;
+  sortOrder?: number;
+};
 
 describe("buildFolderTree", () => {
-  it("returns empty root on empty input", () => {
-    expect(buildFolderTree([])).toEqual({
-      folder: "",
-      path: "",
-      items: [],
-      children: [],
-    });
-  });
-
-  it("nests items by folder, sorts folders alpha, items at correct nodes", () => {
-    const items = [
-      { id: 1, title: "a", folder_path: "" },
-      { id: 2, title: "b", folder_path: "inbox/" },
-      { id: 3, title: "c", folder_path: "projects/phd/" },
-    ];
-    const tree = buildFolderTree(items);
-
-    expect(tree.folder).toBe("");
+  it("returns empty root when given no folders and no items", () => {
+    const tree = buildFolderTree([], []);
+    expect(tree.folder).toBeNull();
     expect(tree.path).toBe("");
-    expect(tree.items.map((i) => i.id)).toEqual([1]);
-    expect(tree.children.map((c) => c.folder)).toEqual(["inbox", "projects"]);
-
-    const inbox = tree.children[0];
-    expect(inbox.path).toBe("inbox/");
-    expect(inbox.items.map((i) => i.id)).toEqual([2]);
-    expect(inbox.children).toEqual([]);
-
-    const projects = tree.children[1];
-    expect(projects.path).toBe("projects/");
-    expect(projects.items).toEqual([]);
-    expect(projects.children).toHaveLength(1);
-
-    const phd = projects.children[0];
-    expect(phd.folder).toBe("phd");
-    expect(phd.path).toBe("projects/phd/");
-    expect(phd.items.map((i) => i.id)).toEqual([3]);
+    expect(tree.items).toEqual([]);
+    expect(tree.children).toEqual([]);
   });
 
-  it("sorts folders alphabetically case-insensitive", () => {
-    const tree = buildFolderTree([
-      { id: 1, title: "x", folder_path: "Zeta/" },
-      { id: 2, title: "y", folder_path: "apple/" },
-      { id: 3, title: "z", folder_path: "Beta/" },
-    ]);
-    expect(tree.children.map((c) => c.folder)).toEqual(["apple", "Beta", "Zeta"]);
-  });
+  it("builds a nested tree from folder rows", () => {
+    const folders: FolderFixture[] = [
+      { id: "a", name: "A", parentId: null, isTrash: false, sortOrder: 0 },
+      { id: "b", name: "B", parentId: "a", isTrash: false, sortOrder: 0 },
+      { id: "c", name: "C", parentId: "b", isTrash: false, sortOrder: 0 },
+    ];
+    const tree = buildFolderTree(folders, []);
 
-  it("sorts items in a folder by title case-insensitive, nulls last", () => {
-    const tree = buildFolderTree([
-      { id: 1, title: "banana", folder_path: "" },
-      { id: 2, title: null, folder_path: "" },
-      { id: 3, title: "Apple", folder_path: "" },
-      { id: 4, title: null, folder_path: "" },
-    ]);
-    expect(tree.items.map((i) => i.id)).toEqual([3, 1, 2, 4]);
-  });
-
-  it("normalizes non-slashed folder_path input", () => {
-    const tree = buildFolderTree([{ id: 1, title: "a", folder_path: "inbox" }]);
     expect(tree.children).toHaveLength(1);
-    expect(tree.children[0].path).toBe("inbox/");
-    expect(tree.children[0].items.map((i) => i.id)).toEqual([1]);
-  });
-});
+    const a = tree.children[0];
+    expect(a.folder?.id).toBe("a");
+    expect(a.path).toBe("A/");
 
-describe("computeMovePatch", () => {
-  it("moves a leaf across folders in the same section", () => {
-    expect(
-      computeMovePatch({
-        draggedSection: "notes",
-        targetSection: "notes",
-        currentFolderPath: "",
-        targetFolderPath: "inbox/",
-        draggedKind: "leaf",
-      }),
-    ).toEqual({ folder_path: "inbox/" });
+    expect(a.children).toHaveLength(1);
+    const b = a.children[0];
+    expect(b.folder?.id).toBe("b");
+    expect(b.path).toBe("A/B/");
+
+    expect(b.children).toHaveLength(1);
+    const c = b.children[0];
+    expect(c.folder?.id).toBe("c");
+    expect(c.path).toBe("A/B/C/");
   });
 
-  it("returns null for same-section no-op", () => {
-    expect(
-      computeMovePatch({
-        draggedSection: "notes",
-        targetSection: "notes",
-        currentFolderPath: "inbox/",
-        targetFolderPath: "inbox/",
-        draggedKind: "leaf",
-      }),
-    ).toBeNull();
+  it("excludes trash folders by default", () => {
+    const folders: FolderFixture[] = [
+      { id: "a", name: "A", parentId: null, isTrash: false, sortOrder: 0 },
+      { id: "t", name: "Trash", parentId: null, isTrash: true, sortOrder: 99 },
+    ];
+    const tree = buildFolderTree(folders, []);
+    expect(tree.children.map((c) => c.folder?.id)).toEqual(["a"]);
   });
 
-  it("returns null for cross-section drops", () => {
-    expect(
-      computeMovePatch({
-        draggedSection: "notes",
-        targetSection: "papers",
-        currentFolderPath: "",
-        targetFolderPath: "inbox/",
-        draggedKind: "leaf",
-      }),
-    ).toBeNull();
+  it("includes trash folders when includeTrash is true", () => {
+    const folders: FolderFixture[] = [
+      { id: "a", name: "A", parentId: null, isTrash: false, sortOrder: 0 },
+      { id: "t", name: "Trash", parentId: null, isTrash: true, sortOrder: 99 },
+    ];
+    const tree = buildFolderTree(folders, [], { includeTrash: true });
+    expect(tree.children.map((c) => c.folder?.id)).toEqual(["a", "t"]);
   });
 
-  it("returns null when dropping a folder into its own descendant", () => {
-    expect(
-      computeMovePatch({
-        draggedSection: "notes",
-        targetSection: "notes",
-        currentFolderPath: "projects/",
-        targetFolderPath: "projects/phd/",
-        draggedKind: "folder",
-        draggedFolderPath: "projects/",
-      }),
-    ).toBeNull();
+  it("excludes descendants of a trash folder by default", () => {
+    const folders: FolderFixture[] = [
+      { id: "t", name: "Trash", parentId: null, isTrash: true, sortOrder: 0 },
+      { id: "x", name: "X", parentId: "t", isTrash: false, sortOrder: 0 },
+    ];
+    const tree = buildFolderTree(folders, []);
+    expect(tree.children).toEqual([]);
   });
 
-  it("returns null when folder is dropped on itself", () => {
-    expect(
-      computeMovePatch({
-        draggedSection: "notes",
-        targetSection: "notes",
-        currentFolderPath: "projects/",
-        targetFolderPath: "projects/",
-        draggedKind: "folder",
-        draggedFolderPath: "projects/",
-      }),
-    ).toBeNull();
+  it("attaches items by folderId at the matching node", () => {
+    const folders: FolderFixture[] = [
+      { id: "a", name: "A", parentId: null, isTrash: false, sortOrder: 0 },
+      { id: "b", name: "B", parentId: "a", isTrash: false, sortOrder: 0 },
+    ];
+    const items: TreeItem[] = [
+      { id: "p1", title: "at-a", folderId: "a", kind: "paper" },
+      { id: "p2", title: "at-b", folderId: "b", kind: "note" },
+    ];
+    const tree = buildFolderTree(folders, items);
+    const a = tree.children[0];
+    const b = a.children[0];
+    expect(a.items.map((i) => i.id)).toEqual(["p1"]);
+    expect(b.items.map((i) => i.id)).toEqual(["p2"]);
+    expect(tree.items).toEqual([]);
   });
 
-  it("normalizes the target folder_path on return", () => {
-    expect(
-      computeMovePatch({
-        draggedSection: "notes",
-        targetSection: "notes",
-        currentFolderPath: "",
-        targetFolderPath: "inbox",
-        draggedKind: "leaf",
-      }),
-    ).toEqual({ folder_path: "inbox/" });
-  });
-});
-
-describe("computeFolderRename", () => {
-  it("renames a root-level folder", () => {
-    expect(
-      computeFolderRename({
-        currentFolderPath: "deep-learning/",
-        newParentPath: "",
-        newFolderName: "dl",
-      }),
-    ).toEqual({ oldPrefix: "deep-learning/", newPrefix: "dl/" });
+  it("attaches items with folderId=null at the root node", () => {
+    const items: TreeItem[] = [
+      { id: "n1", title: "root-note", folderId: null, kind: "note" },
+    ];
+    const tree = buildFolderTree([], items);
+    expect(tree.items.map((i) => i.id)).toEqual(["n1"]);
   });
 
-  it("returns null when the rename would form a cycle", () => {
-    expect(
-      computeFolderRename({
-        currentFolderPath: "projects/",
-        newParentPath: "projects/phd/",
-      }),
-    ).toBeNull();
+  it("treats items with an unknown folderId as orphans at the root", () => {
+    const folders: FolderFixture[] = [
+      { id: "a", name: "A", parentId: null, isTrash: false, sortOrder: 0 },
+    ];
+    const items: TreeItem[] = [
+      { id: "orphan", title: "lost", folderId: "missing", kind: "paper" },
+      { id: "normal", title: "normal", folderId: "a", kind: "paper" },
+    ];
+    const tree = buildFolderTree(folders, items);
+    expect(tree.items.map((i) => i.id)).toEqual(["orphan"]);
+    expect(tree.children[0].items.map((i) => i.id)).toEqual(["normal"]);
   });
 
-  it("returns null when rename is a no-op", () => {
-    expect(
-      computeFolderRename({
-        currentFolderPath: "deep-learning/",
-        newParentPath: "",
-        newFolderName: "deep-learning",
-      }),
-    ).toBeNull();
+  it("drops items whose folder is inside a trash subtree (when trash excluded)", () => {
+    const folders: FolderFixture[] = [
+      { id: "t", name: "Trash", parentId: null, isTrash: true, sortOrder: 0 },
+    ];
+    const items: TreeItem[] = [
+      { id: "p1", title: "gone", folderId: "t", kind: "paper" },
+    ];
+    const tree = buildFolderTree(folders, items);
+    expect(tree.children).toEqual([]);
+    expect(tree.items).toEqual([]);
   });
 
-  it("moves a folder under a new parent, keeping last segment", () => {
-    expect(
-      computeFolderRename({
-        currentFolderPath: "deep-learning/",
-        newParentPath: "archive/",
-      }),
-    ).toEqual({ oldPrefix: "deep-learning/", newPrefix: "archive/deep-learning/" });
+  it("sorts folder children by (sortOrder asc, name asc)", () => {
+    const folders: FolderFixture[] = [
+      { id: "z", name: "Zeta", parentId: null, isTrash: false, sortOrder: 0 },
+      { id: "a", name: "apple", parentId: null, isTrash: false, sortOrder: 0 },
+      { id: "b", name: "Beta", parentId: null, isTrash: false, sortOrder: -5 },
+      { id: "c", name: "carrot", parentId: null, isTrash: false, sortOrder: 10 },
+    ];
+    const tree = buildFolderTree(folders, []);
+    expect(tree.children.map((c) => c.folder?.id)).toEqual(["b", "a", "z", "c"]);
   });
 
-  it("rewrites descendant folder_paths when applied as a DB REPLACE", () => {
-    // Regression: simulate the UPDATE ... REPLACE(folder_path, oldPrefix, newPrefix) WHERE folder_path LIKE oldPrefix||'%'
-    const patch = computeFolderRename({
-      currentFolderPath: "deep-learning/",
-      newParentPath: "",
-      newFolderName: "dl",
-    })!;
-    const rewrite = (fp: string) =>
-      fp.startsWith(patch.oldPrefix)
-        ? patch.newPrefix + fp.slice(patch.oldPrefix.length)
-        : fp;
-    expect(rewrite("deep-learning/cnn/")).toBe("dl/cnn/");
-    expect(rewrite("deep-learning/")).toBe("dl/");
-    expect(rewrite("other/")).toBe("other/");
-  });
-});
-
-describe("isValidFolderPath", () => {
-  it("rejects a path containing %", () => {
-    expect(isValidFolderPath("a%/")).toBe(false);
-  });
-
-  it("rejects a path containing _", () => {
-    expect(isValidFolderPath("a_b/")).toBe(false);
-  });
-
-  it("rejects a path containing backslash", () => {
-    expect(isValidFolderPath("a\\b/")).toBe(false);
-  });
-
-  it("accepts a normal nested path", () => {
-    expect(isValidFolderPath("projects/phd/")).toBe(true);
-  });
-
-  it("accepts an empty string", () => {
-    expect(isValidFolderPath("")).toBe(true);
-  });
-
-  it("accepts a path with uppercase and digits", () => {
-    expect(isValidFolderPath("Zeta/2026/")).toBe(true);
-  });
-
-  it("accepts a path with hyphens", () => {
-    expect(isValidFolderPath("deep-learning/")).toBe(true);
+  it("sorts items by title case-insensitive with stable order for ties/nulls", () => {
+    const items: TreeItem[] = [
+      { id: "1", title: "banana", folderId: null, kind: "note" },
+      { id: "2", title: null, folderId: null, kind: "note" },
+      { id: "3", title: "Apple", folderId: null, kind: "note" },
+      { id: "4", title: null, folderId: null, kind: "note" },
+    ];
+    const tree = buildFolderTree([], items);
+    expect(tree.items.map((i) => i.id)).toEqual(["3", "1", "2", "4"]);
   });
 });

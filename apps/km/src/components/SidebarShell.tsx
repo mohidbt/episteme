@@ -1,12 +1,16 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Sidebar as ShadcnSidebar,
   SidebarContent,
   SidebarHeader,
 } from "@/components/ui/sidebar";
-import { SidebarSection } from "./SidebarSection";
+import { DriveTree } from "./DriveTree";
+import { ByTypeNav } from "./ByTypeNav";
+import { SidebarAgentSection } from "./SidebarAgentSection";
+import { SidebarSettingsSection } from "./SidebarSettingsSection";
 import type { TreeResponse } from "@/lib/tree-server";
 
 interface SidebarShellProps {
@@ -17,39 +21,34 @@ interface SidebarShellProps {
 export function SidebarShell({ library, tree }: SidebarShellProps) {
   const router = useRouter();
   const onMutate = () => router.refresh();
+  const trashFolder = tree.folders.find((f) => f.isTrash) ?? null;
   return (
-    <ShadcnSidebar collapsible="none" className="border-r">
+    <ShadcnSidebar
+      collapsible="none"
+      className="border border-foreground rounded-r-xl overflow-hidden shadow-[4px_4px_20px_rgba(0,0,0,0.08)]"
+    >
       <SidebarHeader className="px-4 pt-5 pb-3">
-        <h1
-          className="font-display text-[20px] leading-none tracking-tight text-sidebar-foreground"
+        <Link
+          href="/"
+          className="font-display text-[20px] leading-none tracking-tight text-sidebar-foreground hover:underline"
           data-testid="km-sidebar-library-name"
         >
           {library.name}
-        </h1>
+        </Link>
       </SidebarHeader>
       <SidebarContent>
-        <SidebarSection
-          kind="papers"
-          label="Papers"
-          items={tree.sections.papers.items}
+        <DriveTree
           libraryId={library.id}
+          folders={tree.folders}
+          papers={tree.papers}
+          references={tree.references}
+          notes={tree.notes}
+          trashId={trashFolder?.id ?? null}
           onMutate={onMutate}
         />
-        <SidebarSection
-          kind="references"
-          label="References"
-          items={tree.sections.references.items}
-          libraryId={library.id}
-          onMutate={onMutate}
-        />
-        <SidebarSection
-          kind="notes"
-          label="Notes"
-          items={tree.sections.notes.items}
-          libraryId={library.id}
-          onMutate={onMutate}
-        />
-        <SidebarSection kind="agent" />
+        <ByTypeNav />
+        <SidebarAgentSection />
+        <SidebarSettingsSection />
       </SidebarContent>
     </ShadcnSidebar>
   );

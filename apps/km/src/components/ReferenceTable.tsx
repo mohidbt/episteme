@@ -7,6 +7,8 @@ import { Trash2, ChevronUp, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 import { denormaliseForList, type CslItem } from "@/lib/csl";
 import type { ReferenceRow } from "@/lib/references-server";
+import type { FolderRow } from "@/lib/folders";
+import { FolderBreadcrumbBadge } from "@/components/FolderBreadcrumbBadge";
 import { cn } from "@/lib/utils";
 
 type SortKey = "citationKey" | "title" | "year";
@@ -14,6 +16,7 @@ type SortDir = "asc" | "desc";
 
 interface ReferenceTableProps {
   rows: ReferenceRow[];
+  folders?: FolderRow[];
 }
 
 interface DisplayRow {
@@ -23,6 +26,7 @@ interface DisplayRow {
   authorsText: string;
   year: number | null;
   folderPath: string;
+  folderId: string | null;
 }
 
 function toDisplay(row: ReferenceRow): DisplayRow {
@@ -35,6 +39,7 @@ function toDisplay(row: ReferenceRow): DisplayRow {
     authorsText,
     year,
     folderPath: row.folderPath,
+    folderId: row.folderId ?? null,
   };
 }
 
@@ -46,7 +51,7 @@ function cmp<T>(a: T, b: T): number {
   return String(a).localeCompare(String(b));
 }
 
-export function ReferenceTable({ rows }: ReferenceTableProps) {
+export function ReferenceTable({ rows, folders }: ReferenceTableProps) {
   const router = useRouter();
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>("asc");
@@ -141,8 +146,14 @@ export function ReferenceTable({ rows }: ReferenceTableProps) {
               <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
                 {r.year ?? ""}
               </td>
-              <td className="px-3 py-2 font-mono text-xs text-muted-foreground">
-                {r.folderPath || "/"}
+              <td className="px-3 py-2">
+                {folders && r.folderId ? (
+                  <FolderBreadcrumbBadge folderId={r.folderId} folders={folders} />
+                ) : (
+                  <span className="font-mono text-xs text-muted-foreground">
+                    {r.folderPath || "/"}
+                  </span>
+                )}
               </td>
               <td className="px-3 py-2">
                 <button

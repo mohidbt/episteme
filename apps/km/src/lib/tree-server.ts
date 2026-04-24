@@ -1,7 +1,7 @@
 import { cache } from "react";
 import { and, asc, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { libraries, notes, papers, references_ } from "@episteme/db/schema";
+import { folders, libraries, notes, papers, references_ } from "@episteme/db/schema";
 
 const AGENT_ITEMS = [
   { kind: "skills", label: "skills.md" },
@@ -9,24 +9,32 @@ const AGENT_ITEMS = [
   { kind: "settings", label: "settings.json" },
 ] as const;
 
+export interface FolderRowOut {
+  id: string;
+  name: string;
+  parentId: string | null;
+  isTrash: boolean;
+  sortOrder: number;
+}
+
 export interface PaperItem {
   id: string;
   title: string | null;
-  folder_path: string;
+  folderId: string | null;
 }
 
 export interface ReferenceItem {
   id: string;
   title: string;
-  citation_key: string;
-  folder_path: string;
+  citationKey: string;
+  folderId: string | null;
 }
 
 export interface NoteItem {
   id: string;
   title: string;
   slug: string;
-  folder_path: string;
+  folderId: string | null;
 }
 
 export interface AgentItem {
@@ -36,12 +44,11 @@ export interface AgentItem {
 
 export interface TreeResponse {
   library: { id: number; name: string };
-  sections: {
-    papers: { items: PaperItem[] };
-    references: { items: ReferenceItem[] };
-    notes: { items: NoteItem[] };
-    agent: { items: readonly AgentItem[] };
-  };
+  folders: FolderRowOut[];
+  papers: PaperItem[];
+  references: ReferenceItem[];
+  notes: NoteItem[];
+  agent: readonly AgentItem[];
 }
 
 export const getTreeForUser = cache(
@@ -54,48 +61,63 @@ export const getTreeForUser = cache(
     const lib = libRows[0];
     if (!lib) return null;
 
-    const [papersRows, refsRowsRaw, notesRows] = await Promise.all([
+    const [folderRows, papersRows, refsRowsRaw, notesRows] = await Promise.all([
       db
-        .select({ id: papers.id, title: papers.title, folder_path: papers.folderPath })
+        .select({
+          id: folders.id,
+          name: folders.name,
+          parentId: folders.parentId,
+          isTrash: folders.isTrash,
+          sortOrder: folders.sortOrder,
+        })
+        .from(folders)
+        .where(and(eq(folders.libraryId, libraryId), eq(folders.userId, userId)))
+        .orderBy(asc(folders.sortOrder), asc(folders.name)),
+      db
+        .select({ id: papers.id, title: papers.title, folderId: papers.folderId })
         .from(papers)
         .where(and(eq(papers.libraryId, libraryId), eq(papers.userId, userId)))
         .orderBy(asc(papers.addedAt)),
       db
         .select({
           id: references_.id,
-          citation_key: references_.citationKey,
-          csl_json: references_.cslJson,
-          folder_path: references_.folderPath,
+          citationKey: references_.citationKey,
+          cslJson: references_.cslJson,
+          folderId: references_.folderId,
         })
         .from(references_)
         .where(and(eq(references_.libraryId, libraryId), eq(references_.userId, userId)))
         .orderBy(asc(references_.createdAt)),
       db
-        .select({ id: notes.id, title: notes.title, slug: notes.slug, folder_path: notes.folderPath })
+        .select({
+          id: notes.id,
+          title: notes.title,
+          slug: notes.slug,
+          folderId: notes.folderId,
+        })
         .from(notes)
         .where(and(eq(notes.libraryId, libraryId), eq(notes.userId, userId)))
         .orderBy(asc(notes.createdAt)),
     ]);
 
     const refsRows: ReferenceItem[] = refsRowsRaw.map((r) => {
-      const csl = r.csl_json as { title?: string } | null;
-      const title: string = csl?.title ?? r.citation_key;
+      const csl = r.cslJson as { title?: string } | null;
+      const title: string = csl?.title ?? r.citationKey;
       return {
         id: r.id,
         title,
-        citation_key: r.citation_key,
-        folder_path: r.folder_path,
+        citationKey: r.citationKey,
+        folderId: r.folderId,
       };
     });
 
     return {
       library: { id: lib.id, name: lib.name },
-      sections: {
-        papers: { items: papersRows },
-        references: { items: refsRows },
-        notes: { items: notesRows },
-        agent: { items: AGENT_ITEMS },
-      },
+      folders: folderRows,
+      papers: papersRows,
+      references: refsRows,
+      notes: notesRows,
+      agent: AGENT_ITEMS,
     };
   },
 );

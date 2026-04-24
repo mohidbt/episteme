@@ -1,6 +1,7 @@
 import { asc, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { libraries } from "@episteme/db/schema";
+import { folders, libraries } from "@episteme/db/schema";
+import { TRASH_FOLDER_NAME } from "@episteme/db/schema";
 import { getUserIdFromRequest } from "@/lib/auth";
 import { libraryCreateSchema } from "@/lib/validators";
 import { jsonError } from "@/lib/crud";
@@ -22,6 +23,19 @@ export async function POST(req: Request) {
   const body = await req.json().catch(() => null);
   const parsed = libraryCreateSchema.safeParse(body);
   if (!parsed.success) return jsonError(400, "validation", { issues: parsed.error.issues });
-  const [row] = await db.insert(libraries).values({ userId, name: parsed.data.name }).returning();
+  const row = await db.transaction(async (tx) => {
+    const [lib] = await tx
+      .insert(libraries)
+      .values({ userId, name: parsed.data.name })
+      .returning();
+    await tx.insert(folders).values({
+      libraryId: lib.id,
+      userId,
+      parentId: null,
+      name: TRASH_FOLDER_NAME,
+      isTrash: true,
+    });
+    return lib;
+  });
   return Response.json(row, { status: 201 });
 }

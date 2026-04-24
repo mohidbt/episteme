@@ -5,7 +5,8 @@ import { BookMarked } from "lucide-react";
 import { auth } from "@episteme/auth";
 import { getDefaultLibrary } from "@/lib/default-library";
 import { getReference, listPapersInLibrary } from "@/lib/references-server";
-import { Breadcrumbs } from "@/components/Breadcrumbs";
+import { PathPill, type PathPillSegment } from "@/components/PathPill";
+import { splitFolderPath } from "@/lib/tree";
 import { ReferenceForm } from "@/components/ReferenceForm";
 import { ReferenceAttachToPaperButton } from "@/components/ReferenceAttachToPaperButton";
 
@@ -31,16 +32,27 @@ export default async function ReferencePage({
     ? (papersInLib.find((p) => p.id === ref.paperId) ?? null)
     : null;
 
+  const folderSegs = splitFolderPath(ref.folderPath);
+  const pillSegments: PathPillSegment[] = library
+    ? [
+        { id: "root", label: library.name, href: "/" },
+        ...folderSegs.map((name, i) => ({
+          id: `folder-${i}`,
+          label: name,
+          href:
+            "/drive/" +
+            folderSegs
+              .slice(0, i + 1)
+              .map((x) => encodeURIComponent(x))
+              .join("/"),
+        })),
+        { id: "title", label: ref.citationKey, href: null },
+      ]
+    : [];
+
   return (
     <div className="mx-auto max-w-3xl p-6">
-      {library && (
-        <Breadcrumbs
-          libraryName={library.name}
-          section="references"
-          folderPath={ref.folderPath}
-          title={ref.citationKey}
-        />
-      )}
+      {library && <PathPill className="mb-4" segments={pillSegments} />}
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <ReferenceAttachToPaperButton
           referenceId={ref.id}

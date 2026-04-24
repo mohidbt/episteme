@@ -19,3 +19,18 @@ export const listPapers = cache(
 );
 
 export type PaperRow = Awaited<ReturnType<typeof listPapers>>[number];
+
+/** Returns all papers for the library regardless of folder. Used by /papers page. */
+export const listAllPapers = cache(
+  async (libraryId: number, userId: string) =>
+    db
+      .select()
+      .from(papers)
+      .where(
+        and(
+          eq(papers.libraryId, libraryId),
+          eq(papers.userId, userId),
+        ),
+      )
+      .orderBy(desc(papers.addedAt)),
+);

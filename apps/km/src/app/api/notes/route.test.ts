@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { noteRevisions } from "@episteme/db/schema";
+import { folders, libraries, noteRevisions, notes } from "@episteme/db/schema";
 import { GET, POST } from "./route";
 import {
   DELETE as DEL_ID,
@@ -21,6 +21,7 @@ import {
   req,
   type TestUser,
 } from "../_test-utils";
+import { getTrashFolderId } from "@/lib/folders-server";
 
 let u: TestUser;
 let other: TestUser;
@@ -81,6 +82,9 @@ describe("notes", () => {
     const note = await c.json();
     expect(note.slug).toBe("hello-world");
 
+    // Move to trash before permanent delete (guard requirement).
+    const trashId = await getTrashFolderId(libraryId, u.id);
+    await db.update(notes).set({ folderId: trashId }).where(eq(notes.id, note.id));
     await DEL_ID(req(`/api/notes/${note.id}`, { method: "DELETE", cookie: u.cookie }), params({ id: note.id }));
   });
 
@@ -151,8 +155,56 @@ describe("notes", () => {
     );
     expect(foreignPatch.status).toBe(403);
 
+    // Move to trash before permanent delete (guard requirement).
+    const trashId = await getTrashFolderId(libraryId, u.id);
+    await db.update(notes).set({ folderId: trashId }).where(eq(notes.id, note.id));
     const del = await DEL_ID(req(`/api/notes/${note.id}`, { method: "DELETE", cookie: u.cookie }), params({ id: note.id }));
     expect(del.status).toBe(204);
+  });
+
+  it("PATCH sets folderId to owned folder", async () => {
+    const c = await POST(req("/api/notes", { method: "POST", cookie: u.cookie, body: JSON.stringify(noteBody({ title: "FolderId Note" })) }));
+    const note = await c.json();
+    const [f] = await db.insert(folders).values({
+      libraryId, userId: u.id, parentId: null, name: `nf-${Date.now()}`,
+    }).returning({ id: folders.id });
+    const r = await PATCH_ID(
+      req(`/api/notes/${note.id}`, { method: "PATCH", cookie: u.cookie, body: JSON.stringify({ folderId: f.id }) }),
+      params({ id: note.id }),
+    );
+    expect(r.status).toBe(200);
+    const [row] = await db.select({ folderId: notes.folderId }).from(notes).where(eq(notes.id, note.id));
+    expect(row.folderId).toBe(f.id);
+  });
+
+  it("PATCH clears folderId when null", async () => {
+    const c = await POST(req("/api/notes", { method: "POST", cookie: u.cookie, body: JSON.stringify(noteBody({ title: "FolderId Null Note" })) }));
+    const note = await c.json();
+    const [f] = await db.insert(folders).values({
+      libraryId, userId: u.id, parentId: null, name: `nf2-${Date.now()}`,
+    }).returning({ id: folders.id });
+    await db.update(notes).set({ folderId: f.id }).where(eq(notes.id, note.id));
+    const r = await PATCH_ID(
+      req(`/api/notes/${note.id}`, { method: "PATCH", cookie: u.cookie, body: JSON.stringify({ folderId: null }) }),
+      params({ id: note.id }),
+    );
+    expect(r.status).toBe(200);
+    const [row] = await db.select({ folderId: notes.folderId }).from(notes).where(eq(notes.id, note.id));
+    expect(row.folderId).toBe(null);
+  });
+
+  it("PATCH 404 on cross-user folderId", async () => {
+    const c = await POST(req("/api/notes", { method: "POST", cookie: u.cookie, body: JSON.stringify(noteBody({ title: "Cross User FolderId" })) }));
+    const note = await c.json();
+    const [otherLib] = await db.insert(libraries).values({ userId: other.id, name: "other notes lib" }).returning({ id: libraries.id });
+    const [otherFolder] = await db.insert(folders).values({
+      libraryId: otherLib.id, userId: other.id, parentId: null, name: `otherf-${Date.now()}`,
+    }).returning({ id: folders.id });
+    const r = await PATCH_ID(
+      req(`/api/notes/${note.id}`, { method: "PATCH", cookie: u.cookie, body: JSON.stringify({ folderId: otherFolder.id }) }),
+      params({ id: note.id }),
+    );
+    expect(r.status).toBe(404);
   });
 
   it("note links CRUD", async () => {

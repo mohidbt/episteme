@@ -40,13 +40,18 @@ export async function POST(req: Request, { params }: Ctx) {
     return jsonError(400, "validation", { message: "file required" });
   }
 
+  const rawFolderId = form.get("folderId");
+  const folderId = typeof rawFolderId === "string" && rawFolderId.length > 0
+    ? rawFolderId
+    : null;
+
   const lowerName = file.name.toLowerCase();
 
   if (lowerName.endsWith(".zip")) {
     if (file.size > MAX_ZIP_BYTES) return jsonError(413, "file_too_large");
     const buf = Buffer.from(await file.arrayBuffer());
     try {
-      const result = await importLibraryZip(userId, libId, buf);
+      const result = await importLibraryZip(userId, libId, buf, folderId);
       return Response.json(result);
     } catch (err) {
       if (err instanceof ZipImportError) {
@@ -77,6 +82,7 @@ export async function POST(req: Request, { params }: Ctx) {
       libraryId: libId,
       userId,
       folderPath,
+      folderId,
       title,
       slug,
       filename: file.name,

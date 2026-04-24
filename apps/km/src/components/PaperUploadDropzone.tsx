@@ -24,6 +24,7 @@ interface UploadItem {
 interface PaperUploadDropzoneProps {
   libraryId: number;
   folderPath: string;
+  folderId?: string | null;
 }
 
 function humanSize(bytes: number): string {
@@ -66,6 +67,7 @@ async function runChunks<T>(
 export function PaperUploadDropzone({
   libraryId,
   folderPath,
+  folderId,
 }: PaperUploadDropzoneProps) {
   const router = useRouter();
   const [items, setItems] = useState<UploadItem[]>([]);
@@ -85,6 +87,7 @@ export function PaperUploadDropzone({
           body: JSON.stringify({
             libraryId,
             folderPath,
+            ...(folderId != null ? { folderId } : {}),
             filename: item.file.name,
             contentType: PDF_CONTENT_TYPE,
             sizeBytes: item.file.size,
@@ -124,7 +127,7 @@ export function PaperUploadDropzone({
         toast.error(`Failed: ${item.file.name}`, { description: msg });
       }
     },
-    [libraryId, folderPath, router, updateItem],
+    [libraryId, folderPath, folderId, router, updateItem],
   );
 
   const onDrop = useCallback(

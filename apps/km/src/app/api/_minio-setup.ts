@@ -29,8 +29,24 @@ async function waitForBucket(timeoutMs = 30_000): Promise<void> {
 /**
  * Bring up the MinIO + minio-init compose services and block until the
  * configured bucket is reachable. Idempotent; fast on a warm daemon.
+ *
+ * If a MinIO is already healthy at $S3_ENDPOINT (e.g. main-branch's MinIO
+ * reused from a worktree), skip compose — starting a second instance on
+ * the same host port would clash.
  */
 export async function ensureMinIOReady(): Promise<void> {
+  const endpoint = process.env.S3_ENDPOINT;
+  if (endpoint) {
+    try {
+      const res = await fetch(`${endpoint}/minio/health/ready`);
+      if (res.ok) {
+        await waitForBucket();
+        return;
+      }
+    } catch {
+      // fall through to compose
+    }
+  }
   const res = spawnSync(
     "docker",
     ["compose", "up", "-d", "minio", "minio-init"],

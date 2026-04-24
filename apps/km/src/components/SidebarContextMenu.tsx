@@ -14,12 +14,19 @@ type Section = "papers" | "references" | "notes";
 
 export type ContextTarget =
   | { kind: "section-header"; section: Section }
-  | { kind: "folder"; section: Section; folderPath: string }
+  | {
+      kind: "folder";
+      section: Section;
+      folderId: string;
+      folderName: string;
+      /** Display path (e.g. "A/B/") — used for creating notes under this folder. */
+      folderPath: string;
+    }
   | {
       kind: "leaf";
       section: Section;
-      id: string | number;
-      folderPath: string;
+      id: string;
+      folderId: string | null;
       title: string | null;
     };
 
@@ -82,7 +89,7 @@ function renderItems(target: ContextTarget, open: (d: DialogKind) => void): Reac
         <ContextMenuItem onClick={() => open("rename-folder")}>Rename folder</ContextMenuItem>
         <ContextMenuItem onClick={() => open("move")}>Move to…</ContextMenuItem>
         <ContextMenuItem variant="destructive" onClick={() => open("delete-folder")}>
-          Delete folder
+          Move to Trash
         </ContextMenuItem>
       </>
     );
@@ -93,7 +100,7 @@ function renderItems(target: ContextTarget, open: (d: DialogKind) => void): Reac
       <ContextMenuItem onClick={() => open("rename-leaf")}>Rename</ContextMenuItem>
       <ContextMenuItem onClick={() => open("move")}>Move to…</ContextMenuItem>
       <ContextMenuItem variant="destructive" onClick={() => open("delete-leaf")}>
-        Delete
+        Move to Trash
       </ContextMenuItem>
     </>
   );

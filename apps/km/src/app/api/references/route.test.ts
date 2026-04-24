@@ -15,8 +15,9 @@ import {
   type TestUser,
 } from "../_test-utils";
 import { db } from "@/lib/db";
-import { notes, noteLinks, papers } from "@episteme/db/schema";
+import { folders, libraries, notes, noteLinks, papers, references_ } from "@episteme/db/schema";
 import { deriveCitationKey } from "@/lib/csl";
+import { getTrashFolderId } from "@/lib/folders-server";
 
 let u: TestUser;
 let other: TestUser;
@@ -93,6 +94,9 @@ describe("references", () => {
     );
     expect((await patched.json()).citationKey).toBe(newKey);
 
+    // Move to trash before permanent delete (guard requirement).
+    const trashId = await getTrashFolderId(libraryId, u.id);
+    await db.update(references_).set({ folderId: trashId }).where(eq(references_.id, ref.id));
     const del = await DEL_ID(req(`/api/references/${ref.id}`, { method: "DELETE", cookie: u.cookie }), params({ id: ref.id }));
     expect(del.status).toBe(204);
   });
@@ -433,6 +437,10 @@ describe("references DELETE cascades noteLinks", () => {
       .where(and(eq(noteLinks.targetKind, "reference"), eq(noteLinks.targetId, ref.id)));
     expect(before.some((r) => r.id === link.id)).toBe(true);
 
+    // Move to trash before permanent delete (guard requirement).
+    const trashId = await getTrashFolderId(libraryId, u.id);
+    await db.update(references_).set({ folderId: trashId }).where(eq(references_.id, ref.id));
+
     const del = await DEL_ID(
       req(`/api/references/${ref.id}`, { method: "DELETE", cookie: u.cookie }),
       params({ id: ref.id }),
@@ -444,5 +452,50 @@ describe("references DELETE cascades noteLinks", () => {
       .from(noteLinks)
       .where(and(eq(noteLinks.targetKind, "reference"), eq(noteLinks.targetId, ref.id)));
     expect(after.length).toBe(0);
+  });
+
+  it("PATCH sets folderId to owned folder", async () => {
+    const c = await POST(req("/api/references", { method: "POST", cookie: u.cookie, body: JSON.stringify(refBody()) }));
+    const ref = await c.json();
+    const [f] = await db.insert(folders).values({
+      libraryId, userId: u.id, parentId: null, name: `rf-${Date.now()}`,
+    }).returning({ id: folders.id });
+    const r = await PATCH_ID(
+      req(`/api/references/${ref.id}`, { method: "PATCH", cookie: u.cookie, body: JSON.stringify({ folderId: f.id }) }),
+      params({ id: ref.id }),
+    );
+    expect(r.status).toBe(200);
+    const [row] = await db.select({ folderId: references_.folderId }).from(references_).where(eq(references_.id, ref.id));
+    expect(row.folderId).toBe(f.id);
+  });
+
+  it("PATCH clears folderId when null", async () => {
+    const c = await POST(req("/api/references", { method: "POST", cookie: u.cookie, body: JSON.stringify(refBody()) }));
+    const ref = await c.json();
+    const [f] = await db.insert(folders).values({
+      libraryId, userId: u.id, parentId: null, name: `rf2-${Date.now()}`,
+    }).returning({ id: folders.id });
+    await db.update(references_).set({ folderId: f.id }).where(eq(references_.id, ref.id));
+    const r = await PATCH_ID(
+      req(`/api/references/${ref.id}`, { method: "PATCH", cookie: u.cookie, body: JSON.stringify({ folderId: null }) }),
+      params({ id: ref.id }),
+    );
+    expect(r.status).toBe(200);
+    const [row] = await db.select({ folderId: references_.folderId }).from(references_).where(eq(references_.id, ref.id));
+    expect(row.folderId).toBe(null);
+  });
+
+  it("PATCH 404 on cross-user folderId", async () => {
+    const c = await POST(req("/api/references", { method: "POST", cookie: u.cookie, body: JSON.stringify(refBody()) }));
+    const ref = await c.json();
+    const [otherLib] = await db.insert(libraries).values({ userId: other.id, name: "other refs lib" }).returning({ id: libraries.id });
+    const [otherFolder] = await db.insert(folders).values({
+      libraryId: otherLib.id, userId: other.id, parentId: null, name: `otherf-${Date.now()}`,
+    }).returning({ id: folders.id });
+    const r = await PATCH_ID(
+      req(`/api/references/${ref.id}`, { method: "PATCH", cookie: u.cookie, body: JSON.stringify({ folderId: otherFolder.id }) }),
+      params({ id: ref.id }),
+    );
+    expect(r.status).toBe(404);
   });
 });

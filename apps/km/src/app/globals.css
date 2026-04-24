@@ -175,4 +175,12 @@
   .dark [data-sonner-toast][data-type="error"]   [data-icon] { color: oklch(0.68 0.12 28); }
   .dark [data-sonner-toast][data-type="warning"] { border-left-color: oklch(0.74 0.09 82); }
   .dark [data-sonner-toast][data-type="warning"] [data-icon] { color: oklch(0.74 0.09 82); }
+
+  @keyframes tile-enter {
+    from { opacity: 0; transform: translateY(4px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .tile-enter {
+    animation: tile-enter 180ms ease-out both;
+  }
 }

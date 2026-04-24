@@ -28,6 +28,7 @@ const MAX_PDF_BYTES = 50 * 1024 * 1024; // 50 MB cap
 export const paperUploadInitSchema = z.object({
   libraryId: z.number().int(),
   folderPath: folderPathSchema.default(""),
+  folderId: z.string().uuid().nullable().optional(),
   filename: nonEmptyTrimmed(500),
   contentType: z.literal(PDF_CONTENT_TYPE),
   sizeBytes: z.number().int().positive().max(MAX_PDF_BYTES),
@@ -36,6 +37,7 @@ export const paperUploadInitSchema = z.object({
 export const paperUpdateSchema = z
   .object({
     folderPath: folderPathSchema.optional(),
+    folderId: z.string().uuid().nullable().optional(),
     title: nonEmptyTrimmed(1000).optional(),
     authors: z.array(z.string()).optional(),
     year: yearSchema.optional(),
@@ -52,6 +54,7 @@ const citationKey = z
 export const referenceCreateSchema = z.object({
   libraryId: z.number().int(),
   folderPath: folderPathSchema.default(""),
+  folderId: z.string().uuid().nullable().optional(),
   citationKey,
   cslJson: z.unknown(),
   paperId: z.string().nullable().optional(),
@@ -79,6 +82,7 @@ export const referenceCreateFromDoiSchema = z
 
 export const referenceUpdateSchema = z.object({
   folderPath: folderPathSchema.optional(),
+  folderId: z.string().uuid().nullable().optional(),
   citationKey: citationKey.optional(),
   cslJson: z.unknown().optional(),
   paperId: z.string().nullable().optional(),
@@ -87,6 +91,7 @@ export const referenceUpdateSchema = z.object({
 export const noteCreateSchema = z.object({
   libraryId: z.number().int(),
   folderPath: folderPathSchema.default(""),
+  folderId: z.string().uuid().nullable().optional(),
   title: nonEmptyTrimmed(500),
   contentMd: z.string().optional(),
   noteType: z.enum(["md", "latex", "pdf-ref"]).default("md"),
@@ -94,6 +99,7 @@ export const noteCreateSchema = z.object({
 
 export const noteUpdateSchema = z.object({
   folderPath: folderPathSchema.optional(),
+  folderId: z.string().uuid().nullable().optional(),
   title: nonEmptyTrimmed(500).optional(),
   contentMd: z.string().optional(),
   noteType: z.enum(["md", "latex", "pdf-ref"]).optional(),
