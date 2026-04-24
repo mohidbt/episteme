@@ -7,6 +7,8 @@ import {
   type TiptapEditor,
   insertCitation,
   insertPdfEmbed,
+  insertWikiLink,
+  invokeAgent,
 } from "@episteme/editor";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
@@ -324,6 +326,8 @@ export function NoteEditor({
           title: string;
           citation?: { citekey: string; title: string; authors: string[]; year: string | null };
           pdfEmbed?: { pdfId: string; title: string; page: number | null };
+          wikiLink?: { title: string; targetKind: "note" | "reference" | "paper"; targetId: string | null };
+          agent?: { skill: string };
         };
         if (p.title === "AI") {
           // Trigger the AI Rephrase portal — increment counter to force re-render
@@ -332,6 +336,10 @@ export function NoteEditor({
           insertCitation(editor, p.citation);
         } else if (p.title === "Pdf" && p.pdfEmbed) {
           insertPdfEmbed(editor, p.pdfEmbed);
+        } else if (p.title === "Link" && p.wikiLink) {
+          insertWikiLink(editor, p.wikiLink);
+        } else if (p.title === "Agent" && p.agent) {
+          invokeAgent(editor, p.agent);
         }
       },
       render: () => {

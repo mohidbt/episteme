@@ -3,6 +3,8 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { CitationTypeahead, type CitationTypeaheadRef, type CitationPick } from "./CitationTypeahead";
 import { PdfTypeahead, type PdfTypeaheadRef, type PdfPick } from "./PdfTypeahead";
+import { WikiLinkTypeahead, type WikiLinkTypeaheadRef, type WikiLinkPick } from "./WikiLinkTypeahead";
+import { AgentTypeahead, type AgentTypeaheadRef, type AgentPick } from "./AgentTypeahead";
 
 export interface SlashCommandTypeaheadRef {
   onKeyDown: (props: { event: KeyboardEvent }) => boolean;
@@ -12,6 +14,8 @@ export interface SlashCommandPick {
   title: string;
   citation?: CitationPick;
   pdfEmbed?: PdfPick;
+  wikiLink?: WikiLinkPick;
+  agent?: AgentPick;
 }
 
 export interface SlashCommandTypeaheadProps {
@@ -45,6 +49,18 @@ const COMMANDS: SlashCommandItem[] = [
     keywords: ["pdf", "embed", "paper", "reader", "document"],
     icon: "📄",
   },
+  {
+    title: "Link",
+    description: "Link to a note, reference, or paper",
+    keywords: ["link", "wiki", "note", "reference", "[["],
+    icon: "🔗",
+  },
+  {
+    title: "Agent",
+    description: "Run an AI agent on this note",
+    keywords: ["agent", "ai", "run", "skill", "triage", "synthesize"],
+    icon: "🤖",
+  },
 ];
 
 export const SlashCommandTypeahead = forwardRef<
@@ -52,15 +68,17 @@ export const SlashCommandTypeahead = forwardRef<
   SlashCommandTypeaheadProps
 >(function SlashCommandTypeahead({ query, onSelect }, ref) {
   const [selected, setSelected] = useState(0);
-  // Mode: "commands" | "cite" | "pdf"
-  const [mode, setMode] = useState<"commands" | "cite" | "pdf">("commands");
-  // Query within citation/pdf mode — typed after selecting the sub-command
+  // Mode: "commands" | "cite" | "pdf" | "link" | "agent"
+  const [mode, setMode] = useState<"commands" | "cite" | "pdf" | "link" | "agent">("commands");
+  // Query within sub-command mode — typed after selecting the sub-command
   const [citeQuery, setCiteQuery] = useState("");
   const citationRef = useRef<CitationTypeaheadRef | null>(null);
   const pdfRef = useRef<PdfTypeaheadRef | null>(null);
+  const wikiLinkRef = useRef<WikiLinkTypeaheadRef | null>(null);
+  const agentRef = useRef<AgentTypeaheadRef | null>(null);
 
   const filtered = useMemo(() => {
-    if (mode === "cite" || mode === "pdf") return [];
+    if (mode === "cite" || mode === "pdf" || mode === "link" || mode === "agent") return [];
     const q = query.toLowerCase().trim();
     if (!q) return COMMANDS;
     return COMMANDS.filter((cmd) => {
@@ -116,6 +134,40 @@ export const SlashCommandTypeahead = forwardRef<
           return pdfRef.current?.onKeyDown({ event }) ?? false;
         }
 
+        if (mode === "link") {
+          if (event.key === "Backspace" && citeQuery === "") {
+            setMode("commands");
+            setCiteQuery("");
+            return true;
+          }
+          if (event.key.length === 1 && !event.ctrlKey && !event.metaKey) {
+            setCiteQuery((q) => q + event.key);
+            return true;
+          }
+          if (event.key === "Backspace") {
+            setCiteQuery((q) => q.slice(0, -1));
+            return true;
+          }
+          return wikiLinkRef.current?.onKeyDown({ event }) ?? false;
+        }
+
+        if (mode === "agent") {
+          if (event.key === "Backspace" && citeQuery === "") {
+            setMode("commands");
+            setCiteQuery("");
+            return true;
+          }
+          if (event.key.length === 1 && !event.ctrlKey && !event.metaKey) {
+            setCiteQuery((q) => q + event.key);
+            return true;
+          }
+          if (event.key === "Backspace") {
+            setCiteQuery((q) => q.slice(0, -1));
+            return true;
+          }
+          return agentRef.current?.onKeyDown({ event }) ?? false;
+        }
+
         if (event.key === "ArrowUp") {
           setSelected((i) =>
             filtered.length === 0 ? 0 : (i + filtered.length - 1) % filtered.length,
@@ -136,6 +188,16 @@ export const SlashCommandTypeahead = forwardRef<
             }
             if (cmd.title === "Pdf") {
               setMode("pdf");
+              setCiteQuery("");
+              return true;
+            }
+            if (cmd.title === "Link") {
+              setMode("link");
+              setCiteQuery("");
+              return true;
+            }
+            if (cmd.title === "Agent") {
+              setMode("agent");
               setCiteQuery("");
               return true;
             }
@@ -176,6 +238,30 @@ export const SlashCommandTypeahead = forwardRef<
     );
   }
 
+  if (mode === "link") {
+    return (
+      <WikiLinkTypeahead
+        ref={wikiLinkRef}
+        query={citeQuery}
+        onSelect={(wikiLink: WikiLinkPick) => {
+          onSelect({ title: "Link", wikiLink });
+        }}
+      />
+    );
+  }
+
+  if (mode === "agent") {
+    return (
+      <AgentTypeahead
+        ref={agentRef}
+        query={citeQuery}
+        onSelect={(agent: AgentPick) => {
+          onSelect({ title: "Agent", agent });
+        }}
+      />
+    );
+  }
+
   if (filtered.length === 0) {
     return (
       <div className="z-50 min-w-[260px] rounded-md border bg-popover p-2 text-sm text-muted-foreground shadow-md">
@@ -199,6 +285,16 @@ export const SlashCommandTypeahead = forwardRef<
             }
             if (cmd.title === "Pdf") {
               setMode("pdf");
+              setCiteQuery("");
+              return;
+            }
+            if (cmd.title === "Link") {
+              setMode("link");
+              setCiteQuery("");
+              return;
+            }
+            if (cmd.title === "Agent") {
+              setMode("agent");
               setCiteQuery("");
               return;
             }

@@ -8,7 +8,7 @@
  * behavioral correctness: after the query changes causing the filtered list
  * to change, selection resets to 0.
  */
-import { describe, expect, it, vi, afterEach } from "vitest";
+import { describe, expect, it, vi, afterEach, beforeEach } from "vitest";
 import { render, screen, act, cleanup, fireEvent } from "@testing-library/react";
 import React from "react";
 import { SlashCommandTypeahead } from "./SlashCommandTypeahead";
@@ -144,5 +144,213 @@ describe("SlashCommandTypeahead — pdf mode", () => {
     expect(onSelect).toHaveBeenCalledWith(
       expect.objectContaining({ title: "Pdf" }),
     );
+  });
+});
+
+describe("SlashCommandTypeahead — link mode", () => {
+  beforeEach(() => {
+    // WikiLinkTypeahead fetches from /api/wiki-link/search — stub it
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ notes: [], references: [], papers: [] }),
+    }));
+  });
+
+  it("shows Link command in the command list", () => {
+    const onSelect = vi.fn();
+    render(<SlashCommandTypeahead query="" onSelect={onSelect} ref={null} />);
+    expect(screen.getByText("Link")).toBeTruthy();
+  });
+
+  it("filters to Link when query is 'link'", () => {
+    const onSelect = vi.fn();
+    render(<SlashCommandTypeahead query="link" onSelect={onSelect} ref={null} />);
+    expect(screen.getByText("Link")).toBeTruthy();
+    expect(screen.queryByText("AI")).toBeNull();
+  });
+
+  it("clicking Link command switches to link typeahead mode (WikiLinkTypeahead shown)", async () => {
+    const onSelect = vi.fn();
+    render(<SlashCommandTypeahead query="link" onSelect={onSelect} ref={null} />);
+    const linkBtn = screen.getByText("Link").closest("button");
+    expect(linkBtn).toBeTruthy();
+    await act(async () => {
+      fireEvent.mouseDown(linkBtn!);
+    });
+    // After switching, the command list is gone; WikiLinkTypeahead prompt is shown
+    expect(screen.queryByText("Link")).toBeNull();
+    // WikiLinkTypeahead renders "Type to search…" when query is empty
+    expect(screen.getByText(/Type to search/i)).toBeTruthy();
+  });
+
+  it("typing extends query in link mode", async () => {
+    const onSelect = vi.fn();
+    const ref: { current: { onKeyDown: (p: { event: KeyboardEvent }) => boolean } | null } = {
+      current: null,
+    };
+    render(
+      <SlashCommandTypeahead
+        query="link"
+        onSelect={onSelect}
+        ref={(r) => { ref.current = r; }}
+      />,
+    );
+    const linkBtn = screen.getByText("Link").closest("button");
+    await act(async () => {
+      fireEvent.mouseDown(linkBtn!);
+    });
+    // Type a character — should extend the query (no error thrown)
+    await act(async () => {
+      ref.current?.onKeyDown({ event: new KeyboardEvent("keydown", { key: "F", bubbles: true }) });
+    });
+    // Component stays in link mode (WikiLinkTypeahead still rendered)
+    expect(screen.queryByText("Link")).toBeNull();
+  });
+
+  it("Link selection calls onSelect with title='Link' and wikiLink payload", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        notes: [{ id: "note-1", title: "Foo Note", slug: "foo-note" }],
+        references: [],
+        papers: [],
+      }),
+    }));
+
+    const onSelect = vi.fn();
+    const ref: { current: { onKeyDown: (p: { event: KeyboardEvent }) => boolean } | null } = {
+      current: null,
+    };
+    render(
+      <SlashCommandTypeahead
+        query="link"
+        onSelect={onSelect}
+        ref={(r) => { ref.current = r; }}
+      />,
+    );
+
+    const linkBtn = screen.getByText("Link").closest("button");
+    await act(async () => {
+      fireEvent.mouseDown(linkBtn!);
+    });
+
+    // Type a query character
+    await act(async () => {
+      ref.current?.onKeyDown({ event: new KeyboardEvent("keydown", { key: "F", bubbles: true }) });
+    });
+
+    // Advance debounce timer
+    await act(async () => {
+      vi.advanceTimersByTime(300);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // Press Enter to pick the first result
+    await act(async () => {
+      ref.current?.onKeyDown({ event: new KeyboardEvent("keydown", { key: "Enter", bubbles: true }) });
+    });
+
+    expect(onSelect).toHaveBeenCalledWith(
+      expect.objectContaining({ title: "Link" }),
+    );
+    vi.useRealTimers();
+  });
+});
+
+describe("SlashCommandTypeahead — agent mode", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("shows Agent command in the command list", () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ enabled_skills: [] }),
+    }));
+    const onSelect = vi.fn();
+    render(<SlashCommandTypeahead query="" onSelect={onSelect} ref={null} />);
+    expect(screen.getByText("Agent")).toBeTruthy();
+  });
+
+  it("filters to Agent when query is 'agent'", () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ enabled_skills: [] }),
+    }));
+    const onSelect = vi.fn();
+    render(<SlashCommandTypeahead query="agent" onSelect={onSelect} ref={null} />);
+    expect(screen.getByText("Agent")).toBeTruthy();
+    expect(screen.queryByText("AI")).toBeNull();
+  });
+
+  it("clicking Agent shows empty state when fetch returns 404", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: false,
+      status: 404,
+      json: async () => ({}),
+    }));
+
+    const onSelect = vi.fn();
+    render(<SlashCommandTypeahead query="agent" onSelect={onSelect} ref={null} />);
+    const agentBtn = screen.getByText("Agent").closest("button");
+    await act(async () => {
+      fireEvent.mouseDown(agentBtn!);
+    });
+
+    // Flush promises so the fetch settles
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(screen.getByText(/No agents installed/i)).toBeTruthy();
+  });
+
+  it("clicking Agent shows empty state when enabled_skills is empty", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ enabled_skills: [] }),
+    }));
+
+    const onSelect = vi.fn();
+    render(<SlashCommandTypeahead query="agent" onSelect={onSelect} ref={null} />);
+    const agentBtn = screen.getByText("Agent").closest("button");
+    await act(async () => {
+      fireEvent.mouseDown(agentBtn!);
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(screen.getByText(/No agents installed/i)).toBeTruthy();
+  });
+
+  it("clicking Agent shows skill list when enabled_skills is non-empty", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ enabled_skills: ["triage"] }),
+    }));
+
+    const onSelect = vi.fn();
+    render(<SlashCommandTypeahead query="agent" onSelect={onSelect} ref={null} />);
+    const agentBtn = screen.getByText("Agent").closest("button");
+    await act(async () => {
+      fireEvent.mouseDown(agentBtn!);
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(screen.getByText("triage")).toBeTruthy();
   });
 });
