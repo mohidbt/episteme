@@ -57,7 +57,7 @@ function NotesList({
                 )}
               </TableCell>
               <TableCell className="text-muted-foreground text-xs">
-                {new Date(note.updatedAt).toLocaleDateString()}
+                {new Date(note.updatedAt).toLocaleDateString("en-US")}
               </TableCell>
             </TableRow>
           );

@@ -65,7 +65,7 @@ interface Props {
   contextMenuHandlers: FileBrowserContextMenuHandlers;
 }
 
-const DATE_FMT = new Intl.DateTimeFormat(undefined, {
+const DATE_FMT = new Intl.DateTimeFormat("en-US", {
   month: "short",
   day: "numeric",
   year: "numeric",
