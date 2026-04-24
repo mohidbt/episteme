@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { POST as POST_PAPER } from "../route";
 import { DELETE, GET, PATCH } from "./route";
 import { POST as POST_FINALIZE } from "./finalize/route";
@@ -18,6 +18,7 @@ import { ensureMinIOReady } from "../../_minio-setup";
 import { storage, paperSourceKey, paperCoverKey } from "@/lib/storage";
 import { db } from "@/lib/db";
 import { folders, libraries, paperHighlights, papers } from "@episteme/db/schema";
+import { getTrashFolderId } from "@/lib/folders-server";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SAMPLE_PDF_PATH = path.join(
@@ -305,6 +306,10 @@ describe("PATCH /api/papers/:id", () => {
   });
 });
 
+async function getTrashId(): Promise<string> {
+  return getTrashFolderId(libraryId, u.id);
+}
+
 describe("DELETE /api/papers/:id", () => {
   it("401 no user", async () => {
     const r = await DELETE(
@@ -331,10 +336,25 @@ describe("DELETE /api/papers/:id", () => {
     expect(r.status).toBe(403);
   });
 
+  it("400 rejects delete when paper is not in trash", async () => {
+    const paperId = await initPaper();
+    const r = await DELETE(
+      req(`/api/papers/${paperId}`, { method: "DELETE", cookie: u.cookie }),
+      params({ id: paperId }),
+    );
+    expect(r.status).toBe(400);
+    const body = await r.json();
+    expect(body.error).toBe("items must be in trash before permanent delete");
+  });
+
   it(
-    "deletes row + source + cover blobs, cascades paper_highlights",
+    "deletes row + source + cover blobs, cascades paper_highlights (paper in trash)",
     async () => {
       const paperId = await initAndFinalize();
+
+      // Move paper to trash before deleting.
+      const trashId = await getTrashId();
+      await db.update(papers).set({ folderId: trashId }).where(eq(papers.id, paperId));
 
       // Seed a highlight row so we can assert cascade delete.
       const [hl] = await db

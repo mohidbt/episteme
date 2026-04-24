@@ -2,7 +2,7 @@ import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import { auth } from "@episteme/auth";
 import { getDefaultLibrary } from "@/lib/default-library";
-import { listAllFolders, listFolderContents } from "@/lib/folders-server";
+import { getTrashFolderId, listAllFolders, listFolderContents } from "@/lib/folders-server";
 import { FileBrowser } from "@/components/FileBrowser";
 import { serializeFolderContents } from "@/app/(app)/drive/serialize";
 import { resolveDrivePath } from "./resolve";
@@ -24,10 +24,13 @@ export default async function DriveDeepPage({
   if (!chain) notFound();
 
   const parent = chain[chain.length - 1]?.id ?? null;
-  const [contents, allFolders] = await Promise.all([
+  const [contents, allFolders, trashId] = await Promise.all([
     listFolderContents(library.id, userId, parent),
     listAllFolders(library.id, userId),
+    getTrashFolderId(library.id, userId).catch(() => null),
   ]);
+
+  const isTrashView = parent !== null && parent === trashId;
 
   return (
     <FileBrowser
@@ -37,6 +40,7 @@ export default async function DriveDeepPage({
       folderChain={chain}
       contents={serializeFolderContents(contents)}
       folders={allFolders}
+      isTrashView={isTrashView}
     />
   );
 }

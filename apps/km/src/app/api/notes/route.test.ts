@@ -21,6 +21,7 @@ import {
   req,
   type TestUser,
 } from "../_test-utils";
+import { getTrashFolderId } from "@/lib/folders-server";
 
 let u: TestUser;
 let other: TestUser;
@@ -81,6 +82,9 @@ describe("notes", () => {
     const note = await c.json();
     expect(note.slug).toBe("hello-world");
 
+    // Move to trash before permanent delete (guard requirement).
+    const trashId = await getTrashFolderId(libraryId, u.id);
+    await db.update(notes).set({ folderId: trashId }).where(eq(notes.id, note.id));
     await DEL_ID(req(`/api/notes/${note.id}`, { method: "DELETE", cookie: u.cookie }), params({ id: note.id }));
   });
 
@@ -151,6 +155,9 @@ describe("notes", () => {
     );
     expect(foreignPatch.status).toBe(403);
 
+    // Move to trash before permanent delete (guard requirement).
+    const trashId = await getTrashFolderId(libraryId, u.id);
+    await db.update(notes).set({ folderId: trashId }).where(eq(notes.id, note.id));
     const del = await DEL_ID(req(`/api/notes/${note.id}`, { method: "DELETE", cookie: u.cookie }), params({ id: note.id }));
     expect(del.status).toBe(204);
   });

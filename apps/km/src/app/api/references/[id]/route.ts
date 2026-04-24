@@ -4,7 +4,7 @@ import { references_, noteLinks } from "@episteme/db/schema";
 import { getUserIdFromRequest } from "@/lib/auth";
 import { referenceUpdateSchema } from "@/lib/validators";
 import { jsonError, requireOwned } from "@/lib/crud";
-import { moveItemToFolder } from "@/lib/folders-server";
+import { getTrashFolderId, moveItemToFolder } from "@/lib/folders-server";
 import { isUniqueViolation, suggestNextCitationKey } from "@/lib/references";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -65,6 +65,12 @@ export async function DELETE(req: Request, { params }: Ctx) {
   const { id } = await params;
   const res = await requireOwned<any>(references_, id, userId);
   if (!res.ok) return jsonError(res.status, res.status === 404 ? "not_found" : "forbidden");
+
+  const trashId = await getTrashFolderId(res.row.libraryId, userId);
+  if (res.row.folderId !== trashId) {
+    return jsonError(400, "items must be in trash before permanent delete");
+  }
+
   // Cascade: note_links has no FK on targetId (polymorphic). Manually wipe references before the row.
   await db.transaction(async (tx) => {
     await tx.delete(noteLinks).where(and(eq(noteLinks.targetKind, "reference"), eq(noteLinks.targetId, id)));

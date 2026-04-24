@@ -17,6 +17,7 @@ import {
 import { db } from "@/lib/db";
 import { folders, libraries, notes, noteLinks, papers, references_ } from "@episteme/db/schema";
 import { deriveCitationKey } from "@/lib/csl";
+import { getTrashFolderId } from "@/lib/folders-server";
 
 let u: TestUser;
 let other: TestUser;
@@ -93,6 +94,9 @@ describe("references", () => {
     );
     expect((await patched.json()).citationKey).toBe(newKey);
 
+    // Move to trash before permanent delete (guard requirement).
+    const trashId = await getTrashFolderId(libraryId, u.id);
+    await db.update(references_).set({ folderId: trashId }).where(eq(references_.id, ref.id));
     const del = await DEL_ID(req(`/api/references/${ref.id}`, { method: "DELETE", cookie: u.cookie }), params({ id: ref.id }));
     expect(del.status).toBe(204);
   });
@@ -432,6 +436,10 @@ describe("references DELETE cascades noteLinks", () => {
       .from(noteLinks)
       .where(and(eq(noteLinks.targetKind, "reference"), eq(noteLinks.targetId, ref.id)));
     expect(before.some((r) => r.id === link.id)).toBe(true);
+
+    // Move to trash before permanent delete (guard requirement).
+    const trashId = await getTrashFolderId(libraryId, u.id);
+    await db.update(references_).set({ folderId: trashId }).where(eq(references_.id, ref.id));
 
     const del = await DEL_ID(
       req(`/api/references/${ref.id}`, { method: "DELETE", cookie: u.cookie }),

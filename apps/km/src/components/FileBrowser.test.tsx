@@ -348,6 +348,44 @@ describe("FileBrowser resolveDrop", () => {
   });
 });
 
+// ── Toolbar trash-view tests (T20) ──────────────────────────────────────────
+describe("FileBrowserToolbar isTrashView (T20)", () => {
+  it("isTrashView=true shows 'Empty trash' button and 'In Trash' badge, hides New menu in toolbar", () => {
+    render(
+      <FileBrowser
+        libraryId={1}
+        libraryName="Default"
+        folderId="trash-folder-id"
+        folderChain={[{ id: "trash-folder-id", name: "Trash" }]}
+        contents={baseContents}
+        folders={baseFolders}
+        isTrashView={true}
+        onEmptyTrash={() => {}}
+      />,
+    );
+    expect(screen.getByRole("button", { name: /empty trash/i })).toBeTruthy();
+    expect(screen.getByText(/in trash/i)).toBeTruthy();
+    // The toolbar "New" button (aria-label="New") should not exist
+    expect(screen.queryByRole("button", { name: "New" })).toBeNull();
+  });
+
+  it("isTrashView=false (default) shows New menu and hides Empty trash / In Trash badge", () => {
+    render(
+      <FileBrowser
+        libraryId={1}
+        libraryName="Default"
+        folderId={null}
+        folderChain={[]}
+        contents={baseContents}
+        folders={baseFolders}
+      />,
+    );
+    expect(screen.queryByRole("button", { name: /empty trash/i })).toBeNull();
+    expect(screen.queryByText(/in trash/i)).toBeNull();
+    expect(screen.getByRole("button", { name: "New" })).toBeTruthy();
+  });
+});
+
 // ── Context-menu tests (T19) ─────────────────────────────────────────────────
 describe("FileBrowser context menu (T19)", () => {
   beforeEach(() => {
@@ -355,7 +393,7 @@ describe("FileBrowser context menu (T19)", () => {
     global.fetch = vi.fn(async () => ({ ok: true, status: 200, json: async () => ({}) }));
   });
 
-  function renderFb(isInTrash = false) {
+  function renderFb(isTrashView = false) {
     return render(
       <FileBrowser
         libraryId={1}
@@ -364,7 +402,7 @@ describe("FileBrowser context menu (T19)", () => {
         folderChain={[]}
         contents={baseContents}
         folders={baseFolders}
-        isInTrash={isInTrash}
+        isTrashView={isTrashView}
       />,
     );
   }

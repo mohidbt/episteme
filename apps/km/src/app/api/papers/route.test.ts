@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { eq } from "drizzle-orm";
 import { GET, POST } from "./route";
 import {
   DELETE as DEL_ID,
@@ -15,11 +16,21 @@ import {
 } from "../_test-utils";
 import { ensureMinIOReady } from "../_minio-setup";
 import { storage, paperSourceKey, paperCoverKey } from "@/lib/storage";
+import { db } from "@/lib/db";
+import { papers } from "@episteme/db/schema";
+import { getTrashFolderId } from "@/lib/folders-server";
 
 let u: TestUser;
 let other: TestUser;
 let libraryId: number;
 const createdPaperIds: string[] = [];
+
+/** Move paper to trash then permanently delete (satisfies T20 guard). */
+async function trashAndDelete(paperId: string): Promise<void> {
+  const trashId = await getTrashFolderId(libraryId, u.id);
+  await db.update(papers).set({ folderId: trashId }).where(eq(papers.id, paperId));
+  await DEL_ID(req(`/api/papers/${paperId}`, { method: "DELETE", cookie: u.cookie }), params({ id: paperId }));
+}
 
 beforeAll(async () => {
   await ensureMinIOReady();
@@ -97,10 +108,7 @@ describe("papers", () => {
     expect(url.pathname.endsWith(`/${body.paperId}/source.pdf`)).toBe(true);
 
     // Clean up so later tests that snapshot listing aren't polluted.
-    await DEL_ID(
-      req(`/api/papers/${body.paperId}`, { method: "DELETE", cookie: u.cookie }),
-      params({ id: body.paperId }),
-    );
+    await trashAndDelete(body.paperId);
   });
 
   it("creates row with placeholder title = filenameToTitle(filename)", async () => {
@@ -119,10 +127,7 @@ describe("papers", () => {
     expect(paper.filename).toBe("My Great Paper.pdf");
     expect(paper.storageUrl).toBe(null);
 
-    await DEL_ID(
-      req(`/api/papers/${paperId}`, { method: "DELETE", cookie: u.cookie }),
-      params({ id: paperId }),
-    );
+    await trashAndDelete(paperId);
   });
 
   it("golden path: init → CRUD", async () => {
@@ -144,8 +149,7 @@ describe("papers", () => {
     );
     expect((await patched.json()).title).toBe("Beta");
 
-    const del = await DEL_ID(req(`/api/papers/${paperId}`, { method: "DELETE", cookie: u.cookie }), params({ id: paperId }));
-    expect(del.status).toBe(204);
+    await trashAndDelete(paperId);
   });
 
   it("ownership: cannot patch other's paper", async () => {
@@ -158,10 +162,7 @@ describe("papers", () => {
     );
     expect(r.status).toBe(403);
 
-    await DEL_ID(
-      req(`/api/papers/${paperId}`, { method: "DELETE", cookie: u.cookie }),
-      params({ id: paperId }),
-    );
+    await trashAndDelete(paperId);
   });
 
   it("folderPath filter", async () => {
@@ -179,10 +180,7 @@ describe("papers", () => {
     expect(rows.length).toBeGreaterThan(0);
     expect(rows.every((p: any) => p.folderPath === "foo/")).toBe(true);
 
-    await DEL_ID(
-      req(`/api/papers/${paperId}`, { method: "DELETE", cookie: u.cookie }),
-      params({ id: paperId }),
-    );
+    await trashAndDelete(paperId);
   });
 
   it("allows duplicate filename in same folder (two distinct rows)", async () => {
@@ -207,8 +205,8 @@ describe("papers", () => {
     createdPaperIds.push(aBody.paperId, bBody.paperId);
     expect(aBody.paperId).not.toBe(bBody.paperId);
 
-    await DEL_ID(req(`/api/papers/${aBody.paperId}`, { method: "DELETE", cookie: u.cookie }), params({ id: aBody.paperId }));
-    await DEL_ID(req(`/api/papers/${bBody.paperId}`, { method: "DELETE", cookie: u.cookie }), params({ id: bBody.paperId }));
+    await trashAndDelete(aBody.paperId);
+    await trashAndDelete(bBody.paperId);
   });
 
   it("GET lists by addedAt desc (newest first)", async () => {
@@ -242,7 +240,7 @@ describe("papers", () => {
     expect(rows[0].id).toBe(secondId);
     expect(rows[1].id).toBe(firstId);
 
-    await DEL_ID(req(`/api/papers/${firstId}`, { method: "DELETE", cookie: u.cookie }), params({ id: firstId }));
-    await DEL_ID(req(`/api/papers/${secondId}`, { method: "DELETE", cookie: u.cookie }), params({ id: secondId }));
+    await trashAndDelete(firstId);
+    await trashAndDelete(secondId);
   });
 });

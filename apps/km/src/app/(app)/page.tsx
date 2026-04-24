@@ -41,6 +41,7 @@ export default async function DriveRootPage() {
       folderChain={[]}
       contents={serializeFolderContents(contents)}
       folders={allFolders}
+      isTrashView={false}
     />
   );
 }

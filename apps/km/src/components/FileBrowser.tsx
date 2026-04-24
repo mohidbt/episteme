@@ -63,8 +63,10 @@ interface Props {
    * needed for cycle-check when dragging a folder onto another folder.
    */
   folders: FolderRow[];
-  /** True when the current folder is the Trash folder. T20 will wire from server. */
-  isInTrash?: boolean;
+  /** True when the current folder is the Trash folder (T20). */
+  isTrashView?: boolean;
+  /** Optional override for empty-trash handler (for tests). Default: internal handler. */
+  onEmptyTrash?: () => void;
 }
 
 /**
@@ -189,7 +191,8 @@ export function FileBrowser({
   folderChain,
   contents,
   folders,
-  isInTrash = false,
+  isTrashView = false,
+  onEmptyTrash: onEmptyTrashProp,
 }: Props) {
   const router = useRouter();
   const [view, setView] = useState<ViewMode>("tile");
@@ -568,7 +571,7 @@ export function FileBrowser({
             index={i}
             selected={selected.has(item.id)}
             currentFolderId={folderId}
-            isInTrash={isInTrash}
+            isInTrash={isTrashView}
             onSelect={handleSelect}
             onOpen={handleOpen}
             contextMenuHandlers={contextMenuHandlers}
@@ -593,7 +596,7 @@ export function FileBrowser({
                 index={i}
                 selected={selected.has(item.id)}
                 currentFolderId={folderId}
-                isInTrash={isInTrash}
+                isInTrash={isTrashView}
                 onSelect={handleSelect}
                 onOpen={handleOpen}
                 contextMenuHandlers={contextMenuHandlers}
@@ -616,6 +619,9 @@ export function FileBrowser({
           view={view}
           onViewChange={setView}
           onMutate={onMutate}
+          isTrashView={isTrashView}
+          onEmptyTrash={onEmptyTrashProp ?? handleEmptyTrash}
+          trashCount={items.length}
         />
 
         {items.length === 0 ? (

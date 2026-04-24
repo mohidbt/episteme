@@ -11,6 +11,7 @@ import { POST as POST_NOTE } from "./notes/route";
 import { POST as POST_LINK } from "./notes/[id]/links/route";
 import { createTestUser, deleteTestUser, params, req, type TestUser } from "./_test-utils";
 import { ensureMinIOReady } from "./_minio-setup";
+import { getTrashFolderId } from "@/lib/folders-server";
 
 let userA: TestUser;
 let userB: TestUser;
@@ -138,6 +139,10 @@ describe("paper delete sets reference.paperId to null", () => {
     );
     const ref = await refR.json();
     expect(ref.paperId).toBe(paperId);
+
+    // Move to trash before permanent delete (guard requirement).
+    const trashId = await getTrashFolderId(libId, userA.id);
+    await db.update(papers).set({ folderId: trashId }).where(eq(papers.id, paperId));
 
     const del = await DEL_PAPER(
       req(`/api/papers/${paperId}`, { method: "DELETE", cookie: userA.cookie }),

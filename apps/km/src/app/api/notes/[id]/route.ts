@@ -4,7 +4,7 @@ import { notes } from "@episteme/db/schema";
 import { getUserIdFromRequest } from "@/lib/auth";
 import { noteUpdateSchema } from "@/lib/validators";
 import { jsonError, requireOwned, resolveNoteSlug } from "@/lib/crud";
-import { moveItemToFolder } from "@/lib/folders-server";
+import { getTrashFolderId, moveItemToFolder } from "@/lib/folders-server";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -58,6 +58,12 @@ export async function DELETE(req: Request, { params }: Ctx) {
   const { id } = await params;
   const res = await requireOwned<any>(notes, id, userId);
   if (!res.ok) return jsonError(res.status, res.status === 404 ? "not_found" : "forbidden");
+
+  const trashId = await getTrashFolderId(res.row.libraryId, userId);
+  if (res.row.folderId !== trashId) {
+    return jsonError(400, "items must be in trash before permanent delete");
+  }
+
   await db.delete(notes).where(eq(notes.id, id));
   return new Response(null, { status: 204 });
 }

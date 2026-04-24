@@ -4,7 +4,7 @@ import { papers } from "@episteme/db/schema";
 import { getUserIdFromRequest } from "@/lib/auth";
 import { paperUpdateSchema } from "@/lib/validators";
 import { jsonError, requireOwned } from "@/lib/crud";
-import { moveItemToFolder } from "@/lib/folders-server";
+import { getTrashFolderId, moveItemToFolder } from "@/lib/folders-server";
 import { storage, paperSourceKey, paperCoverKey } from "@/lib/storage";
 
 export const runtime = "nodejs";
@@ -58,6 +58,11 @@ export async function DELETE(req: Request, { params }: Ctx) {
   const { id } = await params;
   const res = await requireOwned<PaperRow>(papers, id, userId);
   if (!res.ok) return jsonError(res.status, res.status === 404 ? "not_found" : "forbidden");
+
+  const trashId = await getTrashFolderId(res.row.libraryId, userId);
+  if (res.row.folderId !== trashId) {
+    return jsonError(400, "items must be in trash before permanent delete");
+  }
 
   // DB delete first — paper_highlights + paper_embeddings cascade via FK.
   await db.delete(papers).where(eq(papers.id, id));

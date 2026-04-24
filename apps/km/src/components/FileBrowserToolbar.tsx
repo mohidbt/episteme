@@ -7,6 +7,7 @@ import {
   ToggleGroupItem,
 } from "@/components/ui/toggle-group";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { NewItemTrigger } from "@/components/NewItemTrigger";
 
 export type ViewMode = "tile" | "list";
@@ -19,6 +20,9 @@ export interface ToolbarProps {
   view: ViewMode;
   onViewChange: (v: ViewMode) => void;
   onMutate: () => void;
+  isTrashView?: boolean;
+  onEmptyTrash?: () => void;
+  trashCount?: number;
 }
 
 export function FileBrowserToolbar({
@@ -29,6 +33,9 @@ export function FileBrowserToolbar({
   view,
   onViewChange,
   onMutate,
+  isTrashView = false,
+  onEmptyTrash,
+  trashCount = 0,
 }: ToolbarProps) {
   return (
     <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-2">
@@ -88,24 +95,40 @@ export function FileBrowserToolbar({
           </ToggleGroupItem>
         </ToggleGroup>
 
-        <NewItemTrigger
-          libraryId={libraryId}
-          folderId={folderId}
-          variant="toolbar"
-          onMutate={onMutate}
-        />
+        {isTrashView ? (
+          <>
+            <Badge variant="secondary">In Trash</Badge>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={onEmptyTrash}
+              disabled={trashCount === 0}
+            >
+              Empty trash
+            </Button>
+          </>
+        ) : (
+          <>
+            <NewItemTrigger
+              libraryId={libraryId}
+              folderId={folderId}
+              variant="toolbar"
+              onMutate={onMutate}
+            />
 
-        {/* TODO(T21): wire to PaperUploadDropzone with folder target. */}
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => {
-            /* no-op in T16 */
-          }}
-        >
-          <Upload aria-hidden className="size-3.5" />
-          Import
-        </Button>
+            {/* TODO(T21): wire to PaperUploadDropzone with folder target. */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                /* no-op in T16 */
+              }}
+            >
+              <Upload aria-hidden className="size-3.5" />
+              Import
+            </Button>
+          </>
+        )}
       </div>
     </div>
   );
