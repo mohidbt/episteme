@@ -1,9 +1,7 @@
 {
-  "//": "Standalone Node service (no bundler) — uses NodeNext instead of the monorepo-wide Bundler resolution.",
+  "//": "Standalone Node service — inherits Bundler resolution from monorepo base so workspace packages resolve correctly.",
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
     "outDir": "dist",
     "rootDir": "src"
   },
