@@ -1,4 +1,5 @@
 import type { Editor } from "@tiptap/core";
+import { TextSelection } from "@tiptap/pm/state";
 import type { CitationAttrs } from "@episteme/markdown";
 
 
@@ -18,6 +19,11 @@ export interface CiteCommandPayload {
  * - If a bibliography already exists (detected by paragraph text starting with
  *   "**Bibliography**"), reuse it.
  * - The [n] index in the Citation node reflects 1-based position in the list.
+ *
+ * Cursor policy (Defect A fix):
+ * - After all mutations are applied, the selection is explicitly set to right
+ *   after the inserted citation node so the user keeps typing at their original
+ *   location rather than ending up inside the bibliography list.
  */
 export function insertCitation(editor: Editor, payload: CiteCommandPayload): void {
   const { citekey, title, authors, year } = payload;
@@ -43,10 +49,18 @@ export function insertCitation(editor: Editor, payload: CiteCommandPayload): voi
     ? `${authorsStr} (${year}). ${title}.`
     : `${authorsStr}. ${title}.`;
 
+  // Record cursor position before the insert so we can restore it after
+  // bibliography mutations (Defect A: bib append leaves cursor inside list).
+  const insertPos = editor.state.selection.from;
+
   editor.chain().focus().insertContent({ type: "citation", attrs: citationAttrs }).run();
 
-  // Now manage bibliography footer
-  ensureBibliography(editor, bibEntry);
+  // After insertContent, the citation is at insertPos (atom node, size 1).
+  // Right-after position = insertPos + 1.
+  const posAfterCitation = insertPos + 1;
+
+  // Manage bibliography footer, then restore selection in one transaction.
+  ensureBibliographyAndRestoreCursor(editor, bibEntry, posAfterCitation);
 }
 
 function countCitations(
@@ -95,7 +109,18 @@ function findBibliographyIndex(
   });
 }
 
-function ensureBibliography(editor: Editor, bibEntry: string): void {
+/**
+ * Append to or create the bibliography section, then restore the cursor to
+ * `posAfterCitation` in the same transaction (Defect A fix).
+ *
+ * The bibliography is appended at the end of the doc, which does not shift
+ * `posAfterCitation` (citations are inline nodes within an earlier paragraph).
+ */
+function ensureBibliographyAndRestoreCursor(
+  editor: Editor,
+  bibEntry: string,
+  posAfterCitation: number,
+): void {
   const doc = editor.getJSON();
   const content = doc.content ?? [];
 
@@ -105,7 +130,7 @@ function ensureBibliography(editor: Editor, bibEntry: string): void {
     // Bib section exists — append a list item to the ordered list after it
     const listNode = content[bibIdx + 1];
     if (listNode?.type === "orderedList") {
-      editor.chain().focus().command(({ tr, state }) => {
+      editor.chain().command(({ tr, state }) => {
         const docNode = state.doc;
         let listPos = -1;
         // Locate the bibliography ordered list: first orderedList node that
@@ -131,12 +156,15 @@ function ensureBibliography(editor: Editor, bibEntry: string): void {
         );
         if (!listItem) return false;
         tr.insert(listEndPos, listItem);
+        // Restore cursor: bibliography is at the end of doc so posAfterCitation
+        // is unaffected by the insert at listEndPos (which is > posAfterCitation).
+        tr.setSelection(TextSelection.create(tr.doc, posAfterCitation));
         return true;
       }).run();
     }
   } else {
     // First citation — append a fresh bibliography section at end of doc
-    editor.chain().focus().command(({ tr, state }) => {
+    editor.chain().command(({ tr, state }) => {
       const endPos = state.doc.content.size;
 
       // Prefer the BibliographyHeading custom node; fall back to plain paragraph.
@@ -158,6 +186,9 @@ function ensureBibliography(editor: Editor, bibEntry: string): void {
       );
       if (!bibHeading || !orderedList) return false;
       tr.insert(endPos, [bibHeading, orderedList]);
+      // Restore cursor after bibliography append (Defect A fix).
+      // endPos is beyond posAfterCitation so posAfterCitation is unshifted.
+      tr.setSelection(TextSelection.create(tr.doc, posAfterCitation));
       return true;
     }).run();
   }
