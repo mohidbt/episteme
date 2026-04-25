@@ -1,5 +1,6 @@
 export { mdToProseMirror } from "./md-to-prosemirror";
 export { proseMirrorToMd } from "./prosemirror-to-md";
+export { unescapeLegacyMd } from "./unescape-legacy-md";
 export { createExtensions } from "./extensions";
 export { extractLinks, extractTags } from "./wiki-link-regex";
 export { WikiLink } from "./tiptap/WikiLink";
