@@ -7,15 +7,44 @@ import React from "react";
 
 // Use vi.hoisted so the variables are available inside vi.mock() factories
 // (which are hoisted to the top of the file by vitest's transformer).
-const { mockDestroy, mockCreateCollabProvider, mockEditor } = vi.hoisted(() => {
+const { mockDestroy, mockCreateCollabProvider, mockEditor, lastProvider } = vi.hoisted(() => {
   const mockDestroy = vi.fn();
-  const mockCreateCollabProvider = vi.fn(() => ({
-    ydoc: {} as any,
-    provider: {} as any,
-    destroy: mockDestroy,
-  }));
+
+  // Minimal event-emitter shim — mirrors HocuspocusProvider's EventEmitter API.
+  function makeProviderShim() {
+    const listeners: Map<string, Array<(...args: any[]) => void>> = new Map();
+    return {
+      on(event: string, fn: (...args: any[]) => void) {
+        if (!listeners.has(event)) listeners.set(event, []);
+        listeners.get(event)!.push(fn);
+      },
+      off(event: string, fn?: (...args: any[]) => void) {
+        if (!fn) { listeners.delete(event); return; }
+        const cbs = listeners.get(event) ?? [];
+        listeners.set(event, cbs.filter((cb) => cb !== fn));
+      },
+      emit(event: string, ...args: any[]) {
+        (listeners.get(event) ?? []).forEach((fn) => fn(...args));
+      },
+    };
+  }
+
+  // lastProvider holds a reference to the most-recently created shim so tests
+  // can emit events on it after render.
+  const lastProvider = { current: makeProviderShim() };
+
+  const mockCreateCollabProvider = vi.fn(() => {
+    const shim = makeProviderShim();
+    lastProvider.current = shim;
+    return {
+      ydoc: {} as any,
+      provider: shim as any,
+      destroy: mockDestroy,
+    };
+  });
+
   const mockEditor = vi.fn(() => null);
-  return { mockDestroy, mockCreateCollabProvider, mockEditor };
+  return { mockDestroy, mockCreateCollabProvider, mockEditor, lastProvider };
 });
 
 vi.mock("next/navigation", () => ({
@@ -219,5 +248,58 @@ describe("NoteEditor – COLLAB_ENABLED=true", () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const calls = mockCreateCollabProvider.mock.calls as any[];
     expect(calls[0][0].noteId).toBe("note-2");
+  });
+
+  // --- Auth-failure token refresh (defense-in-depth for stale SSR token) ---
+
+  it("refetches token and recreates provider when provider emits authenticationFailed", async () => {
+    // Arrange: render with an SSR token so the provider is created immediately.
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ token: "fresh-jwt" }),
+    } as Response);
+
+    renderNoteEditor({ userName: "bob", initialCollabToken: "stale-jwt" });
+
+    // Wait for the provider to be created with the stale token.
+    await vi.waitFor(() => expect(mockCreateCollabProvider).toHaveBeenCalledTimes(1));
+    expect((mockCreateCollabProvider.mock.calls as any[])[0][0].token).toBe("stale-jwt");
+
+    // Act: simulate the provider reporting auth failure (e.g. cached stale JWT).
+    lastProvider.current.emit("authenticationFailed", { reason: "Token expired" });
+
+    // Assert: a fresh token fetch is triggered.
+    await vi.waitFor(() =>
+      expect(mockFetch).toHaveBeenCalledWith("/api/collab/token", { method: "POST" }),
+    );
+
+    // After the fetch resolves, a second provider must be created with the fresh token.
+    await vi.waitFor(() => expect(mockCreateCollabProvider).toHaveBeenCalledTimes(2));
+    const secondCallArg = (mockCreateCollabProvider.mock.calls as any[])[1][0];
+    expect(secondCallArg.token).toBe("fresh-jwt");
+  });
+
+  it("does not spam the token endpoint on repeated authenticationFailed events", async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ token: "fresh-jwt-2" }),
+    } as Response);
+
+    renderNoteEditor({ userName: "carol", initialCollabToken: "stale-jwt-2" });
+
+    await vi.waitFor(() => expect(mockCreateCollabProvider).toHaveBeenCalledTimes(1));
+
+    // Emit auth failure twice in rapid succession.
+    lastProvider.current.emit("authenticationFailed", { reason: "expired" });
+    lastProvider.current.emit("authenticationFailed", { reason: "expired" });
+
+    // Allow microtasks/effects to settle.
+    await new Promise((r) => setTimeout(r, 50));
+
+    // Only ONE fetch should have been made (single-shot guard).
+    const collabTokenFetchCalls = (mockFetch.mock.calls as any[][]).filter(
+      ([url]) => url === "/api/collab/token",
+    );
+    expect(collabTokenFetchCalls).toHaveLength(1);
   });
 });
