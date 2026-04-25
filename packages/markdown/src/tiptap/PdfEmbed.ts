@@ -84,8 +84,8 @@ export const PdfEmbed = Node.create({
   renderHTML({ node, HTMLAttributes }) {
     const attrs = node.attrs as PdfEmbedAttrs;
     const href = attrs.page != null
-      ? `/read/${attrs.pdfId}#page=${attrs.page}`
-      : `/read/${attrs.pdfId}`;
+      ? `/p/${attrs.pdfId}#page=${attrs.page}`
+      : `/p/${attrs.pdfId}`;
 
     return [
       "div",

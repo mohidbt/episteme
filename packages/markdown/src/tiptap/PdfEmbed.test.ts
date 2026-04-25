@@ -48,11 +48,11 @@ describe("PdfEmbed node — renderHTML", () => {
     expect(html).toContain('data-pdf-id="123"');
   });
 
-  it("emits Open in reader link pointing to /read/:pdfId", () => {
+  it("emits Open in reader link pointing to /p/:pdfId", () => {
     const editor = makeEditor(samplePdfDoc);
     const html = editor.getHTML();
     editor.destroy();
-    expect(html).toContain('href="/read/123"');
+    expect(html).toContain('href="/p/123"');
     expect(html).toContain("Open in reader");
   });
 
@@ -60,7 +60,7 @@ describe("PdfEmbed node — renderHTML", () => {
     const editor = makeEditor(samplePdfDocWithPage);
     const html = editor.getHTML();
     editor.destroy();
-    expect(html).toContain('href="/read/abc-456#page=7"');
+    expect(html).toContain('href="/p/abc-456#page=7"');
   });
 
   it("no page fragment when page is null", () => {
