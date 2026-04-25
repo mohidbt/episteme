@@ -451,22 +451,32 @@ export function NoteEditor({
       }
     : undefined;
 
+  // When COLLAB_ENABLED, defer rendering Editor until the provider exists.
+  // Mounting Editor first with collab=undefined and then setting collab on
+  // a later render destroys+recreates the Tiptap editor mid-React-commit
+  // and causes "insertBefore on Node" DOM crashes. Single Editor lifecycle.
+  const editorReady = !COLLAB_ENABLED || collabState !== null;
+
   return (
     <div ref={editorHostRef}>
-      <Editor
-        initialMd={initialMd}
-        onChangeMd={onChangeMd}
-        autofocus
-        wikiLinkSuggestion={wikiLinkSuggestion}
-        slashCommandSuggestion={slashCommandSuggestion}
-        resolvedLinks={resolvedLinks}
-        onReady={onReady}
-        collab={collabProp}
-      >
-        {editorInstance && (
-          <AiBubbleMenu editor={editorInstance} aiTriggerCount={aiTriggerCount} />
-        )}
-      </Editor>
+      {editorReady ? (
+        <Editor
+          initialMd={initialMd}
+          onChangeMd={onChangeMd}
+          autofocus
+          wikiLinkSuggestion={wikiLinkSuggestion}
+          slashCommandSuggestion={slashCommandSuggestion}
+          resolvedLinks={resolvedLinks}
+          onReady={onReady}
+          collab={collabProp}
+        >
+          {editorInstance && (
+            <AiBubbleMenu editor={editorInstance} aiTriggerCount={aiTriggerCount} />
+          )}
+        </Editor>
+      ) : (
+        <div className="min-h-[60vh] opacity-50" aria-busy="true" />
+      )}
     </div>
   );
 }
