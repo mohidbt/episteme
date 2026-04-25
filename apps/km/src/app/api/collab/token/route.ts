@@ -1,5 +1,5 @@
-import { SignJWT } from "jose";
 import { auth } from "@episteme/auth";
+import { mintCollabToken } from "@/lib/collab-token";
 
 export async function POST(req: Request): Promise<Response> {
   const session = await auth.api.getSession({ headers: req.headers });
@@ -7,11 +7,6 @@ export async function POST(req: Request): Promise<Response> {
     return Response.json({ error: "unauthorized" }, { status: 401 });
   }
 
-  const secret = new TextEncoder().encode(process.env.BETTER_AUTH_SECRET);
-  const token = await new SignJWT({ userId: session.user.id })
-    .setProtectedHeader({ alg: "HS256" })
-    .setExpirationTime("10m")
-    .sign(secret);
-
+  const token = await mintCollabToken(session.user.id);
   return Response.json({ token });
 }
