@@ -69,7 +69,7 @@ describe("migrateAnonymousUser via onLinkAccount", () => {
         .select()
         .from(references_)
         .where(eq(references_.userId, anonId)),
-    ).toHaveLength(1);
+    ).toHaveLength(5);
 
     // 2. Sign-up while holding the anon session cookie → onLinkAccount fires.
     const tag = `${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36)}`;
@@ -129,7 +129,9 @@ describe("migrateAnonymousUser via onLinkAccount", () => {
       .select()
       .from(references_)
       .where(eq(references_.userId, newId));
-    expect(refsForNew).toHaveLength(1);
-    expect(refsForNew[0].citationKey).toBe("jumper2021highly");
+    expect(refsForNew).toHaveLength(5);
+    expect(
+      refsForNew.some((r) => r.citationKey === "jumper2021highly"),
+    ).toBe(true);
   });
 });

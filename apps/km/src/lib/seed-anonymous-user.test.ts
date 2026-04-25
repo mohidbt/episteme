@@ -9,7 +9,7 @@ import {
   references_,
   user as userTable,
 } from "@episteme/db/schema";
-import { storage, paperSourceKey } from "@/lib/storage";
+import { storage, paperSourceKey, paperCoverKey } from "@/lib/storage";
 import { ensureMinIOReady } from "@/app/api/_minio-setup";
 import { seedAnonymousUser } from "./seed-anonymous-user";
 import type { CslItem } from "./csl";
@@ -46,16 +46,17 @@ afterAll(async () => {
       .from(papers)
       .where(eq(papers.userId, userId));
     await Promise.all(
-      rows.map((r) =>
+      rows.flatMap((r) => [
         storage.deleteObject(paperSourceKey(r.id)).catch(() => {}),
-      ),
+        storage.deleteObject(paperCoverKey(r.id)).catch(() => {}),
+      ]),
     );
   }
   await db.delete(userTable).where(inArray(userTable.id, createdUserIds));
 });
 
 describe("seedAnonymousUser", () => {
-  it("creates 1 library + TRASH folder + 1 note + 1 paper (PDF in MinIO) + 1 reference", async () => {
+  it("creates library + TRASH + nested Reading List/Foundations + welcome note + paper (cover + PDF in MinIO) + 5 references", async () => {
     const userId = await insertAnonymousUser();
 
     await seedAnonymousUser(userId);
@@ -67,13 +68,17 @@ describe("seedAnonymousUser", () => {
     expect(libs).toHaveLength(1);
     expect(libs[0].name).toBe("My Library");
 
-    const trashFolders = await db
+    const allFolders = await db
       .select()
       .from(folders)
-      .where(
-        and(eq(folders.libraryId, libs[0].id), eq(folders.isTrash, true)),
-      );
+      .where(eq(folders.libraryId, libs[0].id));
+    const trashFolders = allFolders.filter((f) => f.isTrash);
     expect(trashFolders).toHaveLength(1);
+    const readingList = allFolders.find((f) => f.name === "Reading List");
+    const foundations = allFolders.find((f) => f.name === "Foundations");
+    expect(readingList).toBeDefined();
+    expect(foundations).toBeDefined();
+    expect(foundations!.parentId).toBe(readingList!.id);
 
     const noteRows = await db
       .select()
@@ -93,27 +98,42 @@ describe("seedAnonymousUser", () => {
     expect(paperRows[0].title).toBe(
       "Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks",
     );
+    expect(paperRows[0].year).toBe(2020);
+    expect(paperRows[0].authors?.[0]).toBe("Patrick Lewis");
 
-    // Confirm the PDF actually landed in MinIO.
-    const headUrl = await storage.getPresignedHead(
-      paperSourceKey(paperRows[0].id),
-      30,
+    const sourceHead = await fetch(
+      await storage.getPresignedHead(paperSourceKey(paperRows[0].id), 30),
+      { method: "HEAD" },
     );
-    const headRes = await fetch(headUrl, { method: "HEAD" });
-    expect(headRes.status).toBe(200);
-    expect(Number(headRes.headers.get("content-length"))).toBeGreaterThan(0);
+    expect(sourceHead.status).toBe(200);
+    const coverHead = await fetch(
+      await storage.getPresignedHead(paperCoverKey(paperRows[0].id), 30),
+      { method: "HEAD" },
+    );
+    expect(coverHead.status).toBe(200);
 
     const refRows = await db
       .select()
       .from(references_)
       .where(eq(references_.userId, userId));
-    expect(refRows).toHaveLength(1);
-    expect((refRows[0].cslJson as CslItem).DOI).toBe(
+    expect(refRows).toHaveLength(5);
+    const dois = refRows.map((r) => (r.cslJson as CslItem).DOI).sort();
+    expect(dois).toEqual([
       "10.1038/s41586-021-03819-2",
+      "10.48550/arXiv.1706.03762",
+      "10.48550/arXiv.1810.04805",
+      "10.48550/arXiv.2005.14165",
+      "10.48550/arXiv.2006.11239",
+    ]);
+    const rootRef = refRows.find(
+      (r) => (r.cslJson as CslItem).DOI === "10.1038/s41586-021-03819-2",
     );
-    // Citation key derives from author family + year + first substantial title word
-    // ("Highly" — "highly" is not a stop word).
-    expect(refRows[0].citationKey).toBe("jumper2021highly");
+    expect(rootRef!.folderPath).toBe("");
+    const nestedRef = refRows.find(
+      (r) => (r.cslJson as CslItem).DOI === "10.48550/arXiv.1706.03762",
+    );
+    expect(nestedRef!.folderPath).toBe("Reading List/Foundations");
+    expect(nestedRef!.folderId).toBe(foundations!.id);
   });
 
   it("is idempotent on a second call for the same user", async () => {
@@ -144,14 +164,12 @@ describe("seedAnonymousUser", () => {
       .select()
       .from(references_)
       .where(eq(references_.userId, userId));
-    expect(refRows).toHaveLength(1);
+    expect(refRows).toHaveLength(5);
   });
 
   it("recovers from a partial seed (orphan library, no other rows)", async () => {
     const userId = await insertAnonymousUser();
 
-    // Simulate a half-seeded user: a library row was inserted by a prior run
-    // that crashed before notes/papers/references_ were written.
     await db.insert(libraries).values({ userId, name: "My Library" });
 
     await seedAnonymousUser(userId);
@@ -178,6 +196,6 @@ describe("seedAnonymousUser", () => {
       .select()
       .from(references_)
       .where(eq(references_.userId, userId));
-    expect(refRows).toHaveLength(1);
+    expect(refRows).toHaveLength(5);
   });
 });

@@ -56,6 +56,7 @@ export function SidebarShell({ library, tree, isAnonymous }: SidebarShellProps) 
       {isAnonymous ? (
         <SidebarFooter className="px-3 pb-3">
           <Button
+            nativeButton={false}
             render={<Link href="/sign-up" />}
             data-testid="sidebar-anon-signup-cta"
             className="w-full"

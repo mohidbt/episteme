@@ -1,0 +1,17 @@
+{
+  "id": "10.48550/arXiv.2005.14165",
+  "type": "article",
+  "DOI": "10.48550/arXiv.2005.14165",
+  "title": "Language Models are Few-Shot Learners",
+  "author": [
+    { "family": "Brown", "given": "Tom B." },
+    { "family": "Mann", "given": "Benjamin" },
+    { "family": "Ryder", "given": "Nick" },
+    { "family": "Subbiah", "given": "Melanie" },
+    { "family": "Kaplan", "given": "Jared" },
+    { "family": "Dhariwal", "given": "Prafulla" }
+  ],
+  "issued": { "date-parts": [[2020]] },
+  "container-title": "arXiv preprint",
+  "URL": "https://arxiv.org/abs/2005.14165"
+}

@@ -1,0 +1,14 @@
+{
+  "id": "10.48550/arXiv.2006.11239",
+  "type": "article",
+  "DOI": "10.48550/arXiv.2006.11239",
+  "title": "Denoising Diffusion Probabilistic Models",
+  "author": [
+    { "family": "Ho", "given": "Jonathan" },
+    { "family": "Jain", "given": "Ajay" },
+    { "family": "Abbeel", "given": "Pieter" }
+  ],
+  "issued": { "date-parts": [[2020]] },
+  "container-title": "arXiv preprint",
+  "URL": "https://arxiv.org/abs/2006.11239"
+}
