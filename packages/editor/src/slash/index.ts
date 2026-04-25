@@ -8,3 +8,5 @@ export { insertWikiLink } from "./LinkCommand";
 export type { LinkCommandPayload } from "./LinkCommand";
 export { invokeAgent } from "./AgentCommand";
 export type { AgentCommandPayload } from "./AgentCommand";
+export { renumberCitations, hydrateCitations } from "./hydrateCitations";
+export type { CitationMeta } from "./hydrateCitations";

@@ -6,6 +6,6 @@ export { editorExtensions, SlashCommand, SlashCommandPluginKey, isInsideCodeBloc
 export type { WikiLinkSuggestion, SlashCommandSuggestion } from "./extensions";
 export { hydrateWikiLinkResolutions } from "./hydrate-wiki-links";
 export type { ResolvedLinksMap, WikiLinkResolution } from "./hydrate-wiki-links";
-export { parseSlashCommand, insertCitation, insertPdfEmbed, insertWikiLink, invokeAgent } from "./slash/index";
-export type { ParsedSlashCommand, CiteCommandPayload, PdfCommandPayload, LinkCommandPayload, AgentCommandPayload } from "./slash/index";
+export { parseSlashCommand, insertCitation, insertPdfEmbed, insertWikiLink, invokeAgent, renumberCitations, hydrateCitations } from "./slash/index";
+export type { ParsedSlashCommand, CiteCommandPayload, PdfCommandPayload, LinkCommandPayload, AgentCommandPayload, CitationMeta } from "./slash/index";
 export { BibliographyHeading } from "./slash/BibliographyHeading";
