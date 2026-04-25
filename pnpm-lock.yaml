@@ -76,6 +76,9 @@ importers:
       gray-matter:
         specifier: ^4.0.3
         version: 4.0.3
+      jose:
+        specifier: ^6.1.0
+        version: 6.2.2
       lucide-react:
         specifier: ^1.7.0
         version: 1.8.0(react@19.2.4)
@@ -501,6 +504,9 @@ importers:
       drizzle-orm:
         specifier: ^0.45.2
         version: 0.45.2(@opentelemetry/api@1.9.1)(kysely@0.28.16)(postgres@3.4.9)
+      jose:
+        specifier: ^6.1.0
+        version: 6.2.2
       jsdom:
         specifier: ^26
         version: 26.1.0

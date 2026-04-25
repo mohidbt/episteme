@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
+import { SignJWT } from "jose";
 import { db } from "@episteme/db";
 import { notes, libraries, user } from "@episteme/db/schema";
 import { auth } from "@episteme/auth";
@@ -183,5 +184,57 @@ describe("authenticateExt — onAuthenticate", () => {
       }),
     );
     expect(result).toMatchObject({ user: { id: userA.id } });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// JWT bearer token tests
+// ---------------------------------------------------------------------------
+
+const JWT_SECRET = process.env.BETTER_AUTH_SECRET!;
+const secretKey = new TextEncoder().encode(JWT_SECRET);
+
+function mintJwt(userId: string, expiresIn: string | number = "10m") {
+  return new SignJWT({ userId })
+    .setProtectedHeader({ alg: "HS256" })
+    .setExpirationTime(expiresIn)
+    .sign(secretKey);
+}
+
+describe("authenticateExt — JWT bearer token", () => {
+  it("resolves with { user: { id } } for a valid JWT belonging to the note owner", async () => {
+    const token = await mintJwt(userA.id);
+    const result = await ext.onAuthenticate!(
+      payload({ token, documentName: `note:${noteIdA}` }),
+    );
+    expect(result).toMatchObject({ user: { id: userA.id } });
+  });
+
+  it("rejects a JWT with wrong signature", async () => {
+    const badKey = new TextEncoder().encode("wrong-secret-key-that-is-at-least-32-bytes");
+    const token = await new SignJWT({ userId: userA.id })
+      .setProtectedHeader({ alg: "HS256" })
+      .setExpirationTime("10m")
+      .sign(badKey);
+    await expect(
+      ext.onAuthenticate!(payload({ token, documentName: `note:${noteIdA}` })),
+    ).rejects.toThrow(/unauth/i);
+  });
+
+  it("rejects an expired JWT", async () => {
+    // exp = 1 second in the past (use numeric timestamp)
+    const token = await mintJwt(userA.id, Math.floor(Date.now() / 1000) - 1);
+    await expect(
+      ext.onAuthenticate!(payload({ token, documentName: `note:${noteIdA}` })),
+    ).rejects.toThrow(/unauth/i);
+  });
+
+  it("rejects a valid JWT for a user that does NOT own the note", async () => {
+    const token = await mintJwt(userB.id);
+    await expect(
+      ext.onAuthenticate!(
+        payload({ token, documentName: `note:${noteIdA}` }),
+      ),
+    ).rejects.toThrow(/unauth/i);
   });
 });

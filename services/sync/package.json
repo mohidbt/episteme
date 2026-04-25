@@ -21,7 +21,8 @@
     "drizzle-orm": "^0.45.2",
     "jsdom": "^26",
     "yjs": "13.6.20",
-    "y-prosemirror": "1.2.12"
+    "y-prosemirror": "1.2.12",
+    "jose": "^6.1.0"
   },
   "devDependencies": {
     "tsx": "^4.19.2",

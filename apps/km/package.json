@@ -27,6 +27,7 @@
     "@napi-rs/canvas": "^0.1.80",
     "archiver": "^7.0.1",
     "better-auth": "^1.6.0",
+    "jose": "^6.1.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
