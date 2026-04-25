@@ -5,6 +5,7 @@ import { PluginKey } from "@tiptap/pm/state";
 import type { EditorState } from "@tiptap/pm/state";
 import { createExtensions as baseExtensions, WikiLink, TagMark, Citation } from "@episteme/markdown";
 import { BibliographyHeading } from "./slash/BibliographyHeading";
+import { MdPaste } from "./MdPaste";
 
 export type WikiLinkSuggestion = Omit<SuggestionOptions, "editor" | "pluginKey">;
 
@@ -86,5 +87,6 @@ export function editorExtensions(opts?: {
     BibliographyHeading,
     Placeholder.configure({ placeholder: opts?.placeholder ?? "Start writing…" }),
     ...(slashCommand ? [slashCommand] : []),
+    MdPaste,
   ];
 }

@@ -9,3 +9,4 @@ export type { ResolvedLinksMap, WikiLinkResolution } from "./hydrate-wiki-links"
 export { parseSlashCommand, insertCitation, insertPdfEmbed, insertWikiLink, invokeAgent, renumberCitations, hydrateCitations } from "./slash/index";
 export type { ParsedSlashCommand, CiteCommandPayload, PdfCommandPayload, LinkCommandPayload, AgentCommandPayload, CitationMeta } from "./slash/index";
 export { BibliographyHeading } from "./slash/BibliographyHeading";
+export { MdPaste } from "./MdPaste";
