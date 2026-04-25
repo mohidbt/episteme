@@ -2,6 +2,7 @@
 import {
   Editor,
   createCollabProvider,
+  userColor,
   type CollabProvider,
   type ResolvedLinksMap,
   type WikiLinkSuggestion,
@@ -22,12 +23,15 @@ export function NoteEditor({
   resolvedLinks,
   flushRef,
   userName,
+  initialCollabToken,
 }: {
   id: string;
   initialMd: string;
   resolvedLinks?: ResolvedLinksMap;
   flushRef?: RefObject<(() => Promise<void>) | null>;
   userName?: string;
+  /** SSR-minted collab JWT. When provided, skips the client-side /api/collab/token fetch. */
+  initialCollabToken?: string | null;
 }) {
   const router = useRouter();
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -37,13 +41,17 @@ export function NoteEditor({
   const [editorInstance, setEditorInstance] = useState<TiptapEditor | null>(null);
   const [aiTriggerCount, setAiTriggerCount] = useState(0);
 
-  // Collab token — pre-fetched before provider construction so the Hocuspocus
-  // WebSocket handshake never races an unresolved async token (provider sends
-  // the auth message synchronously on connect; an unresolved token fn was
-  // causing "authenticationRequired → won't try again" on SPA navigation).
-  const [collabToken, setCollabToken] = useState<string | null>(null);
+  // Collab token — SSR-minted by the server component and passed as a prop,
+  // so the provider can be created synchronously on first render with no
+  // client-side round-trip. Falls back to a client-side POST fetch when the
+  // prop is absent (e.g. tests, or a future non-SSR entry point).
+  const [collabToken, setCollabToken] = useState<string | null>(
+    COLLAB_ENABLED ? (initialCollabToken ?? null) : null,
+  );
   useEffect(() => {
     if (!COLLAB_ENABLED) return;
+    // If we already have a token (from SSR prop), skip the fetch.
+    if (initialCollabToken) return;
     let cancelled = false;
     fetch("/api/collab/token", { method: "POST" })
       .then(async (res) => {
@@ -60,7 +68,7 @@ export function NoteEditor({
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [id, initialCollabToken]);
 
   const collabState = useMemo<CollabProvider | null>(() => {
     if (!COLLAB_ENABLED || !collabToken) return null;
@@ -443,11 +451,12 @@ export function NoteEditor({
     [],
   );
 
+  const name = userName ?? "anonymous";
   const collabProp = collabState
     ? {
         ydoc: collabState.ydoc,
         provider: collabState.provider,
-        user: { name: userName ?? "anonymous", color: "#666" },
+        user: { name, color: userColor(name) },
       }
     : undefined;
 

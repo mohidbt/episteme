@@ -19,6 +19,7 @@ export function NotePageClient({
   initialPublicSlug,
   noteSlug,
   userName,
+  initialCollabToken,
 }: {
   id: string;
   title: string;
@@ -29,6 +30,7 @@ export function NotePageClient({
   initialPublicSlug: string | null;
   noteSlug: string;
   userName: string;
+  initialCollabToken?: string | null;
 }) {
   const router = useRouter();
   const flushRef = useRef<(() => Promise<void>) | null>(null);
@@ -88,6 +90,7 @@ export function NotePageClient({
         resolvedLinks={resolvedLinks}
         flushRef={flushRef}
         userName={userName}
+        initialCollabToken={initialCollabToken}
       />
     </>
   );

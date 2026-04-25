@@ -63,12 +63,13 @@ import { NoteEditor } from "./NoteEditor";
 
 // ---- Helpers --------------------------------------------------------------
 
-function renderNoteEditor(props?: { userName?: string }) {
+function renderNoteEditor(props?: { userName?: string; initialCollabToken?: string | null }) {
   render(
     <NoteEditor
       id="note-1"
       initialMd="# Hello"
       userName={props?.userName ?? "alice"}
+      initialCollabToken={props?.initialCollabToken}
     />,
   );
 }
@@ -148,28 +149,43 @@ describe("NoteEditor – COLLAB_ENABLED=true", () => {
     mockCollabEnabled = false;
   });
 
-  it("calls createCollabProvider with a resolved token (after pre-fetch)", async () => {
-    renderNoteEditor({ userName: "bob" });
-    // Token pre-fetch is async — wait for createCollabProvider to be called
+  // --- SSR token path (initialCollabToken provided) ---
+
+  it("uses SSR token synchronously — createCollabProvider called on first render without fetch", async () => {
+    renderNoteEditor({ userName: "bob", initialCollabToken: "ssr-jwt" });
+    // With SSR token, provider is created synchronously (no async fetch needed)
     await vi.waitFor(() => expect(mockCreateCollabProvider).toHaveBeenCalledTimes(1));
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const callArg = (mockCreateCollabProvider.mock.calls as any[])[0][0];
     expect(callArg.noteId).toBe("note-1");
-    // token is now the resolved JWT string (pre-fetched, no race with WS handshake)
-    expect(callArg.token).toBe("fake-jwt");
+    expect(callArg.token).toBe("ssr-jwt");
+    // fetch should NOT have been called for the token
+    expect(mockFetch).not.toHaveBeenCalledWith("/api/collab/token", { method: "POST" });
   });
 
-  it("passes the correct url from NEXT_PUBLIC_COLLAB_URL", async () => {
-    renderNoteEditor();
+  it("passes the correct url from NEXT_PUBLIC_COLLAB_URL (SSR token path)", async () => {
+    renderNoteEditor({ initialCollabToken: "ssr-jwt" });
     await vi.waitFor(() => expect(mockCreateCollabProvider).toHaveBeenCalled());
     expect(mockCreateCollabProvider).toHaveBeenCalledWith(
       expect.objectContaining({ url: "ws://localhost:1234" }),
     );
   });
 
-  it("calls /api/collab/token with POST", async () => {
+  it("passes userName as collab user.name to Editor (SSR token path)", async () => {
+    renderNoteEditor({ userName: "bob", initialCollabToken: "ssr-jwt" });
+    await vi.waitFor(() => {
+      const calls = mockEditor.mock.calls;
+      const collabProps = calls.map((args: any[]) => args[0]?.collab?.user?.name).filter(Boolean);
+      expect(collabProps).toContain("bob");
+    });
+  });
+
+  // --- Fallback fetch path (no initialCollabToken) ---
+
+  it("falls back to /api/collab/token fetch when no SSR token is provided", async () => {
     renderNoteEditor({ userName: "bob" });
-    await vi.waitFor(() => expect(mockCreateCollabProvider).toHaveBeenCalled());
+    await vi.waitFor(() => expect(mockCreateCollabProvider).toHaveBeenCalledTimes(1));
+    const callArg = (mockCreateCollabProvider.mock.calls as any[])[0][0];
+    expect(callArg.token).toBe("fake-jwt");
     expect(mockFetch).toHaveBeenCalledWith("/api/collab/token", { method: "POST" });
   });
 
@@ -181,21 +197,12 @@ describe("NoteEditor – COLLAB_ENABLED=true", () => {
     expect(mockCreateCollabProvider).not.toHaveBeenCalled();
   });
 
-  it("passes userName as collab user.name to Editor", async () => {
-    renderNoteEditor({ userName: "bob" });
-    await vi.waitFor(() => {
-      const calls = mockEditor.mock.calls;
-      const collabProps = calls.map((args: any[]) => args[0]?.collab?.user?.name).filter(Boolean);
-      expect(collabProps).toContain("bob");
-    });
-  });
-
   it("creates a NEW collab provider when remounted with a different id (regression: drive-click navigation)", async () => {
     // Simulate the key={id} remount behavior in NotePageClient:
     // React unmounts NoteEditor and mounts a fresh one when id changes.
     // createCollabProvider must be called for each mount with the correct noteId.
     const { unmount: unmount1 } = render(
-      <NoteEditor id="note-1" initialMd="# Note 1" userName="alice" />,
+      <NoteEditor id="note-1" initialMd="# Note 1" userName="alice" initialCollabToken="ssr-jwt-1" />,
     );
     await vi.waitFor(() => expect(mockCreateCollabProvider).toHaveBeenCalledTimes(1));
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -207,7 +214,7 @@ describe("NoteEditor – COLLAB_ENABLED=true", () => {
     mockDestroy.mockClear();
 
     // Mount with a new id (simulates router navigating to a different note)
-    render(<NoteEditor id="note-2" initialMd="# Note 2" userName="alice" />);
+    render(<NoteEditor id="note-2" initialMd="# Note 2" userName="alice" initialCollabToken="ssr-jwt-2" />);
     await vi.waitFor(() => expect(mockCreateCollabProvider).toHaveBeenCalledTimes(1));
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const calls = mockCreateCollabProvider.mock.calls as any[];
