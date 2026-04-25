@@ -42,18 +42,30 @@ export function NoteEditor({
 
   useEffect(() => {
     if (!COLLAB_ENABLED) return;
-    console.warn(
-      "[NoteEditor] COLLAB_ENABLED is on but the auth-token bridge isn't wired yet — connections will fail with `unauth: invalid session`. See Phase 1.0 follow-up.",
-    );
-    const token = "EPISTEME_COLLAB_TOKEN_TODO"; // Phase 1.0 follow-up: mint via /api/collab/token
-    const c = createCollabProvider({
-      noteId: id,
-      url: COLLAB_URL,
-      token,
-    });
-    setCollabState(c);
+    let destroyed = false;
+    let provider: ReturnType<typeof createCollabProvider> | null = null;
+
+    fetch("/api/collab/token", { method: "POST" })
+      .then(async (res) => {
+        if (!res.ok) {
+          console.error("[NoteEditor] /api/collab/token returned", res.status, "— collab disabled");
+          return;
+        }
+        const { token } = await res.json() as { token: string };
+        if (destroyed) return;
+        provider = createCollabProvider({ noteId: id, url: COLLAB_URL, token });
+        setCollabState(provider);
+      })
+      .catch((err) => {
+        console.error("[NoteEditor] failed to fetch collab token", err);
+      });
+
     return () => {
-      c.destroy();
+      destroyed = true;
+      if (provider) {
+        provider.destroy();
+        provider = null;
+      }
       setCollabState(null);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps

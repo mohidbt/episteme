@@ -126,38 +126,59 @@ describe("NoteEditor – COLLAB_ENABLED=false (default)", () => {
 });
 
 describe("NoteEditor – COLLAB_ENABLED=true", () => {
+  let mockFetch: ReturnType<typeof vi.fn>;
+
   beforeEach(() => {
     mockCollabEnabled = true;
     mockCreateCollabProvider.mockClear();
     mockDestroy.mockClear();
     mockEditor.mockClear();
+    // Mock fetch to return a fake JWT token from /api/collab/token
+    mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ token: "fake-jwt" }),
+    } as Response);
+    vi.stubGlobal("fetch", mockFetch);
   });
 
   afterEach(() => {
     cleanup();
+    vi.unstubAllGlobals();
     mockCollabEnabled = false;
   });
 
-  it("calls createCollabProvider exactly once with correct noteId", () => {
+  it("calls createCollabProvider with the JWT token from /api/collab/token", async () => {
     renderNoteEditor({ userName: "bob" });
+    // Flush the fetch promise microtasks
+    await vi.waitFor(() => expect(mockCreateCollabProvider).toHaveBeenCalled());
     expect(mockCreateCollabProvider).toHaveBeenCalledTimes(1);
     expect(mockCreateCollabProvider).toHaveBeenCalledWith(
-      expect.objectContaining({ noteId: "note-1" }),
+      expect.objectContaining({ noteId: "note-1", token: "fake-jwt" }),
     );
   });
 
-  it("passes the correct url from NEXT_PUBLIC_COLLAB_URL", () => {
+  it("passes the correct url from NEXT_PUBLIC_COLLAB_URL", async () => {
     renderNoteEditor();
+    await vi.waitFor(() => expect(mockCreateCollabProvider).toHaveBeenCalled());
     expect(mockCreateCollabProvider).toHaveBeenCalledWith(
       expect.objectContaining({ url: "ws://localhost:1234" }),
     );
   });
 
-  it("passes userName as collab user.name to Editor", () => {
+  it("does NOT call createCollabProvider when token fetch returns non-OK", async () => {
+    mockFetch.mockResolvedValue({ ok: false, status: 401 } as Response);
+    renderNoteEditor();
+    // Give time for the async fetch to complete
+    await new Promise((r) => setTimeout(r, 50));
+    expect(mockCreateCollabProvider).not.toHaveBeenCalled();
+  });
+
+  it("passes userName as collab user.name to Editor", async () => {
     renderNoteEditor({ userName: "bob" });
-    // The Editor should eventually be called with collab.user.name === "bob"
-    const calls = mockEditor.mock.calls;
-    const collabProps = calls.map((args: any[]) => args[0]?.collab?.user?.name).filter(Boolean);
-    expect(collabProps).toContain("bob");
+    await vi.waitFor(() => {
+      const calls = mockEditor.mock.calls;
+      const collabProps = calls.map((args: any[]) => args[0]?.collab?.user?.name).filter(Boolean);
+      expect(collabProps).toContain("bob");
+    });
   });
 });
