@@ -4,7 +4,8 @@ import { HocuspocusProvider } from "@hocuspocus/provider";
 export interface CollabProviderArgs {
   noteId: string;
   url: string;
-  token: string;
+  /** A JWT string or an async function that resolves to one. */
+  token: string | (() => Promise<string>);
 }
 
 export interface CollabProvider {

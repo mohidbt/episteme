@@ -37,39 +37,30 @@ export function NoteEditor({
   const [editorInstance, setEditorInstance] = useState<TiptapEditor | null>(null);
   const [aiTriggerCount, setAiTriggerCount] = useState(0);
 
-  // Collab provider — instantiated once when COLLAB_ENABLED, torn down on unmount.
-  const [collabState, setCollabState] = useState<CollabProvider | null>(null);
-
-  useEffect(() => {
-    if (!COLLAB_ENABLED) return;
-    let destroyed = false;
-    let provider: ReturnType<typeof createCollabProvider> | null = null;
-
-    fetch("/api/collab/token", { method: "POST" })
-      .then(async (res) => {
-        if (!res.ok) {
-          console.error("[NoteEditor] /api/collab/token returned", res.status, "— collab disabled");
-          return;
-        }
-        const { token } = await res.json() as { token: string };
-        if (destroyed) return;
-        provider = createCollabProvider({ noteId: id, url: COLLAB_URL, token });
-        setCollabState(provider);
-      })
-      .catch((err) => {
-        console.error("[NoteEditor] failed to fetch collab token", err);
-      });
-
-    return () => {
-      destroyed = true;
-      if (provider) {
-        provider.destroy();
-        provider = null;
+  // Collab provider — created synchronously with an async token function so the
+  // Collaboration extension is always present at editor-init time. The provider
+  // fetches the JWT on first connect and re-fetches on reconnect automatically.
+  const collabState = useMemo<CollabProvider | null>(() => {
+    if (!COLLAB_ENABLED) return null;
+    const tokenFn = async (): Promise<string> => {
+      const res = await fetch("/api/collab/token", { method: "POST" });
+      if (!res.ok) {
+        console.error("[NoteEditor] /api/collab/token returned", res.status, "— collab disabled");
+        return "";
       }
-      setCollabState(null);
+      const { token } = await res.json() as { token: string };
+      return token;
     };
+    return createCollabProvider({ noteId: id, url: COLLAB_URL, token: tokenFn });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+  useEffect(() => {
+    if (!collabState) return;
+    return () => {
+      collabState.destroy();
+    };
+  }, [collabState]);
 
   const onReady = useCallback((editor: TiptapEditor) => {
     editorRef.current = editor;
