@@ -5,7 +5,7 @@ import { createCollabProvider } from "./collab";
 
 // Suppress WebSocket connection attempts — provider tries to connect on
 // construction; we only want to assert object shape.
-vi.spyOn(HocuspocusProvider.prototype, "connect").mockImplementation(() => {});
+vi.spyOn(HocuspocusProvider.prototype, "connect").mockImplementation(() => Promise.resolve());
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -39,9 +39,11 @@ describe("createCollabProvider", () => {
     collab.destroy();
   });
 
-  it("provider.configuration.url matches passed url", () => {
+  it("provider websocket url matches passed url", () => {
     const collab = createCollabProvider(args);
-    expect(collab.provider.configuration.url).toBe(args.url);
+    // url lives on the websocket sub-provider's configuration, not directly
+    // on HocuspocusProvider.configuration.
+    expect(collab.provider.configuration.websocketProvider.configuration.url).toBe(args.url);
     collab.destroy();
   });
 

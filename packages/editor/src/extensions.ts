@@ -3,6 +3,10 @@ import Suggestion, { type SuggestionOptions } from "@tiptap/suggestion";
 import { Extension } from "@tiptap/core";
 import { PluginKey } from "@tiptap/pm/state";
 import { createExtensions as baseExtensions, WikiLink, TagMark } from "@episteme/markdown";
+import Collaboration from "@tiptap/extension-collaboration";
+import CollaborationCursor from "@tiptap/extension-collaboration-cursor";
+import type * as Y from "yjs";
+import type { HocuspocusProvider } from "@hocuspocus/provider";
 
 export type WikiLinkSuggestion = Omit<SuggestionOptions, "editor" | "pluginKey">;
 
@@ -14,10 +18,17 @@ export const SlashCommand = Extension.create({
 
 export type SlashCommandSuggestion = Omit<SuggestionOptions, "editor" | "pluginKey">;
 
+export interface CollabOptions {
+  ydoc: Y.Doc;
+  provider: HocuspocusProvider;
+  user: { name: string; color?: string };
+}
+
 export function editorExtensions(opts?: {
   placeholder?: string;
   wikiLinkSuggestion?: WikiLinkSuggestion;
   slashCommandSuggestion?: SlashCommandSuggestion;
+  collab?: CollabOptions;
 }) {
   const wikiLink = opts?.wikiLinkSuggestion
     ? WikiLink.extend({
@@ -48,11 +59,19 @@ export function editorExtensions(opts?: {
       })
     : null;
 
+  const collab = opts?.collab;
+
   return [
-    ...baseExtensions(),
+    ...baseExtensions({ collaborative: !!collab }),
     wikiLink,
     TagMark,
     Placeholder.configure({ placeholder: opts?.placeholder ?? "Start writing…" }),
     ...(slashCommand ? [slashCommand] : []),
+    ...(collab
+      ? [
+          Collaboration.configure({ document: collab.ydoc, field: "prosemirror" }),
+          CollaborationCursor.configure({ provider: collab.provider, user: collab.user }),
+        ]
+      : []),
   ];
 }

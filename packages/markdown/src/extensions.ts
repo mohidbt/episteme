@@ -40,11 +40,13 @@ const ItalicUnderscore = Italic.extend({
   },
 });
 
-export const createExtensions = () => {
+export const createExtensions = (opts?: { collaborative?: boolean }) => {
   const exts = [
     StarterKit.configure({
       heading: { levels: [1, 2, 3] },
       italic: false,
+      // Collaboration extension owns undo/redo — StarterKit history must be off.
+      history: opts?.collaborative ? false : undefined,
     }),
     ItalicUnderscore,
     Link,
