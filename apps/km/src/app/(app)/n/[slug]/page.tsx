@@ -1,3 +1,8 @@
+// Prevent Next.js from caching the RSC payload. The server component mints a
+// Hocuspocus JWT (10-min TTL) at render time; caching would serve a stale,
+// expired token to the client and break collab connections.
+export const dynamic = "force-dynamic";
+
 import { headers } from "next/headers";
 import { auth } from "@episteme/auth";
 import { and, eq } from "drizzle-orm";

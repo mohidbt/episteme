@@ -83,6 +83,44 @@ export function NoteEditor({
     };
   }, [collabState]);
 
+  // Single-shot guard: flip to `true` after the first retry attempt so rapid
+  // back-to-back `authenticationFailed` events don't spam the token endpoint.
+  // Reset whenever `id` changes (new note mount).
+  const authRetryFiredRef = useRef(false);
+  useEffect(() => {
+    authRetryFiredRef.current = false;
+  }, [id]);
+
+  // Defense-in-depth: if the provider rejects our token (e.g. the SSR-minted
+  // JWT expired during slow hydration or bfcache restore), fetch a fresh token
+  // and let the useMemo re-create the provider with it.
+  useEffect(() => {
+    if (!collabState) return;
+    const onAuthFail = () => {
+      if (authRetryFiredRef.current) return;
+      authRetryFiredRef.current = true;
+      fetch("/api/collab/token", { method: "POST" })
+        .then(async (res) => {
+          if (!res.ok) {
+            console.error(
+              "[NoteEditor] auth-failure retry: /api/collab/token returned",
+              res.status,
+            );
+            return;
+          }
+          const { token } = (await res.json()) as { token: string };
+          setCollabToken(token);
+        })
+        .catch((err) => {
+          console.error("[NoteEditor] auth-failure retry fetch error", err);
+        });
+    };
+    collabState.provider.on("authenticationFailed", onAuthFail);
+    return () => {
+      collabState.provider.off("authenticationFailed", onAuthFail);
+    };
+  }, [collabState]);
+
   const onReady = useCallback((editor: TiptapEditor) => {
     editorRef.current = editor;
     setEditorInstance(editor);
