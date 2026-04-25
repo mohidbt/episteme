@@ -90,6 +90,39 @@ describe("NoteEditor – COLLAB_ENABLED=false (default)", () => {
     renderNoteEditor();
     expect(mockCreateCollabProvider).not.toHaveBeenCalled();
   });
+
+  it("autosave PATCH fetch IS called with /api/notes/:id/content when collab is off and user types", async () => {
+    // Mock global fetch so we can assert it was called
+    const mockFetch = vi.fn().mockResolvedValue({ ok: true } as Response);
+    vi.stubGlobal("fetch", mockFetch);
+
+    try {
+      renderNoteEditor();
+
+      // The Editor stub received onChangeMd as a prop — call it to simulate typing.
+      // The component registers onChangeMd in mockEditor's props on each render call.
+      const onChangeMd = mockEditor.mock.calls
+        .map((args: any[]) => args[0]?.onChangeMd)
+        .find(Boolean) as ((md: string) => void) | undefined;
+
+      expect(onChangeMd).toBeDefined();
+      onChangeMd!("typed content");
+
+      // cleanup() unmounts the component which triggers the useEffect teardown
+      // calling flush() synchronously with the pending content.
+      cleanup();
+
+      // flush() is async (fetch), so await the next microtask
+      await Promise.resolve();
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        "/api/notes/note-1/content",
+        expect.objectContaining({ method: "PATCH" }),
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
 });
 
 describe("NoteEditor – COLLAB_ENABLED=true", () => {

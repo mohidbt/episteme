@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@hocuspocus/server": "2.15.0",
+    "@hocuspocus/provider": "2.15.0",
     "@hocuspocus/extension-database": "2.15.0",
     "@episteme/db": "workspace:*",
     "@episteme/auth": "workspace:*",
