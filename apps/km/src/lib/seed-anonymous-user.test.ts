@@ -14,22 +14,6 @@ import { ensureMinIOReady } from "@/app/api/_minio-setup";
 import { seedAnonymousUser } from "./seed-anonymous-user";
 import type { CslItem } from "./csl";
 
-// Fixed CSL for AlphaFold paper — keeps the test offline.
-const ALPHAFOLD_CSL: CslItem = {
-  id: "10.1038/s41586-021-03819-2",
-  type: "article-journal",
-  DOI: "10.1038/s41586-021-03819-2",
-  title: "Highly accurate protein structure prediction with AlphaFold",
-  author: [
-    { family: "Jumper", given: "John" },
-    { family: "Evans", given: "Richard" },
-  ],
-  issued: { "date-parts": [[2021, 8, 26]] },
-  "container-title": "Nature",
-};
-
-const fakeFetchCrossRef = async (_doi: string) => ALPHAFOLD_CSL;
-
 const createdUserIds: string[] = [];
 
 function makeAnonId(): string {
@@ -53,16 +37,28 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  if (createdUserIds.length > 0) {
-    await db.delete(userTable).where(inArray(userTable.id, createdUserIds));
+  if (createdUserIds.length === 0) return;
+  // Drop MinIO objects before users — once papers cascade-delete, we lose the
+  // paperId needed to compute the storage key.
+  for (const userId of createdUserIds) {
+    const rows = await db
+      .select({ id: papers.id })
+      .from(papers)
+      .where(eq(papers.userId, userId));
+    await Promise.all(
+      rows.map((r) =>
+        storage.deleteObject(paperSourceKey(r.id)).catch(() => {}),
+      ),
+    );
   }
+  await db.delete(userTable).where(inArray(userTable.id, createdUserIds));
 });
 
 describe("seedAnonymousUser", () => {
   it("creates 1 library + TRASH folder + 1 note + 1 paper (PDF in MinIO) + 1 reference", async () => {
     const userId = await insertAnonymousUser();
 
-    await seedAnonymousUser(userId, { fetchCrossRef: fakeFetchCrossRef });
+    await seedAnonymousUser(userId);
 
     const libs = await db
       .select()
@@ -123,8 +119,42 @@ describe("seedAnonymousUser", () => {
   it("is idempotent on a second call for the same user", async () => {
     const userId = await insertAnonymousUser();
 
-    await seedAnonymousUser(userId, { fetchCrossRef: fakeFetchCrossRef });
-    await seedAnonymousUser(userId, { fetchCrossRef: fakeFetchCrossRef });
+    await seedAnonymousUser(userId);
+    await seedAnonymousUser(userId);
+
+    const libs = await db
+      .select()
+      .from(libraries)
+      .where(eq(libraries.userId, userId));
+    expect(libs).toHaveLength(1);
+
+    const noteRows = await db
+      .select()
+      .from(notes)
+      .where(eq(notes.userId, userId));
+    expect(noteRows).toHaveLength(1);
+
+    const paperRows = await db
+      .select()
+      .from(papers)
+      .where(eq(papers.userId, userId));
+    expect(paperRows).toHaveLength(1);
+
+    const refRows = await db
+      .select()
+      .from(references_)
+      .where(eq(references_.userId, userId));
+    expect(refRows).toHaveLength(1);
+  });
+
+  it("recovers from a partial seed (orphan library, no other rows)", async () => {
+    const userId = await insertAnonymousUser();
+
+    // Simulate a half-seeded user: a library row was inserted by a prior run
+    // that crashed before notes/papers/references_ were written.
+    await db.insert(libraries).values({ userId, name: "My Library" });
+
+    await seedAnonymousUser(userId);
 
     const libs = await db
       .select()

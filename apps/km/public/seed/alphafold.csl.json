@@ -1,0 +1,12 @@
+{
+  "id": "10.1038/s41586-021-03819-2",
+  "type": "article-journal",
+  "DOI": "10.1038/s41586-021-03819-2",
+  "title": "Highly accurate protein structure prediction with AlphaFold",
+  "author": [
+    { "family": "Jumper", "given": "John" },
+    { "family": "Evans", "given": "Richard" }
+  ],
+  "issued": { "date-parts": [[2021, 8, 26]] },
+  "container-title": "Nature"
+}

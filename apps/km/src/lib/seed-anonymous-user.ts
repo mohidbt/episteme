@@ -12,7 +12,6 @@ import {
 } from "@episteme/db/schema";
 import { storage, paperSourceKey } from "@/lib/storage";
 import { resolveNoteSlug } from "@/lib/crud";
-import { fetchCrossRef as fetchCrossRefReal } from "@/lib/crossref";
 import { deriveCitationKey, validateCslJson, type CslItem } from "@/lib/csl";
 
 const SEED_DIR = "public/seed";
@@ -22,33 +21,47 @@ const SEED_PAPER_FILE = "2005.11401.pdf";
 const SEED_PAPER_TITLE =
   "Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks";
 const SEED_PAPER_DOI = "10.48550/arXiv.2005.11401";
-const SEED_REFERENCE_DOI = "10.1038/s41586-021-03819-2";
-
-export interface SeedDeps {
-  /** Test seam — defaults to the real CrossRef fetcher. */
-  fetchCrossRef?: (doi: string) => Promise<CslItem | null>;
-}
+const SEED_REFERENCE_CSL_FILE = "alphafold.csl.json";
 
 /**
  * Seed app-level demo content for a freshly-created anonymous user. Idempotent:
- * a user with an existing library is a no-op (defensive, since the create hook
- * should fire exactly once).
+ * if all four seed rows (library, note, paper, reference) exist, no-op.
+ * Otherwise wipe any partial state for this user and re-seed from scratch — a
+ * prior failed run (e.g. MinIO down, fs read error) leaves a half-seeded user
+ * that must be made whole on retry.
  */
-export async function seedAnonymousUser(
-  userId: string,
-  deps: SeedDeps = {},
-): Promise<void> {
-  const fetchCrossRef = deps.fetchCrossRef ?? fetchCrossRefReal;
-
-  // Idempotency gate.
-  const existing = await db
+export async function seedAnonymousUser(userId: string): Promise<void> {
+  // Idempotency gate: only skip if all four seed rows are present. A partial
+  // state (e.g. library inserted but paper insert threw) must be redone.
+  const [libRow] = await db
     .select({ id: libraries.id })
     .from(libraries)
     .where(eq(libraries.userId, userId))
     .limit(1);
-  if (existing.length > 0) return;
+  const [noteRow] = await db
+    .select({ id: notes.id })
+    .from(notes)
+    .where(eq(notes.userId, userId))
+    .limit(1);
+  const [paperRow] = await db
+    .select({ id: papers.id })
+    .from(papers)
+    .where(eq(papers.userId, userId))
+    .limit(1);
+  const [refRow] = await db
+    .select({ id: references_.id })
+    .from(references_)
+    .where(eq(references_.userId, userId))
+    .limit(1);
+  if (libRow && noteRow && paperRow && refRow) return;
 
-  // Library + TRASH folder, mirroring POST /api/libraries.
+  // Partial state exists: drop everything for this user and re-seed. Deleting
+  // libraries cascades to folders/notes/papers/references_ (all FK'd to
+  // libraries.id with onDelete: cascade).
+  if (libRow || noteRow || paperRow || refRow) {
+    await db.delete(libraries).where(eq(libraries.userId, userId));
+  }
+
   const lib = await db.transaction(async (tx) => {
     const [created] = await tx
       .insert(libraries)
@@ -64,7 +77,6 @@ export async function seedAnonymousUser(
     return created;
   });
 
-  // Welcome note.
   const noteMdPath = path.join(process.cwd(), SEED_DIR, WELCOME_NOTE_FILE);
   const contentMd = await fs.readFile(noteMdPath, "utf8");
   const slug = await resolveNoteSlug(userId, WELCOME_NOTE_TITLE);
@@ -77,7 +89,6 @@ export async function seedAnonymousUser(
     contentMd,
   });
 
-  // Seed paper: insert row, upload PDF to MinIO at paperSourceKey().
   const pdfPath = path.join(process.cwd(), SEED_DIR, SEED_PAPER_FILE);
   const pdfBuf = await fs.readFile(pdfPath);
   const [paper] = await db
@@ -98,18 +109,16 @@ export async function seedAnonymousUser(
     "application/pdf",
   );
 
-  // Seed reference via CrossRef DOI lookup.
-  const fetched = await fetchCrossRef(SEED_REFERENCE_DOI);
-  if (fetched) {
-    const cslJson = validateCslJson(fetched);
-    const citationKey = deriveCitationKey(cslJson);
-    await db.insert(references_).values({
-      libraryId: lib.id,
-      userId,
-      folderPath: "",
-      citationKey,
-      cslJson,
-      paperId: null,
-    });
-  }
+  const cslPath = path.join(process.cwd(), SEED_DIR, SEED_REFERENCE_CSL_FILE);
+  const cslRaw = JSON.parse(await fs.readFile(cslPath, "utf8")) as CslItem;
+  const cslJson = validateCslJson(cslRaw);
+  const citationKey = deriveCitationKey(cslJson);
+  await db.insert(references_).values({
+    libraryId: lib.id,
+    userId,
+    folderPath: "",
+    citationKey,
+    cslJson,
+    paperId: null,
+  });
 }
