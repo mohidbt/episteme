@@ -5,10 +5,12 @@ import {
   type WikiLinkSuggestion,
   type SlashCommandSuggestion,
   type TiptapEditor,
+  type CitationMeta,
   insertCitation,
   insertPdfEmbed,
   insertWikiLink,
   invokeAgent,
+  hydrateCitations,
 } from "@episteme/editor";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
@@ -39,6 +41,24 @@ export function NoteEditor({
   const onReady = useCallback((editor: TiptapEditor) => {
     editorRef.current = editor;
     setEditorInstance(editor);
+
+    // Hydrate citations fire-and-forget: refill bibIndex + metadata + bibliography
+    // from fresh server data so reload restores [n] indices and hover tooltips.
+    // This must not block first paint.
+    void hydrateCitations(editor, async (citekeys: string[]): Promise<CitationMeta[]> => {
+      try {
+        const r = await fetch("/api/citations/by-citekeys", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ citekeys }),
+        });
+        if (!r.ok) return [];
+        const data = await r.json() as { results: CitationMeta[] };
+        return data.results;
+      } catch {
+        return [];
+      }
+    });
   }, []);
 
   const flush = useCallback((): Promise<void> => {
