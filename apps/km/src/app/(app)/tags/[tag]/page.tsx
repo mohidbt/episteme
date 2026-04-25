@@ -1,7 +1,5 @@
-import { headers } from "next/headers";
 import Link from "next/link";
-import { auth } from "@episteme/auth";
-import { redirect } from "next/navigation";
+import { getRequiredUserId } from "@/lib/session";
 import { listNotesByTag } from "@/lib/notes/tag-queries";
 
 export default async function TagPage({
@@ -9,12 +7,11 @@ export default async function TagPage({
 }: {
   params: Promise<{ tag: string }>;
 }) {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session?.user) redirect("/sign-in");
+  const userId = await getRequiredUserId();
 
   const { tag } = await params;
   const normalizedTag = tag.toLowerCase();
-  const notesList = await listNotesByTag(session.user.id, normalizedTag);
+  const notesList = await listNotesByTag(userId, normalizedTag);
 
   return (
     <div className="mx-auto max-w-3xl p-6">

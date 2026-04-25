@@ -1,8 +1,7 @@
 import Link from "next/link";
-import { headers } from "next/headers";
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import { BookMarked } from "lucide-react";
-import { auth } from "@episteme/auth";
+import { getRequiredUserId } from "@/lib/session";
 import { getDefaultLibrary } from "@/lib/default-library";
 import { getReference, listPapersInLibrary } from "@/lib/references-server";
 import { PathPill, type PathPillSegment } from "@/components/PathPill";
@@ -15,17 +14,16 @@ export default async function ReferencePage({
 }: {
   params: Promise<{ referenceId: string }>;
 }) {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session?.user) redirect("/sign-in");
+  const userId = await getRequiredUserId();
   const { referenceId } = await params;
   const [ref, library] = await Promise.all([
-    getReference(referenceId, session.user.id),
-    getDefaultLibrary(session.user.id),
+    getReference(referenceId, userId),
+    getDefaultLibrary(userId),
   ]);
   if (!ref) notFound();
 
   const papersInLib = library
-    ? await listPapersInLibrary(library.id, session.user.id)
+    ? await listPapersInLibrary(library.id, userId)
     : [];
 
   const attachedPaper = ref.paperId

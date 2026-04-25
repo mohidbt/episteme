@@ -1,6 +1,5 @@
-import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
-import { auth } from "@episteme/auth";
+import { getRequiredUserId } from "@/lib/session";
 import { getDefaultLibrary } from "@/lib/default-library";
 import { listPapers } from "@/lib/papers-server";
 import { isValidFolderPath } from "@/lib/tree";
@@ -13,9 +12,8 @@ export default async function PapersFolderPage({
 }: {
   params: Promise<{ path: string[] }>;
 }) {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session?.user) redirect("/sign-in");
-  const library = await getDefaultLibrary(session.user.id);
+  const userId = await getRequiredUserId();
+  const library = await getDefaultLibrary(userId);
   if (!library) redirect("/");
 
   const { path } = await params;
@@ -28,7 +26,7 @@ export default async function PapersFolderPage({
   const folderPath = decoded.join("/") + "/";
   if (!isValidFolderPath(folderPath)) notFound();
 
-  const rows = await listPapers(library.id, session.user.id, folderPath);
+  const rows = await listPapers(library.id, userId, folderPath);
 
   return (
     <div className="p-6">

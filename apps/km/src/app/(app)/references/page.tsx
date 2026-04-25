@@ -1,7 +1,6 @@
 import Link from "next/link";
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { auth } from "@episteme/auth";
+import { getRequiredUserId } from "@/lib/session";
 import { getDefaultLibrary } from "@/lib/default-library";
 import { listAllReferences } from "@/lib/references-server";
 import { listAllFolders } from "@/lib/folders-server";
@@ -19,14 +18,13 @@ export default async function ReferencesPage({
   const sp = await searchParams;
   const folderFilter = sp.folder ?? null;
 
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session?.user) redirect("/sign-in");
-  const library = await getDefaultLibrary(session.user.id);
+  const userId = await getRequiredUserId();
+  const library = await getDefaultLibrary(userId);
   if (!library) redirect("/");
 
   const [allRefs, allFolders] = await Promise.all([
-    listAllReferences(library.id, session.user.id),
-    listAllFolders(library.id, session.user.id),
+    listAllReferences(library.id, userId),
+    listAllFolders(library.id, userId),
   ]);
 
   // Exclude references in trash

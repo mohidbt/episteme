@@ -1,14 +1,11 @@
-import { headers } from "next/headers";
 import Link from "next/link";
-import { auth } from "@episteme/auth";
-import { redirect } from "next/navigation";
+import { getRequiredUserId } from "@/lib/session";
 import { listTagsWithCounts } from "@/lib/notes/tag-queries";
 
 export default async function TagsPage() {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session?.user) redirect("/sign-in");
+  const userId = await getRequiredUserId();
 
-  const tags = await listTagsWithCounts(session.user.id);
+  const tags = await listTagsWithCounts(userId);
 
   return (
     <div className="mx-auto max-w-3xl p-6">
