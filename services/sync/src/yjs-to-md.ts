@@ -2,11 +2,16 @@ import * as Y from "yjs";
 import { yDocToProsemirrorJSON } from "y-prosemirror";
 import { proseMirrorToMd } from "@episteme/markdown";
 
-/**
- * Serialize a Y.Doc to markdown using the "prosemirror" XmlFragment key
- * (matches the y-prosemirror default used by the client in Task 4).
- */
+// The "prosemirror" XmlFragment key matches the y-prosemirror default used by
+// the client (set in Task 4). Don't rename — they have to agree.
+export function yDocToPmJson(doc: Y.Doc): unknown {
+  return yDocToProsemirrorJSON(doc, "prosemirror");
+}
+
+export function pmJsonToMd(pmJson: unknown): string {
+  return proseMirrorToMd(pmJson as Parameters<typeof proseMirrorToMd>[0]);
+}
+
 export function yjsToMd(doc: Y.Doc): string {
-  const pmJson = yDocToProsemirrorJSON(doc, "prosemirror");
-  return proseMirrorToMd(pmJson);
+  return pmJsonToMd(yDocToPmJson(doc));
 }

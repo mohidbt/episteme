@@ -164,6 +164,14 @@ describe("authenticateExt — onAuthenticate", () => {
     ).rejects.toThrow(/malformed/i);
   });
 
+  it("rejects when documentName UUID is uppercase (Postgres uuid is canonical lowercase)", async () => {
+    await expect(
+      ext.onAuthenticate!(
+        payload({ token: userA.cookie, documentName: `note:${noteIdA.toUpperCase()}` }),
+      ),
+    ).rejects.toThrow(/malformed/i);
+  });
+
   it("token wins over requestHeaders.cookie (cookie precedence)", async () => {
     // token = userA's session; requestHeaders.cookie = userB's session
     // The note belongs to userA — should resolve, proving token is the trust anchor

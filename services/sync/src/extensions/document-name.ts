@@ -1,4 +1,6 @@
-const NOTE_DOC_RE = /^note:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
+// Postgres `uuid` stores canonical lowercase — reject uppercase so upstream
+// lookups don't silently miss and surface as "not owner" 401s.
+const NOTE_DOC_RE = /^note:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
 
 /**
  * Parse a Hocuspocus documentName of the form `note:<uuid>`.

@@ -4,10 +4,10 @@ import { prosemirrorJSONToYDoc } from "y-prosemirror";
 import { Editor } from "@tiptap/core";
 import { eq } from "drizzle-orm";
 import { db } from "@episteme/db";
-import { notes } from "@episteme/db/schema";
+import { notes, type ProseMirrorJSON } from "@episteme/db/schema";
 import { mdToProseMirror, createExtensions } from "@episteme/markdown";
 import { rebuildLinks, createRevisionIfNeeded } from "@episteme/notes-core";
-import { yjsToMd } from "../yjs-to-md.js";
+import { yDocToPmJson, pmJsonToMd } from "../yjs-to-md.js";
 import { parseNoteDocumentName } from "./document-name.js";
 
 /**
@@ -28,30 +28,41 @@ export function persistExt(): Pick<Extension, "onStoreDocument" | "onLoadDocumen
       if (!noteId) return; // non-note document, ignore
 
       const userId: string | undefined = (context as { user?: { id?: string } }).user?.id;
+      if (!userId) {
+        throw new Error(
+          `persist: no user on context for ${documentName} — authenticate extension should have rejected this`,
+        );
+      }
 
-      // 1. Serialize Y.Doc → binary update + markdown
+      // 1. Serialize Y.Doc → binary update + ProseMirror JSON + markdown.
+      // Keep pmJson around so we can write it to contentJson and avoid drift
+      // with the REST save path (apps/km/.../save-note-md.ts).
       const yjsState = Y.encodeStateAsUpdate(document);
-      const contentMd = yjsToMd(document);
+      const pmJson = yDocToPmJson(document);
+      const contentMd = pmJsonToMd(pmJson);
 
       // 2. Side effects — run BEFORE updating contentMd so createRevisionIfNeeded
       // can compute the delta against the OLD notes.contentMd.
       // Eventual-consistency trade-off: if the process dies between step 2 and
       // step 3, note_links / note_revisions may lag by one save cycle.
       // Revisit with a single transaction if a race condition is observed (Phase 1.0 choice (b)).
-      if (userId) {
-        await createRevisionIfNeeded({
-          noteId,
-          authorId: userId,
-          newMd: contentMd,
-          reason: "autosave",
-        });
-        await rebuildLinks(noteId, contentMd, userId);
-      }
+      await createRevisionIfNeeded({
+        noteId,
+        authorId: userId,
+        newMd: contentMd,
+        reason: "autosave",
+      });
+      await rebuildLinks(noteId, contentMd, userId);
 
-      // 3. Persist yjs_state + content_md to the notes row.
+      // 3. Persist yjs_state + content_md + content_json to the notes row.
       await db
         .update(notes)
-        .set({ yjsState, contentMd, updatedAt: new Date() })
+        .set({
+          yjsState,
+          contentMd,
+          contentJson: pmJson as ProseMirrorJSON,
+          updatedAt: new Date(),
+        })
         .where(eq(notes.id, noteId));
     },
 

@@ -132,11 +132,19 @@ describe("persistExt — onStoreDocument", () => {
     const noteId = await makeNote("initial content");
     const doc = mdToYDoc("## Hello\n\nWorld paragraph.");
     await ext.onStoreDocument!(
-      storePayload({ documentName: `note:${noteId}`, document: doc }),
+      storePayload({
+        documentName: `note:${noteId}`,
+        document: doc,
+        context: { user: { id: u.id } },
+      }),
     );
 
     const [row] = await db
-      .select({ yjsState: notes.yjsState, contentMd: notes.contentMd })
+      .select({
+        yjsState: notes.yjsState,
+        contentMd: notes.contentMd,
+        contentJson: notes.contentJson,
+      })
       .from(notes)
       .where(eq(notes.id, noteId));
 
@@ -145,6 +153,19 @@ describe("persistExt — onStoreDocument", () => {
     expect(row.yjsState).toBeTruthy();
     expect((row.yjsState as Uint8Array).length).toBeGreaterThan(0);
     expect(row.contentMd).toContain("Hello");
+    // contentJson parity with REST save path — non-null doc root
+    expect(row.contentJson).not.toBeNull();
+    expect((row.contentJson as { type: string }).type).toBe("doc");
+  });
+
+  it("throws when context.user.id is missing for a note: doc", async () => {
+    const noteId = await makeNote("");
+    const doc = mdToYDoc("# Hi");
+    await expect(
+      ext.onStoreDocument!(
+        storePayload({ documentName: `note:${noteId}`, document: doc, context: {} }),
+      ),
+    ).rejects.toThrow(/no user on context/i);
   });
 
   it("bumps updated_at on store", async () => {
@@ -159,7 +180,11 @@ describe("persistExt — onStoreDocument", () => {
 
     const doc = mdToYDoc("updated content");
     await ext.onStoreDocument!(
-      storePayload({ documentName: `note:${noteId}`, document: doc }),
+      storePayload({
+        documentName: `note:${noteId}`,
+        document: doc,
+        context: { user: { id: u.id } },
+      }),
     );
 
     const [after] = await db
@@ -300,10 +325,7 @@ describe("persistExt — onLoadDocument", () => {
     // Should have applied the yjs state (not content_md)
     const fragment = doc.getXmlFragment("prosemirror");
     expect(fragment.length).toBeGreaterThan(0);
-    // Verify the state matches the stored doc (not bootstrapped from content_md)
-    const storedState = Y.encodeStateAsUpdate(storedDoc);
-    const loadedState = Y.encodeStateAsUpdate(doc);
-    // Both docs should encode to the same content (same XmlFragment)
+    // Verify it matches the stored doc (proves yjs_state took precedence over content_md)
     expect(
       doc.getXmlFragment("prosemirror").toJSON(),
     ).toBe(

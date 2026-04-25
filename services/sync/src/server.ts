@@ -1,3 +1,4 @@
+import "./dom-shim.js";
 import { Hocuspocus } from "@hocuspocus/server";
 import { authenticateExt } from "./extensions/authenticate.js";
 import { persistExt } from "./extensions/persist.js";
