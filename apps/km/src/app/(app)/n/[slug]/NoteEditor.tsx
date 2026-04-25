@@ -38,21 +38,22 @@ export function NoteEditor({
   const [aiTriggerCount, setAiTriggerCount] = useState(0);
 
   // Collab provider — instantiated once when COLLAB_ENABLED, torn down on unmount.
-  const collabRef = useRef<CollabProvider | null>(null);
   const [collabState, setCollabState] = useState<CollabProvider | null>(null);
 
   useEffect(() => {
     if (!COLLAB_ENABLED) return;
+    console.warn(
+      "[NoteEditor] COLLAB_ENABLED is on but the auth-token bridge isn't wired yet — connections will fail with `unauth: invalid session`. See Phase 1.0 follow-up.",
+    );
+    const token = "EPISTEME_COLLAB_TOKEN_TODO"; // Phase 1.0 follow-up: mint via /api/collab/token
     const c = createCollabProvider({
       noteId: id,
       url: COLLAB_URL,
-      token: document.cookie,
+      token,
     });
-    collabRef.current = c;
     setCollabState(c);
     return () => {
       c.destroy();
-      collabRef.current = null;
       setCollabState(null);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -65,7 +66,7 @@ export function NoteEditor({
 
   const flush = useCallback((): Promise<void> => {
     // When Hocuspocus is active it owns persistence — skip the PATCH path.
-    if (collabRef.current) return Promise.resolve();
+    if (collabState) return Promise.resolve();
     const md = pendingMdRef.current;
     if (md == null) return Promise.resolve();
     pendingMdRef.current = null;
@@ -83,7 +84,7 @@ export function NoteEditor({
       .catch((err) => {
         console.warn("[autosave] failed", err);
       });
-  }, [id]);
+  }, [id, collabState]);
 
   const onChangeMd = useCallback(
     (md: string) => {

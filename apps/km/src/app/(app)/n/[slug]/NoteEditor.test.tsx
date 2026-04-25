@@ -6,14 +6,15 @@ import { render, cleanup } from "@testing-library/react";
 
 // Use vi.hoisted so the variables are available inside vi.mock() factories
 // (which are hoisted to the top of the file by vitest's transformer).
-const { mockDestroy, mockCreateCollabProvider } = vi.hoisted(() => {
+const { mockDestroy, mockCreateCollabProvider, mockEditor } = vi.hoisted(() => {
   const mockDestroy = vi.fn();
   const mockCreateCollabProvider = vi.fn(() => ({
     ydoc: {} as any,
     provider: {} as any,
     destroy: mockDestroy,
   }));
-  return { mockDestroy, mockCreateCollabProvider };
+  const mockEditor = vi.fn(() => null);
+  return { mockDestroy, mockCreateCollabProvider, mockEditor };
 });
 
 vi.mock("next/navigation", () => ({
@@ -27,7 +28,7 @@ vi.mock("@episteme/editor", async (importOriginal) => {
     ...actual,
     // Keep the Editor component as a no-op stub — we only care about
     // createCollabProvider being called (or not).
-    Editor: vi.fn(() => null),
+    Editor: mockEditor,
     createCollabProvider: mockCreateCollabProvider,
   };
 });
@@ -78,6 +79,7 @@ describe("NoteEditor – COLLAB_ENABLED=false (default)", () => {
     mockCollabEnabled = false;
     mockCreateCollabProvider.mockClear();
     mockDestroy.mockClear();
+    mockEditor.mockClear();
   });
 
   afterEach(() => {
@@ -95,6 +97,7 @@ describe("NoteEditor – COLLAB_ENABLED=true", () => {
     mockCollabEnabled = true;
     mockCreateCollabProvider.mockClear();
     mockDestroy.mockClear();
+    mockEditor.mockClear();
   });
 
   afterEach(() => {
@@ -115,5 +118,13 @@ describe("NoteEditor – COLLAB_ENABLED=true", () => {
     expect(mockCreateCollabProvider).toHaveBeenCalledWith(
       expect.objectContaining({ url: "ws://localhost:1234" }),
     );
+  });
+
+  it("passes userName as collab user.name to Editor", () => {
+    renderNoteEditor({ userName: "bob" });
+    // The Editor should eventually be called with collab.user.name === "bob"
+    const calls = mockEditor.mock.calls;
+    const collabProps = calls.map((args: any[]) => args[0]?.collab?.user?.name).filter(Boolean);
+    expect(collabProps).toContain("bob");
   });
 });
