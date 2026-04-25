@@ -5,7 +5,6 @@ import { getDefaultLibrary } from "@/lib/default-library";
 import { listAllFolders, listFolderContents } from "@/lib/folders-server";
 import { FileBrowser } from "@/components/FileBrowser";
 import { serializeFolderContents } from "@/app/(app)/drive/serialize";
-import { UnifiedDropzone } from "@/components/UnifiedDropzone";
 
 // NOTE: if the user has no library we render an inline empty-state below.
 // A dedicated `/onboarding` route does not exist yet — flag for a follow-up.
@@ -36,9 +35,6 @@ export default async function DriveRootPage() {
 
   return (
     <div>
-      <div className="px-6 pt-6">
-        <UnifiedDropzone libraryId={library.id} folderPath="" folderId={null} />
-      </div>
       <FileBrowser
         libraryId={library.id}
         libraryName={library.name}
