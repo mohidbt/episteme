@@ -2,7 +2,7 @@ export { Editor } from "./Editor";
 export type { EditorProps } from "./Editor";
 export { BubbleMenu } from "@tiptap/react";
 export type { Editor as TiptapEditor } from "@tiptap/react";
-export { editorExtensions, SlashCommand, SlashCommandPluginKey } from "./extensions";
+export { editorExtensions, SlashCommand, SlashCommandPluginKey, userColor, buildCursorElement } from "./extensions";
 export type { WikiLinkSuggestion, SlashCommandSuggestion, CollabOptions } from "./extensions";
 export { hydrateWikiLinkResolutions } from "./hydrate-wiki-links";
 export type { ResolvedLinksMap, WikiLinkResolution } from "./hydrate-wiki-links";

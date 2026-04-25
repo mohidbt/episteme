@@ -8,6 +8,77 @@ import CollaborationCursor from "@tiptap/extension-collaboration-cursor";
 import type * as Y from "yjs";
 import type { HocuspocusProvider } from "@hocuspocus/provider";
 
+/**
+ * Derive a stable vibrant hex color from a username string.
+ * Uses HSL with fixed saturation/lightness for readability.
+ */
+export function userColor(name: string): string {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const hue = Math.abs(hash) % 360;
+  // HSL → hex: saturation 70%, lightness 45% gives vivid but readable colors
+  return hslToHex(hue, 70, 45);
+}
+
+function hslToHex(h: number, s: number, l: number): string {
+  s /= 100;
+  l /= 100;
+  const a = s * Math.min(l, 1 - l);
+  const f = (n: number) => {
+    const k = (n + h / 30) % 12;
+    const color = l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1);
+    return Math.round(255 * color).toString(16).padStart(2, "0");
+  };
+  return `#${f(0)}${f(8)}${f(4)}`;
+}
+
+/**
+ * Build a Google-Docs-style remote cursor element:
+ * - 2px vertical caret line in user's color
+ * - Small floating name label above the caret
+ */
+export function buildCursorElement(user: Record<string, string>): HTMLElement {
+  const color = user.color ?? "#888";
+  const name = user.name ?? "Unknown";
+
+  const caret = document.createElement("span");
+  caret.style.cssText = [
+    `border-left: 2px solid ${color}`,
+    "border-right: none",
+    "border-top: none",
+    "border-bottom: none",
+    "margin-left: -1px",
+    "margin-right: -1px",
+    "position: relative",
+    "word-break: normal",
+    "pointer-events: none",
+  ].join(";");
+
+  const label = document.createElement("span");
+  label.textContent = name;
+  label.style.cssText = [
+    `background-color: ${color}`,
+    "color: #fff",
+    "font-size: 10px",
+    "font-family: ui-sans-serif, system-ui, sans-serif",
+    "line-height: 1.2",
+    "padding: 1px 4px",
+    "border-radius: 3px",
+    "position: absolute",
+    "top: -1.4em",
+    "left: -1px",
+    "white-space: nowrap",
+    "pointer-events: none",
+    "user-select: none",
+    "z-index: 10",
+  ].join(";");
+
+  caret.appendChild(label);
+  return caret;
+}
+
 export type WikiLinkSuggestion = Omit<SuggestionOptions, "editor" | "pluginKey">;
 
 export const SlashCommandPluginKey = new PluginKey("slashCommand");
@@ -70,7 +141,20 @@ export function editorExtensions(opts?: {
     ...(collab
       ? [
           Collaboration.configure({ document: collab.ydoc, field: Y_PROSEMIRROR_FIELD }),
-          CollaborationCursor.configure({ provider: collab.provider, user: collab.user }),
+          CollaborationCursor.configure({
+            provider: collab.provider,
+            user: collab.user,
+            // Google-Docs-style remote cursor: thin caret + floating name label.
+            // Own-user cursor is already excluded by y-prosemirror's
+            // defaultAwarenessStateFilter (currentClientId !== userClientId).
+            render: buildCursorElement,
+            // Semi-transparent selection highlight (alpha ~20%) instead of
+            // the default opaque block.
+            selectionRender: (user: Record<string, string>) => ({
+              style: `background-color: ${user.color ?? "#888"}33`,
+              class: "collaboration-cursor__selection",
+            }),
+          }),
         ]
       : []),
   ];
