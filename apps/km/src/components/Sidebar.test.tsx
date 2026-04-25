@@ -36,10 +36,10 @@ function baseTree(overrides?: Partial<TreeResponse>): TreeResponse {
   };
 }
 
-function renderShell(tree: TreeResponse) {
+function renderShell(tree: TreeResponse, isAnonymous = false) {
   return render(
     <SidebarProvider>
-      <SidebarShell library={tree.library} tree={tree} />
+      <SidebarShell library={tree.library} tree={tree} isAnonymous={isAnonymous} />
     </SidebarProvider>,
   );
 }
@@ -145,5 +145,18 @@ describe("Sidebar", () => {
   it("hides badge dot when Trash is empty", () => {
     renderShell(baseTree());
     expect(screen.queryByTestId("sidebar-trash-badge")).toBeNull();
+  });
+
+  it("renders 'Sign up to save' CTA when isAnonymous=true", () => {
+    renderShell(baseTree(), true);
+    const cta = screen.getByTestId("sidebar-anon-signup-cta");
+    expect(cta).toBeTruthy();
+    expect(cta.textContent).toMatch(/sign up to save/i);
+    expect(cta.getAttribute("href")).toBe("/sign-up");
+  });
+
+  it("does not render 'Sign up to save' CTA when isAnonymous=false", () => {
+    renderShell(baseTree(), false);
+    expect(screen.queryByTestId("sidebar-anon-signup-cta")).toBeNull();
   });
 });
