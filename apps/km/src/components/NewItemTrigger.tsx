@@ -26,7 +26,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { validateFolderName } from "@/lib/folders";
-import { PaperUploadDropzone } from "./PaperUploadDropzone";
+import { UnifiedDropzone } from "./UnifiedDropzone";
 
 type Variant = "group" | "menu-item" | "sub-menu-item" | "toolbar";
 
@@ -48,7 +48,7 @@ const VARIANT_CLASS: Record<Exclude<Variant, "toolbar">, string> = {
     "top-0.5 right-1 opacity-0 group-hover/menu-sub-item:opacity-100 group-focus-within/menu-sub-item:opacity-100 aria-expanded:opacity-100",
 };
 
-type DialogKind = "note" | "reference" | "folder" | "upload" | null;
+type DialogKind = "note" | "reference" | "folder" | "upload" | "upload-note" | "upload-references" | null;
 
 async function jsonFetch(url: string, init: RequestInit): Promise<Response> {
   const headers = new Headers(init.headers);
@@ -119,6 +119,12 @@ export function NewItemTrigger({
           <DropdownMenuItem onClick={() => setDialog("upload")}>
             Upload paper…
           </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => setDialog("upload-note")}>
+            Upload note…
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => setDialog("upload-references")}>
+            Upload references (.bib)…
+          </DropdownMenuItem>
           <DropdownMenuItem onClick={() => setDialog("folder")}>
             Folder
           </DropdownMenuItem>
@@ -134,7 +140,45 @@ export function NewItemTrigger({
             <DialogTitle>Upload paper</DialogTitle>
             <DialogDescription>Drop or choose PDF files to upload.</DialogDescription>
           </DialogHeader>
-          <PaperUploadDropzone
+          <UnifiedDropzone
+            libraryId={libraryId}
+            folderPath=""
+            folderId={folderId}
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setDialog(null); onMutate(); }}>
+              Done
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={dialog === "upload-note"} onOpenChange={(o) => setDialog(o ? "upload-note" : null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Upload note</DialogTitle>
+            <DialogDescription>Drop or choose .md, .markdown, or .txt files.</DialogDescription>
+          </DialogHeader>
+          <UnifiedDropzone
+            libraryId={libraryId}
+            folderPath=""
+            folderId={folderId}
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setDialog(null); onMutate(); }}>
+              Done
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={dialog === "upload-references"} onOpenChange={(o) => setDialog(o ? "upload-references" : null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Upload references</DialogTitle>
+            <DialogDescription>Drop or choose a .bib (BibTeX) file to bulk-import references.</DialogDescription>
+          </DialogHeader>
+          <UnifiedDropzone
             libraryId={libraryId}
             folderPath=""
             folderId={folderId}
