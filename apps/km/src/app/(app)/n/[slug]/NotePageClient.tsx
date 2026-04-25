@@ -18,6 +18,7 @@ export function NotePageClient({
   initialIsPublic,
   initialPublicSlug,
   noteSlug,
+  userName,
 }: {
   id: string;
   title: string;
@@ -27,6 +28,7 @@ export function NotePageClient({
   initialIsPublic: boolean;
   initialPublicSlug: string | null;
   noteSlug: string;
+  userName: string;
 }) {
   const router = useRouter();
   const flushRef = useRef<(() => Promise<void>) | null>(null);
@@ -84,6 +86,7 @@ export function NotePageClient({
         initialMd={initialMd}
         resolvedLinks={resolvedLinks}
         flushRef={flushRef}
+        userName={userName}
       />
     </>
   );

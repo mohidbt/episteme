@@ -99,6 +99,7 @@ export default async function NotePage({
         initialIsPublic={note.isPublic}
         initialPublicSlug={note.publicSlug ?? null}
         noteSlug={slug}
+        userName={session.user.name ?? session.user.email ?? "anonymous"}
       />
       <BacklinksPanel noteId={note.id} />
     </div>
