@@ -2,7 +2,7 @@ import Placeholder from "@tiptap/extension-placeholder";
 import Suggestion, { type SuggestionOptions } from "@tiptap/suggestion";
 import { Extension } from "@tiptap/core";
 import { PluginKey } from "@tiptap/pm/state";
-import { createExtensions as baseExtensions, WikiLink, TagMark } from "@episteme/markdown";
+import { createExtensions as baseExtensions, WikiLink, TagMark, Y_PROSEMIRROR_FIELD } from "@episteme/markdown";
 import Collaboration from "@tiptap/extension-collaboration";
 import CollaborationCursor from "@tiptap/extension-collaboration-cursor";
 import type * as Y from "yjs";
@@ -69,7 +69,7 @@ export function editorExtensions(opts?: {
     ...(slashCommand ? [slashCommand] : []),
     ...(collab
       ? [
-          Collaboration.configure({ document: collab.ydoc, field: "prosemirror" }),
+          Collaboration.configure({ document: collab.ydoc, field: Y_PROSEMIRROR_FIELD }),
           CollaborationCursor.configure({ provider: collab.provider, user: collab.user }),
         ]
       : []),

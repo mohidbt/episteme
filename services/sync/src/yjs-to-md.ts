@@ -1,11 +1,9 @@
 import * as Y from "yjs";
 import { yDocToProsemirrorJSON } from "y-prosemirror";
-import { proseMirrorToMd } from "@episteme/markdown";
+import { proseMirrorToMd, Y_PROSEMIRROR_FIELD } from "@episteme/markdown";
 
-// The "prosemirror" XmlFragment key matches the y-prosemirror default used by
-// the client (set in Task 4). Don't rename — they have to agree.
 export function yDocToPmJson(doc: Y.Doc): unknown {
-  return yDocToProsemirrorJSON(doc, "prosemirror");
+  return yDocToProsemirrorJSON(doc, Y_PROSEMIRROR_FIELD);
 }
 
 export function pmJsonToMd(pmJson: unknown): string {

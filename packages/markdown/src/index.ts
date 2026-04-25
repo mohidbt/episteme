@@ -7,3 +7,6 @@ export { TagMark } from "./tiptap/TagMark";
 export type { JSONContent } from "@tiptap/core";
 export type { Link } from "./wiki-link-regex";
 export type { WikiLinkAttrs, WikiLinkTargetKind } from "./tiptap/WikiLink";
+
+/** Shared field name for the Yjs XmlFragment used by y-prosemirror and Hocuspocus. */
+export const Y_PROSEMIRROR_FIELD = "prosemirror";
