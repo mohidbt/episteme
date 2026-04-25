@@ -37,23 +37,36 @@ export function NoteEditor({
   const [editorInstance, setEditorInstance] = useState<TiptapEditor | null>(null);
   const [aiTriggerCount, setAiTriggerCount] = useState(0);
 
-  // Collab provider — created synchronously with an async token function so the
-  // Collaboration extension is always present at editor-init time. The provider
-  // fetches the JWT on first connect and re-fetches on reconnect automatically.
-  const collabState = useMemo<CollabProvider | null>(() => {
-    if (!COLLAB_ENABLED) return null;
-    const tokenFn = async (): Promise<string> => {
-      const res = await fetch("/api/collab/token", { method: "POST" });
-      if (!res.ok) {
-        console.error("[NoteEditor] /api/collab/token returned", res.status, "— collab disabled");
-        return "";
-      }
-      const { token } = await res.json() as { token: string };
-      return token;
+  // Collab token — pre-fetched before provider construction so the Hocuspocus
+  // WebSocket handshake never races an unresolved async token (provider sends
+  // the auth message synchronously on connect; an unresolved token fn was
+  // causing "authenticationRequired → won't try again" on SPA navigation).
+  const [collabToken, setCollabToken] = useState<string | null>(null);
+  useEffect(() => {
+    if (!COLLAB_ENABLED) return;
+    let cancelled = false;
+    fetch("/api/collab/token", { method: "POST" })
+      .then(async (res) => {
+        if (!res.ok) {
+          console.error("[NoteEditor] /api/collab/token returned", res.status, "— collab disabled");
+          return;
+        }
+        const { token } = (await res.json()) as { token: string };
+        if (!cancelled) setCollabToken(token);
+      })
+      .catch((err) => {
+        console.error("[NoteEditor] failed to fetch collab token", err);
+      });
+    return () => {
+      cancelled = true;
     };
-    return createCollabProvider({ noteId: id, url: COLLAB_URL, token: tokenFn });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+  const collabState = useMemo<CollabProvider | null>(() => {
+    if (!COLLAB_ENABLED || !collabToken) return null;
+    return createCollabProvider({ noteId: id, url: COLLAB_URL, token: collabToken });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, collabToken]);
 
   useEffect(() => {
     if (!collabState) return;
