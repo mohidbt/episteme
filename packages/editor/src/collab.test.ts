@@ -3,12 +3,10 @@ import * as Y from "yjs";
 import { HocuspocusProvider } from "@hocuspocus/provider";
 import { createCollabProvider } from "./collab";
 
-// Suppress WebSocket connection attempts — provider tries to connect on
-// construction; we only want to assert object shape.
-vi.spyOn(HocuspocusProvider.prototype, "connect").mockImplementation(() => Promise.resolve());
-
 beforeEach(() => {
-  vi.clearAllMocks();
+  // Suppress WebSocket connection attempts — provider tries to connect on
+  // construction; we only want to assert object shape.
+  vi.spyOn(HocuspocusProvider.prototype, "connect").mockImplementation(() => Promise.resolve());
 });
 
 afterEach(() => {
