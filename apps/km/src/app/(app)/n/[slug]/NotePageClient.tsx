@@ -82,6 +82,7 @@ export function NotePageClient({
         </div>
       </div>
       <NoteEditor
+        key={id}
         id={id}
         initialMd={initialMd}
         resolvedLinks={resolvedLinks}
