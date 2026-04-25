@@ -46,10 +46,11 @@
   background: var(--card, #fff);
 }
 .pdf-embed-thumb {
-  width: 40px;
-  height: 52px;
-  background: var(--muted, #f3f4f6);
-  border-radius: 3px;
+  width: 64px;
+  height: 80px;
+  object-fit: cover;
+  background: var(--muted, #f1f1f1);
+  border-radius: 4px;
   flex-shrink: 0;
 }
 .pdf-embed-title {

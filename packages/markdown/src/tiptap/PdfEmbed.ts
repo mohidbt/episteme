@@ -93,7 +93,7 @@ export const PdfEmbed = Node.create({
         "data-type": "pdf-embed",
         class: "pdf-embed",
       }),
-      ["div", { class: "pdf-embed-thumb" }],
+      ["img", { class: "pdf-embed-thumb", src: `/api/papers/${attrs.pdfId}/cover`, alt: "", loading: "lazy" }],
       ["div", { class: "pdf-embed-title" }, attrs.title],
       [
         "a",
@@ -166,7 +166,7 @@ export const PdfEmbed = Node.create({
               const safeId = md.utils.escapeHtml(pdfId);
               const safeTitle = md.utils.escapeHtml(title);
               const pageAttr = page != null ? ` data-page="${page}"` : "";
-              return `<div data-type="pdf-embed" data-pdf-id="${safeId}" data-title="${safeTitle}"${pageAttr}></div>\n`;
+              return `<div data-type="pdf-embed" data-pdf-id="${safeId}" data-title="${safeTitle}"${pageAttr}><img class="pdf-embed-thumb" src="/api/papers/${safeId}/cover" alt="" loading="lazy"></div>\n`;
             };
           },
         },

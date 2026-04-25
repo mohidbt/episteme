@@ -104,6 +104,51 @@ describe("PdfEmbed node — MD serialization", () => {
   });
 });
 
+describe("PdfEmbed node — cover image thumbnail", () => {
+  it("renderHTML produces an img with src pointing to /api/papers/:pdfId/cover", () => {
+    const editor = makeEditor({
+      type: "doc",
+      content: [
+        {
+          type: "pdfEmbed",
+          attrs: { pdfId: "abc-123", title: "Test Paper", page: null },
+        },
+      ],
+    });
+    const html = editor.getHTML();
+    editor.destroy();
+    expect(html).toContain('<img');
+    expect(html).toContain('src="/api/papers/abc-123/cover"');
+    expect(html).toContain('class="pdf-embed-thumb"');
+  });
+
+  it("renderHTML does not render an empty div as the thumbnail", () => {
+    const editor = makeEditor({
+      type: "doc",
+      content: [
+        {
+          type: "pdfEmbed",
+          attrs: { pdfId: "abc-123", title: "Test Paper", page: null },
+        },
+      ],
+    });
+    const html = editor.getHTML();
+    editor.destroy();
+    // Should not have the old empty div placeholder
+    expect(html).not.toContain('<div class="pdf-embed-thumb"');
+  });
+
+  it("HTML parsed from MD comment renders img with cover URL", () => {
+    const md = '<!-- episteme:pdf id="abc-123" title="Test Paper" -->\n';
+    const doc = mdToProseMirror(md);
+    // Re-render through an editor to get the HTML
+    const editor = makeEditor(doc);
+    const html = editor.getHTML();
+    editor.destroy();
+    expect(html).toContain('src="/api/papers/abc-123/cover"');
+  });
+});
+
 describe("PdfEmbed node — MD round-trip", () => {
   it("comment → node → comment (no page)", () => {
     const md =
