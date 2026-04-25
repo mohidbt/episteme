@@ -2,12 +2,13 @@
 
 import { useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
-import type { ResolvedLinksMap } from "@episteme/editor";
+import type { ResolvedLinksMap, TiptapEditor } from "@episteme/editor";
 import { NoteEditor } from "./NoteEditor";
 import { VersionDrawer } from "@/components/VersionDrawer";
 import { SummarizeAction } from "@/components/SummarizeAction";
 import { AskNotesPanel } from "@/components/AskNotesPanel";
 import { PublishDialog } from "@/components/PublishDialog";
+import { DownloadButton } from "@/components/DownloadButton";
 
 export function NotePageClient({
   id,
@@ -30,6 +31,7 @@ export function NotePageClient({
 }) {
   const router = useRouter();
   const flushRef = useRef<(() => Promise<void>) | null>(null);
+  const editorRef = useRef<TiptapEditor | null>(null);
 
   const onBeforeRestore = useCallback(async () => {
     // Flush any pending autosave BEFORE the restore POST so its PATCH cannot
@@ -77,6 +79,16 @@ export function NotePageClient({
             onBeforeRestore={onBeforeRestore}
             onAfterRestore={onAfterRestore}
           />
+          <DownloadButton
+            slug={noteSlug}
+            getMarkdown={() => {
+              const editor = editorRef.current;
+              if (editor?.storage?.markdown?.getMarkdown) {
+                return editor.storage.markdown.getMarkdown() as string;
+              }
+              return initialMd;
+            }}
+          />
         </div>
       </div>
       <NoteEditor
@@ -84,6 +96,7 @@ export function NotePageClient({
         initialMd={initialMd}
         resolvedLinks={resolvedLinks}
         flushRef={flushRef}
+        editorRef={editorRef}
       />
     </>
   );

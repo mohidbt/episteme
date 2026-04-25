@@ -24,11 +24,13 @@ export function NoteEditor({
   initialMd,
   resolvedLinks,
   flushRef,
+  editorRef: externalEditorRef,
 }: {
   id: string;
   initialMd: string;
   resolvedLinks?: ResolvedLinksMap;
   flushRef?: RefObject<(() => Promise<void>) | null>;
+  editorRef?: RefObject<TiptapEditor | null>;
 }) {
   const router = useRouter();
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -40,6 +42,7 @@ export function NoteEditor({
 
   const onReady = useCallback((editor: TiptapEditor) => {
     editorRef.current = editor;
+    if (externalEditorRef) externalEditorRef.current = editor;
     setEditorInstance(editor);
 
     // Hydrate citations fire-and-forget: refill bibIndex + metadata + bibliography
@@ -354,7 +357,7 @@ export function NoteEditor({
           setAiTriggerCount((c) => c + 1);
         } else if (p.title === "Cite" && p.citation) {
           insertCitation(editor, p.citation);
-        } else if (p.title === "Pdf" && p.pdfEmbed) {
+        } else if (p.title === "PDF" && p.pdfEmbed) {
           insertPdfEmbed(editor, p.pdfEmbed);
         } else if (p.title === "Link" && p.wikiLink) {
           insertWikiLink(editor, p.wikiLink);
