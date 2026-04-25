@@ -38,7 +38,7 @@ export default function SignUpPage() {
       setLoading(false);
       return;
     }
-    router.push("/papers");
+    router.push("/");
   }
 
   return (

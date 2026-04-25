@@ -12,6 +12,14 @@ export interface CreateAuthOpts {
    * (storage, crossref, etc.).
    */
   onAnonymousUserCreate?: (userId: string) => Promise<void>;
+  /**
+   * Fires when an anonymous session signs up / signs in for real and the
+   * better-auth anonymous plugin links the two accounts. Implementations
+   * should migrate per-user FK rows from `anonUserId` → `newUserId` so the
+   * anon user's seeded data follows them into the authed account. After this
+   * callback returns, the plugin deletes the anonymous user row.
+   */
+  onAnonymousLink?: (anonUserId: string, newUserId: string) => Promise<void>;
 }
 
 export function createAuth(opts: CreateAuthOpts = {}) {
@@ -28,7 +36,18 @@ export function createAuth(opts: CreateAuthOpts = {}) {
     emailAndPassword: {
       enabled: true,
     },
-    plugins: [anonymous()],
+    plugins: [
+      anonymous({
+        onLinkAccount: opts.onAnonymousLink
+          ? async ({ anonymousUser, newUser }) => {
+              await opts.onAnonymousLink!(
+                anonymousUser.user.id,
+                newUser.user.id,
+              );
+            }
+          : undefined,
+      }),
+    ],
     databaseHooks: {
       user: {
         create: {
