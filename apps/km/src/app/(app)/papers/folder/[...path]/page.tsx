@@ -6,7 +6,7 @@ import { listPapers } from "@/lib/papers-server";
 import { isValidFolderPath } from "@/lib/tree";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { PaperGrid } from "@/components/PaperGrid";
-import { PaperUploadDropzone } from "@/components/PaperUploadDropzone";
+import { UnifiedDropzone } from "@/components/UnifiedDropzone";
 
 export default async function PapersFolderPage({
   params,
@@ -37,7 +37,7 @@ export default async function PapersFolderPage({
         section="papers"
         folderPath={folderPath}
       />
-      <PaperUploadDropzone libraryId={library.id} folderPath={folderPath} />
+      <UnifiedDropzone libraryId={library.id} folderPath={folderPath} />
       {rows.length === 0 ? (
         <div className="flex flex-1 items-center justify-center p-10">
           <div className="text-center">

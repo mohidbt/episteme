@@ -17,7 +17,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { NewItemTrigger } from "@/components/NewItemTrigger";
-import { PaperUploadDropzone } from "@/components/PaperUploadDropzone";
+import { UnifiedDropzone } from "@/components/UnifiedDropzone";
 import { PathPill } from "@/components/PathPill";
 
 export type ViewMode = "tile" | "list";
@@ -125,12 +125,12 @@ export function FileBrowserToolbar({
             <Dialog open={importOpen} onOpenChange={setImportOpen}>
               <DialogContent>
                 <DialogHeader>
-                  <DialogTitle>Import papers</DialogTitle>
+                  <DialogTitle>Import files</DialogTitle>
                   <DialogDescription>
-                    Drop or choose PDF files to upload into this folder.
+                    Drop or choose PDF, .md, or .bib files into this folder.
                   </DialogDescription>
                 </DialogHeader>
-                <PaperUploadDropzone
+                <UnifiedDropzone
                   libraryId={libraryId}
                   folderPath={folderPath}
                   folderId={folderId}
