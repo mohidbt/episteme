@@ -1,21 +1,24 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, cleanup } from "@testing-library/react";
-import * as Y from "yjs";
 
 // ---- Mocks ----------------------------------------------------------------
+
+// Use vi.hoisted so the variables are available inside vi.mock() factories
+// (which are hoisted to the top of the file by vitest's transformer).
+const { mockDestroy, mockCreateCollabProvider } = vi.hoisted(() => {
+  const mockDestroy = vi.fn();
+  const mockCreateCollabProvider = vi.fn(() => ({
+    ydoc: {} as any,
+    provider: {} as any,
+    destroy: mockDestroy,
+  }));
+  return { mockDestroy, mockCreateCollabProvider };
+});
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
   usePathname: () => "/",
-}));
-
-// Mock the editor package so we can spy on createCollabProvider
-const mockDestroy = vi.fn();
-const mockCreateCollabProvider = vi.fn(() => ({
-  ydoc: new Y.Doc(),
-  provider: {} as any,
-  destroy: mockDestroy,
 }));
 
 vi.mock("@episteme/editor", async (importOriginal) => {
@@ -40,11 +43,25 @@ vi.mock("@/components/AiBubbleMenu", () => ({
   AiBubbleMenu: vi.fn(() => null),
 }));
 
+// ---- Flag mocking via @/lib/flags ----------------------------------------
+// We control COLLAB_ENABLED by mocking the flags module rather than
+// messing with process.env + module reloads (vitest ESM doesn't support
+// require() for relative paths inside vitest's virtual module graph).
+
+let mockCollabEnabled = false;
+
+vi.mock("@/lib/flags", () => ({
+  get COLLAB_ENABLED() { return mockCollabEnabled; },
+  COLLAB_URL: "ws://localhost:1234",
+}));
+
+// ---- Import subject under test -------------------------------------------
+// Import after all vi.mock() calls so hoisting works correctly.
+import { NoteEditor } from "./NoteEditor";
+
 // ---- Helpers --------------------------------------------------------------
 
 function renderNoteEditor(props?: { userName?: string }) {
-  // Dynamic import after env vars are set so the module picks up the flag
-  const { NoteEditor } = require("./NoteEditor");
   render(
     <NoteEditor
       id="note-1"
@@ -58,15 +75,13 @@ function renderNoteEditor(props?: { userName?: string }) {
 
 describe("NoteEditor – COLLAB_ENABLED=false (default)", () => {
   beforeEach(() => {
-    delete process.env.NEXT_PUBLIC_COLLAB;
-    vi.resetModules();
+    mockCollabEnabled = false;
     mockCreateCollabProvider.mockClear();
     mockDestroy.mockClear();
   });
 
   afterEach(() => {
     cleanup();
-    vi.restoreAllMocks();
   });
 
   it("does NOT call createCollabProvider when flag is off", () => {
@@ -77,18 +92,14 @@ describe("NoteEditor – COLLAB_ENABLED=false (default)", () => {
 
 describe("NoteEditor – COLLAB_ENABLED=true", () => {
   beforeEach(() => {
-    process.env.NEXT_PUBLIC_COLLAB = "1";
-    process.env.NEXT_PUBLIC_COLLAB_URL = "ws://localhost:1234";
-    vi.resetModules();
+    mockCollabEnabled = true;
     mockCreateCollabProvider.mockClear();
     mockDestroy.mockClear();
   });
 
   afterEach(() => {
     cleanup();
-    delete process.env.NEXT_PUBLIC_COLLAB;
-    delete process.env.NEXT_PUBLIC_COLLAB_URL;
-    vi.restoreAllMocks();
+    mockCollabEnabled = false;
   });
 
   it("calls createCollabProvider exactly once with correct noteId", () => {

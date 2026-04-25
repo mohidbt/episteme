@@ -1,6 +1,8 @@
 "use client";
 import {
   Editor,
+  createCollabProvider,
+  type CollabProvider,
   type ResolvedLinksMap,
   type WikiLinkSuggestion,
   type SlashCommandSuggestion,
@@ -8,6 +10,7 @@ import {
 } from "@episteme/editor";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import { COLLAB_ENABLED, COLLAB_URL } from "@/lib/flags";
 import { createRoot, type Root } from "react-dom/client";
 import { WikiLinkTypeahead, type WikiLinkTypeaheadRef } from "@/components/WikiLinkTypeahead";
 import { SlashCommandTypeahead, type SlashCommandTypeaheadRef } from "@/components/SlashCommandTypeahead";
@@ -18,11 +21,13 @@ export function NoteEditor({
   initialMd,
   resolvedLinks,
   flushRef,
+  userName,
 }: {
   id: string;
   initialMd: string;
   resolvedLinks?: ResolvedLinksMap;
   flushRef?: RefObject<(() => Promise<void>) | null>;
+  userName?: string;
 }) {
   const router = useRouter();
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -32,12 +37,35 @@ export function NoteEditor({
   const [editorInstance, setEditorInstance] = useState<TiptapEditor | null>(null);
   const [aiTriggerCount, setAiTriggerCount] = useState(0);
 
+  // Collab provider — instantiated once when COLLAB_ENABLED, torn down on unmount.
+  const collabRef = useRef<CollabProvider | null>(null);
+  const [collabState, setCollabState] = useState<CollabProvider | null>(null);
+
+  useEffect(() => {
+    if (!COLLAB_ENABLED) return;
+    const c = createCollabProvider({
+      noteId: id,
+      url: COLLAB_URL,
+      token: document.cookie,
+    });
+    collabRef.current = c;
+    setCollabState(c);
+    return () => {
+      c.destroy();
+      collabRef.current = null;
+      setCollabState(null);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
+
   const onReady = useCallback((editor: TiptapEditor) => {
     editorRef.current = editor;
     setEditorInstance(editor);
   }, []);
 
   const flush = useCallback((): Promise<void> => {
+    // When Hocuspocus is active it owns persistence — skip the PATCH path.
+    if (collabRef.current) return Promise.resolve();
     const md = pendingMdRef.current;
     if (md == null) return Promise.resolve();
     pendingMdRef.current = null;
@@ -398,6 +426,14 @@ export function NoteEditor({
     [],
   );
 
+  const collabProp = collabState
+    ? {
+        ydoc: collabState.ydoc,
+        provider: collabState.provider,
+        user: { name: userName ?? "anonymous", color: "#666" },
+      }
+    : undefined;
+
   return (
     <div ref={editorHostRef}>
       <Editor
@@ -408,6 +444,7 @@ export function NoteEditor({
         slashCommandSuggestion={slashCommandSuggestion}
         resolvedLinks={resolvedLinks}
         onReady={onReady}
+        collab={collabProp}
       >
         {editorInstance && (
           <AiBubbleMenu editor={editorInstance} aiTriggerCount={aiTriggerCount} />
