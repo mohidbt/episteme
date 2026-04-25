@@ -35,6 +35,15 @@ export async function deleteTestUser(id: string): Promise<void> {
   await db.delete(user).where(eq(user.id, id));
 }
 
+export async function createAnonTestUser(): Promise<TestUser> {
+  const { headers, response } = await auth.api.signInAnonymous({ returnHeaders: true });
+  const setCookie = headers.get("set-cookie");
+  if (!setCookie) throw new Error("signInAnonymous returned no set-cookie header");
+  const cookie = setCookie.split(";")[0];
+  const id = (response as { user: { id: string } }).user.id;
+  return { id, cookie };
+}
+
 export function req(
   url: string,
   init: RequestInit & { cookie?: string } = {},
