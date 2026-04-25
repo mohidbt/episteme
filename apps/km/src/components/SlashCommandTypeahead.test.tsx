@@ -50,7 +50,7 @@ describe("SlashCommandTypeahead — selection reset", () => {
     render(<SlashCommandTypeahead query="" onSelect={onSelect} ref={null} />);
     expect(screen.getByText("AI")).toBeTruthy();
     expect(screen.getByText("Cite")).toBeTruthy();
-    expect(screen.getByText("Pdf")).toBeTruthy();
+    expect(screen.getByText("PDF")).toBeTruthy();
   });
 
   it("filters commands by query", async () => {
@@ -62,33 +62,33 @@ describe("SlashCommandTypeahead — selection reset", () => {
 });
 
 describe("SlashCommandTypeahead — pdf mode", () => {
-  it("shows Pdf command in the command list", () => {
+  it("shows PDF command in the command list", () => {
     const onSelect = vi.fn();
     render(<SlashCommandTypeahead query="" onSelect={onSelect} ref={null} />);
-    expect(screen.getByText("Pdf")).toBeTruthy();
+    expect(screen.getByText("PDF")).toBeTruthy();
   });
 
-  it("filters to Pdf when query is 'pdf'", () => {
+  it("filters to PDF when query is 'pdf'", () => {
     const onSelect = vi.fn();
     render(<SlashCommandTypeahead query="pdf" onSelect={onSelect} ref={null} />);
-    expect(screen.getByText("Pdf")).toBeTruthy();
+    expect(screen.getByText("PDF")).toBeTruthy();
     expect(screen.queryByText("AI")).toBeNull();
     expect(screen.queryByText("Cite")).toBeNull();
   });
 
-  it("clicking Pdf command switches to pdf typeahead mode", async () => {
+  it("clicking PDF command switches to pdf typeahead mode", async () => {
     const onSelect = vi.fn();
     render(<SlashCommandTypeahead query="pdf" onSelect={onSelect} ref={null} />);
-    const pdfBtn = screen.getByText("Pdf").closest("button");
+    const pdfBtn = screen.getByText("PDF").closest("button");
     expect(pdfBtn).toBeTruthy();
     await act(async () => {
       fireEvent.mouseDown(pdfBtn!);
     });
     // After clicking, the pdf typeahead should be shown (placeholder text for empty query)
-    expect(screen.queryByText("Pdf")).toBeNull();
+    expect(screen.queryByText("PDF")).toBeNull();
   });
 
-  it("Pdf selection calls onSelect with title='Pdf' and pdfEmbed payload", async () => {
+  it("PDF selection calls onSelect with title='PDF' and pdfEmbed payload", async () => {
     vi.useFakeTimers();
     const mockFetch = vi.fn().mockResolvedValue({
       ok: true,
@@ -118,8 +118,8 @@ describe("SlashCommandTypeahead — pdf mode", () => {
       />,
     );
 
-    // Click Pdf to switch mode
-    const pdfBtn = screen.getByText("Pdf").closest("button");
+    // Click PDF to switch mode
+    const pdfBtn = screen.getByText("PDF").closest("button");
     await act(async () => {
       fireEvent.mouseDown(pdfBtn!);
     });
@@ -142,7 +142,7 @@ describe("SlashCommandTypeahead — pdf mode", () => {
     });
 
     expect(onSelect).toHaveBeenCalledWith(
-      expect.objectContaining({ title: "Pdf" }),
+      expect.objectContaining({ title: "PDF" }),
     );
   });
 });

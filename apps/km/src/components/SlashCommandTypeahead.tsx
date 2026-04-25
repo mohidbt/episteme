@@ -44,7 +44,7 @@ const COMMANDS: SlashCommandItem[] = [
     icon: "📚",
   },
   {
-    title: "Pdf",
+    title: "PDF",
     description: "Embed a PDF from your library",
     keywords: ["pdf", "embed", "paper", "reader", "document"],
     icon: "📄",
@@ -186,7 +186,7 @@ export const SlashCommandTypeahead = forwardRef<
               setCiteQuery("");
               return true;
             }
-            if (cmd.title === "Pdf") {
+            if (cmd.title === "PDF") {
               setMode("pdf");
               setCiteQuery("");
               return true;
@@ -232,7 +232,7 @@ export const SlashCommandTypeahead = forwardRef<
         ref={pdfRef}
         query={citeQuery}
         onSelect={(pdfEmbed: PdfPick) => {
-          onSelect({ title: "Pdf", pdfEmbed });
+          onSelect({ title: "PDF", pdfEmbed });
         }}
       />
     );
@@ -283,7 +283,7 @@ export const SlashCommandTypeahead = forwardRef<
               setCiteQuery("");
               return;
             }
-            if (cmd.title === "Pdf") {
+            if (cmd.title === "PDF") {
               setMode("pdf");
               setCiteQuery("");
               return;
