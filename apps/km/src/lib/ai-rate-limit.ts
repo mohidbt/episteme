@@ -28,6 +28,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 export interface RateLimit {
   check(ip: string): RateLimitResult;
+  __getBucketSizeForTests(): number;
 }
 
 export function createRateLimit(options: RateLimitOptions): RateLimit {
@@ -37,6 +38,14 @@ export function createRateLimit(options: RateLimitOptions): RateLimit {
   return {
     check(ip: string): RateLimitResult {
       const t = now();
+      // Lazy GC: on each check, sweep any entries whose day window fully
+      // elapsed — those IPs went silent for >24h and no longer need state.
+      // Bounds the Map to the set of IPs active in the last day window;
+      // without this, abuse traffic (one hit per IP, never seen again) would
+      // grow the Map unbounded over time.
+      for (const [k, v] of buckets) {
+        if (t - v.dayStart >= DAY_MS) buckets.delete(k);
+      }
       let b = buckets.get(ip);
       if (!b) {
         b = { minuteStart: t, minuteCount: 0, dayStart: t, dayCount: 0 };
@@ -46,10 +55,8 @@ export function createRateLimit(options: RateLimitOptions): RateLimit {
         b.minuteStart = t;
         b.minuteCount = 0;
       }
-      if (t - b.dayStart >= DAY_MS) {
-        b.dayStart = t;
-        b.dayCount = 0;
-      }
+      // Day-window reset is handled by the lazy GC sweep above (stale entries
+      // are deleted; survivors have t - dayStart < DAY_MS by construction).
       if (b.minuteCount >= perMinute) {
         const retryAfter = Math.max(1, Math.ceil((MINUTE_MS - (t - b.minuteStart)) / 1000));
         return { allowed: false, retryAfter };
@@ -61,6 +68,9 @@ export function createRateLimit(options: RateLimitOptions): RateLimit {
       b.minuteCount += 1;
       b.dayCount += 1;
       return { allowed: true };
+    },
+    __getBucketSizeForTests(): number {
+      return buckets.size;
     },
   };
 }

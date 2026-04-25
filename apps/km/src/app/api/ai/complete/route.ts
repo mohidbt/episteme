@@ -55,12 +55,14 @@ export async function POST(req: Request) {
       headers: { ...headers, "Content-Type": "application/json" },
       body: bodyText,
     });
-  } catch {
+  } catch (err) {
     if (session.isAnonymous) {
       console.error("ai-anon: upstream fetch threw");
       return Response.json({ error: "agent_unavailable" }, { status: 502 });
     }
-    throw new Error("upstream fetch failed");
+    // Authed path: preserve original error (stack/cause) for ops debugging.
+    // Anon masking above is intentional — never leak upstream details to anon clients.
+    throw err;
   }
 
   if (session.isAnonymous && !upstream.ok) {
