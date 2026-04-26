@@ -61,6 +61,12 @@ const COMMANDS: SlashCommandItem[] = [
     keywords: ["agent", "ai", "run", "skill", "triage", "synthesize"],
     icon: "🤖",
   },
+  {
+    title: "Table",
+    description: "Insert a 3×3 table",
+    keywords: ["table", "grid", "rows", "columns"],
+    icon: "▦",
+  },
 ];
 
 export const SlashCommandTypeahead = forwardRef<

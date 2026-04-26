@@ -71,6 +71,39 @@
   text-decoration: underline;
 }
 
+/* Tables — GFM round-trip via tiptap-markdown; resizable columns enabled. */
+.episteme-prose table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 0.5em 0;
+  table-layout: fixed;
+  overflow: hidden;
+}
+.episteme-prose td,
+.episteme-prose th {
+  border: 1px solid var(--border);
+  padding: 4px 8px;
+  vertical-align: top;
+  position: relative;
+}
+.episteme-prose th {
+  background: var(--muted);
+  font-weight: 600;
+  text-align: left;
+}
+.episteme-prose .column-resize-handle {
+  position: absolute;
+  right: -2px;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: var(--primary);
+  pointer-events: none;
+}
+.ProseMirror.resize-cursor {
+  cursor: col-resize;
+}
+
 /* Appearance modifiers: applied via data attributes on the <main> ancestor
    in apps/km so the editor package stays unaware of the preference surface. */
 main[data-prose-font="serif"] .episteme-prose {

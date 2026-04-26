@@ -50,6 +50,20 @@ describe("markdown round-trip", () => {
     expect(back).not.toContain("_stars_");
   });
 
+  it("round-trips a GFM table with header + body rows", () => {
+    const md = "| h1 | h2 |\n| --- | --- |\n| a | b |\n| c | d |\n";
+    const doc: JSONContent = mdToProseMirror(md);
+    const back = proseMirrorToMd(doc);
+    // Normalize spacing inside cells / pipe alignment but preserve row structure
+    const stripCellPad = (s: string) =>
+      s
+        .trim()
+        .split("\n")
+        .map((line) => line.replace(/\s*\|\s*/g, "|"))
+        .join("\n");
+    expect(stripCellPad(back)).toBe(stripCellPad(md));
+  });
+
   it("returns a valid empty ProseMirror doc for empty string", () => {
     const doc = mdToProseMirror("");
     expect(doc).toBeTruthy();

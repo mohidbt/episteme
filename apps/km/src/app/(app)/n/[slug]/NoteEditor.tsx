@@ -454,6 +454,12 @@ export function NoteEditor({
           insertWikiLink(editor, p.wikiLink);
         } else if (p.title === "Agent" && p.agent) {
           invokeAgent(editor, p.agent);
+        } else if (p.title === "Table") {
+          editor
+            .chain()
+            .focus()
+            .insertTable({ rows: 3, cols: 3, withHeaderRow: true })
+            .run();
         }
       },
       render: () => {

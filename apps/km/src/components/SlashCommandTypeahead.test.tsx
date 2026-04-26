@@ -59,6 +59,25 @@ describe("SlashCommandTypeahead — selection reset", () => {
     expect(screen.queryByText("AI")).toBeNull();
     expect(screen.getByText("Cite")).toBeTruthy();
   });
+
+  it("filters to Table when query is 'table'", () => {
+    const onSelect = vi.fn();
+    render(<SlashCommandTypeahead query="table" onSelect={onSelect} ref={null} />);
+    expect(screen.getByText("Table")).toBeTruthy();
+    expect(screen.queryByText("AI")).toBeNull();
+    expect(screen.queryByText("Cite")).toBeNull();
+  });
+
+  it("clicking Table calls onSelect with title='Table' (no sub-mode)", async () => {
+    const onSelect = vi.fn();
+    render(<SlashCommandTypeahead query="table" onSelect={onSelect} ref={null} />);
+    const tableBtn = screen.getByText("Table").closest("button");
+    expect(tableBtn).toBeTruthy();
+    await act(async () => {
+      fireEvent.mouseDown(tableBtn!);
+    });
+    expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ title: "Table" }));
+  });
 });
 
 describe("SlashCommandTypeahead — pdf mode", () => {
