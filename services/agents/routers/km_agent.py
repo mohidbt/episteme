@@ -15,7 +15,7 @@ from checkpointer import get_saver
 from store import get_store
 from lib.config_cache import load_user_config, save_user_config
 from lib.openrouter_model import model_for
-from lib.sse_events import format_sse
+from lib.sse_events import format_sse, format_typed
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/agents/km", tags=["km-agent"])
@@ -25,14 +25,16 @@ router = APIRouter(prefix="/agents/km", tags=["km-agent"])
 # Event mapping
 # ---------------------------------------------------------------------------
 
-def _map_event(ev: dict) -> dict | None:
-    """Map an astream_events v2 event to a typed SSE event dict.
+def _map_event(ev: dict) -> tuple[str, dict] | None:
+    """Map an astream_events v2 event to a (event_type, payload) pair.
 
-    Covered in 1.3a:
-    - on_chat_model_stream  → text   {delta}
-    - on_tool_start         → tool_call  {id, name, args, state}
-    - on_tool_end           → tool_result {id, name, output, state}
-    - on_chain_end with __interrupt__ in output → interrupt {id, tool, args, allowed_decisions}
+    Returns None for events we don't emit.
+
+    1.3a emitters (this file):
+        text, tool_call, tool_result, interrupt, done
+
+    TODO 1.3b: add emitters for thinking, todos, sources, skill_load, suggestion
+    TODO 1.3c: file_diff is emitted from the Next.js route, not here
     """
     event_name = ev.get("event", "")
     run_id = ev.get("run_id", "")
@@ -44,44 +46,36 @@ def _map_event(ev: dict) -> dict | None:
         content = getattr(chunk, "content", "") or ""
         if not content:
             return None
-        return {"event": "text", "data": {"id": run_id, "delta": content}}
+        return ("text", {"id": run_id, "delta": content})
 
     if event_name == "on_tool_start":
         name = ev.get("name", "tool")
         args = ev.get("data", {}).get("input") or {}
-        return {
-            "event": "tool_call",
-            "data": {"id": run_id, "name": name, "args": args, "state": "input-available"},
-        }
+        return ("tool_call", {"id": run_id, "name": name, "args": args, "state": "input-available"})
 
     if event_name == "on_tool_end":
-        name = ev.get("name", "tool")
         raw_output = ev.get("data", {}).get("output")
         output = getattr(raw_output, "content", raw_output) if raw_output is not None else None
-        state = "output-available"
-        if isinstance(raw_output, Exception):
-            state = "output-error"
-        return {
-            "event": "tool_result",
-            "data": {"id": run_id, "name": name, "output": output, "state": state},
-        }
+        state = "output-error" if isinstance(raw_output, Exception) else "output-available"
+        payload: dict = {"id": run_id, "state": state}
+        if state == "output-available":
+            payload["output"] = output
+        else:
+            payload["errorText"] = str(raw_output)
+        return ("tool_result", payload)
 
     if event_name == "on_chain_end":
         output = ev.get("data", {}).get("output") or {}
         interrupts = output.get("__interrupt__") if isinstance(output, dict) else None
         if not interrupts:
             return None
-        # Emit one interrupt event per interrupt value
         interrupt = interrupts[0]
         value = getattr(interrupt, "value", interrupt) if not isinstance(interrupt, dict) else interrupt
         interrupt_id = getattr(interrupt, "id", run_id)
-        return {
-            "event": "interrupt",
-            "data": {
-                "id": interrupt_id,
-                "value": value,
-            },
-        }
+        tool = value.get("tool", "") if isinstance(value, dict) else ""
+        args = value.get("args", {}) if isinstance(value, dict) else {}
+        allowed = value.get("allowed_decisions", []) if isinstance(value, dict) else []
+        return ("interrupt", {"id": interrupt_id, "tool": tool, "args": args, "allowed_decisions": allowed})
 
     return None
 
@@ -114,7 +108,7 @@ async def invoke(req: Request, auth: InternalAuthDep):
             ):
                 mapped = _map_event(ev)
                 if mapped:
-                    yield format_sse(mapped["event"], mapped["data"])
+                    yield format_typed(mapped[0], mapped[1])
             yield format_sse("done", {"thread_id": body["thread_id"]})
         except Exception as e:  # noqa: BLE001
             logger.exception("invoke failed")
@@ -151,7 +145,7 @@ async def resume(req: Request, auth: InternalAuthDep):
             ):
                 mapped = _map_event(ev)
                 if mapped:
-                    yield format_sse(mapped["event"], mapped["data"])
+                    yield format_typed(mapped[0], mapped[1])
             yield format_sse("done", {"thread_id": body["thread_id"]})
         except Exception as e:  # noqa: BLE001
             logger.exception("resume failed")

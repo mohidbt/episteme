@@ -208,7 +208,9 @@ def test_invoke_tool_result_event_shape():
     tr_events = [e for e in events if e["event"] == "tool_result"]
     assert len(tr_events) >= 1
     d = tr_events[0]["data"]
-    assert "name" in d
+    # v1 matrix: tool_result carries id + state + output? (no name field)
+    assert "id" in d
+    assert "state" in d
     assert "output" in d
 
 
