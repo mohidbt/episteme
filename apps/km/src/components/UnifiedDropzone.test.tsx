@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
-import { render, screen, cleanup, waitFor, act } from "@testing-library/react";
+import { render, screen, cleanup, waitFor, act, fireEvent } from "@testing-library/react";
 import { UnifiedDropzone, detectFileType } from "./UnifiedDropzone";
 
 vi.mock("next/navigation", () => ({
@@ -220,6 +220,70 @@ describe("UnifiedDropzone", () => {
     expect(body.libraryId).toBe(3);
     expect(body.contentType).toBe("image/png");
     expect(body.filename).toBe("pic.png");
+  });
+
+  it("cancels an in-flight image upload and DELETEs the asset row", async () => {
+    mockFetch({
+      "/api/assets": { status: 201, body: { assetId: "asset-cancel-1", uploadUrl: "http://example.com/put" } },
+    });
+    // FakeXHR that stays in-flight until cancelled (no auto-resolve in send).
+    const abortSpy = vi.fn();
+    let lastXhr: { onabort: (() => void) | null; abort: () => void } | null = null;
+    class FakeXHR {
+      upload = { onprogress: null as ((e: ProgressEvent) => void) | null };
+      onload: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      onabort: (() => void) | null = null;
+      status = 0;
+      open() {}
+      setRequestHeader() {}
+      send() {
+        lastXhr = this;
+      }
+      abort() {
+        abortSpy();
+        this.onabort?.();
+      }
+    }
+    vi.stubGlobal("XMLHttpRequest", FakeXHR as unknown as typeof XMLHttpRequest);
+
+    render(<UnifiedDropzone libraryId={3} folderPath="" folderId={null} />);
+    const input = document.querySelector("input[type=file]") as HTMLInputElement;
+    const file = new File(["bytes"], "cancel.png", { type: "image/png" });
+
+    await act(async () => {
+      dropFile(input, file);
+    });
+
+    // Wait for init POST to fire and the cancel button to render.
+    await waitFor(() => {
+      expect(vi.mocked(globalThis.fetch)).toHaveBeenCalled();
+    });
+    const fetchMock = vi.mocked(globalThis.fetch);
+    const initCall = fetchMock.mock.calls.find(
+      (c) => String(c[0]) === "/api/assets" && (c[1] as RequestInit)?.method === "POST",
+    );
+    expect(initCall).toBeDefined();
+
+    const cancelBtn = await screen.findByLabelText("Cancel cancel.png");
+    expect(lastXhr).not.toBeNull();
+
+    await act(async () => {
+      fireEvent.click(cancelBtn);
+    });
+
+    expect(abortSpy).toHaveBeenCalled();
+
+    await waitFor(() => {
+      const deleteCall = fetchMock.mock.calls.find(
+        (c) =>
+          String(c[0]) === "/api/assets/asset-cancel-1" &&
+          (c[1] as RequestInit)?.method === "DELETE",
+      );
+      expect(deleteCall).toBeDefined();
+    });
+
+    expect(screen.getByText(/Image · cancelled/)).toBeTruthy();
   });
 
   it("shows toast.error for unknown extension files", async () => {

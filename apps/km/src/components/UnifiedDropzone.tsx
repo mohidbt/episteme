@@ -233,65 +233,49 @@ export function UnifiedDropzone({
 
   const cancelItem = useCallback(
     (id: string) => {
-      // Snapshot the item so we can read xhr/controller/server ids and decide
-      // which side-effects to run (abort transport + DELETE server row).
-      let snapshot: UploadItem | undefined;
+      // Read the latest item from the updater (React may defer the updater
+      // body, so we run side-effects from inside it), then return the
+      // cancelled state. Side-effects are idempotent: aborting an already-
+      // settled XHR is a noop, and DELETE failures are swallowed.
       setItems((prev) => {
-        snapshot = prev.find((it) => it.id === id);
+        const snapshot = prev.find((it) => it.id === id);
+        if (!snapshot) return prev;
+        try {
+          snapshot.xhr?.abort();
+        } catch {
+          /* noop */
+        }
+        try {
+          snapshot.controller?.abort();
+        } catch {
+          /* noop */
+        }
+        if (snapshot.paperId) {
+          fetch(`/api/papers/${snapshot.paperId}`, { method: "DELETE" }).catch(() => {});
+        }
+        if (snapshot.assetId) {
+          fetch(`/api/assets/${snapshot.assetId}`, { method: "DELETE" }).catch(() => {});
+        }
         return prev.map((it) =>
           it.id === id
             ? { ...it, status: "cancelled", xhr: null, controller: null }
             : it,
         );
       });
-      if (!snapshot) return;
-      try {
-        snapshot.xhr?.abort();
-      } catch {
-        /* noop */
-      }
-      try {
-        snapshot.controller?.abort();
-      } catch {
-        /* noop */
-      }
-      // Best-effort cleanup of the server row created during init. If it fails
-      // (e.g. already gone), the janitor / orphan cleanup handles it.
-      if (snapshot.paperId) {
-        fetch(`/api/papers/${snapshot.paperId}`, { method: "DELETE" }).catch(() => {});
-      }
-      if (snapshot.assetId) {
-        fetch(`/api/assets/${snapshot.assetId}`, { method: "DELETE" }).catch(() => {});
-      }
     },
     [],
   );
 
   const retryItem = useCallback(
     (id: string) => {
+      // Read the latest item from inside the updater (React may defer it),
+      // reset its status, and kick off processing from there. This avoids
+      // depending on a closure-captured `items` array.
       setItems((prev) => {
-        const target = prev.find((it) => it.id === id);
-        if (!target) return prev;
-        return prev.map((it) =>
-          it.id === id
-            ? {
-                ...it,
-                status: "queued",
-                progress: 0,
-                error: undefined,
-                xhr: null,
-                controller: null,
-                paperId: null,
-                assetId: null,
-              }
-            : it,
-        );
-      });
-      // Kick off processing on the next tick so the state update lands first.
-      const target = items.find((it) => it.id === id);
-      if (target) {
+        const snapshot = prev.find((it) => it.id === id);
+        if (!snapshot) return prev;
         const reset: UploadItem = {
-          ...target,
+          ...snapshot,
           status: "queued",
           progress: 0,
           error: undefined,
@@ -301,9 +285,10 @@ export function UnifiedDropzone({
           assetId: null,
         };
         void processFile(reset);
-      }
+        return prev.map((it) => (it.id === id ? reset : it));
+      });
     },
-    [items, processFile],
+    [processFile],
   );
 
   const onDrop = useCallback(
