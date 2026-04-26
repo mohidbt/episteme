@@ -33,7 +33,7 @@ import { getSessionInfo } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { signRequest } from "@/lib/agents/sign-request";
 import { GET, PATCH } from "./route";
-import { req } from "../../_test-utils";
+import { req } from "../../../_test-utils";
 
 const originalFetch = global.fetch;
 const originalAgentsUrl = process.env.AGENTS_URL;
