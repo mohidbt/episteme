@@ -36,11 +36,24 @@ export const paperUploadInitSchema = z.object({
 
 const MAX_ASSET_BYTES = 50 * 1024 * 1024; // 50 MB cap, mirrors paper limit
 
+// Allowlist: images for inline note embeds + a handful of common document
+// types. Restricting contentType matters because the value is baked into the
+// presigned PUT URL — any string we accept here is what the client gets to
+// upload. Wide-open `text/html` would be an XSS vector via the asset GET URL.
+const ASSET_MIME_ALLOWLIST = [
+  "image/png",
+  "image/jpeg",
+  "image/gif",
+  "image/webp",
+  "image/svg+xml",
+  "application/pdf",
+] as const;
+
 export const assetUploadInitSchema = z.object({
   libraryId: z.number().int(),
   folderId: z.string().uuid().nullable().optional(),
   filename: nonEmptyTrimmed(500),
-  contentType: nonEmptyTrimmed(200),
+  contentType: z.enum(ASSET_MIME_ALLOWLIST),
   sizeBytes: z.number().int().positive().max(MAX_ASSET_BYTES),
 });
 
