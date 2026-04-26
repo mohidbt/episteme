@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { and, asc, eq } from "drizzle-orm";
-import { db } from "@/lib/db";
+import { db } from "@episteme/db";
 import {
   libraries,
   noteLinks,
@@ -14,9 +14,8 @@ import {
   createTestUser,
   deleteTestUser,
   type TestUser,
-} from "@/app/api/_test-utils";
+} from "./_test-utils";
 import { rebuildLinks, resolveUnresolvedNoteLinks } from "./rebuild-links";
-import { saveNoteMd } from "./save-note-md";
 
 let u: TestUser;
 let libraryId: number;
@@ -344,13 +343,4 @@ describe("resolveUnresolvedNoteLinks", () => {
   });
 });
 
-describe("saveNoteMd integration", () => {
-  it("persists links and tags via saveNoteMd → rebuildLinks", async () => {
-    await saveNoteMd(sourceNoteId, "see [[Transformers]] body #ml", u.id);
-    const links = await linksOf(sourceNoteId);
-    expect(links).toHaveLength(1);
-    expect(links[0].targetId).toBe(targetNoteId);
-    const tags = await tagsOf(sourceNoteId);
-    expect(tags.map((r) => r.tag)).toEqual(["ml"]);
-  });
-});
+// saveNoteMd integration test lives in apps/km where saveNoteMd is defined.

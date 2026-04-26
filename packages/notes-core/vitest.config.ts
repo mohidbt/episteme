@@ -1,11 +1,9 @@
 import { defineConfig } from "vitest/config";
-import react from "@vitejs/plugin-react";
 import path from "path";
 
 export default defineConfig({
-  plugins: [react()],
   test: {
-    include: ["src/**/*.test.{ts,tsx}"],
+    include: ["src/**/*.test.ts"],
     environment: "node",
     env: {
       DATABASE_URL:
@@ -16,15 +14,10 @@ export default defineConfig({
         "test-secret-for-integration-tests-only-not-for-prod",
       BETTER_AUTH_URL:
         process.env.BETTER_AUTH_URL || "http://localhost:3001",
-      S3_ENDPOINT: process.env.S3_ENDPOINT || "http://localhost:9000",
-      S3_BUCKET: process.env.S3_BUCKET || "episteme-dev",
-      S3_ACCESS_KEY: process.env.S3_ACCESS_KEY || "episteme",
-      S3_SECRET_KEY: process.env.S3_SECRET_KEY || "episteme-dev",
     },
   },
   resolve: {
     alias: {
-      "@": path.resolve(__dirname, "src"),
       "@episteme/db/schema": path.resolve(
         __dirname,
         "../../packages/db/src/schema/index.ts",
@@ -41,25 +34,9 @@ export default defineConfig({
         __dirname,
         "../../packages/markdown/src/index.ts",
       ),
-      "@episteme/editor": path.resolve(
-        __dirname,
-        "../../packages/editor/src/index.ts",
-      ),
-      "@episteme/storage": path.resolve(
-        __dirname,
-        "../../packages/storage/src/index.ts",
-      ),
-      "@episteme/auth/byok": path.resolve(
-        __dirname,
-        "../../packages/auth/src/byok.ts",
-      ),
       "@episteme/auth": path.resolve(
         __dirname,
         "../../packages/auth/src/index.ts",
-      ),
-      "@episteme/notes-core": path.resolve(
-        __dirname,
-        "../../packages/notes-core/src/index.ts",
       ),
     },
   },

@@ -1,5 +1,5 @@
 import { desc, eq } from "drizzle-orm";
-import { db } from "@/lib/db";
+import { db } from "@episteme/db";
 import { noteRevisions, notes } from "@episteme/db/schema";
 import { pruneRevisions } from "./prune-revisions";
 

@@ -1,3 +1,8 @@
+// Prevent Next.js from caching the RSC payload. The server component mints a
+// Hocuspocus JWT (10-min TTL) at render time; caching would serve a stale,
+// expired token to the client and break collab connections.
+export const dynamic = "force-dynamic";
+
 import { headers } from "next/headers";
 import { auth } from "@episteme/auth";
 import { and, eq } from "drizzle-orm";
@@ -9,6 +14,8 @@ import { PathPill, type PathPillSegment } from "@/components/PathPill";
 import { splitFolderPath } from "@/lib/tree";
 import { BacklinksPanel } from "@/components/BacklinksPanel";
 import { NotePageClient } from "./NotePageClient";
+import { mintCollabToken } from "@/lib/collab-token";
+import { COLLAB_ENABLED } from "@/lib/flags";
 
 export default async function NotePage({
   params,
@@ -28,6 +35,12 @@ export default async function NotePage({
     .select({ username: user.username })
     .from(user)
     .where(eq(user.id, session.user.id));
+
+  // Mint the Hocuspocus JWT server-side so NoteEditor can create the collab
+  // provider synchronously on first render — no client-side round-trip needed.
+  const initialCollabToken = COLLAB_ENABLED
+    ? await mintCollabToken(session.user.id)
+    : null;
 
   const linkRows = await db
     .select({
@@ -99,6 +112,8 @@ export default async function NotePage({
         initialIsPublic={note.isPublic}
         initialPublicSlug={note.publicSlug ?? null}
         noteSlug={slug}
+        userName={session.user.name ?? session.user.email ?? "anonymous"}
+        initialCollabToken={initialCollabToken}
       />
       <BacklinksPanel noteId={note.id} />
     </div>

@@ -18,7 +18,7 @@ dist
 coverage
 playwright-report
 test-results
-**/tsconfig.tsbuildinfo
+**/*.tsbuildinfo
 **/.venv
 **/__pycache__
 **/*.egg-info

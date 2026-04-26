@@ -1,5 +1,5 @@
 import { and, eq, notInArray, sql } from "drizzle-orm";
-import { db } from "@/lib/db";
+import { db } from "@episteme/db";
 import { noteRevisions } from "@episteme/db/schema";
 
 const AUTOSAVE_KEEP = 200;

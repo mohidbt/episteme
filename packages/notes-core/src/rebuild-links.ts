@@ -1,5 +1,5 @@
 import { and, desc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
-import { db } from "@/lib/db";
+import { db } from "@episteme/db";
 import {
   noteLinks,
   noteTags,

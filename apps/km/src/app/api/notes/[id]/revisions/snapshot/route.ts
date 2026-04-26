@@ -5,7 +5,7 @@ import { db } from "@/lib/db";
 import { notes } from "@episteme/db/schema";
 import { getUserIdFromRequest } from "@/lib/auth";
 import { jsonError } from "@/lib/crud";
-import { createRevisionIfNeeded } from "@/lib/notes/create-revision";
+import { createRevisionIfNeeded } from "@episteme/notes-core";
 
 const reasonSchema = z.enum(["pre-ai-edit", "conflict-resolve"]);
 
