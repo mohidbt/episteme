@@ -38,6 +38,15 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
+
+  /* Syntax-highlighting palette. The shadcn neutral theme is grayscale, so we
+     introduce four small hue tokens used by the lowlight token classes in
+     packages/editor/src/styles.css. Tuned for readability on --muted (light)
+     and the dark-mode --muted (below) without being garish. */
+  --hljs-keyword: oklch(0.50 0.18 268);   /* indigo — keywords, types, tags */
+  --hljs-string:  oklch(0.52 0.13 152);   /* green — strings, attrs */
+  --hljs-number:  oklch(0.62 0.16 50);    /* orange — numbers, literals */
+  --hljs-symbol:  oklch(0.55 0.20 320);   /* violet — symbols, selectors */
 }
 
 @theme inline {
@@ -117,6 +126,12 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
+
+  /* Brighter hues on dark muted (~oklch(0.269)). */
+  --hljs-keyword: oklch(0.78 0.13 268);
+  --hljs-string:  oklch(0.80 0.14 152);
+  --hljs-number:  oklch(0.80 0.13 60);
+  --hljs-symbol:  oklch(0.78 0.15 320);
 }
 
 @layer base {

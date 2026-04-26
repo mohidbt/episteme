@@ -461,6 +461,12 @@ export function NoteEditor({
             .focus()
             .insertTable({ rows: 3, cols: 3, withHeaderRow: true })
             .run();
+        } else if (p.title === "Code Block") {
+          editor
+            .chain()
+            .focus()
+            .toggleCodeBlock({ language: "ts" })
+            .run();
         }
       },
       render: () => {

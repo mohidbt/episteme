@@ -3,8 +3,10 @@ import Suggestion, { type SuggestionOptions } from "@tiptap/suggestion";
 import { Extension } from "@tiptap/core";
 import { PluginKey } from "@tiptap/pm/state";
 import type { EditorState } from "@tiptap/pm/state";
+import { ReactNodeViewRenderer } from "@tiptap/react";
 import { createExtensions as baseExtensions, WikiLink, TagMark, Y_PROSEMIRROR_FIELD } from "@episteme/markdown";
 import { BibliographyHeading } from "./slash/BibliographyHeading";
+import { CodeBlockNodeView } from "./CodeBlockNodeView";
 import { MdPaste } from "./MdPaste";
 import Collaboration from "@tiptap/extension-collaboration";
 import CollaborationCursor from "@tiptap/extension-collaboration-cursor";
@@ -165,7 +167,18 @@ export function editorExtensions(opts?: {
   const collab = opts?.collab;
 
   return [
-    ...baseExtensions({ collaborative: !!collab }),
+    ...baseExtensions({
+      collaborative: !!collab,
+      // Attach the React NodeView (language switcher) to CodeBlockLowlight.
+      // The markdown package itself is React-free; we pass the renderer in
+      // from here so headless callers (md round-trip tests) keep working.
+      codeBlockExtend: (ext) =>
+        ext.extend({
+          addNodeView() {
+            return ReactNodeViewRenderer(CodeBlockNodeView);
+          },
+        }),
+    }),
     wikiLink,
     TagMark,
     BibliographyHeading,

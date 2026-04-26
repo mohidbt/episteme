@@ -81,7 +81,17 @@ const ItalicUnderscore = Italic.extend({
   },
 });
 
-export const createExtensions = (opts?: { collaborative?: boolean }) => {
+export const createExtensions = (opts?: {
+  collaborative?: boolean;
+  // Optional NodeView extender — passed in by callers that have React in scope
+  // (e.g. apps/km via @episteme/editor). When provided, the function it returns
+  // is applied to CodeBlockLowlight via .extend() so the editor renders a React
+  // NodeView (used here for the language switcher dropdown). Headless callers
+  // (markdown package tests, server-side md round-trip) leave this unset and
+  // get a plain extension with no React dependency.
+  codeBlockExtend?: (ext: typeof CodeBlockLowlight) => typeof CodeBlockLowlight;
+}) => {
+  const codeBlock = (opts?.codeBlockExtend ?? ((e) => e))(CodeBlockLowlight);
   const exts = [
     StarterKit.configure({
       heading: { levels: [1, 2, 3] },
@@ -91,7 +101,7 @@ export const createExtensions = (opts?: { collaborative?: boolean }) => {
       // Collaboration extension owns undo/redo — StarterKit history must be off.
       history: opts?.collaborative ? false : undefined,
     }),
-    CodeBlockLowlight.configure({ lowlight, defaultLanguage: null }),
+    codeBlock.configure({ lowlight, defaultLanguage: null }),
     ItalicUnderscore,
     Link,
     TaskList,

@@ -67,6 +67,12 @@ const COMMANDS: SlashCommandItem[] = [
     keywords: ["table", "grid", "rows", "columns"],
     icon: "▦",
   },
+  {
+    title: "Code Block",
+    description: "Insert a code block with syntax highlighting",
+    keywords: ["code", "block", "snippet", "syntax", "fence", "```"],
+    icon: "{ }",
+  },
 ];
 
 export const SlashCommandTypeahead = forwardRef<

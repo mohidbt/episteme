@@ -2,26 +2,100 @@
 .episteme-prose h1 { font-size: 1.6em; font-weight: 700; margin: 0.8em 0 0.4em; }
 .episteme-prose h2 { font-size: 1.35em; font-weight: 600; margin: 0.7em 0 0.35em; }
 .episteme-prose p  { margin: 0.5em 0; }
-.episteme-prose code { background: #f1f1ef; padding: 0 4px; border-radius: 3px; font-family: ui-monospace, monospace; }
+.episteme-prose code { background: var(--muted); padding: 0 4px; border-radius: 3px; font-family: ui-monospace, monospace; }
 .episteme-prose pre  { background: var(--muted); padding: 12px; border-radius: 6px; overflow-x: auto; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.episteme-prose pre code { background: transparent; padding: 0; border-radius: 0; }
 
-/* Syntax highlighting tokens (lowlight / highlight.js). Semantic-token only. */
+/* Code-block NodeView wrapper hosts the language-switcher dropdown. */
+.episteme-code-block { position: relative; margin: 0.6em 0; }
+.episteme-code-block__lang {
+  position: absolute;
+  right: 8px;
+  top: 8px;
+  z-index: 1;
+  appearance: none;
+  -webkit-appearance: none;
+  background: var(--background);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--muted-foreground);
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 11px;
+  line-height: 1;
+  padding: 3px 18px 3px 6px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 120ms;
+  background-image: linear-gradient(45deg, transparent 50%, var(--muted-foreground) 50%),
+                    linear-gradient(135deg, var(--muted-foreground) 50%, transparent 50%);
+  background-position: calc(100% - 9px) 50%, calc(100% - 5px) 50%;
+  background-size: 4px 4px, 4px 4px;
+  background-repeat: no-repeat;
+}
+.episteme-code-block:hover .episteme-code-block__lang,
+.episteme-code-block__lang:focus { opacity: 1; }
+
+/* Syntax highlighting tokens (lowlight / highlight.js). Semantic palette,
+   ≤ 8 colors. All references go through shadcn tokens defined in
+   apps/km/src/app/globals.css so dark-mode flips Just Work. */
+
+/* Comments / muted meta — secondary-foreground gives a softer grey than
+   muted-foreground on the muted background. */
 .episteme-prose pre code .hljs-comment,
-.episteme-prose pre code .hljs-quote { color: var(--muted-foreground); font-style: italic; }
+.episteme-prose pre code .hljs-quote,
+.episteme-prose pre code .hljs-meta,
+.episteme-prose pre code .hljs-deletion { color: var(--muted-foreground); font-style: italic; }
+
+/* Keywords / types / structural — primary, the strongest accent. */
 .episteme-prose pre code .hljs-keyword,
 .episteme-prose pre code .hljs-selector-tag,
 .episteme-prose pre code .hljs-title,
 .episteme-prose pre code .hljs-section,
-.episteme-prose pre code .hljs-function { color: var(--primary); }
+.episteme-prose pre code .hljs-type,
+.episteme-prose pre code .hljs-built_in,
+.episteme-prose pre code .hljs-class,
+.episteme-prose pre code .hljs-tag,
+.episteme-prose pre code .hljs-doctag,
+.episteme-prose pre code .hljs-template-tag { color: var(--hljs-keyword); }
+
+/* Function names / defined names — same primary, bold for emphasis. */
+.episteme-prose pre code .hljs-function,
+.episteme-prose pre code .hljs-title.function_,
+.episteme-prose pre code .hljs-title.class_ { color: var(--hljs-keyword); font-weight: 600; }
+
+/* Strings / values / regexp / additions / link targets — green-ish accent. */
 .episteme-prose pre code .hljs-string,
 .episteme-prose pre code .hljs-attr,
-.episteme-prose pre code .hljs-symbol,
-.episteme-prose pre code .hljs-bullet { color: var(--accent-foreground); }
+.episteme-prose pre code .hljs-attribute,
+.episteme-prose pre code .hljs-regexp,
+.episteme-prose pre code .hljs-link,
+.episteme-prose pre code .hljs-addition,
+.episteme-prose pre code .hljs-template-variable { color: var(--hljs-string); }
+
+/* Numbers / literals / formulas — orange-ish accent. */
 .episteme-prose pre code .hljs-number,
-.episteme-prose pre code .hljs-literal { color: var(--secondary-foreground); }
+.episteme-prose pre code .hljs-literal,
+.episteme-prose pre code .hljs-formula { color: var(--hljs-number); }
+
+/* Selector pseudo / attr / bullet / strong — accent-foreground (purple-ish in
+   default shadcn). */
+.episteme-prose pre code .hljs-bullet,
+.episteme-prose pre code .hljs-selector-class,
+.episteme-prose pre code .hljs-selector-id,
+.episteme-prose pre code .hljs-selector-attr,
+.episteme-prose pre code .hljs-selector-pseudo,
+.episteme-prose pre code .hljs-symbol { color: var(--hljs-symbol); }
+
+/* Variable / param / subst — default foreground (explicit so they
+   don't accidentally inherit one of the above). */
 .episteme-prose pre code .hljs-variable,
 .episteme-prose pre code .hljs-name,
-.episteme-prose pre code .hljs-built_in { color: var(--foreground); }
+.episteme-prose pre code .hljs-params,
+.episteme-prose pre code .hljs-subst { color: var(--foreground); }
+
+/* Emphasis / strong — preserve the markdown semantics inside code. */
+.episteme-prose pre code .hljs-emphasis { font-style: italic; }
+.episteme-prose pre code .hljs-strong { font-weight: 600; }
 .episteme-prose blockquote { border-left: 3px solid #d1d5db; padding-left: 12px; color: #4b5563; }
 .episteme-prose ul, .episteme-prose ol { padding-left: 1.5em; }
 .episteme-prose [data-type="taskList"] { list-style: none; padding-left: 0; }
