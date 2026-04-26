@@ -10,56 +10,15 @@ import {
   Rows3,
   Columns3,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
 
 export function TableBubbleMenu({ editor }: { editor: TiptapEditor }) {
-  const [isHoveringTable, setIsHoveringTable] = useState(false);
-  const hoveredTableRef = useRef<HTMLElement | null>(null);
-
-  useEffect(() => {
-    const dom = editor.view.dom as HTMLElement;
-
-    const onMouseOver = (e: MouseEvent) => {
-      const target = e.target as HTMLElement | null;
-      const tableEl = target?.closest?.("table") as HTMLElement | null;
-      if (tableEl && dom.contains(tableEl)) {
-        hoveredTableRef.current = tableEl;
-        setIsHoveringTable(true);
-      }
-    };
-
-    const onMouseOut = (e: MouseEvent) => {
-      const related = e.relatedTarget as HTMLElement | null;
-      // Only clear if the mouse left the table entirely (not just moved between cells)
-      if (
-        hoveredTableRef.current &&
-        !hoveredTableRef.current.contains(related)
-      ) {
-        hoveredTableRef.current = null;
-        setIsHoveringTable(false);
-      }
-    };
-
-    dom.addEventListener("mouseover", onMouseOver);
-    dom.addEventListener("mouseout", onMouseOut);
-    return () => {
-      dom.removeEventListener("mouseover", onMouseOver);
-      dom.removeEventListener("mouseout", onMouseOut);
-    };
-  }, [editor]);
-
   return (
     <BubbleMenu
       editor={editor}
-      shouldShow={() => isHoveringTable}
+      shouldShow={({ editor: e }) => e.isActive("table")}
       tippyOptions={{
         placement: "top",
         interactive: true,
-        getReferenceClientRect: () => {
-          const el = hoveredTableRef.current;
-          if (el) return el.getBoundingClientRect();
-          return editor.view.dom.getBoundingClientRect();
-        },
         popperOptions: {
           strategy: "fixed",
           modifiers: [
