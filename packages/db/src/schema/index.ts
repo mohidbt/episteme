@@ -17,6 +17,7 @@ export * from "./ai-highlight-runs";
 export * from "./libraries";
 export * from "./folders";
 export * from "./papers";
+export * from "./assets";
 export * from "./paper-highlights";
 export * from "./paper-embeddings";
 export * from "./references";

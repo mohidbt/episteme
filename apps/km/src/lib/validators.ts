@@ -34,6 +34,16 @@ export const paperUploadInitSchema = z.object({
   sizeBytes: z.number().int().positive().max(MAX_PDF_BYTES),
 });
 
+const MAX_ASSET_BYTES = 50 * 1024 * 1024; // 50 MB cap, mirrors paper limit
+
+export const assetUploadInitSchema = z.object({
+  libraryId: z.number().int(),
+  folderId: z.string().uuid().nullable().optional(),
+  filename: nonEmptyTrimmed(500),
+  contentType: nonEmptyTrimmed(200),
+  sizeBytes: z.number().int().positive().max(MAX_ASSET_BYTES),
+});
+
 export const paperUpdateSchema = z
   .object({
     folderPath: folderPathSchema.optional(),

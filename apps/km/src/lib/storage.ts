@@ -20,3 +20,7 @@ export function paperSourceKey(paperId: string): string {
 export function paperCoverKey(paperId: string): string {
   return `${paperId}/cover.png`;
 }
+
+export function assetSourceKey(assetId: string): string {
+  return `assets/${assetId}`;
+}
