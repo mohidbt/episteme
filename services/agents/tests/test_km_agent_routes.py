@@ -1,13 +1,10 @@
 """RED → GREEN tests for /agents/km/{invoke,resume,state,config} routes."""
-import asyncio
 import hmac
 import hashlib
 import json
 import os
 import time
-from unittest.mock import AsyncMock, MagicMock, patch
-
-import pytest
+from unittest.mock import MagicMock, patch
 
 SECRET = "test-secret-abc"
 os.environ["INHALE_INTERNAL_SECRET"] = SECRET
