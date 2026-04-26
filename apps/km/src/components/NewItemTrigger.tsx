@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  useRef,
   useState,
   type KeyboardEvent,
   type MouseEvent,
@@ -26,7 +25,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { validateFolderName } from "@/lib/folders";
-import { PaperUploadDropzone } from "./PaperUploadDropzone";
 
 type Variant = "group" | "menu-item" | "sub-menu-item" | "toolbar";
 
@@ -48,7 +46,7 @@ const VARIANT_CLASS: Record<Exclude<Variant, "toolbar">, string> = {
     "top-0.5 right-1 opacity-0 group-hover/menu-sub-item:opacity-100 group-focus-within/menu-sub-item:opacity-100 aria-expanded:opacity-100",
 };
 
-type DialogKind = "note" | "reference" | "folder" | "upload" | null;
+type DialogKind = "note" | "reference" | "folder" | null;
 
 async function jsonFetch(url: string, init: RequestInit): Promise<Response> {
   const headers = new Headers(init.headers);
@@ -74,8 +72,6 @@ export function NewItemTrigger({
   variant = "menu-item",
 }: Props) {
   const [dialog, setDialog] = useState<DialogKind>(null);
-  // fileInputRef kept for backward compat but no longer used (T21 wired the dialog)
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const stop = (e: MouseEvent<HTMLButtonElement>) => {
     e.preventDefault();
@@ -116,36 +112,11 @@ export function NewItemTrigger({
           <DropdownMenuItem onClick={() => setDialog("reference")}>
             Reference
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => setDialog("upload")}>
-            Upload paper…
-          </DropdownMenuItem>
           <DropdownMenuItem onClick={() => setDialog("folder")}>
             Folder
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-
-      {/* Hidden input retained for ref but no longer used; upload handled via dialog. */}
-      <input ref={fileInputRef} type="file" accept=".pdf" className="hidden" onChange={() => {}} />
-
-      <Dialog open={dialog === "upload"} onOpenChange={(o) => setDialog(o ? "upload" : null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Upload paper</DialogTitle>
-            <DialogDescription>Drop or choose PDF files to upload.</DialogDescription>
-          </DialogHeader>
-          <PaperUploadDropzone
-            libraryId={libraryId}
-            folderPath=""
-            folderId={folderId}
-          />
-          <DialogFooter>
-            <Button variant="outline" onClick={() => { setDialog(null); onMutate(); }}>
-              Done
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       <NoteCreateDialog
         open={dialog === "note"}

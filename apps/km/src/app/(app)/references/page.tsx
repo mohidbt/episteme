@@ -9,6 +9,7 @@ import { ReferenceTable } from "@/components/ReferenceTable";
 import { ReferenceDoiInput } from "@/components/ReferenceDoiInput";
 import { ReferenceImportButton } from "@/components/ReferenceImportButton";
 import { FolderFilterDropdown } from "@/components/FolderFilterDropdown";
+import { UnifiedDropzone } from "@/components/UnifiedDropzone";
 
 export default async function ReferencesPage({
   searchParams,
@@ -46,6 +47,7 @@ export default async function ReferencesPage({
       <h1 className="mb-4 font-display text-3xl leading-none tracking-tight">
         References
       </h1>
+      <UnifiedDropzone libraryId={library.id} folderPath="" />
       <div className="mb-6 flex flex-col gap-3">
         <ReferenceDoiInput libraryId={library.id} folderPath="" />
         <div className="flex items-center gap-2">

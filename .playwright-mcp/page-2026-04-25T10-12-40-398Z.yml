@@ -1,0 +1,45 @@
+- generic [ref=e1]:
+  - generic [ref=e2]:
+    - generic [ref=e3]:
+      - paragraph [ref=e4]: You’re in guest mode. Your work is saved in this browser. Sign up to keep it across devices.
+      - link "Sign up" [ref=e5] [cursor=pointer]:
+        - /url: /sign-up
+    - generic [ref=e6]:
+      - complementary [ref=e7]:
+        - paragraph [ref=e8]: Notes
+        - list [ref=e17]:
+          - listitem [ref=e18]:
+            - button "Welcome to Episteme" [ref=e19]
+          - listitem [ref=e20]:
+            - button "Paper notes" [ref=e21]
+          - listitem [ref=e22]:
+            - button "Try the AI" [ref=e23]
+        - paragraph [ref=e10]: Papers
+        - button "Demo paper (PDF)" [expanded] [active] [ref=e11]
+      - main [ref=e12]:
+        - article [ref=e24]:
+          - heading "Welcome to Episteme" [level=1] [ref=e25]
+          - paragraph [ref=e26]: Episteme is a knowledge-management workspace for your notes, papers, and references. Everything you see on this page lives in your browser — no account required. Try editing it.
+          - paragraph [ref=e27]:
+            - text: Organise your thinking with notebooks, link notes with
+            - code [ref=e28]: "[[wikilinks]]"
+            - text: ", and annotate PDFs from the reader. The sidebar on the left is your drive; the editor in front of you is a Notion-style block editor with slash commands."
+          - paragraph [ref=e29]: When you're ready to sync across devices, sign up and your guest content will follow you.
+        - generic [ref=e39]:
+          - heading "Demo paper" [level=2] [ref=e40]
+          - generic [ref=e41]:
+            - generic [ref=e45]:
+              - generic [ref=e46]: Test PDF Document
+              - generic [ref=e47]: This is a test document for inhale reader testing.
+              - generic [ref=e48]: It contains multiple lines of selectable text.
+              - generic [ref=e49]: Use this to verify highlights, comments, and zoom.
+            - generic [ref=e50]:
+              - paragraph [ref=e51]: Highlights
+              - list [ref=e52]:
+                - listitem [ref=e53]: Attention is all you need.
+        - link "Sign up to save your work across devices →" [ref=e15] [cursor=pointer]:
+          - /url: /sign-up
+  - region "Notifications alt+T"
+  - button "Open Next.js Dev Tools" [ref=e35] [cursor=pointer]:
+    - img [ref=e36]
+  - alert [ref=e16]

@@ -30,14 +30,16 @@ export default async function DriveRootPage() {
   ]);
 
   return (
-    <FileBrowser
-      libraryId={library.id}
-      libraryName={library.name}
-      folderId={null}
-      folderChain={[]}
-      contents={serializeFolderContents(contents)}
-      folders={allFolders}
-      isTrashView={false}
-    />
+    <div>
+      <FileBrowser
+        libraryId={library.id}
+        libraryName={library.name}
+        folderId={null}
+        folderChain={[]}
+        contents={serializeFolderContents(contents)}
+        folders={allFolders}
+        isTrashView={false}
+      />
+    </div>
   );
 }

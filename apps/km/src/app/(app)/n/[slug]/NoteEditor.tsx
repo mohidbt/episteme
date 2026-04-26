@@ -8,6 +8,12 @@ import {
   type WikiLinkSuggestion,
   type SlashCommandSuggestion,
   type TiptapEditor,
+  type CitationMeta,
+  insertCitation,
+  insertPdfEmbed,
+  insertWikiLink,
+  invokeAgent,
+  hydrateCitations,
 } from "@episteme/editor";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
@@ -24,6 +30,7 @@ export function NoteEditor({
   flushRef,
   userName,
   initialCollabToken,
+  editorRef: externalEditorRef,
 }: {
   id: string;
   initialMd: string;
@@ -32,6 +39,7 @@ export function NoteEditor({
   userName?: string;
   /** SSR-minted collab JWT. When provided, skips the client-side /api/collab/token fetch. */
   initialCollabToken?: string | null;
+  editorRef?: RefObject<TiptapEditor | null>;
 }) {
   const router = useRouter();
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -123,7 +131,26 @@ export function NoteEditor({
 
   const onReady = useCallback((editor: TiptapEditor) => {
     editorRef.current = editor;
+    if (externalEditorRef) externalEditorRef.current = editor;
     setEditorInstance(editor);
+
+    // Hydrate citations fire-and-forget: refill bibIndex + metadata + bibliography
+    // from fresh server data so reload restores [n] indices and hover tooltips.
+    // This must not block first paint.
+    void hydrateCitations(editor, async (citekeys: string[]): Promise<CitationMeta[]> => {
+      try {
+        const r = await fetch("/api/citations/by-citekeys", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ citekeys }),
+        });
+        if (!r.ok) return [];
+        const data = await r.json() as { results: CitationMeta[] };
+        return data.results;
+      } catch {
+        return [];
+      }
+    });
   }, []);
 
   const flush = useCallback((): Promise<void> => {
@@ -409,10 +436,24 @@ export function NoteEditor({
         // Delete the `/` trigger and any typed query characters
         editor.chain().focus().deleteRange(range).run();
 
-        const p = props as { title: string };
+        const p = props as {
+          title: string;
+          citation?: { citekey: string; title: string; authors: string[]; year: string | null };
+          pdfEmbed?: { pdfId: string; title: string; page: number | null };
+          wikiLink?: { title: string; targetKind: "note" | "reference" | "paper"; targetId: string | null };
+          agent?: { skill: string };
+        };
         if (p.title === "AI") {
           // Trigger the AI Rephrase portal — increment counter to force re-render
           setAiTriggerCount((c) => c + 1);
+        } else if (p.title === "Cite" && p.citation) {
+          insertCitation(editor, p.citation);
+        } else if (p.title === "PDF" && p.pdfEmbed) {
+          insertPdfEmbed(editor, p.pdfEmbed);
+        } else if (p.title === "Link" && p.wikiLink) {
+          insertWikiLink(editor, p.wikiLink);
+        } else if (p.title === "Agent" && p.agent) {
+          invokeAgent(editor, p.agent);
         }
       },
       render: () => {

@@ -15,6 +15,7 @@ import { BacklinksPanel } from "@/components/BacklinksPanel";
 import { NotePageClient } from "./NotePageClient";
 import { mintCollabToken } from "@/lib/collab-token";
 import { COLLAB_ENABLED } from "@/lib/flags";
+import { prepareNoteContent } from "@/lib/note-content";
 
 export default async function NotePage({
   params,
@@ -106,7 +107,7 @@ export default async function NotePage({
       <NotePageClient
         id={note.id}
         title={note.title}
-        initialMd={note.contentMd ?? ""}
+        initialMd={prepareNoteContent(note.contentMd ?? "")}
         resolvedLinks={resolvedLinks}
         initialUsername={me?.username ?? null}
         initialIsPublic={note.isPublic}
