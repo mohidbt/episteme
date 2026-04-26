@@ -64,6 +64,22 @@ describe("markdown round-trip", () => {
     expect(stripCellPad(back)).toBe(stripCellPad(md));
   });
 
+  it("preserves language fence on fenced code block (ts)", () => {
+    const md = "```ts\nconst x = 1;\n```\n";
+    const doc = mdToProseMirror(md);
+    const back = proseMirrorToMd(doc);
+    expect(back).toContain("```ts");
+    expect(back).toContain("const x = 1;");
+  });
+
+  it("preserves language fence on fenced code block (python)", () => {
+    const md = "```python\nprint('hi')\n```\n";
+    const doc = mdToProseMirror(md);
+    const back = proseMirrorToMd(doc);
+    expect(back).toContain("```python");
+    expect(back).toContain("print('hi')");
+  });
+
   it("returns a valid empty ProseMirror doc for empty string", () => {
     const doc = mdToProseMirror("");
     expect(doc).toBeTruthy();

@@ -21,7 +21,10 @@
     "@tiptap/extension-table-row": "^2.10.0",
     "@tiptap/extension-table-cell": "^2.10.0",
     "@tiptap/extension-table-header": "^2.10.0",
+    "@tiptap/extension-code-block-lowlight": "^2.10.0",
     "@tiptap/suggestion": "^2.10.0",
+    "highlight.js": "^11.10.0",
+    "lowlight": "^3.3.0",
     "tiptap-markdown": "^0.8.10"
   },
   "devDependencies": {

@@ -7,7 +7,32 @@ import Table from "@tiptap/extension-table";
 import TableRow from "@tiptap/extension-table-row";
 import TableCell from "@tiptap/extension-table-cell";
 import TableHeader from "@tiptap/extension-table-header";
+import CodeBlockLowlight from "@tiptap/extension-code-block-lowlight";
+import { createLowlight } from "lowlight";
+import typescript from "highlight.js/lib/languages/typescript";
+import javascript from "highlight.js/lib/languages/javascript";
+import python from "highlight.js/lib/languages/python";
+import rust from "highlight.js/lib/languages/rust";
+import go from "highlight.js/lib/languages/go";
+import bash from "highlight.js/lib/languages/bash";
+import json from "highlight.js/lib/languages/json";
+import markdown from "highlight.js/lib/languages/markdown";
+import sql from "highlight.js/lib/languages/sql";
+import yaml from "highlight.js/lib/languages/yaml";
 import { Markdown } from "tiptap-markdown";
+
+const lowlight = createLowlight();
+lowlight.register("ts", typescript);
+lowlight.register("tsx", typescript);
+lowlight.register("js", javascript);
+lowlight.register("py", python);
+lowlight.register("rs", rust);
+lowlight.register("go", go);
+lowlight.register("bash", bash);
+lowlight.register("json", json);
+lowlight.register("md", markdown);
+lowlight.register("sql", sql);
+lowlight.register("yaml", yaml);
 import { Citation } from "./tiptap/Citation";
 import { PdfEmbed } from "./tiptap/PdfEmbed";
 
@@ -51,9 +76,12 @@ export const createExtensions = (opts?: { collaborative?: boolean }) => {
     StarterKit.configure({
       heading: { levels: [1, 2, 3] },
       italic: false,
+      // CodeBlockLowlight replaces StarterKit's built-in CodeBlock.
+      codeBlock: false,
       // Collaboration extension owns undo/redo — StarterKit history must be off.
       history: opts?.collaborative ? false : undefined,
     }),
+    CodeBlockLowlight.configure({ lowlight, defaultLanguage: null }),
     ItalicUnderscore,
     Link,
     TaskList,
