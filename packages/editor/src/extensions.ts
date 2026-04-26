@@ -7,7 +7,6 @@ import { ReactNodeViewRenderer } from "@tiptap/react";
 import { createExtensions as baseExtensions, WikiLink, TagMark, Y_PROSEMIRROR_FIELD } from "@episteme/markdown";
 import { BibliographyHeading } from "./slash/BibliographyHeading";
 import { CodeBlockNodeView } from "./CodeBlockNodeView";
-import { TableNodeView } from "./TableNodeView";
 import { MdPaste } from "./MdPaste";
 import Collaboration from "@tiptap/extension-collaboration";
 import CollaborationCursor from "@tiptap/extension-collaboration-cursor";
@@ -177,14 +176,6 @@ export function editorExtensions(opts?: {
         ext.extend({
           addNodeView() {
             return ReactNodeViewRenderer(CodeBlockNodeView);
-          },
-        }),
-      // Attach a draggable React NodeView to the Table node (drag handle).
-      tableExtend: (ext) =>
-        ext.extend({
-          draggable: true,
-          addNodeView() {
-            return ReactNodeViewRenderer(TableNodeView);
           },
         }),
     }),

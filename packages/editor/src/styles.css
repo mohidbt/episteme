@@ -177,7 +177,6 @@
   position: relative;
   /* Task 1.3: native browser vertical resize handle on cells */
   resize: vertical;
-  overflow: auto;
   min-height: 2em;
 }
 .episteme-prose tr td:last-of-type,
@@ -214,36 +213,6 @@
   cursor: col-resize;
 }
 
-/* Task 1.4: Draggable table NodeView wrapper + drag handle */
-.episteme-table-wrapper {
-  position: relative;
-  margin: 0.5em 0;
-}
-/* Ensure the inner <table> matches the existing .episteme-prose table styles
-   even though NodeViewWrapper adds a <div> between .episteme-prose and the table. */
-.episteme-table-wrapper table {
-  margin: 0;
-}
-.episteme-table-drag-handle {
-  position: absolute;
-  left: -22px;
-  top: 4px;
-  opacity: 0;
-  cursor: grab;
-  color: var(--muted-foreground);
-  transition: opacity 120ms;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-}
-.episteme-table-wrapper:hover .episteme-table-drag-handle {
-  opacity: 1;
-}
-.episteme-table-drag-handle:active {
-  cursor: grabbing;
-}
 
 /* Appearance modifiers: applied via data attributes on the <main> ancestor
    in apps/km so the editor package stays unaware of the preference surface. */

@@ -90,13 +90,8 @@ export const createExtensions = (opts?: {
   // (markdown package tests, server-side md round-trip) leave this unset and
   // get a plain extension with no React dependency.
   codeBlockExtend?: (ext: typeof CodeBlockLowlight) => typeof CodeBlockLowlight;
-  // Optional Table extender — same pattern as codeBlockExtend. Used by
-  // @episteme/editor to attach a draggable React NodeView to the Table node.
-  // Headless callers leave this unset.
-  tableExtend?: (ext: typeof Table) => typeof Table;
 }) => {
   const codeBlock = (opts?.codeBlockExtend ?? ((e) => e))(CodeBlockLowlight);
-  const table = (opts?.tableExtend ?? ((e) => e))(Table);
   const exts = [
     StarterKit.configure({
       heading: { levels: [1, 2, 3] },
@@ -111,7 +106,7 @@ export const createExtensions = (opts?: {
     Link,
     TaskList,
     TaskItem.configure({ nested: true }),
-    table.configure({ resizable: true }),
+    Table.configure({ resizable: true }),
     TableRow,
     TableHeader,
     TableCell,
