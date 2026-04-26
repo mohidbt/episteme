@@ -22,6 +22,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { WikiLinkTypeahead, type WikiLinkTypeaheadRef } from "@/components/WikiLinkTypeahead";
 import { SlashCommandTypeahead, type SlashCommandTypeaheadRef } from "@/components/SlashCommandTypeahead";
 import { AiBubbleMenu } from "@/components/AiBubbleMenu";
+import { TableBubbleMenu } from "@/components/TableBubbleMenu";
 
 export function NoteEditor({
   id,
@@ -565,7 +566,10 @@ export function NoteEditor({
           collab={collabProp}
         >
           {editorInstance && (
-            <AiBubbleMenu editor={editorInstance} aiTriggerCount={aiTriggerCount} />
+            <>
+              <AiBubbleMenu editor={editorInstance} aiTriggerCount={aiTriggerCount} />
+              <TableBubbleMenu editor={editorInstance} />
+            </>
           )}
         </Editor>
       ) : (

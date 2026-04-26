@@ -89,9 +89,13 @@
   text-decoration: underline;
 }
 
-/* Tables — GFM round-trip via tiptap-markdown; resizable columns enabled. */
+/* Tables — GFM round-trip via tiptap-markdown; resizable columns enabled.
+   Flat, Notion-/Linear-style: thin borders, rounded outer frame, no header fill. */
 .episteme-prose table {
-  border-collapse: collapse;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  border-collapse: separate;
+  border-spacing: 0;
   width: 100%;
   margin: 0.5em 0;
   table-layout: fixed;
@@ -99,24 +103,41 @@
 }
 .episteme-prose td,
 .episteme-prose th {
-  border: 1px solid var(--border);
-  padding: 4px 8px;
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  padding: 6px 10px;
   vertical-align: top;
   position: relative;
 }
+.episteme-prose tr td:last-of-type,
+.episteme-prose tr th:last-of-type {
+  border-right: none;
+}
+.episteme-prose tr:last-of-type td,
+.episteme-prose tr:last-of-type th {
+  border-bottom: none;
+}
 .episteme-prose th {
-  background: var(--muted);
   font-weight: 600;
   text-align: left;
 }
+.episteme-prose td.selectedCell,
+.episteme-prose th.selectedCell {
+  background: color-mix(in srgb, var(--accent) 30%, transparent);
+}
 .episteme-prose .column-resize-handle {
   position: absolute;
-  right: -2px;
+  right: 0;
   top: 0;
   bottom: 0;
-  width: 4px;
-  background: var(--primary);
+  width: 1px;
+  background: var(--border);
   pointer-events: none;
+  transition: background 120ms, width 120ms;
+}
+.episteme-prose table:hover .column-resize-handle {
+  width: 2px;
+  background: var(--primary);
 }
 .ProseMirror.resize-cursor {
   cursor: col-resize;
