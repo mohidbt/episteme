@@ -10,15 +10,57 @@ import {
   Rows3,
   Columns3,
 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 
 export function TableBubbleMenu({ editor }: { editor: TiptapEditor }) {
+  const [isHoveringTable, setIsHoveringTable] = useState(false);
+  const hoveredTableRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    const dom = editor.view.dom as HTMLElement;
+
+    const onMouseOver = (e: MouseEvent) => {
+      const tableEl = (e.target as HTMLElement | null)?.closest?.("table") as HTMLElement | null;
+      if (tableEl && dom.contains(tableEl)) {
+        hoveredTableRef.current = tableEl;
+        if (!isHoveringTable) setIsHoveringTable(true);
+      }
+    };
+
+    const onMouseOut = (e: MouseEvent) => {
+      if (
+        hoveredTableRef.current &&
+        !hoveredTableRef.current.contains(e.relatedTarget as HTMLElement | null)
+      ) {
+        hoveredTableRef.current = null;
+        setIsHoveringTable(false);
+      }
+    };
+
+    dom.addEventListener("mouseover", onMouseOver);
+    dom.addEventListener("mouseout", onMouseOut);
+    return () => {
+      dom.removeEventListener("mouseover", onMouseOver);
+      dom.removeEventListener("mouseout", onMouseOut);
+    };
+  }, [editor, isHoveringTable]);
+
+  // Dispatch a no-op transaction so BubbleMenu re-evaluates shouldShow
+  // whenever hover state changes (shouldShow only fires on PM view updates).
+  useEffect(() => {
+    editor.view.dispatch(editor.view.state.tr);
+  }, [isHoveringTable, editor]);
+
   return (
     <BubbleMenu
       editor={editor}
-      shouldShow={({ editor: e }) => e.isActive("table")}
+      shouldShow={() => isHoveringTable}
       tippyOptions={{
         placement: "top",
         interactive: true,
+        getReferenceClientRect: () =>
+          hoveredTableRef.current?.getBoundingClientRect() ??
+          editor.view.dom.getBoundingClientRect(),
         popperOptions: {
           strategy: "fixed",
           modifiers: [
