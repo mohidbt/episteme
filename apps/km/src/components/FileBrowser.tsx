@@ -144,13 +144,22 @@ function flatten(contents: FolderContents): FileBrowserItemData[] {
     updatedAt: toMs(n.updatedAt),
     href: `/n/${n.slug}`,
   }));
-  return [...folders, ...papers, ...refs, ...notes];
+  const assets: FileBrowserItemData[] = contents.assets.map((a) => ({
+    id: a.id,
+    kind: "asset" as ItemKind,
+    title: a.filename,
+    updatedAt: toMs(a.updatedAt),
+    href: null,
+    mimeType: a.mimeType,
+  }));
+  return [...folders, ...papers, ...refs, ...notes, ...assets];
 }
 
 function apiRouteForKind(kind: ItemKind): string | null {
   if (kind === "paper") return "papers";
   if (kind === "reference") return "references";
   if (kind === "note") return "notes";
+  if (kind === "asset") return "assets";
   return null;
 }
 
@@ -307,7 +316,8 @@ export function FileBrowser({
       paper: 1,
       reference: 2,
       note: 3,
-      data: 4,
+      asset: 4,
+      data: 5,
     };
     const copy = [...items];
     copy.sort((a, b) => {
@@ -354,6 +364,17 @@ export function FileBrowser({
         router.push(`/drive/${segments.join("/")}`);
         return;
       }
+      if (item.kind === "asset") {
+        // TODO: image lightbox preview. Today: fetch presigned downloadUrl
+        // and open in a new tab — works for both images and other MIMEs.
+        void fetch(`/api/assets/${item.id}`)
+          .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`status ${r.status}`))))
+          .then((body: { downloadUrl?: string }) => {
+            if (body.downloadUrl) window.open(body.downloadUrl, "_blank", "noopener,noreferrer");
+          })
+          .catch(() => toast.error("Failed to open asset"));
+        return;
+      }
       if (item.href) router.push(item.href);
     },
     [router, folderChain],
@@ -374,7 +395,12 @@ export function FileBrowser({
     if (!name) return;
     const kind = renameTarget.kind;
     const id = renameTarget.id;
-    const body = kind === "folder" ? { name } : { title: name };
+    const body =
+      kind === "folder"
+        ? { name }
+        : kind === "asset"
+          ? { filename: name }
+          : { title: name };
     const route =
       kind === "folder"
         ? `folders/${id}`
@@ -382,7 +408,9 @@ export function FileBrowser({
           ? `papers/${id}`
           : kind === "reference"
             ? `references/${id}`
-            : `notes/${id}`;
+            : kind === "asset"
+              ? `assets/${id}`
+              : `notes/${id}`;
     try {
       const res = await fetch(`/api/${route}`, {
         method: "PATCH",
@@ -421,7 +449,9 @@ export function FileBrowser({
               ? "papers"
               : moveTarget.kind === "reference"
                 ? "references"
-                : "notes";
+                : moveTarget.kind === "asset"
+                  ? "assets"
+                  : "notes";
           const res = await fetch(`/api/${route}/${moveTarget.id}`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
@@ -441,6 +471,15 @@ export function FileBrowser({
   const handleTrash = useCallback(
     async (item: FileBrowserItemData) => {
       try {
+        // Assets have no `prevFolderId` and no trash flow yet — hard delete.
+        // TODO: full trash/restore for assets.
+        if (item.kind === "asset") {
+          if (!window.confirm(`Delete "${item.title}"? This cannot be undone.`)) return;
+          const res = await fetch(`/api/assets/${item.id}`, { method: "DELETE" });
+          if (!res.ok) throw new Error(`status ${res.status}`);
+          router.refresh();
+          return;
+        }
         const res = await fetch("/api/folders/trash", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -482,7 +521,9 @@ export function FileBrowser({
             ? "papers"
             : item.kind === "reference"
               ? "references"
-              : "notes";
+              : item.kind === "asset"
+                ? "assets"
+                : "notes";
       try {
         const res = await fetch(`/api/${plural}/${item.id}`, { method: "DELETE" });
         if (!res.ok) throw new Error(`status ${res.status}`);

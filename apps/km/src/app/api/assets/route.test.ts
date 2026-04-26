@@ -1,7 +1,11 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { GET, POST } from "./route";
-import { DELETE as DEL_ID, GET as GET_ID } from "./[id]/route";
+import {
+  DELETE as DEL_ID,
+  GET as GET_ID,
+  PATCH as PATCH_ID,
+} from "./[id]/route";
 import { POST as POST_LIB } from "../libraries/route";
 import {
   createTestUser,
@@ -248,6 +252,110 @@ describe("assets", () => {
       params({ id: assetId }),
     );
     expect(after.status).toBe(404);
+  });
+
+  it("PATCH renames asset", async () => {
+    const c = await POST(
+      req("/api/assets", {
+        method: "POST",
+        cookie: u.cookie,
+        body: JSON.stringify(initUpload({ filename: "old.png" })),
+      }),
+    );
+    const { assetId } = await c.json();
+    createdAssetIds.push(assetId);
+
+    const r = await PATCH_ID(
+      req(`/api/assets/${assetId}`, {
+        method: "PATCH",
+        cookie: u.cookie,
+        body: JSON.stringify({ filename: "new-name.png" }),
+      }),
+      params({ id: assetId }),
+    );
+    expect(r.status).toBe(200);
+    const body = await r.json();
+    expect(body.filename).toBe("new-name.png");
+  });
+
+  it("PATCH moves asset to owned folder + clears with null", async () => {
+    const { POST: POST_FOLDER } = await import("../folders/route");
+    const folderRes = await POST_FOLDER(
+      req("/api/folders", {
+        method: "POST",
+        cookie: u.cookie,
+        body: JSON.stringify({ libraryId, parentId: null, name: "PatchTarget" }),
+      }),
+    );
+    const folderId: string = (await folderRes.json()).id;
+
+    const c = await POST(
+      req("/api/assets", {
+        method: "POST",
+        cookie: u.cookie,
+        body: JSON.stringify(initUpload({ filename: "movable.png" })),
+      }),
+    );
+    const { assetId } = await c.json();
+    createdAssetIds.push(assetId);
+
+    const moved = await PATCH_ID(
+      req(`/api/assets/${assetId}`, {
+        method: "PATCH",
+        cookie: u.cookie,
+        body: JSON.stringify({ folderId }),
+      }),
+      params({ id: assetId }),
+    );
+    expect(moved.status).toBe(200);
+    const movedBody = await moved.json();
+    expect(movedBody.folderId).toBe(folderId);
+
+    const cleared = await PATCH_ID(
+      req(`/api/assets/${assetId}`, {
+        method: "PATCH",
+        cookie: u.cookie,
+        body: JSON.stringify({ folderId: null }),
+      }),
+      params({ id: assetId }),
+    );
+    expect(cleared.status).toBe(200);
+    const clearedBody = await cleared.json();
+    expect(clearedBody.folderId).toBeNull();
+  });
+
+  it("PATCH 404 for missing asset id", async () => {
+    const r = await PATCH_ID(
+      req(`/api/assets/00000000-0000-0000-0000-000000000000`, {
+        method: "PATCH",
+        cookie: u.cookie,
+        body: JSON.stringify({ filename: "x.png" }),
+      }),
+      params({ id: "00000000-0000-0000-0000-000000000000" }),
+    );
+    expect(r.status).toBe(404);
+  });
+
+  it("PATCH 403 for other user", async () => {
+    const c = await POST(
+      req("/api/assets", {
+        method: "POST",
+        cookie: u.cookie,
+        body: JSON.stringify(initUpload({ filename: "hands-off.png" })),
+      }),
+    );
+    const { assetId } = await c.json();
+    createdAssetIds.push(assetId);
+
+    const r = await PATCH_ID(
+      req(`/api/assets/${assetId}`, {
+        method: "PATCH",
+        cookie: other.cookie,
+        body: JSON.stringify({ filename: "stolen.png" }),
+      }),
+      params({ id: assetId }),
+    );
+    expect(r.status).toBe(403);
   });
 
   it("DELETE 403 for other user", async () => {

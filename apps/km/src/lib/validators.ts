@@ -57,6 +57,13 @@ export const assetUploadInitSchema = z.object({
   sizeBytes: z.number().int().positive().max(MAX_ASSET_BYTES),
 });
 
+export const assetUpdateSchema = z
+  .object({
+    folderId: z.string().uuid().nullable().optional(),
+    filename: nonEmptyTrimmed(500).optional(),
+  })
+  .strict();
+
 export const paperUpdateSchema = z
   .object({
     folderPath: folderPathSchema.optional(),

@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, type MouseEvent as ReactMouseEvent } from "react";
+import { memo, useEffect, useState, type MouseEvent as ReactMouseEvent } from "react";
 import Link from "next/link";
 import {
   Folder,
@@ -9,6 +9,7 @@ import {
   NotebookPen,
   Table as TableIcon,
   Sheet,
+  File as FileIcon,
   type LucideIcon,
 } from "lucide-react";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
@@ -20,7 +21,7 @@ import {
   type FileBrowserContextMenuHandlers,
 } from "./FileBrowserContextMenu";
 
-export type ItemKind = "folder" | "paper" | "reference" | "note" | "data";
+export type ItemKind = "folder" | "paper" | "reference" | "note" | "data" | "asset";
 
 export const KIND_ICON: Record<ItemKind, LucideIcon> = {
   folder: Folder,
@@ -28,10 +29,53 @@ export const KIND_ICON: Record<ItemKind, LucideIcon> = {
   reference: BookMarked,
   note: NotebookPen,
   data: TableIcon,
+  asset: FileIcon,
 };
 
+/**
+ * Image-asset thumbnail. Fetches the presigned downloadUrl from
+ * /api/assets/:id once on mount; falls back to a generic file icon while
+ * loading or on error. We don't preload all assets globally — let each
+ * tile pull its own URL lazily.
+ */
+function AssetImageThumb({ id, alt }: { id: string; alt: string }) {
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/assets/${id}`)
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`status ${r.status}`))))
+      .then((body: { downloadUrl?: string }) => {
+        if (!cancelled && body.downloadUrl) setUrl(body.downloadUrl);
+      })
+      .catch(() => {
+        /* silent — tile falls back to generic glyph */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+  if (!url) {
+    return (
+      <FileIcon
+        aria-hidden
+        data-testid="kind-icon-asset"
+        className="h-16 w-16 text-muted-foreground/70"
+        strokeWidth={1.5}
+      />
+    );
+  }
+  return (
+    <img
+      src={url}
+      alt={alt}
+      data-testid="asset-thumb"
+      className="h-16 w-16 rounded-sm object-cover ring-1 ring-border"
+    />
+  );
+}
+
 // Finder-style large glyph for tile view. Per-kind color and shape.
-function KindGlyph({ kind }: { kind: ItemKind }) {
+function KindGlyph({ kind, item }: { kind: ItemKind; item?: FileBrowserItemData }) {
   if (kind === "folder") {
     // Inline folder with a tab — filled apple-blue translucent body.
     return (
@@ -103,6 +147,19 @@ function KindGlyph({ kind }: { kind: ItemKind }) {
       />
     );
   }
+  if (kind === "asset") {
+    if (item && item.mimeType && IMAGE_MIMES.has(item.mimeType)) {
+      return <AssetImageThumb id={item.id} alt={item.title} />;
+    }
+    return (
+      <FileIcon
+        aria-hidden
+        data-testid="kind-icon-asset"
+        className="h-16 w-16 text-muted-foreground/70"
+        strokeWidth={1.5}
+      />
+    );
+  }
   // data
   return (
     <Sheet
@@ -120,7 +177,16 @@ const KIND_LABEL: Record<ItemKind, string> = {
   reference: "Reference",
   note: "Note",
   data: "Data",
+  asset: "Asset",
 };
+
+const IMAGE_MIMES = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/gif",
+  "image/webp",
+  "image/svg+xml",
+]);
 
 export interface FileBrowserItemData {
   id: string;
@@ -130,6 +196,8 @@ export interface FileBrowserItemData {
   updatedAt: number;
   // for leaves: link href; folders have no href (onOpen is used instead)
   href: string | null;
+  /** Asset only: MIME type — drives thumbnail vs generic-icon rendering. */
+  mimeType?: string;
 }
 
 interface Props {
@@ -298,7 +366,7 @@ function FileBrowserItemImpl({
   const tileInner = (
     <>
       <div className="flex h-20 items-center justify-center transition-transform duration-150 group-hover/tile:-translate-y-0.5 group-hover/tile:drop-shadow-sm">
-        <KindGlyph kind={item.kind} />
+        <KindGlyph kind={item.kind} item={item} />
       </div>
       <div className="flex w-full flex-col items-center gap-0.5">
         <div className="font-display line-clamp-2 w-full text-center text-sm leading-snug text-foreground">

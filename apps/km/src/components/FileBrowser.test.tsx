@@ -58,6 +58,16 @@ const baseContents: FolderContents = {
     },
   ],
   references: [],
+  assets: [
+    {
+      kind: "asset",
+      id: "a1",
+      filename: "diagram.png",
+      mimeType: "image/png",
+      folderId: null,
+      updatedAt: NOW,
+    },
+  ],
   notes: [
     {
       kind: "note",
@@ -96,6 +106,9 @@ describe("FileBrowser", () => {
     expect(screen.getByText("Research")).toBeTruthy();
     expect(screen.getByText("On Attention")).toBeTruthy();
     expect(screen.getByText("My note")).toBeTruthy();
+    // Assets land in the Drive list alongside papers/notes.
+    expect(screen.getByText("diagram.png")).toBeTruthy();
+    expect(screen.getByTestId("fb-item-a1")).toBeTruthy();
   });
 
   it("clicking a folder navigates to /drive/<encoded name>", () => {
@@ -173,8 +186,8 @@ describe("FileBrowser", () => {
     const tbody = container.querySelector("tbody");
     expect(tbody).toBeTruthy();
     const rows = tbody!.querySelectorAll("tr");
-    // 3 items in baseContents (folder f1, paper p1, note n1)
-    expect(rows.length).toBe(3);
+    // 4 items in baseContents (folder f1, paper p1, note n1, asset a1)
+    expect(rows.length).toBe(4);
   });
 
   it("renders empty state when no items", () => {
@@ -184,7 +197,7 @@ describe("FileBrowser", () => {
         libraryName="Default"
         folderId={null}
         folderChain={[]}
-        contents={{ folders: [], papers: [], references: [], notes: [] }}
+        contents={{ folders: [], papers: [], references: [], notes: [], assets: [] }}
         folders={[]}
       />,
     );
