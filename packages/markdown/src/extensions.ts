@@ -20,21 +20,31 @@ import markdown from "highlight.js/lib/languages/markdown";
 import sql from "highlight.js/lib/languages/sql";
 import yaml from "highlight.js/lib/languages/yaml";
 import { Markdown } from "tiptap-markdown";
-
-const lowlight = createLowlight();
-lowlight.register("ts", typescript);
-lowlight.register("tsx", typescript);
-lowlight.register("js", javascript);
-lowlight.register("py", python);
-lowlight.register("rs", rust);
-lowlight.register("go", go);
-lowlight.register("bash", bash);
-lowlight.register("json", json);
-lowlight.register("md", markdown);
-lowlight.register("sql", sql);
-lowlight.register("yaml", yaml);
 import { Citation } from "./tiptap/Citation";
 import { PdfEmbed } from "./tiptap/PdfEmbed";
+
+// Register both short and long-form aliases so common fence variants
+// (```python, ```rust, ```typescript, etc.) all highlight.
+const lowlight = createLowlight();
+lowlight.register("ts", typescript);
+lowlight.register("typescript", typescript);
+lowlight.register("tsx", typescript);
+lowlight.register("js", javascript);
+lowlight.register("javascript", javascript);
+lowlight.register("py", python);
+lowlight.register("python", python);
+lowlight.register("rs", rust);
+lowlight.register("rust", rust);
+lowlight.register("go", go);
+lowlight.register("bash", bash);
+lowlight.register("sh", bash);
+lowlight.register("shell", bash);
+lowlight.register("json", json);
+lowlight.register("md", markdown);
+lowlight.register("markdown", markdown);
+lowlight.register("sql", sql);
+lowlight.register("yaml", yaml);
+lowlight.register("yml", yaml);
 
 // Minimal Link mark so tiptap-markdown's link parser/serializer activates.
 // We don't need the full @tiptap/extension-link (click handling, paste rules)
