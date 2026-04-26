@@ -230,24 +230,31 @@ def test_invoke_done_event_contains_thread_id():
     assert done_events[0]["data"]["thread_id"] == "t1"
 
 
-def test_invoke_error_event_on_exception():
+def test_invoke_no_error_sse_event_on_exception():
+    """Exceptions in astream_events must NOT produce an error SSE event — they propagate.
+
+    We verify this by checking that if the exception bubbles, it isn't wrapped in SSE.
+    The TestClient re-raises streaming exceptions, so we catch the RuntimeError directly.
+    """
+    import pytest  # noqa: PLC0415
+
     async def boom(*args, **kwargs):
         raise RuntimeError("agent blew up")
         yield  # pragma: no cover
 
     body = json.dumps({"thread_id": "t1", "message": "hi"}).encode()
 
+    no_raise_client = TestClient(app, raise_server_exceptions=False)
+
     with patch("routers.km_agent.build_km_agent", return_value=_make_mock_agent(astream_events_coro=boom)):
-        r = client.post(
+        r = no_raise_client.post(
             "/agents/km/invoke",
             content=body,
             headers=_signed_headers("POST", "/agents/km/invoke", body),
         )
 
-    events = _parse_sse(r.text)
-    error_events = [e for e in events if e["event"] == "error"]
-    assert len(error_events) == 1
-    assert "agent blew up" in error_events[0]["data"]["message"]
+    # Response text must NOT contain an SSE error event
+    assert "event: error" not in r.text
 
 
 # ---------------------------------------------------------------------------
@@ -305,10 +312,37 @@ def test_resume_streams_done_event():
 # /state/{thread_id}
 # ---------------------------------------------------------------------------
 
-def test_state_returns_todos_and_pending_interrupts():
-    path = "/agents/km/state/thread-abc"
+def test_state_returns_empty_when_no_checkpoint():
+    """When aget_tuple returns None, state returns empty todos/pending_interrupts."""
+    from unittest.mock import AsyncMock  # noqa: PLC0415
 
-    with patch("routers.km_agent.build_km_agent", return_value=_make_mock_agent()):
+    path = "/agents/km/state/thread-new"
+    mock_saver = MagicMock()
+    mock_saver.aget_tuple = AsyncMock(return_value=None)
+
+    with patch("routers.km_agent.get_saver", return_value=mock_saver):
+        r = client.get(
+            path,
+            headers=_signed_headers("GET", path, b""),
+        )
+
+    assert r.status_code == 200
+    data = r.json()
+    assert data == {"todos": [], "pending_interrupts": []}
+
+
+def test_state_returns_todos_from_checkpoint():
+    """When aget_tuple returns a checkpoint, todos are extracted from channel_values."""
+    from unittest.mock import AsyncMock  # noqa: PLC0415
+
+    path = "/agents/km/state/thread-abc"
+    mock_tuple = MagicMock()
+    mock_tuple.checkpoint = {"channel_values": {"todos": ["task A", "task B"]}}
+
+    mock_saver = MagicMock()
+    mock_saver.aget_tuple = AsyncMock(return_value=mock_tuple)
+
+    with patch("routers.km_agent.get_saver", return_value=mock_saver):
         r = client.get(
             path,
             headers=_signed_headers("GET", path, b""),
@@ -318,11 +352,8 @@ def test_state_returns_todos_and_pending_interrupts():
     data = r.json()
     assert "todos" in data
     assert "pending_interrupts" in data
-    assert data["todos"] == ["task A"]
-    assert len(data["pending_interrupts"]) == 1
-    pi = data["pending_interrupts"][0]
-    assert pi["id"] == "t1"
-    assert len(pi["interrupts"]) == 1
+    assert data["todos"] == ["task A", "task B"]
+    assert data["pending_interrupts"] == []
 
 
 # ---------------------------------------------------------------------------

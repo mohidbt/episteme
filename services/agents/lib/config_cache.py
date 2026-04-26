@@ -11,7 +11,7 @@ _CACHE: dict[str, dict] = {}
 _DEFAULTS = {
     "enabledSkills": [],
     "attachedMcps": [],
-    "modelPreference": "google/gemma-4-31b-it:free",
+    "modelPreference": "openai/gpt-4o-mini",
     "approvalRules": {
         "publish": "require",
         "external_send": "require",

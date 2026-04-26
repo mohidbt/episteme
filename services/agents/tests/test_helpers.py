@@ -24,7 +24,7 @@ class TestConfigCache:
         cfg = load_user_config("unknown-user")
         assert cfg["enabledSkills"] == []
         assert cfg["attachedMcps"] == []
-        assert cfg["modelPreference"] == "google/gemma-4-31b-it:free"
+        assert cfg["modelPreference"] == "openai/gpt-4o-mini"
         assert cfg["approvalRules"]["publish"] == "require"
         assert cfg["approvalRules"]["external_send"] == "require"
         assert cfg["approvalRules"]["write_note"] == "auto"
@@ -42,7 +42,7 @@ class TestConfigCache:
 
         save_user_config("u1", {"modelPreference": "openai/gpt-4o"})
         cfg_u2 = load_user_config("u2")
-        assert cfg_u2["modelPreference"] == "google/gemma-4-31b-it:free"
+        assert cfg_u2["modelPreference"] == "openai/gpt-4o-mini"
 
     def test_repeated_save_replaces_value(self):
         from lib.config_cache import load_user_config, save_user_config  # noqa: PLC0415
@@ -96,14 +96,14 @@ class TestOpenrouterModel:
         from lib.openrouter_model import model_for  # noqa: PLC0415
         from langchain_openai import ChatOpenAI  # noqa: PLC0415
 
-        m = model_for("google/gemma-4-31b-it:free", "sk-test-key")
+        m = model_for("openai/gpt-4o-mini", "sk-test-key")
         assert isinstance(m, ChatOpenAI)
 
     def test_model_for_sets_base_url(self):
         from lib.openrouter_model import model_for  # noqa: PLC0415
         from lib.chat import OPENROUTER_BASE  # noqa: PLC0415
 
-        m = model_for("google/gemma-4-31b-it:free", "sk-test-key")
+        m = model_for("openai/gpt-4o-mini", "sk-test-key")
         assert str(m.openai_api_base) == OPENROUTER_BASE
 
     def test_model_for_passes_model_id(self):

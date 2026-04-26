@@ -48,54 +48,39 @@ async def _reap_orphan_runs(boot_time: datetime) -> None:
         logger.info("reaped %d orphan ai_highlight_runs row(s)", reaped)
 
 
-def _init_pg_saver_store() -> tuple:
-    """Enter PostgresSaver/PostgresStore context managers once at startup.
-
-    Returns (saver_ctx, store_ctx) context manager objects (or None, None if
-    no PG URL is configured).  Callers must __exit__ them at shutdown.
-    """
-    url = os.environ.get("EPISTEME_AGENTS_PG_URL")
-    if not url:
-        return None, None
-
-    try:
-        from langgraph.checkpoint.postgres import PostgresSaver  # noqa: PLC0415
-        from langgraph.store.postgres import PostgresStore  # noqa: PLC0415
-        import checkpointer as chk_mod  # noqa: PLC0415
-        import store as store_mod  # noqa: PLC0415
-
-        saver_ctx = PostgresSaver.from_conn_string(url)
-        saver = saver_ctx.__enter__()
-        chk_mod._CACHED_SAVER = saver
-
-        store_ctx = PostgresStore.from_conn_string(url)
-        store_obj = store_ctx.__enter__()
-        store_mod._CACHED_STORE = store_obj
-
-        logger.info("PostgresSaver + PostgresStore opened for process lifetime")
-        return saver_ctx, store_ctx
-    except Exception:
-        logger.exception("Failed to open PostgresSaver/PostgresStore — falling back to in-memory")
-        return None, None
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_pool()
     await _reap_orphan_runs(datetime.now(timezone.utc))
-    saver_ctx, store_ctx = _init_pg_saver_store()
-    yield
-    # Cleanly close PostgresSaver / PostgresStore if opened
-    if store_ctx is not None:
+
+    url = os.environ.get("EPISTEME_AGENTS_PG_URL")
+    if url:
         try:
-            store_ctx.__exit__(None, None, None)
+            from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver  # noqa: PLC0415
+            from langgraph.store.postgres.aio import AsyncPostgresStore  # noqa: PLC0415
+            import checkpointer as chk_mod  # noqa: PLC0415
+            import store as store_mod  # noqa: PLC0415
+
+            async with AsyncPostgresSaver.from_conn_string(url) as saver:
+                await saver.setup()
+                chk_mod._CACHED_SAVER = saver
+
+                async with AsyncPostgresStore.from_conn_string(url) as store_obj:
+                    await store_obj.setup()
+                    store_mod._CACHED_STORE = store_obj
+
+                    logger.info("AsyncPostgresSaver + AsyncPostgresStore opened for process lifetime")
+                    yield
+
+                store_mod._CACHED_STORE = None
+            chk_mod._CACHED_SAVER = None
+
         except Exception:
-            logger.exception("Error closing PostgresStore")
-    if saver_ctx is not None:
-        try:
-            saver_ctx.__exit__(None, None, None)
-        except Exception:
-            logger.exception("Error closing PostgresSaver")
+            logger.exception("Failed to open AsyncPostgresSaver/AsyncPostgresStore — falling back to in-memory")
+            yield
+    else:
+        yield
+
     await close_pool()
 
 

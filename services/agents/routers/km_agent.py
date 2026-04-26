@@ -100,19 +100,15 @@ async def invoke(req: Request, auth: InternalAuthDep):
     )
 
     async def gen():
-        try:
-            async for ev in agent.astream_events(
-                {"messages": [{"role": "user", "content": body["message"]}]},
-                config={"configurable": {"thread_id": body["thread_id"]}},
-                version="v2",
-            ):
-                mapped = _map_event(ev)
-                if mapped:
-                    yield format_typed(mapped[0], mapped[1])
-            yield format_sse("done", {"thread_id": body["thread_id"]})
-        except Exception as e:  # noqa: BLE001
-            logger.exception("invoke failed")
-            yield format_sse("error", {"message": str(e)})
+        async for ev in agent.astream_events(
+            {"messages": [{"role": "user", "content": body["message"]}]},
+            config={"configurable": {"thread_id": body["thread_id"]}},
+            version="v2",
+        ):
+            mapped = _map_event(ev)
+            if mapped:
+                yield format_typed(mapped[0], mapped[1])
+        yield format_sse("done", {"thread_id": body["thread_id"]})
 
     return StreamingResponse(
         gen(),
@@ -137,19 +133,15 @@ async def resume(req: Request, auth: InternalAuthDep):
     )
 
     async def gen():
-        try:
-            async for ev in agent.astream_events(
-                Command(resume=body["decisions"]),
-                config={"configurable": {"thread_id": body["thread_id"]}},
-                version="v2",
-            ):
-                mapped = _map_event(ev)
-                if mapped:
-                    yield format_typed(mapped[0], mapped[1])
-            yield format_sse("done", {"thread_id": body["thread_id"]})
-        except Exception as e:  # noqa: BLE001
-            logger.exception("resume failed")
-            yield format_sse("error", {"message": str(e)})
+        async for ev in agent.astream_events(
+            Command(resume=body["decisions"]),
+            config={"configurable": {"thread_id": body["thread_id"]}},
+            version="v2",
+        ):
+            mapped = _map_event(ev)
+            if mapped:
+                yield format_typed(mapped[0], mapped[1])
+        yield format_sse("done", {"thread_id": body["thread_id"]})
 
     return StreamingResponse(
         gen(),
@@ -160,26 +152,15 @@ async def resume(req: Request, auth: InternalAuthDep):
 
 @router.get("/state/{thread_id}")
 async def state(thread_id: str, auth: InternalAuthDep):
-    user_id = auth["user_id"]
-    cfg = load_user_config(user_id)
-    agent = build_km_agent(
-        user_id=user_id,
-        thread_id=thread_id,
-        model=model_for(cfg["modelPreference"], auth["llm_key"]),
-        enabled_skills=cfg.get("enabledSkills", []),
-        approval_rules=cfg.get("approvalRules", {}),
-        store=get_store(),
-        saver=get_saver(),
-    )
-    snapshot = agent.get_state(config={"configurable": {"thread_id": thread_id}})
-    return {
-        "todos": snapshot.values.get("todos", []),
-        "pending_interrupts": [
-            {"id": t.id, "interrupts": [i.value for i in t.interrupts]}
-            for t in snapshot.tasks
-            if t.interrupts
-        ],
-    }
+    saver = get_saver()
+    config = {"configurable": {"thread_id": thread_id}}
+    tuple_ = await saver.aget_tuple(config)
+    if tuple_ is None:
+        return {"todos": [], "pending_interrupts": []}
+    channel_values = tuple_.checkpoint.get("channel_values", {})
+    todos = channel_values.get("todos", [])
+    # pending_interrupts detail deferred to 1.3b
+    return {"todos": todos, "pending_interrupts": []}
 
 
 @router.post("/config")

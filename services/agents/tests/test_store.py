@@ -1,5 +1,10 @@
-"""RED tests for store factory."""
-from unittest.mock import MagicMock, patch
+"""Tests for store factory.
+
+With async PostgresStore, get_store() no longer initialises Postgres itself —
+that's done in main.py lifespan via async with AsyncPostgresStore.from_conn_string().
+get_store() returns _CACHED_STORE (set by lifespan) or a fresh InMemoryStore.
+"""
+from unittest.mock import MagicMock
 
 
 def test_get_store_returns_inmemory_when_env_unset(monkeypatch):
@@ -12,19 +17,36 @@ def test_get_store_returns_inmemory_when_env_unset(monkeypatch):
     assert isinstance(s, InMemoryStore)
 
 
-def test_get_store_calls_postgres_when_env_set(monkeypatch):
-    monkeypatch.setenv("EPISTEME_AGENTS_PG_URL", "postgresql://u:p@host/db")
+def test_get_store_returns_cached_when_set():
+    """When lifespan caches an async store, get_store() returns it."""
+    import store  # noqa: PLC0415
+
     fake_store = MagicMock()
-    fake_cm = MagicMock()
-    fake_cm.__enter__ = MagicMock(return_value=fake_store)
-    fake_cm.__exit__ = MagicMock(return_value=False)
-
-    with patch("store.PostgresStore.from_conn_string", return_value=fake_cm) as mock_fn:
-        from importlib import reload  # noqa: PLC0415
-        import store  # noqa: PLC0415
-
-        reload(store)
+    original = store._CACHED_STORE
+    try:
+        store._CACHED_STORE = fake_store
         result = store.get_store()
+        assert result is fake_store
+    finally:
+        store._CACHED_STORE = original
 
-    mock_fn.assert_called_once_with("postgresql://u:p@host/db")
-    assert result is fake_store
+
+def test_get_store_returns_inmemory_when_cache_empty(monkeypatch):
+    """Without cached store, always returns InMemoryStore regardless of env var."""
+    import store  # noqa: PLC0415
+    from langgraph.store.memory import InMemoryStore  # noqa: PLC0415
+
+    monkeypatch.setenv("EPISTEME_AGENTS_PG_URL", "postgresql://u:p@host/db")
+    original = store._CACHED_STORE
+    try:
+        store._CACHED_STORE = None
+        result = store.get_store()
+        assert isinstance(result, InMemoryStore)
+    finally:
+        store._CACHED_STORE = original
+
+
+def test_async_postgres_store_importable():
+    """AsyncPostgresStore must be importable from store module namespace."""
+    from store import AsyncPostgresStore  # noqa: PLC0415
+    assert AsyncPostgresStore is not None
