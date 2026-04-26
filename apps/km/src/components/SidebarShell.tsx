@@ -5,8 +5,10 @@ import { useRouter } from "next/navigation";
 import {
   Sidebar as ShadcnSidebar,
   SidebarContent,
+  SidebarFooter,
   SidebarHeader,
 } from "@/components/ui/sidebar";
+import { Button } from "@/components/ui/button";
 import { DriveTree } from "./DriveTree";
 import { ByTypeNav } from "./ByTypeNav";
 import { SidebarAgentSection } from "./SidebarAgentSection";
@@ -16,9 +18,10 @@ import type { TreeResponse } from "@/lib/tree-server";
 interface SidebarShellProps {
   library: { id: number; name: string };
   tree: TreeResponse;
+  isAnonymous: boolean;
 }
 
-export function SidebarShell({ library, tree }: SidebarShellProps) {
+export function SidebarShell({ library, tree, isAnonymous }: SidebarShellProps) {
   const router = useRouter();
   const onMutate = () => router.refresh();
   const trashFolder = tree.folders.find((f) => f.isTrash) ?? null;
@@ -50,6 +53,18 @@ export function SidebarShell({ library, tree }: SidebarShellProps) {
         <SidebarAgentSection />
         <SidebarSettingsSection />
       </SidebarContent>
+      {isAnonymous ? (
+        <SidebarFooter className="px-3 pb-3">
+          <Button
+            nativeButton={false}
+            render={<Link href="/sign-up" />}
+            data-testid="sidebar-anon-signup-cta"
+            className="w-full"
+          >
+            Sign up to save across devices
+          </Button>
+        </SidebarFooter>
+      ) : null}
     </ShadcnSidebar>
   );
 }

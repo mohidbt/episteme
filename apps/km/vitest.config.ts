@@ -53,6 +53,10 @@ export default defineConfig({
         __dirname,
         "../../packages/auth/src/byok.ts",
       ),
+      "@episteme/auth/client": path.resolve(
+        __dirname,
+        "../../packages/auth/src/client.ts",
+      ),
       "@episteme/auth": path.resolve(
         __dirname,
         "../../packages/auth/src/index.ts",

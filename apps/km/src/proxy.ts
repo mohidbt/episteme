@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSessionCookie } from "better-auth/cookies";
 import { decideHostRewrite } from "@/lib/proxy-host";
 
 const PUBLISH_DOMAIN = process.env.EPISTEME_PUBLISH_DOMAIN ?? "epistaime.com";
@@ -18,15 +17,6 @@ export function proxy(request: NextRequest) {
     return NextResponse.rewrite(url);
   }
 
-  const pn = request.nextUrl.pathname;
-  if (pn.startsWith("/n/") || pn.startsWith("/settings/")) {
-    const session = getSessionCookie(request);
-    if (!session) {
-      const url = new URL("/sign-in", request.url);
-      url.searchParams.set("callbackUrl", pn);
-      return NextResponse.redirect(url);
-    }
-  }
   return NextResponse.next();
 }
 

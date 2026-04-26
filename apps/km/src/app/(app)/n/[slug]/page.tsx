@@ -3,10 +3,9 @@
 // expired token to the client and break collab connections.
 export const dynamic = "force-dynamic";
 
-import { headers } from "next/headers";
-import { auth } from "@episteme/auth";
 import { and, eq } from "drizzle-orm";
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
+import { getRequiredUserId } from "@/lib/session";
 import { db } from "@/lib/db";
 import { noteLinks, notes, user } from "@episteme/db/schema";
 import { getDefaultLibrary } from "@/lib/default-library";
@@ -22,25 +21,26 @@ export default async function NotePage({
 }: {
   params: Promise<{ slug: string }>;
 }) {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session?.user) redirect("/sign-in");
+  const userId = await getRequiredUserId();
   const { slug } = await params;
   const [note] = await db
     .select()
     .from(notes)
-    .where(and(eq(notes.userId, session.user.id), eq(notes.slug, slug)));
+    .where(and(eq(notes.userId, userId), eq(notes.slug, slug)));
   if (!note) notFound();
 
   const [me] = await db
-    .select({ username: user.username })
+    .select({
+      username: user.username,
+      name: user.name,
+      email: user.email,
+    })
     .from(user)
-    .where(eq(user.id, session.user.id));
+    .where(eq(user.id, userId));
 
   // Mint the Hocuspocus JWT server-side so NoteEditor can create the collab
   // provider synchronously on first render — no client-side round-trip needed.
-  const initialCollabToken = COLLAB_ENABLED
-    ? await mintCollabToken(session.user.id)
-    : null;
+  const initialCollabToken = COLLAB_ENABLED ? await mintCollabToken(userId) : null;
 
   const linkRows = await db
     .select({
@@ -82,7 +82,7 @@ export default async function NotePage({
     }),
   );
 
-  const library = await getDefaultLibrary(session.user.id);
+  const library = await getDefaultLibrary(userId);
   const folderSegs = splitFolderPath(note.folderPath ?? "");
   const pillSegments: PathPillSegment[] = library
     ? [
@@ -112,7 +112,7 @@ export default async function NotePage({
         initialIsPublic={note.isPublic}
         initialPublicSlug={note.publicSlug ?? null}
         noteSlug={slug}
-        userName={session.user.name ?? session.user.email ?? "anonymous"}
+        userName={me?.name ?? me?.email ?? "anonymous"}
         initialCollabToken={initialCollabToken}
       />
       <BacklinksPanel noteId={note.id} />

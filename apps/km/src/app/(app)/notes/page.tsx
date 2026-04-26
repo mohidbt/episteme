@@ -1,6 +1,5 @@
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { auth } from "@episteme/auth";
+import { getRequiredUserId } from "@/lib/session";
 import { getDefaultLibrary } from "@/lib/default-library";
 import { listNotes } from "@/lib/notes-server";
 import { listAllFolders } from "@/lib/folders-server";
@@ -8,14 +7,13 @@ import { resolveChain } from "@/lib/folders";
 import NotesTable from "@/components/NotesTable";
 
 export default async function NotesPage() {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session?.user) redirect("/sign-in");
-  const library = await getDefaultLibrary(session.user.id);
+  const userId = await getRequiredUserId();
+  const library = await getDefaultLibrary(userId);
   if (!library) redirect("/");
 
   const [allNotes, allFolders] = await Promise.all([
-    listNotes(library.id, session.user.id),
-    listAllFolders(library.id, session.user.id),
+    listNotes(library.id, userId),
+    listAllFolders(library.id, userId),
   ]);
 
   const folderById = new Map(allFolders.map((f) => [f.id, f]));

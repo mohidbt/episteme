@@ -7,25 +7,37 @@ vi.mock("@episteme/auth/byok", () => ({
 
 import { getDecryptedApiKey } from "@episteme/auth/byok";
 import { POST } from "./route";
-import { createTestUser, deleteTestUser, req, type TestUser } from "../../_test-utils";
+import { __resetRateLimitForTests } from "@/lib/ai-rate-limit";
+import {
+  createAnonTestUser,
+  createTestUser,
+  deleteTestUser,
+  req,
+  type TestUser,
+} from "../../_test-utils";
 
 let u: TestUser;
+let anon: TestUser;
 const originalFetch = global.fetch;
 const originalAgentsUrl = process.env.AGENTS_URL;
 const originalSecret = process.env.INHALE_INTERNAL_SECRET;
+const originalSharedKey = process.env.EPISTEME_SHARED_LLM_KEY;
 
 beforeAll(async () => {
   u = await createTestUser();
+  anon = await createAnonTestUser();
 });
 
 afterAll(async () => {
   await deleteTestUser(u.id);
+  await deleteTestUser(anon.id);
 });
 
 beforeEach(() => {
   process.env.INHALE_INTERNAL_SECRET = "test-secret-abc";
   process.env.AGENTS_URL = "http://test-agents:8000";
   vi.mocked(getDecryptedApiKey).mockResolvedValue("sk-test-key");
+  __resetRateLimitForTests();
 });
 
 afterEach(() => {
@@ -35,6 +47,8 @@ afterEach(() => {
   else process.env.AGENTS_URL = originalAgentsUrl;
   if (originalSecret === undefined) delete process.env.INHALE_INTERNAL_SECRET;
   else process.env.INHALE_INTERNAL_SECRET = originalSecret;
+  if (originalSharedKey === undefined) delete process.env.EPISTEME_SHARED_LLM_KEY;
+  else process.env.EPISTEME_SHARED_LLM_KEY = originalSharedKey;
 });
 
 describe("POST /api/ai/complete", () => {
@@ -130,5 +144,106 @@ describe("POST /api/ai/complete", () => {
       }),
     );
     expect(r.status).toBe(500);
+  });
+
+  describe("anonymous user", () => {
+    it("502 agent_unavailable when shared key env is missing", async () => {
+      delete process.env.EPISTEME_SHARED_LLM_KEY;
+      const r = await POST(
+        req("/api/ai/complete", {
+          method: "POST",
+          cookie: anon.cookie,
+          body: JSON.stringify({ prompt: "hi" }),
+        }),
+      );
+      expect(r.status).toBe(502);
+      expect(await r.json()).toEqual({ error: "agent_unavailable" });
+    });
+
+    it("uses EPISTEME_SHARED_LLM_KEY (not BYOK) when below caps", async () => {
+      process.env.EPISTEME_SHARED_LLM_KEY = "shared-anon-key";
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValue(new Response("data: [DONE]\n\n", { status: 200 }));
+      global.fetch = fetchMock as unknown as typeof fetch;
+
+      await POST(
+        req("/api/ai/complete", {
+          method: "POST",
+          cookie: anon.cookie,
+          body: JSON.stringify({ prompt: "hi" }),
+        }),
+      );
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      const headers = fetchMock.mock.calls[0][1].headers as Record<string, string>;
+      expect(headers["X-Inhale-LLM-Key"]).toBe("shared-anon-key");
+      expect(headers["X-Inhale-LLM-Key"]).not.toBe("sk-test-key");
+    });
+
+    it("413 when body exceeds 16KB", async () => {
+      process.env.EPISTEME_SHARED_LLM_KEY = "shared-anon-key";
+      const big = "x".repeat(16 * 1024 + 1);
+      const r = await POST(
+        req("/api/ai/complete", {
+          method: "POST",
+          cookie: anon.cookie,
+          body: JSON.stringify({ prompt: big }),
+        }),
+      );
+      expect(r.status).toBe(413);
+      expect(await r.json()).toEqual({ error: "payload_too_large" });
+    });
+
+    it("429 with retryAfter on the 6th request in 60s from same IP", async () => {
+      process.env.EPISTEME_SHARED_LLM_KEY = "shared-anon-key";
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValue(new Response("data: [DONE]\n\n", { status: 200 }));
+      global.fetch = fetchMock as unknown as typeof fetch;
+
+      const make = () =>
+        POST(
+          req("/api/ai/complete", {
+            method: "POST",
+            cookie: anon.cookie,
+            headers: { "x-forwarded-for": "9.9.9.9" },
+            body: JSON.stringify({ prompt: "hi" }),
+          }),
+        );
+
+      for (let i = 0; i < 5; i++) {
+        const r = await make();
+        expect(r.status).toBe(200);
+      }
+      const r = await make();
+      expect(r.status).toBe(429);
+      const j = (await r.json()) as { error: string; retryAfter: number };
+      expect(j.error).toBe("rate_limited");
+      expect(typeof j.retryAfter).toBe("number");
+      expect(j.retryAfter).toBeGreaterThan(0);
+    });
+
+    it("masks upstream errors so leaked secrets do not reach the client", async () => {
+      process.env.EPISTEME_SHARED_LLM_KEY = "shared-anon-key";
+      const leaked = "sk-or-fake-secret-1234";
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValue(
+          new Response(`upstream auth failed: ${leaked}`, { status: 401 }),
+        );
+      global.fetch = fetchMock as unknown as typeof fetch;
+
+      const r = await POST(
+        req("/api/ai/complete", {
+          method: "POST",
+          cookie: anon.cookie,
+          body: JSON.stringify({ prompt: "hi" }),
+        }),
+      );
+      expect(r.status).toBe(502);
+      const text = await r.text();
+      expect(text).not.toContain(leaked);
+      expect(JSON.parse(text)).toEqual({ error: "agent_unavailable" });
+    });
   });
 });

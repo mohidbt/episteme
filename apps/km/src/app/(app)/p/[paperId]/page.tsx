@@ -1,10 +1,9 @@
 import { cache } from "react";
 import { and, eq } from "drizzle-orm";
 import Link from "next/link";
-import { headers } from "next/headers";
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import { BookMarked } from "lucide-react";
-import { auth } from "@episteme/auth";
+import { getRequiredUserId } from "@/lib/session";
 import { db } from "@/lib/db";
 import { papers } from "@episteme/db/schema";
 import { getDefaultLibrary } from "@/lib/default-library";
@@ -39,16 +38,15 @@ export default async function PaperPage({
 }: {
   params: Promise<{ paperId: string }>;
 }) {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session?.user) redirect("/sign-in");
+  const userId = await getRequiredUserId();
 
   const { paperId } = await params;
-  const paper = await loadPaper(paperId, session.user.id);
+  const paper = await loadPaper(paperId, userId);
   if (!paper) notFound();
 
   const [library, refs] = await Promise.all([
-    getDefaultLibrary(session.user.id),
-    getReferencesForPaper(paper.id, session.user.id),
+    getDefaultLibrary(userId),
+    getReferencesForPaper(paper.id, userId),
   ]);
   const displayTitle = paper.title && paper.title.trim().length > 0 ? paper.title : paper.filename;
   const firstRef = refs[0];
