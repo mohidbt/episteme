@@ -8,7 +8,7 @@
 
 ## Decision Matrix (6/6 → Deep Agents)
 
-### 1. Long-running, multi-step, editable plan → needs planning loop
+### 1. Task = long-running, multi-step, editable plan → **needs planning loop**.
 
 The agent must break research tasks into measurable sub-steps, track progress, allow the user to edit the plan mid-session, and adapt to new findings. A simple tool loop cannot expose this state to the user for modification. **Deep Agents' `TodoListMiddleware`** provides built-in plan tracking with the `write_todos` tool, letting the agent create and revise a task list as research evolves.
 
