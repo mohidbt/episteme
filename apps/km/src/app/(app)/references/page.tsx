@@ -1,7 +1,6 @@
 import Link from "next/link";
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { auth } from "@episteme/auth";
+import { getRequiredUserId } from "@/lib/session";
 import { getDefaultLibrary } from "@/lib/default-library";
 import { listAllReferences } from "@/lib/references-server";
 import { listAllFolders } from "@/lib/folders-server";
@@ -10,6 +9,7 @@ import { ReferenceTable } from "@/components/ReferenceTable";
 import { ReferenceDoiInput } from "@/components/ReferenceDoiInput";
 import { ReferenceImportButton } from "@/components/ReferenceImportButton";
 import { FolderFilterDropdown } from "@/components/FolderFilterDropdown";
+import { UnifiedDropzone } from "@/components/UnifiedDropzone";
 
 export default async function ReferencesPage({
   searchParams,
@@ -19,14 +19,13 @@ export default async function ReferencesPage({
   const sp = await searchParams;
   const folderFilter = sp.folder ?? null;
 
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session?.user) redirect("/sign-in");
-  const library = await getDefaultLibrary(session.user.id);
+  const userId = await getRequiredUserId();
+  const library = await getDefaultLibrary(userId);
   if (!library) redirect("/");
 
   const [allRefs, allFolders] = await Promise.all([
-    listAllReferences(library.id, session.user.id),
-    listAllFolders(library.id, session.user.id),
+    listAllReferences(library.id, userId),
+    listAllFolders(library.id, userId),
   ]);
 
   // Exclude references in trash
@@ -48,6 +47,7 @@ export default async function ReferencesPage({
       <h1 className="mb-4 font-display text-3xl leading-none tracking-tight">
         References
       </h1>
+      <UnifiedDropzone libraryId={library.id} folderPath="" />
       <div className="mb-6 flex flex-col gap-3">
         <ReferenceDoiInput libraryId={library.id} folderPath="" />
         <div className="flex items-center gap-2">

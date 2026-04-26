@@ -1,13 +1,23 @@
 "use client";
 import {
   Editor,
+  createCollabProvider,
+  userColor,
+  type CollabProvider,
   type ResolvedLinksMap,
   type WikiLinkSuggestion,
   type SlashCommandSuggestion,
   type TiptapEditor,
+  type CitationMeta,
+  insertCitation,
+  insertPdfEmbed,
+  insertWikiLink,
+  invokeAgent,
+  hydrateCitations,
 } from "@episteme/editor";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import { COLLAB_ENABLED, COLLAB_URL } from "@/lib/flags";
 import { createRoot, type Root } from "react-dom/client";
 import { WikiLinkTypeahead, type WikiLinkTypeaheadRef } from "@/components/WikiLinkTypeahead";
 import { SlashCommandTypeahead, type SlashCommandTypeaheadRef } from "@/components/SlashCommandTypeahead";
@@ -18,11 +28,18 @@ export function NoteEditor({
   initialMd,
   resolvedLinks,
   flushRef,
+  userName,
+  initialCollabToken,
+  editorRef: externalEditorRef,
 }: {
   id: string;
   initialMd: string;
   resolvedLinks?: ResolvedLinksMap;
   flushRef?: RefObject<(() => Promise<void>) | null>;
+  userName?: string;
+  /** SSR-minted collab JWT. When provided, skips the client-side /api/collab/token fetch. */
+  initialCollabToken?: string | null;
+  editorRef?: RefObject<TiptapEditor | null>;
 }) {
   const router = useRouter();
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -32,12 +49,113 @@ export function NoteEditor({
   const [editorInstance, setEditorInstance] = useState<TiptapEditor | null>(null);
   const [aiTriggerCount, setAiTriggerCount] = useState(0);
 
+  // Collab token — SSR-minted by the server component and passed as a prop,
+  // so the provider can be created synchronously on first render with no
+  // client-side round-trip. Falls back to a client-side POST fetch when the
+  // prop is absent (e.g. tests, or a future non-SSR entry point).
+  const [collabToken, setCollabToken] = useState<string | null>(
+    COLLAB_ENABLED ? (initialCollabToken ?? null) : null,
+  );
+  useEffect(() => {
+    if (!COLLAB_ENABLED) return;
+    // If we already have a token (from SSR prop), skip the fetch.
+    if (initialCollabToken) return;
+    let cancelled = false;
+    fetch("/api/collab/token", { method: "POST" })
+      .then(async (res) => {
+        if (!res.ok) {
+          console.error("[NoteEditor] /api/collab/token returned", res.status, "— collab disabled");
+          return;
+        }
+        const { token } = (await res.json()) as { token: string };
+        if (!cancelled) setCollabToken(token);
+      })
+      .catch((err) => {
+        console.error("[NoteEditor] failed to fetch collab token", err);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [id, initialCollabToken]);
+
+  const collabState = useMemo<CollabProvider | null>(() => {
+    if (!COLLAB_ENABLED || !collabToken) return null;
+    return createCollabProvider({ noteId: id, url: COLLAB_URL, token: collabToken });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, collabToken]);
+
+  useEffect(() => {
+    if (!collabState) return;
+    return () => {
+      collabState.destroy();
+    };
+  }, [collabState]);
+
+  // Single-shot guard: flip to `true` after the first retry attempt so rapid
+  // back-to-back `authenticationFailed` events don't spam the token endpoint.
+  // Reset whenever `id` changes (new note mount).
+  const authRetryFiredRef = useRef(false);
+  useEffect(() => {
+    authRetryFiredRef.current = false;
+  }, [id]);
+
+  // Defense-in-depth: if the provider rejects our token (e.g. the SSR-minted
+  // JWT expired during slow hydration or bfcache restore), fetch a fresh token
+  // and let the useMemo re-create the provider with it.
+  useEffect(() => {
+    if (!collabState) return;
+    const onAuthFail = () => {
+      if (authRetryFiredRef.current) return;
+      authRetryFiredRef.current = true;
+      fetch("/api/collab/token", { method: "POST" })
+        .then(async (res) => {
+          if (!res.ok) {
+            console.error(
+              "[NoteEditor] auth-failure retry: /api/collab/token returned",
+              res.status,
+            );
+            return;
+          }
+          const { token } = (await res.json()) as { token: string };
+          setCollabToken(token);
+        })
+        .catch((err) => {
+          console.error("[NoteEditor] auth-failure retry fetch error", err);
+        });
+    };
+    collabState.provider.on("authenticationFailed", onAuthFail);
+    return () => {
+      collabState.provider.off("authenticationFailed", onAuthFail);
+    };
+  }, [collabState]);
+
   const onReady = useCallback((editor: TiptapEditor) => {
     editorRef.current = editor;
+    if (externalEditorRef) externalEditorRef.current = editor;
     setEditorInstance(editor);
+
+    // Hydrate citations fire-and-forget: refill bibIndex + metadata + bibliography
+    // from fresh server data so reload restores [n] indices and hover tooltips.
+    // This must not block first paint.
+    void hydrateCitations(editor, async (citekeys: string[]): Promise<CitationMeta[]> => {
+      try {
+        const r = await fetch("/api/citations/by-citekeys", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ citekeys }),
+        });
+        if (!r.ok) return [];
+        const data = await r.json() as { results: CitationMeta[] };
+        return data.results;
+      } catch {
+        return [];
+      }
+    });
   }, []);
 
   const flush = useCallback((): Promise<void> => {
+    // When Hocuspocus is active it owns persistence — skip the PATCH path.
+    if (collabState) return Promise.resolve();
     const md = pendingMdRef.current;
     if (md == null) return Promise.resolve();
     pendingMdRef.current = null;
@@ -55,7 +173,7 @@ export function NoteEditor({
       .catch((err) => {
         console.warn("[autosave] failed", err);
       });
-  }, [id]);
+  }, [id, collabState]);
 
   const onChangeMd = useCallback(
     (md: string) => {
@@ -318,10 +436,24 @@ export function NoteEditor({
         // Delete the `/` trigger and any typed query characters
         editor.chain().focus().deleteRange(range).run();
 
-        const p = props as { title: string };
+        const p = props as {
+          title: string;
+          citation?: { citekey: string; title: string; authors: string[]; year: string | null };
+          pdfEmbed?: { pdfId: string; title: string; page: number | null };
+          wikiLink?: { title: string; targetKind: "note" | "reference" | "paper"; targetId: string | null };
+          agent?: { skill: string };
+        };
         if (p.title === "AI") {
           // Trigger the AI Rephrase portal — increment counter to force re-render
           setAiTriggerCount((c) => c + 1);
+        } else if (p.title === "Cite" && p.citation) {
+          insertCitation(editor, p.citation);
+        } else if (p.title === "PDF" && p.pdfEmbed) {
+          insertPdfEmbed(editor, p.pdfEmbed);
+        } else if (p.title === "Link" && p.wikiLink) {
+          insertWikiLink(editor, p.wikiLink);
+        } else if (p.title === "Agent" && p.agent) {
+          invokeAgent(editor, p.agent);
         }
       },
       render: () => {
@@ -398,21 +530,41 @@ export function NoteEditor({
     [],
   );
 
+  const name = userName ?? "anonymous";
+  const collabProp = collabState
+    ? {
+        ydoc: collabState.ydoc,
+        provider: collabState.provider,
+        user: { name, color: userColor(name) },
+      }
+    : undefined;
+
+  // When COLLAB_ENABLED, defer rendering Editor until the provider exists.
+  // Mounting Editor first with collab=undefined and then setting collab on
+  // a later render destroys+recreates the Tiptap editor mid-React-commit
+  // and causes "insertBefore on Node" DOM crashes. Single Editor lifecycle.
+  const editorReady = !COLLAB_ENABLED || collabState !== null;
+
   return (
     <div ref={editorHostRef}>
-      <Editor
-        initialMd={initialMd}
-        onChangeMd={onChangeMd}
-        autofocus
-        wikiLinkSuggestion={wikiLinkSuggestion}
-        slashCommandSuggestion={slashCommandSuggestion}
-        resolvedLinks={resolvedLinks}
-        onReady={onReady}
-      >
-        {editorInstance && (
-          <AiBubbleMenu editor={editorInstance} aiTriggerCount={aiTriggerCount} />
-        )}
-      </Editor>
+      {editorReady ? (
+        <Editor
+          initialMd={initialMd}
+          onChangeMd={onChangeMd}
+          autofocus
+          wikiLinkSuggestion={wikiLinkSuggestion}
+          slashCommandSuggestion={slashCommandSuggestion}
+          resolvedLinks={resolvedLinks}
+          onReady={onReady}
+          collab={collabProp}
+        >
+          {editorInstance && (
+            <AiBubbleMenu editor={editorInstance} aiTriggerCount={aiTriggerCount} />
+          )}
+        </Editor>
+      ) : (
+        <div className="min-h-[60vh] opacity-50" aria-busy="true" />
+      )}
     </div>
   );
 }

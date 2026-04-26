@@ -4,6 +4,8 @@ import Italic from "@tiptap/extension-italic";
 import TaskList from "@tiptap/extension-task-list";
 import TaskItem from "@tiptap/extension-task-item";
 import { Markdown } from "tiptap-markdown";
+import { Citation } from "./tiptap/Citation";
+import { PdfEmbed } from "./tiptap/PdfEmbed";
 
 // Minimal Link mark so tiptap-markdown's link parser/serializer activates.
 // We don't need the full @tiptap/extension-link (click handling, paste rules)
@@ -40,16 +42,20 @@ const ItalicUnderscore = Italic.extend({
   },
 });
 
-export const createExtensions = () => {
+export const createExtensions = (opts?: { collaborative?: boolean }) => {
   const exts = [
     StarterKit.configure({
       heading: { levels: [1, 2, 3] },
       italic: false,
+      // Collaboration extension owns undo/redo — StarterKit history must be off.
+      history: opts?.collaborative ? false : undefined,
     }),
     ItalicUnderscore,
     Link,
     TaskList,
     TaskItem.configure({ nested: true }),
+    Citation,
+    PdfEmbed,
     // NOTE: Task 3's live editor will want `transformPastedText: true` so
     // pasted markdown is parsed into nodes; keep it false here for headless
     // round-tripping where we already pass a markdown string to setContent.

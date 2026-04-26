@@ -1,21 +1,19 @@
-import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
-import { auth } from "@episteme/auth";
+import { getRequiredUserId } from "@/lib/session";
 import { getDefaultLibrary } from "@/lib/default-library";
 import { listPapers } from "@/lib/papers-server";
 import { isValidFolderPath } from "@/lib/tree";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { PaperGrid } from "@/components/PaperGrid";
-import { PaperUploadDropzone } from "@/components/PaperUploadDropzone";
+import { UnifiedDropzone } from "@/components/UnifiedDropzone";
 
 export default async function PapersFolderPage({
   params,
 }: {
   params: Promise<{ path: string[] }>;
 }) {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session?.user) redirect("/sign-in");
-  const library = await getDefaultLibrary(session.user.id);
+  const userId = await getRequiredUserId();
+  const library = await getDefaultLibrary(userId);
   if (!library) redirect("/");
 
   const { path } = await params;
@@ -28,7 +26,7 @@ export default async function PapersFolderPage({
   const folderPath = decoded.join("/") + "/";
   if (!isValidFolderPath(folderPath)) notFound();
 
-  const rows = await listPapers(library.id, session.user.id, folderPath);
+  const rows = await listPapers(library.id, userId, folderPath);
 
   return (
     <div className="p-6">
@@ -37,7 +35,7 @@ export default async function PapersFolderPage({
         section="papers"
         folderPath={folderPath}
       />
-      <PaperUploadDropzone libraryId={library.id} folderPath={folderPath} />
+      <UnifiedDropzone libraryId={library.id} folderPath={folderPath} />
       {rows.length === 0 ? (
         <div className="flex flex-1 items-center justify-center p-10">
           <div className="text-center">

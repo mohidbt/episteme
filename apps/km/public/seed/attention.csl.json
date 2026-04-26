@@ -1,0 +1,19 @@
+{
+  "id": "10.48550/arXiv.1706.03762",
+  "type": "article",
+  "DOI": "10.48550/arXiv.1706.03762",
+  "title": "Attention Is All You Need",
+  "author": [
+    { "family": "Vaswani", "given": "Ashish" },
+    { "family": "Shazeer", "given": "Noam" },
+    { "family": "Parmar", "given": "Niki" },
+    { "family": "Uszkoreit", "given": "Jakob" },
+    { "family": "Jones", "given": "Llion" },
+    { "family": "Gomez", "given": "Aidan N." },
+    { "family": "Kaiser", "given": "Łukasz" },
+    { "family": "Polosukhin", "given": "Illia" }
+  ],
+  "issued": { "date-parts": [[2017]] },
+  "container-title": "arXiv preprint",
+  "URL": "https://arxiv.org/abs/1706.03762"
+}

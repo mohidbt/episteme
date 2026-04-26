@@ -1,0 +1,33 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - generic [ref=e3]:
+      - paragraph [ref=e4]: You’re in guest mode. Your work is saved in this browser. Sign up to keep it across devices.
+      - link "Sign up" [ref=e5] [cursor=pointer]:
+        - /url: /sign-up
+    - generic [ref=e6]:
+      - complementary [ref=e7]:
+        - paragraph [ref=e8]: Notes
+        - list [ref=e9]:
+          - listitem [ref=e10]:
+            - button "Welcome to Episteme" [ref=e11]
+          - listitem [ref=e12]:
+            - button "Paper notes" [ref=e13]
+          - listitem [ref=e14]:
+            - button "Try the AI" [ref=e15]
+        - paragraph [ref=e16]: Papers
+        - button "Demo paper (PDF)" [ref=e17]
+      - main [ref=e18]:
+        - article [ref=e19]:
+          - heading "Welcome to Episteme" [level=1] [ref=e20]
+          - paragraph [ref=e21]: Episteme is a knowledge-management workspace for your notes, papers, and references. Everything you see on this page lives in your browser — no account required. Try editing it.
+          - paragraph [ref=e22]:
+            - text: Organise your thinking with notebooks, link notes with
+            - code [ref=e23]: "[[wikilinks]]"
+            - text: ", and annotate PDFs from the reader. The sidebar on the left is your drive; the editor in front of you is a Notion-style block editor with slash commands."
+          - paragraph [ref=e24]: When you're ready to sync across devices, sign up and your guest content will follow you.
+        - link "Sign up to save your work across devices →" [ref=e26] [cursor=pointer]:
+          - /url: /sign-up
+  - region "Notifications alt+T"
+  - button "Open Next.js Dev Tools" [ref=e32] [cursor=pointer]:
+    - img [ref=e33]
+  - alert [ref=e36]

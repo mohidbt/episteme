@@ -1,17 +1,17 @@
 import type { ReactNode } from "react";
-import { redirect } from "next/navigation";
-import { getCurrentUserId } from "@/lib/session";
+import { getCurrentSession } from "@/lib/session";
 import { getUserPreferences } from "@/lib/preferences-server";
 import { Sidebar } from "@/components/Sidebar";
 import { SidebarProvider } from "@/components/ui/sidebar";
+import { AnonAutoSignIn } from "@/components/AnonAutoSignIn";
 
 export default async function AppLayout({ children }: { children: ReactNode }) {
-  const userId = await getCurrentUserId();
-  if (!userId) redirect("/sign-in");
-  const prefs = await getUserPreferences(userId);
+  const session = await getCurrentSession();
+  if (!session) return <AnonAutoSignIn />;
+  const prefs = await getUserPreferences(session.userId);
   return (
     <SidebarProvider className="h-dvh overflow-hidden py-2 pr-2">
-      <Sidebar userId={userId} />
+      <Sidebar userId={session.userId} isAnonymous={session.isAnonymous} />
       <main
         className="flex-1 min-w-0 h-full overflow-y-auto"
         data-prose-font={prefs.font}

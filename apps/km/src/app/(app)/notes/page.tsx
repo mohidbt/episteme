@@ -1,21 +1,20 @@
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { auth } from "@episteme/auth";
+import { getRequiredUserId } from "@/lib/session";
 import { getDefaultLibrary } from "@/lib/default-library";
 import { listNotes } from "@/lib/notes-server";
 import { listAllFolders } from "@/lib/folders-server";
 import { resolveChain } from "@/lib/folders";
 import NotesTable from "@/components/NotesTable";
+import { UnifiedDropzone } from "@/components/UnifiedDropzone";
 
 export default async function NotesPage() {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session?.user) redirect("/sign-in");
-  const library = await getDefaultLibrary(session.user.id);
+  const userId = await getRequiredUserId();
+  const library = await getDefaultLibrary(userId);
   if (!library) redirect("/");
 
   const [allNotes, allFolders] = await Promise.all([
-    listNotes(library.id, session.user.id),
-    listAllFolders(library.id, session.user.id),
+    listNotes(library.id, userId),
+    listAllFolders(library.id, userId),
   ]);
 
   const folderById = new Map(allFolders.map((f) => [f.id, f]));
@@ -31,6 +30,7 @@ export default async function NotesPage() {
       <h1 className="mb-4 font-display text-3xl leading-none tracking-tight">
         Notes
       </h1>
+      <UnifiedDropzone libraryId={library.id} folderPath="" />
       {rows.length === 0 ? (
         <div className="flex flex-1 items-center justify-center p-10">
           <div className="text-center">

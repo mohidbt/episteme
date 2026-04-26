@@ -1,6 +1,5 @@
-import { headers } from "next/headers";
-import { notFound, redirect } from "next/navigation";
-import { auth } from "@episteme/auth";
+import { notFound } from "next/navigation";
+import { getRequiredUserId } from "@/lib/session";
 import { getDefaultLibrary } from "@/lib/default-library";
 import {
   getTrashFolderId,
@@ -11,9 +10,7 @@ import { FileBrowser } from "@/components/FileBrowser";
 import { serializeFolderContents } from "@/app/(app)/drive/serialize";
 
 export default async function TrashPage() {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session?.user) redirect("/sign-in");
-  const userId = session.user.id;
+  const userId = await getRequiredUserId();
 
   const library = await getDefaultLibrary(userId);
   if (!library) notFound();

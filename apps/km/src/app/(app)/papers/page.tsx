@@ -1,13 +1,12 @@
 import Link from "next/link";
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { auth } from "@episteme/auth";
+import { getRequiredUserId } from "@/lib/session";
 import { getDefaultLibrary } from "@/lib/default-library";
 import { listAllPapers } from "@/lib/papers-server";
 import { listAllFolders } from "@/lib/folders-server";
 import { resolveChain } from "@/lib/folders";
 import { PaperGrid } from "@/components/PaperGrid";
-import { PaperUploadDropzone } from "@/components/PaperUploadDropzone";
+import { UnifiedDropzone } from "@/components/UnifiedDropzone";
 import { FolderFilterDropdown } from "@/components/FolderFilterDropdown";
 
 export default async function PapersPage({
@@ -18,14 +17,13 @@ export default async function PapersPage({
   const sp = await searchParams;
   const folderFilter = sp.folder ?? null;
 
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session?.user) redirect("/sign-in");
-  const library = await getDefaultLibrary(session.user.id);
+  const userId = await getRequiredUserId();
+  const library = await getDefaultLibrary(userId);
   if (!library) redirect("/");
 
   const [allPapers, allFolders] = await Promise.all([
-    listAllPapers(library.id, session.user.id),
-    listAllFolders(library.id, session.user.id),
+    listAllPapers(library.id, userId),
+    listAllFolders(library.id, userId),
   ]);
 
   // Exclude papers in trash
@@ -47,7 +45,7 @@ export default async function PapersPage({
       <h1 className="mb-4 font-display text-3xl leading-none tracking-tight">
         Papers
       </h1>
-      <PaperUploadDropzone libraryId={library.id} folderPath="" />
+      <UnifiedDropzone libraryId={library.id} folderPath="" />
       <div className="mb-4 flex items-center gap-3">
         <FolderFilterDropdown
           folders={allFolders}

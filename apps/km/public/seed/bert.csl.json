@@ -1,0 +1,15 @@
+{
+  "id": "10.48550/arXiv.1810.04805",
+  "type": "article",
+  "DOI": "10.48550/arXiv.1810.04805",
+  "title": "BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding",
+  "author": [
+    { "family": "Devlin", "given": "Jacob" },
+    { "family": "Chang", "given": "Ming-Wei" },
+    { "family": "Lee", "given": "Kenton" },
+    { "family": "Toutanova", "given": "Kristina" }
+  ],
+  "issued": { "date-parts": [[2018]] },
+  "container-title": "arXiv preprint",
+  "URL": "https://arxiv.org/abs/1810.04805"
+}

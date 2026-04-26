@@ -1,0 +1,10 @@
+{
+  "//": "Standalone Node service — inherits Bundler resolution from monorepo base so workspace packages resolve correctly.",
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src"
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["dist", "tests"]
+}
