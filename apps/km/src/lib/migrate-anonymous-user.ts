@@ -4,6 +4,7 @@ import {
   agentConfigs,
   agentConversations,
   agentMemories,
+  assets,
   folders,
   libraries,
   notes,
@@ -53,6 +54,10 @@ export async function migrateAnonymousUser(
       .update(paperHighlights)
       .set({ userId: newUserId })
       .where(eq(paperHighlights.userId, anonUserId));
+    await tx
+      .update(assets)
+      .set({ userId: newUserId })
+      .where(eq(assets.userId, anonUserId));
     await tx
       .update(userPreferences)
       .set({ userId: newUserId })

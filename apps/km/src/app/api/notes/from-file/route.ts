@@ -2,8 +2,7 @@ import { db } from "@/lib/db";
 import { notes, libraries } from "@episteme/db/schema";
 import { getUserIdFromRequest } from "@/lib/auth";
 import { jsonError, requireOwned, resolveNoteSlug } from "@/lib/crud";
-import { resolveUnresolvedNoteLinks } from "@/lib/notes/rebuild-links";
-import { createRevisionIfNeeded } from "@/lib/notes/create-revision";
+import { resolveUnresolvedNoteLinks, createRevisionIfNeeded } from "@episteme/notes-core";
 
 export const runtime = "nodejs";
 
