@@ -29,3 +29,5 @@ export * from "./note-tags";
 export * from "./agent-configs";
 export * from "./agent-memories";
 export * from "./user-preferences";
+export * from "./agent-threads";
+export * from "./openrouter-catalog";
