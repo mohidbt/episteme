@@ -1,10 +1,8 @@
 """RED tests for services/agents/lib/km_http.py — outbound HMAC client."""
 import hashlib
 import hmac
-import json
 import os
-import time
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import httpx
 import pytest
@@ -65,7 +63,6 @@ async def test_km_post_sends_correct_hmac_headers():
 @pytest.mark.asyncio
 async def test_km_post_base_url_from_env():
     """km_post uses EPISTEME_KM_BASE_URL from env."""
-    from lib.km_http import km_post  # noqa: PLC0415
 
     captured: dict = {}
 
