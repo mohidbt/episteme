@@ -92,9 +92,15 @@ Events `on_tool_start` → `tool_call`, `on_tool_end` → `tool_result`, `on_cha
 - **Was:** Called `build_km_agent(...)` then `agent.get_state(...)` — required LLM key for a read-only operation.
 - **Fix:** Route calls `get_saver().aget_tuple(config)` directly. Extracts `todos` from `checkpoint["channel_values"]["todos"]`. `pending_interrupts` returns `[]` (deferred to 1.3b).
 
-### Bug 4 — Default model doesn't support tool calling
-- **Was:** `google/gemma-4-31b-it:free` → 404 "No endpoints found that support tool use"
-- **Fix:** Default changed to `openai/gpt-4o-mini` — verified to support tool use on OpenRouter.
+### Bug 4 — RETRACTED — gemma-4-31b-it:free DOES support tool calling
+- Earlier note claimed the model didn't exist or didn't support tools. **Wrong.** Verified via OpenRouter `/api/v1/models`:
+  - `id: google/gemma-4-31b-it:free`
+  - `supported_parameters: [..., 'tool_choice', 'tools', ...]`
+  - `pricing: {prompt: 0, completion: 0}` (free)
+  - `context_length: 262144`
+- **Real failure mode observed during smoke:** upstream rate limit (HTTP 429 from Google AI Studio: `"google/gemma-4-31b-it:free is temporarily rate-limited upstream"`). The free tier has shared quota — production needs a paid fallback OR per-user BYOK.
+- **Default reverted to `google/gemma-4-31b-it:free`** in `lib/config_cache.py`.
+- **Tech debt:** rate-limit handling — when 429 hits the SSE stream, surface a typed `error`/`rate_limited` event AND optionally cascade to a fallback paid model. Owner: 1.3c (BYOK + cascade UI per master spec §C).
 
 ---
 
