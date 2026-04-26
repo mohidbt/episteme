@@ -1,9 +1,6 @@
 """RED tests for CompositeBackend — filesystem router."""
 import pytest
 
-from backends.base import Backend
-
-
 class _MockBackend:
     """Minimal in-memory Backend for testing routing."""
 

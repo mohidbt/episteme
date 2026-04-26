@@ -1,6 +1,6 @@
 """RED tests for NotesBackend."""
 import os
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 

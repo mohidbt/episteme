@@ -8,19 +8,19 @@ def _make_backend(thread_id: str = "thread-1"):
 
 
 def test_write_and_read_round_trip():
-    backend = _make_backend("t1")
+    backend = _make_backend("t-rw")
     backend.write("/scratch/draft.md", "hello world")
     assert backend.read("/scratch/draft.md") == "hello world"
 
 
 def test_read_missing_raises_file_not_found():
-    backend = _make_backend("t1")
+    backend = _make_backend("t-miss")
     with pytest.raises(FileNotFoundError):
         backend.read("/scratch/missing.md")
 
 
 def test_ls_returns_paths_in_thread():
-    backend = _make_backend("t1")
+    backend = _make_backend("t-ls")
     backend.write("/scratch/a.md", "a")
     backend.write("/scratch/b.md", "b")
     result = backend.ls("/scratch/")
@@ -28,7 +28,7 @@ def test_ls_returns_paths_in_thread():
 
 
 def test_delete_removes_file():
-    backend = _make_backend("t1")
+    backend = _make_backend("t-del")
     backend.write("/scratch/x.md", "data")
     backend.delete("/scratch/x.md")
     with pytest.raises(FileNotFoundError):
@@ -36,9 +36,9 @@ def test_delete_removes_file():
 
 
 def test_clear_thread_empties_storage():
-    backend = _make_backend("t1")
+    backend = _make_backend("t-clear")
     backend.write("/scratch/a.md", "data")
-    backend.clear_thread("t1")
+    backend.clear_thread("t-clear")
     with pytest.raises(FileNotFoundError):
         backend.read("/scratch/a.md")
 
