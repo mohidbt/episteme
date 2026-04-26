@@ -1,11 +1,13 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useDropzone } from "react-dropzone";
 import { toast } from "sonner";
-import { XIcon, RotateCcwIcon } from "lucide-react";
+import { XIcon, RotateCcwIcon, CheckIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+const DONE_AUTO_DISMISS_MS = 1500;
 
 const MAX_PDF_BYTES = 50 * 1024 * 1024; // 50 MB
 const MAX_ASSET_BYTES = 50 * 1024 * 1024; // 50 MB, mirrors validators
@@ -109,6 +111,18 @@ export function UnifiedDropzone({
   const updateItem = useCallback((id: string, patch: Partial<UploadItem>) => {
     setItems((prev) => prev.map((it) => (it.id === id ? { ...it, ...patch } : it)));
   }, []);
+
+  // Auto-dismiss successfully-completed uploads after a brief flash so the
+  // user sees the ✓ then it goes away. Failed/cancelled stay until manually
+  // cleared so the user can retry / read the error.
+  useEffect(() => {
+    const doneIds = items.filter((it) => it.status === "done").map((it) => it.id);
+    if (doneIds.length === 0) return;
+    const t = setTimeout(() => {
+      setItems((prev) => prev.filter((it) => !doneIds.includes(it.id)));
+    }, DONE_AUTO_DISMISS_MS);
+    return () => clearTimeout(t);
+  }, [items]);
 
   const processFile = useCallback(
     async (item: UploadItem) => {
@@ -441,24 +455,30 @@ export function UnifiedDropzone({
                     </span>
                   </div>
                   <div className="mt-1 flex items-center gap-2">
-                    <div
-                      role="progressbar"
-                      aria-valuenow={it.progress}
-                      aria-valuemin={0}
-                      aria-valuemax={100}
-                      aria-label={`${it.file.name} ${it.status}`}
-                      className="h-1 flex-1 overflow-hidden rounded-sm bg-muted"
-                    >
+                    {it.status === "done" ? (
+                      <span className="flex flex-1 items-center gap-1 text-[11px] text-muted-foreground">
+                        <CheckIcon className="h-3 w-3" aria-hidden /> Uploaded
+                      </span>
+                    ) : (
                       <div
-                        className={cn(
-                          "h-full transition-all",
-                          it.status === "failed" || it.status === "cancelled"
-                            ? "bg-destructive"
-                            : "bg-foreground/70",
-                        )}
-                        style={{ width: `${it.progress}%` }}
-                      />
-                    </div>
+                        role="progressbar"
+                        aria-valuenow={it.progress}
+                        aria-valuemin={0}
+                        aria-valuemax={100}
+                        aria-label={`${it.file.name} ${it.status}`}
+                        className="h-1 flex-1 overflow-hidden rounded-sm bg-muted"
+                      >
+                        <div
+                          className={cn(
+                            "h-full transition-all",
+                            it.status === "failed" || it.status === "cancelled"
+                              ? "bg-destructive"
+                              : "bg-foreground/70",
+                          )}
+                          style={{ width: `${it.progress}%` }}
+                        />
+                      </div>
+                    )}
                     <span className="shrink-0 text-[11px] text-muted-foreground">
                       {humanSize(it.file.size)}
                     </span>
