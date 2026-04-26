@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 import { render, screen, cleanup, waitFor, act } from "@testing-library/react";
-import { UnifiedDropzone } from "./UnifiedDropzone";
+import { UnifiedDropzone, detectFileType } from "./UnifiedDropzone";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }),
@@ -165,6 +165,61 @@ describe("UnifiedDropzone", () => {
 
     const infoCall = vi.mocked(toast.info).mock.calls[0];
     expect(String(infoCall[0])).toMatch(/1\.3/);
+  });
+
+  it("detectFileType maps image extensions to 'image'", () => {
+    for (const name of ["a.png", "a.jpg", "a.jpeg", "a.gif", "a.webp", "a.svg", "A.PNG"]) {
+      const f = new File(["x"], name, { type: "" });
+      expect(detectFileType(f)).toBe("image");
+    }
+    expect(detectFileType(new File(["x"], "a.pdf", { type: "" }))).toBe("paper");
+    expect(detectFileType(new File(["x"], "a.md", { type: "" }))).toBe("note");
+    expect(detectFileType(new File(["x"], "a.bib", { type: "" }))).toBe("reference");
+    expect(detectFileType(new File(["x"], "a.csv", { type: "" }))).toBe("data");
+    expect(detectFileType(new File(["x"], "a.xyz", { type: "" }))).toBe("unknown");
+  });
+
+  it("calls /api/assets when an image is dropped", async () => {
+    mockFetch({
+      "/api/assets": { status: 201, body: { assetId: "asset-1", uploadUrl: "http://example.com/put" } },
+    });
+    // Stub XHR so the PUT resolves without a real network call.
+    class FakeXHR {
+      upload = { onprogress: null as ((e: ProgressEvent) => void) | null };
+      onload: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      onabort: (() => void) | null = null;
+      status = 200;
+      open() {}
+      setRequestHeader() {}
+      send() {
+        setTimeout(() => this.onload?.(), 0);
+      }
+      abort() {}
+    }
+    vi.stubGlobal("XMLHttpRequest", FakeXHR as unknown as typeof XMLHttpRequest);
+
+    render(<UnifiedDropzone libraryId={3} folderPath="" folderId={null} />);
+    const input = document.querySelector("input[type=file]") as HTMLInputElement;
+    const file = new File(["bytes"], "pic.png", { type: "image/png" });
+
+    await act(async () => {
+      dropFile(input, file);
+    });
+
+    await waitFor(() => {
+      expect(vi.mocked(globalThis.fetch)).toHaveBeenCalled();
+    });
+
+    const fetchMock = vi.mocked(globalThis.fetch);
+    const assetsCall = fetchMock.mock.calls.find(
+      (c) => String(c[0]) === "/api/assets" && (c[1] as RequestInit)?.method === "POST",
+    );
+    expect(assetsCall).toBeDefined();
+    const body = JSON.parse((assetsCall![1] as RequestInit).body as string);
+    expect(body.libraryId).toBe(3);
+    expect(body.contentType).toBe("image/png");
+    expect(body.filename).toBe("pic.png");
   });
 
   it("shows toast.error for unknown extension files", async () => {
