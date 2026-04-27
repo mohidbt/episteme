@@ -388,3 +388,83 @@ def test_config_post_persists_for_subsequent_load():
     from lib.config_cache import load_user_config  # noqa: PLC0415
     cfg = load_user_config("user_1")
     assert cfg["modelPreference"] == "openai/gpt-4o-mini"
+
+
+# ---------------------------------------------------------------------------
+# Guest mode (Task 13) — guest user_id is forbidden from /agents/km routes
+# ---------------------------------------------------------------------------
+
+def _guest_headers(method: str, path: str, body: bytes) -> dict:
+    ts = str(int(time.time()))
+    sig = hmac.new(
+        SECRET.encode(),
+        ts.encode() + method.encode() + path.encode() + body,
+        hashlib.sha256,
+    ).hexdigest()
+    return {
+        "X-Inhale-User-Id": "guest",
+        "X-Inhale-LLM-Key": "sk-test",
+        "X-Inhale-Ts": ts,
+        "X-Inhale-Sig": sig,
+        "Content-Type": "application/json",
+    }
+
+
+def test_guest_invoke_returns_403():
+    body = json.dumps({"thread_id": "t1", "message": "hi"}).encode()
+    r = client.post(
+        "/agents/km/invoke",
+        content=body,
+        headers=_guest_headers("POST", "/agents/km/invoke", body),
+    )
+    assert r.status_code == 403
+    assert r.json()["detail"] == {
+        "error": "guests cannot use agents",
+        "code": "guest_forbidden",
+    }
+
+
+def test_guest_resume_returns_403():
+    body = json.dumps({"thread_id": "t1", "decisions": []}).encode()
+    r = client.post(
+        "/agents/km/resume",
+        content=body,
+        headers=_guest_headers("POST", "/agents/km/resume", body),
+    )
+    assert r.status_code == 403
+    assert r.json()["detail"]["code"] == "guest_forbidden"
+
+
+def test_guest_state_returns_403():
+    path = "/agents/km/state/whatever"
+    r = client.get(
+        path,
+        headers=_guest_headers("GET", path, b""),
+    )
+    assert r.status_code == 403
+    assert r.json()["detail"]["code"] == "guest_forbidden"
+
+
+def test_guest_config_post_returns_403():
+    body = json.dumps({"modelPreference": "openai/gpt-4o"}).encode()
+    r = client.post(
+        "/agents/km/config",
+        content=body,
+        headers=_guest_headers("POST", "/agents/km/config", body),
+    )
+    assert r.status_code == 403
+    assert r.json()["detail"]["code"] == "guest_forbidden"
+
+
+def test_guest_config_post_does_not_persist():
+    """Guest 403 must not write to the cache."""
+    from lib import config_cache  # noqa: PLC0415
+    config_cache._CACHE.clear()
+
+    body = json.dumps({"modelPreference": "openai/gpt-4o"}).encode()
+    client.post(
+        "/agents/km/config",
+        content=body,
+        headers=_guest_headers("POST", "/agents/km/config", body),
+    )
+    assert "guest" not in config_cache._CACHE
