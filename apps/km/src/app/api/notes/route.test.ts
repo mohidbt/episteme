@@ -60,6 +60,19 @@ describe("notes", () => {
     expect(r.status).toBe(400);
   });
 
+  it("cookie POST with missing libraryId returns 400 validation (no fallback)", async () => {
+    // The HMAC path falls back to user's default library when libraryId is
+    // omitted. Cookie-authed users must still get a validation error so
+    // existing UI behavior is preserved. See internal-auth.ts viaHmac flag.
+    const r = await POST(
+      req("/api/notes", { method: "POST", cookie: u.cookie, body: JSON.stringify({ title: "no-lib" }) }),
+    );
+    expect(r.status).toBe(400);
+    const body = await r.json();
+    // Either schema validation or no_library — must NOT be 201/created.
+    expect(body.error).not.toBe(undefined);
+  });
+
   it("creates an initial manual revision so history isn't empty", async () => {
     const r = await POST(
       req("/api/notes", { method: "POST", cookie: u.cookie, body: JSON.stringify(noteBody({ title: "Seeded Rev Note" })) }),

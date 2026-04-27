@@ -5,7 +5,11 @@ vi.mock("@episteme/auth/server", () => ({
   auth: { api: { getSession: vi.fn().mockResolvedValue(null) } },
 }));
 
-import { verifyInternalAuth, getAuthedUserId } from "../internal-auth";
+import {
+  verifyInternalAuth,
+  getAuthedUserId,
+  MissingInternalSecretError,
+} from "../internal-auth";
 
 const SECRET = "test-secret-abc";
 
@@ -71,6 +75,50 @@ describe("verifyInternalAuth (reader)", () => {
     expect(res.ok).toBe(false);
   });
 
+  it("rejects future-skew (ts > now + 60s)", async () => {
+    const ts = String(Math.floor(Date.now() / 1000) + 120);
+    const sig = sign(ts, "GET", "/api/library", "");
+    const req = makeReq({
+      headers: {
+        "X-Inhale-User-Id": "u1",
+        "X-Inhale-Ts": ts,
+        "X-Inhale-Sig": sig,
+      },
+    });
+    const res = await verifyInternalAuth(req, "");
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.reason).toBe("stale");
+  });
+
+  it("throws MissingInternalSecretError when unset", async () => {
+    delete process.env.INHALE_INTERNAL_SECRET;
+    const ts = String(Math.floor(Date.now() / 1000));
+    const req = makeReq({
+      headers: {
+        "X-Inhale-User-Id": "u",
+        "X-Inhale-Ts": ts,
+        "X-Inhale-Sig": "x".repeat(64),
+      },
+    });
+    await expect(verifyInternalAuth(req, "")).rejects.toBeInstanceOf(
+      MissingInternalSecretError,
+    );
+  });
+
+  // Cross-language golden vector. See apps/km/src/lib/internal-auth.test.ts
+  // and services/agents/tests/test_auth.py for the matching assertions.
+  it("matches Python golden HMAC vector", async () => {
+    const ts = "1700000000";
+    const path = "/api/notes?q=foo";
+    const body = '{"title":"hi"}';
+    const expected =
+      "b79393e07c11da2acad023e6bb8884a499303486bbcc5889884a41a44427e6a8";
+    const computed = createHmac("sha256", "test-secret")
+      .update(ts + "POST" + path + body)
+      .digest("hex");
+    expect(computed).toBe(expected);
+  });
+
   it("rejects stale", async () => {
     const ts = String(Math.floor(Date.now() / 1000) - 120);
     const sig = sign(ts, "GET", "/api/library", "");
@@ -91,7 +139,7 @@ describe("getAuthedUserId", () => {
     expect(id).toBeNull();
   });
 
-  it("returns userId on valid HMAC", async () => {
+  it("returns userId + viaHmac=true on valid HMAC", async () => {
     const ts = String(Math.floor(Date.now() / 1000));
     const sig = sign(ts, "GET", "/api/library", "");
     const req = makeReq({
@@ -101,6 +149,9 @@ describe("getAuthedUserId", () => {
         "X-Inhale-Sig": sig,
       },
     });
-    expect(await getAuthedUserId(req, "")).toBe("u-hmac");
+    expect(await getAuthedUserId(req, "")).toEqual({
+      userId: "u-hmac",
+      viaHmac: true,
+    });
   });
 });
