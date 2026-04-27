@@ -31,7 +31,12 @@ function statusBadge(status: AgentThreadStatus) {
       );
     case "awaiting_hitl":
       return (
-        <Badge variant="destructive" data-testid="status-chip" data-status={status}>
+        <Badge
+          variant="secondary"
+          className="bg-amber-100 text-amber-900 hover:bg-amber-100 dark:bg-amber-950/40 dark:text-amber-300"
+          data-testid="status-chip"
+          data-status={status}
+        >
           needs approval
         </Badge>
       );
