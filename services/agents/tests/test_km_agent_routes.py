@@ -468,3 +468,59 @@ def test_guest_config_post_does_not_persist():
         headers=_guest_headers("POST", "/agents/km/config", body),
     )
     assert "guest" not in config_cache._CACHE
+
+
+# ---------------------------------------------------------------------------
+# /agents/km/debug/loaded_skills — test-only debug endpoint (HMAC-gated).
+#
+# Used by scripts/check-skill-addition.ts to assert load_skills() resolved
+# the fixture skill before the /invoke smoke. Without this, /invoke 200
+# could mask a silently-skipped skill — see strengthen #1.
+# ---------------------------------------------------------------------------
+
+def test_debug_loaded_skills_requires_auth():
+    r = client.get("/agents/km/debug/loaded_skills?only=lit-triage")
+    assert r.status_code == 401
+
+
+def test_debug_loaded_skills_returns_resolved_specs():
+    """A real skill name resolves and reports its tool/subagent allow-list."""
+    path = "/agents/km/debug/loaded_skills?only=lit-triage"
+    r = client.get(path, headers=_signed_headers("GET", path, b""))
+    assert r.status_code == 200
+    payload = r.json()
+    assert isinstance(payload, list)
+    assert len(payload) == 1
+    spec = payload[0]
+    assert spec["name"] == "lit-triage"
+    assert isinstance(spec["tools"], list)
+    assert isinstance(spec["subagents"], list)
+    # lit-triage references researcher per its frontmatter
+    assert "researcher" in spec["subagents"]
+
+
+def test_debug_loaded_skills_unknown_returns_500():
+    """Unknown skill in `only` surfaces load_skills() KeyError as 500.
+
+    The scalability gate relies on this — a fixture name that fails to load
+    should fail the gate loudly rather than be silently skipped.
+    """
+    path = "/agents/km/debug/loaded_skills?only=does-not-exist"
+    r = client.get(path, headers=_signed_headers("GET", path, b""))
+    assert r.status_code == 500
+
+
+def test_debug_loaded_skills_multiple_only_values():
+    """Multiple `only` query repeats are aggregated."""
+    path = "/agents/km/debug/loaded_skills?only=lit-triage&only=synthesis"
+    r = client.get(path, headers=_signed_headers("GET", path, b""))
+    assert r.status_code == 200
+    names = sorted(s["name"] for s in r.json())
+    assert names == ["lit-triage", "synthesis"]
+
+
+def test_debug_loaded_skills_guest_returns_403():
+    """Guests cannot probe agent state."""
+    path = "/agents/km/debug/loaded_skills?only=lit-triage"
+    r = client.get(path, headers=_guest_headers("GET", path, b""))
+    assert r.status_code == 403
