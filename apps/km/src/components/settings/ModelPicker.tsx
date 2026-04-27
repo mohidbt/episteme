@@ -11,6 +11,7 @@ import {
   SelectItem,
   SelectSeparator,
 } from "@/components/ui/select";
+import { fetchModelCatalog } from "@/lib/openrouter-catalog";
 
 export type CatalogModel = {
   id: string;
@@ -31,8 +32,7 @@ export function ModelPicker({
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch("/api/openrouter/catalog");
-        const body = (await res.json()) as { models: CatalogModel[] };
+        const body = await fetchModelCatalog();
         if (cancelled) return;
         setModels(Array.isArray(body.models) ? body.models : []);
       } catch {

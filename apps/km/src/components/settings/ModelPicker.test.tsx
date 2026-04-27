@@ -8,8 +8,10 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { ModelPicker } from "./ModelPicker";
+import { _resetCatalogCacheForTests } from "@/lib/openrouter-catalog";
 
 beforeEach(() => {
+  _resetCatalogCacheForTests();
   globalThis.fetch = vi.fn(async () => {
     return new Response(
       JSON.stringify({
@@ -27,6 +29,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  _resetCatalogCacheForTests();
 });
 
 describe("ModelPicker", () => {
@@ -37,7 +40,10 @@ describe("ModelPicker", () => {
     );
 
     await waitFor(() => {
-      expect(globalThis.fetch).toHaveBeenCalledWith("/api/openrouter/catalog");
+      expect(globalThis.fetch).toHaveBeenCalledWith(
+        "/api/openrouter/catalog",
+        expect.objectContaining({ method: "GET" }),
+      );
     });
 
     const trigger = screen.getByTestId("model-picker-trigger");
