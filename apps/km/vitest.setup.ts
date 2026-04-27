@@ -18,3 +18,22 @@ if (
   (Element.prototype as unknown as { getAnimations: () => unknown[] }).getAnimations =
     () => [];
 }
+
+// jsdom lacks PointerEvent; @base-ui's button/switch click handlers reference
+// `event instanceof PointerEvent`. Provide a minimal polyfill backed by MouseEvent
+// — but only when MouseEvent itself is defined (i.e. in jsdom env, not node).
+if (
+  typeof globalThis.PointerEvent === "undefined" &&
+  typeof globalThis.MouseEvent !== "undefined"
+) {
+  class PointerEventPolyfill extends globalThis.MouseEvent {
+    pointerId: number;
+    pointerType: string;
+    constructor(type: string, init: PointerEventInit = {}) {
+      super(type, init);
+      this.pointerId = init.pointerId ?? 0;
+      this.pointerType = init.pointerType ?? "mouse";
+    }
+  }
+  globalThis.PointerEvent = PointerEventPolyfill as unknown as typeof PointerEvent;
+}

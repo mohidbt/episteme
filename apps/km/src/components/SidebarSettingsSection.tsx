@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Cog, Database as DataIcon, Palette } from "lucide-react";
+import { Cog, Database as DataIcon, Palette, ShieldCheck } from "lucide-react";
 import {
   SidebarGroup,
   SidebarGroupContent,
@@ -15,6 +15,7 @@ import {
 const LINKS = [
   { label: "Data", href: "/settings/data", Icon: DataIcon },
   { label: "Appearance", href: "/settings/appearance", Icon: Palette },
+  { label: "Permissions & MCP", href: "/settings/agents", Icon: ShieldCheck },
 ] as const;
 
 export function SidebarSettingsSection() {
