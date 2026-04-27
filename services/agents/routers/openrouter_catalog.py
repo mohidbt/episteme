@@ -5,6 +5,7 @@ Frontend reads via Drizzle directly (Next.js → Postgres). This service is
 responsible for *populating* the cache (24h TTL, stale-while-revalidate).
 """
 import asyncio
+import json
 import logging
 import os
 from datetime import datetime, timedelta, timezone
@@ -21,6 +22,8 @@ router = APIRouter(prefix="/openrouter", tags=["openrouter-catalog"])
 
 OPENROUTER_MODELS_URL = "https://openrouter.ai/api/v1/models"
 TTL = timedelta(hours=24)
+
+_refresh_in_flight = False
 
 
 async def _fetch_openrouter(api_key: str | None) -> list[dict[str, Any]]:
@@ -52,7 +55,6 @@ async def refresh_catalog(conn, api_key: str | None = None) -> int:
         for entry in entries
         if isinstance(entry, dict) and entry.get("id")
     ]
-    import json
     await conn.executemany(
         "INSERT INTO openrouter_catalog (model_id, payload, fetched_at) "
         "VALUES ($1, $2::jsonb, $3) "
@@ -64,10 +66,18 @@ async def refresh_catalog(conn, api_key: str | None = None) -> int:
 
 
 async def _bg_refresh() -> None:
-    """Background refresh — opens its own connection from the pool."""
+    """Background refresh — opens its own connection from the pool.
+
+    Module-level _refresh_in_flight flag prevents concurrent OpenRouter fetches
+    when many stale GETs land in the same window.
+    """
+    global _refresh_in_flight
+    if _refresh_in_flight:
+        return
     from deps import db as db_module  # noqa: PLC0415
     if db_module._pool is None:
         return
+    _refresh_in_flight = True
     api_key = os.environ.get("OPENROUTER_API_KEY")
     try:
         async with db_module._pool.acquire() as conn:
@@ -75,6 +85,8 @@ async def _bg_refresh() -> None:
         logger.info("openrouter catalog background refresh: %d rows", count)
     except Exception:
         logger.exception("openrouter catalog background refresh failed")
+    finally:
+        _refresh_in_flight = False
 
 
 def _is_stale(oldest: datetime | None) -> bool:
@@ -90,14 +102,13 @@ async def get_catalog(conn: ConnDep) -> dict[str, Any]:
     rows = await conn.fetch(
         "SELECT payload, fetched_at FROM openrouter_catalog ORDER BY fetched_at DESC"
     )
-    import json as _json
     models = []
     newest: datetime | None = None
     oldest: datetime | None = None
     for r in rows:
         payload = r["payload"]
         if isinstance(payload, str):
-            payload = _json.loads(payload)
+            payload = json.loads(payload)
         models.append(payload)
         ts = r["fetched_at"]
         if newest is None or ts > newest:
