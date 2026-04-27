@@ -1,12 +1,16 @@
 name: km-e2e
 
-# Phase 1.3b Task 12 — scalability regression gate.
+# Phase 1.3b Task 12 — scalability regression gate + agents unit suite.
 # Proves PRD §5.4.7: adding a new skill = one SKILL.md commit, zero core
 # changes to services/agents/ outside skills/.
 #
-# This workflow currently runs only the scalability gate. Future phases
-# (per phase-0.9-agent-basic.md) extend it with the full pytest suite and
-# the km Playwright e2e once those are stabilized.
+# Two parallel jobs so a fast pytest failure isn't masked by the (slower)
+# scalability gate (fix #8).
+#   - agents-unit:        pytest services/agents/tests
+#   - agents-scalability: scripts/check-skill-addition.ts + helper unit tests
+#
+# Future phases (per phase-0.9-agent-basic.md) extend this with the km
+# Playwright e2e once stabilized.
 
 on:
   pull_request:
@@ -18,12 +22,44 @@ on:
     branches: [main]
 
 jobs:
-  scalability-gate:
+  agents-unit:
+    name: agents unit (pytest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history — the scalability gate's diff invariant uses
+          # `git diff --stat` + `git ls-files --others`, which want full
+          # .gitignore / commit history (fix #13). We checkout the same way
+          # in both jobs for consistency.
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Install agents Python deps
+        working-directory: services/agents
+        run: uv sync
+
+      - name: Run pytest
+        working-directory: services/agents
+        run: uv run pytest tests/
+
+  agents-scalability:
     name: scalability gate (check-skill-addition)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+        with:
+          # See agents-unit comment — full history required.
+          fetch-depth: 0
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
