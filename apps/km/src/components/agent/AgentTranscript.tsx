@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { toast } from "sonner";
 import {
   agentStreamReducer,
   initialAgentTranscriptState,
@@ -400,8 +401,11 @@ function InterruptCardView({ card, threadId }: InterruptCardViewProps) {
     async (type: "approve" | "reject") => {
       if (decided || submitting) return;
       setSubmitting(true);
+      // Optimistically reflect decision in UI; revert on failure so the
+      // user can retry without a stale "decided" badge stuck on the card.
+      setDecided(type);
       try {
-        await fetch("/api/agents/km/resume", {
+        const res = await fetch("/api/agents/km/resume", {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
@@ -409,9 +413,13 @@ function InterruptCardView({ card, threadId }: InterruptCardViewProps) {
             decisions: [{ tool_call_id: card.id, type }],
           }),
         });
-        setDecided(type);
+        if (!res.ok) {
+          setDecided(null);
+          toast.error("Failed to send decision. Try again.");
+        }
       } catch {
-        // surface to UI later; MVP swallow.
+        setDecided(null);
+        toast.error("Failed to send decision. Try again.");
       } finally {
         setSubmitting(false);
       }
