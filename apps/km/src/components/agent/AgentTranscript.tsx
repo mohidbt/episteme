@@ -3,6 +3,7 @@
 import {
   useCallback,
   useEffect,
+  useMemo,
   useReducer,
   useRef,
   useState,
@@ -10,10 +11,44 @@ import {
 import {
   agentStreamReducer,
   initialAgentTranscriptState,
+  type FileDiffCard as FileDiffCardData,
+  type InterruptCard as InterruptCardData,
+  type SkillLoadCard as SkillLoadCardData,
+  type SuggestionCard as SuggestionCardData,
+  type TextCard as TextCardData,
+  type ThinkingCard as ThinkingCardData,
+  type ToolCard as ToolCardData,
   type TranscriptCard,
 } from "@/lib/agent-stream-reducer";
-import type { AgentEvent } from "@/lib/agent-events";
+import type { AgentEvent, Citation } from "@/lib/agent-events";
 import type { PageContext } from "@/lib/page-context";
+
+import {
+  Conversation,
+  ConversationContent,
+  ConversationScrollButton,
+} from "@/components/ai-elements/conversation";
+import {
+  Message,
+  MessageContent,
+  MessageResponse,
+} from "@/components/ai-elements/message";
+import {
+  Reasoning,
+  ReasoningTrigger,
+  ReasoningContent,
+} from "@/components/ai-elements/reasoning";
+import {
+  Tool,
+  ToolHeader,
+  ToolContent,
+  ToolInput,
+  ToolOutput,
+} from "@/components/ai-elements/tool";
+import { Suggestions, Suggestion } from "@/components/ai-elements/suggestion";
+import { Button } from "@/components/ui/button";
+import { FileDiffCard } from "./FileDiffCard";
+import { SkillLoadCard } from "./SkillLoadCard";
 
 export interface AgentTranscriptProps {
   threadId: string;
@@ -117,35 +152,83 @@ export function AgentTranscript({
     [threadId, pageContext],
   );
 
-  const handleSend = useCallback(() => {
-    const text = input.trim();
-    if (!text) return;
-    setInput("");
-    if (onSendMessage) onSendMessage(text);
-    else void defaultSend(text);
-  }, [input, onSendMessage, defaultSend]);
+  const handleSend = useCallback(
+    (textArg?: string) => {
+      const text = (textArg ?? input).trim();
+      if (!text) return;
+      if (textArg === undefined) setInput("");
+      if (onSendMessage) onSendMessage(text);
+      else void defaultSend(text);
+    },
+    [input, onSendMessage, defaultSend],
+  );
+
+  const handleSuggestionClick = useCallback(
+    (suggestion: string) => {
+      handleSend(suggestion);
+    },
+    [handleSend],
+  );
+
+  const allCitations = useMemo<Citation[]>(() => {
+    const out: Citation[] = [];
+    for (const list of Object.values(state.sourcesByMessage)) {
+      out.push(...list);
+    }
+    return out;
+  }, [state.sourcesByMessage]);
 
   return (
     <div
       className={`flex flex-col ${fullHeight ? "h-full" : "h-[520px]"}`}
       data-testid="agent-transcript"
     >
-      <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-2 text-sm">
-        {state.cards.length === 0 ? (
-          <div className="text-muted-foreground text-xs">
-            No messages yet. Ask the agent something.
-          </div>
-        ) : (
-          state.cards.map((card, i) => (
-            <CardView key={`${card.kind}-${i}`} card={card} />
-          ))
-        )}
-        {streaming ? (
-          <div className="text-muted-foreground text-xs" data-testid="streaming-indicator">
-            …
-          </div>
-        ) : null}
-      </div>
+      <Conversation className="flex-1 min-h-0">
+        <ConversationContent className="text-sm">
+          {state.cards.length === 0 ? (
+            <div className="text-muted-foreground text-xs">
+              No messages yet. Ask the agent something.
+            </div>
+          ) : (
+            state.cards.map((card, i) => (
+              <CardView
+                key={`${card.kind}-${"id" in card ? card.id : i}-${i}`}
+                card={card}
+                streaming={streaming}
+                onSuggestionClick={handleSuggestionClick}
+                threadId={threadId}
+              />
+            ))
+          )}
+          {state.todos.length > 0 ? (
+            <div className="text-xs text-muted-foreground" data-testid="todo-count">
+              {state.todos.length} todos
+            </div>
+          ) : null}
+          {allCitations.length > 0 ? (
+            <details className="text-xs" data-testid="all-citations">
+              <summary className="cursor-pointer text-muted-foreground">
+                {allCitations.length} citation
+                {allCitations.length === 1 ? "" : "s"}
+              </summary>
+              <ul className="mt-1 list-disc pl-5">
+                {allCitations.map((c, i) => (
+                  <li key={`${c.chunk_id}-${i}`}>
+                    {c.title ?? c.chunk_id}
+                    {c.page ? ` · p${c.page}` : ""}
+                  </li>
+                ))}
+              </ul>
+            </details>
+          ) : null}
+          {streaming ? (
+            <div className="text-muted-foreground text-xs" data-testid="streaming-indicator">
+              …
+            </div>
+          ) : null}
+        </ConversationContent>
+        <ConversationScrollButton />
+      </Conversation>
       <div className="border-t p-2 flex gap-2">
         <textarea
           className="flex-1 resize-none rounded-md border bg-background px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-ring min-h-[36px] max-h-[120px]"
@@ -163,7 +246,7 @@ export function AgentTranscript({
         />
         <button
           type="button"
-          onClick={handleSend}
+          onClick={() => handleSend()}
           disabled={!input.trim() || streaming}
           className="rounded-md bg-primary px-3 py-1 text-sm text-primary-foreground disabled:opacity-50"
         >
@@ -174,62 +257,189 @@ export function AgentTranscript({
   );
 }
 
-function CardView({ card }: { card: TranscriptCard }) {
-  // MVP placeholder rendering. Task #7 swaps for AI Elements.
+interface CardViewProps {
+  card: TranscriptCard;
+  streaming: boolean;
+  onSuggestionClick: (suggestion: string) => void;
+  threadId: string;
+}
+
+function CardView({
+  card,
+  streaming,
+  onSuggestionClick,
+  threadId,
+}: CardViewProps) {
   switch (card.kind) {
     case "text":
-      return (
-        <div data-testid="card-text" className="whitespace-pre-wrap">
-          {card.text}
-        </div>
-      );
+      return <TextCardView card={card} />;
     case "thinking":
-      return (
-        <div
-          data-testid="card-thinking"
-          className="text-xs italic text-muted-foreground whitespace-pre-wrap"
-        >
-          {card.text}
-        </div>
-      );
+      return <ThinkingCardView card={card} streaming={streaming} />;
     case "tool":
-      return (
-        <div data-testid="card-tool" className="rounded border p-2 text-xs">
-          <div className="font-mono">tool: {card.name}</div>
-          <div className="text-muted-foreground">state: {card.state}</div>
-        </div>
-      );
+      return <ToolCardView card={card} />;
     case "interrupt":
-      return (
-        <div
-          data-testid="card-interrupt"
-          className="rounded border border-amber-500 p-2 text-xs"
-        >
-          interrupt: {card.tool}
-        </div>
-      );
+      return <InterruptCardView card={card} threadId={threadId} />;
     case "skill_load":
-      return (
-        <div data-testid="card-skill_load" className="text-xs">
-          skill: {card.name}
-        </div>
-      );
+      return <SkillLoadCard name={card.name} />;
     case "file_diff":
-      return (
-        <div data-testid="card-file_diff" className="rounded border p-2 text-xs">
-          file_diff: {card.noteId}
-        </div>
-      );
+      return <FileDiffCardView card={card} />;
     case "suggestion":
-      return (
-        <div data-testid="card-suggestion" className="text-xs">
-          suggestions: {card.items.join(", ")}
-        </div>
-      );
+      return <SuggestionCardView card={card} onClick={onSuggestionClick} />;
     default: {
       const _: never = card;
       void _;
       return null;
     }
   }
+}
+
+function TextCardView({ card }: { card: TextCardData }) {
+  return (
+    <div data-testid="card-text">
+      <Message from="assistant">
+        <MessageContent>
+          <MessageResponse>{card.text}</MessageResponse>
+        </MessageContent>
+      </Message>
+    </div>
+  );
+}
+
+function ThinkingCardView({
+  card,
+  streaming,
+}: {
+  card: ThinkingCardData;
+  streaming: boolean;
+}) {
+  return (
+    <div data-testid="card-thinking">
+      <Reasoning isStreaming={streaming}>
+        <ReasoningTrigger />
+        <ReasoningContent>{card.text}</ReasoningContent>
+      </Reasoning>
+    </div>
+  );
+}
+
+function ToolCardView({ card }: { card: ToolCardData }) {
+  return (
+    <div data-testid="card-tool">
+      <Tool defaultOpen={card.state !== "input-available"}>
+        <ToolHeader
+          type={`tool-${card.name}` as `tool-${string}`}
+          state={card.state}
+        />
+        <ToolContent>
+          <ToolInput input={card.args} />
+          <ToolOutput output={card.output} errorText={card.errorText} />
+        </ToolContent>
+      </Tool>
+    </div>
+  );
+}
+
+function FileDiffCardView({ card }: { card: FileDiffCardData }) {
+  return (
+    <FileDiffCard
+      noteId={card.noteId}
+      beforeHash={card.beforeHash}
+      afterHash={card.afterHash}
+      diff={card.diff}
+    />
+  );
+}
+
+function SuggestionCardView({
+  card,
+  onClick,
+}: {
+  card: SuggestionCardData;
+  onClick: (suggestion: string) => void;
+}) {
+  return (
+    <div data-testid="card-suggestion">
+      <Suggestions>
+        {card.items.map((item, i) => (
+          <Suggestion
+            key={`${item}-${i}`}
+            suggestion={item}
+            onClick={onClick}
+          />
+        ))}
+      </Suggestions>
+    </div>
+  );
+}
+
+interface InterruptCardViewProps {
+  card: InterruptCardData;
+  threadId: string;
+}
+
+function InterruptCardView({ card, threadId }: InterruptCardViewProps) {
+  const [decided, setDecided] = useState<"approve" | "reject" | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  const decide = useCallback(
+    async (type: "approve" | "reject") => {
+      if (decided || submitting) return;
+      setSubmitting(true);
+      try {
+        await fetch("/api/agents/km/resume", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            thread_id: threadId,
+            decisions: [{ tool_call_id: card.id, type }],
+          }),
+        });
+        setDecided(type);
+      } catch {
+        // surface to UI later; MVP swallow.
+      } finally {
+        setSubmitting(false);
+      }
+    },
+    [card.id, threadId, decided, submitting],
+  );
+
+  return (
+    <div
+      data-testid="card-interrupt"
+      className="rounded-md border border-amber-500/60 bg-amber-50/40 p-3 text-xs space-y-2 dark:bg-amber-950/20"
+    >
+      <div className="font-medium">
+        Approval required: <span className="font-mono">{card.tool}</span>
+      </div>
+      <pre className="whitespace-pre-wrap break-words font-mono text-[11px] rounded bg-muted/40 p-2 max-h-48 overflow-auto">
+        {JSON.stringify(card.args, null, 2)}
+      </pre>
+      {decided ? (
+        <div className="text-muted-foreground" data-testid="interrupt-decided">
+          {decided === "approve" ? "Approved" : "Rejected"}
+        </div>
+      ) : (
+        <div className="flex gap-2">
+          <Button
+            size="sm"
+            data-action="approve"
+            disabled={submitting}
+            onClick={() => decide("approve")}
+          >
+            Approve
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            data-action="reject"
+            disabled={submitting}
+            onClick={() => decide("reject")}
+          >
+            Reject
+          </Button>
+        </div>
+      )}
+    </div>
+  );
 }
