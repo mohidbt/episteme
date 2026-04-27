@@ -26,6 +26,28 @@ from skills import SKILLS_ROOT, SkillSpec, load_skills
 from tools import ALL_TOOLS
 
 
+def _apply_rule(
+    interrupt_on: dict[str, bool],
+    tool_name: str,
+    rule: str | None,
+    *,
+    default: str,
+) -> None:
+    """Apply approval_rules entry for a tool with metadata-respecting semantics.
+
+    - rule == "require" → force True.
+    - rule == "auto"    → force False (downgrades any metadata flag).
+    - rule is None and tool already in interrupt_on (set by metadata) → leave it.
+    - rule is None and tool absent → fall back to spec default.
+    """
+    if rule == "require":
+        interrupt_on[tool_name] = True
+    elif rule == "auto":
+        interrupt_on[tool_name] = False
+    elif tool_name not in interrupt_on:
+        interrupt_on[tool_name] = default == "require"
+
+
 def _build_interrupt_on(
     approval_rules: dict,
     loaded_skills: list[SkillSpec] | None = None,
@@ -38,10 +60,15 @@ def _build_interrupt_on(
         if tool.metadata and tool.metadata.get("require_approval"):
             interrupt_on[tool.name] = True
 
-    # Spec-mandated overrides (approval_rules take precedence over metadata)
-    interrupt_on["make_public"] = approval_rules.get("publish", "require") == "require"
-    interrupt_on["external_send"] = approval_rules.get("external_send", "require") == "require"
-    interrupt_on["create_note"] = approval_rules.get("write_note", "auto") == "require"
+    # Spec-mandated overrides — approval_rules is authoritative ONLY when
+    # explicitly set; otherwise tool metadata (step 1) wins. Defaults from
+    # the master spec (publish=require, external_send=require, write_note=auto)
+    # are applied below as fallbacks when the tool has NO metadata flag.
+    _apply_rule(interrupt_on, "make_public", approval_rules.get("publish"), default="require")
+    _apply_rule(
+        interrupt_on, "external_send", approval_rules.get("external_send"), default="require"
+    )
+    _apply_rule(interrupt_on, "create_note", approval_rules.get("write_note"), default="auto")
 
     # Per-skill require_approval — a skill being active forces HITL on its
     # listed tools regardless of approval_rules / tool metadata.
