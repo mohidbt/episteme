@@ -4,6 +4,7 @@ Defines TypedDicts for all 11 event types and provides two formatters:
   format_sse(event_type, data) — unvalidated, existing call sites unchanged
   format_typed(event_type, payload) — validates required keys, fails fast in dev
 """
+import dataclasses
 import json
 from typing import Any, Literal, NotRequired, TypedDict
 
@@ -113,9 +114,56 @@ _REQUIRED_KEYS: dict[str, frozenset[str]] = {
 # Public helpers
 # ---------------------------------------------------------------------------
 
+
+def _jsonable(value: Any) -> Any:
+    """Convert LangGraph / LangChain runtime objects to JSON-friendly shapes.
+
+    Deep Agents built-in tools (write_todos, edit_file, task subagent) return
+    `langgraph.types.Command` from `on_tool_end`. Without conversion, the SSE
+    encoder hits ``TypeError: Object of type Command is not JSON serializable``
+    and tears down the stream mid-flight (§1.3b-E2E-fix-1).
+
+    Strategy:
+    - Command (dataclass) → ``{"update": ..., "goto": ..., "resume": ..., "graph": ...}``
+      (drops keys whose values are None / empty tuple — the dataclass default).
+    - BaseMessage-like (has ``.content``) → its content (already covered upstream
+      but belt-and-suspenders here for arbitrary nested values).
+    - dataclass → ``dataclasses.asdict``.
+    - dict / list / tuple → recurse.
+    - Anything else with ``model_dump`` (pydantic) → ``model_dump()``.
+    - Otherwise → return unchanged; ``json.dumps`` can still raise for genuinely
+      foreign types (callers should treat that as a real bug, not a runtime
+      TypeError to swallow).
+    """
+    # Avoid hard imports of langgraph at module load — keep this helper
+    # import-light. ``Command`` is a dataclass, so the dataclass path covers it.
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, dict):
+        return {k: _jsonable(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_jsonable(v) for v in value]
+    if dataclasses.is_dataclass(value) and not isinstance(value, type):
+        # Drop None/empty-tuple keys so the wire shape stays compact.
+        as_dict = dataclasses.asdict(value)
+        return {k: _jsonable(v) for k, v in as_dict.items() if v not in (None, (), [])}
+    if hasattr(value, "model_dump"):
+        try:
+            return _jsonable(value.model_dump())
+        except Exception:  # noqa: BLE001 — pydantic v1/v2 + custom failures
+            pass
+    if hasattr(value, "content"):
+        return _jsonable(getattr(value, "content"))
+    return value
+
+
 def format_sse(event_type: str, data: dict) -> str:
-    """Emit a single SSE event frame: event + data lines followed by blank line."""
-    return f"event: {event_type}\ndata: {json.dumps(data)}\n\n"
+    """Emit a single SSE event frame: event + data lines followed by blank line.
+
+    The payload is run through ``_jsonable`` so LangGraph runtime objects
+    (Command, BaseMessage, pydantic models) cannot crash ``json.dumps``.
+    """
+    return f"event: {event_type}\ndata: {json.dumps(_jsonable(data))}\n\n"
 
 
 def format_typed(event_type: EventType, payload: dict) -> str:

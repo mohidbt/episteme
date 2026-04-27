@@ -7,7 +7,7 @@ These tests drive the addition of:
 import json
 import pytest
 
-from lib.sse_events import format_typed, EventType
+from lib.sse_events import EventType, format_sse, format_typed
 
 
 # ---------------------------------------------------------------------------
@@ -189,3 +189,24 @@ def test_all_event_types_format_with_minimal_payload():
     for et in ALL_11:
         raw = format_typed(et, minimal[et])
         assert raw.startswith(f"event: {et}"), f"Bad output for {et!r}: {raw!r}"
+
+
+# ---------------------------------------------------------------------------
+# §1.3b-E2E-fix-1: format_sse must tolerate Command (and other non-JSON types)
+# without crashing the SSE stream. Belt-and-suspenders alongside the explicit
+# Command extraction in routers/km_agent.py::_map_event.
+# ---------------------------------------------------------------------------
+
+def test_format_sse_serializes_langgraph_command():
+    """format_sse must JSON-encode a langgraph Command without TypeError."""
+    from langgraph.types import Command  # noqa: PLC0415
+
+    cmd = Command(update={"k": "v"}, goto="some_node")
+    raw = format_sse("tool_result", {"id": "x", "state": "output-available", "output": cmd})
+    event_type, data = _parse_sse(raw)
+    assert event_type == "tool_result"
+    # Output is converted to a JSON-friendly dict
+    out = data["output"]
+    assert isinstance(out, dict)
+    assert out.get("update") == {"k": "v"}
+    assert out.get("goto") == "some_node"

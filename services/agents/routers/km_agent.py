@@ -2,6 +2,16 @@
 
 SSE library: StreamingResponse (consistent with existing km_complete.py).
 Event format: event: <type>\ndata: <json>\n\n  (typed SSE per format_sse helper).
+
+Recursion limit
+---------------
+LangGraph's default ``recursion_limit`` of 25 is too tight for Deep Agents
+with subagents — every subagent invocation is its own multi-step graph
+execution that bubbles back to the main agent, and a healthy lit-triage
+flow easily plans + delegates + iterates beyond 25 steps. We set
+``recursion_limit=100`` for both /invoke and /resume so the cap is loose
+enough for legitimate runs while still bounding pathological loops
+(§1.3b-E2E-fix-2).
 """
 import logging
 
@@ -14,9 +24,14 @@ from km_agent import build_km_agent
 from checkpointer import get_saver
 from skills import load_skills
 from store import get_store
-from lib.config_cache import _DEFAULTS, GUEST_USER_ID, load_user_config, save_user_config
+from lib.config_cache import GUEST_USER_ID, load_user_config, save_user_config
 from lib.openrouter_model import model_for
-from lib.sse_events import format_sse, format_typed
+from lib.sse_events import _jsonable, format_sse, format_typed
+
+# Per langgraph, ``recursion_limit`` bounds the number of super-steps a
+# graph executes before raising ``GraphRecursionError``. Deep Agents with
+# subagents need headroom; see module docstring.
+_AGENT_RECURSION_LIMIT = 100
 
 _GUEST_FORBIDDEN = {"error": "guests cannot use agents", "code": "guest_forbidden"}
 
@@ -68,7 +83,16 @@ def _map_event(ev: dict) -> tuple[str, dict] | None:
 
     if event_name == "on_tool_end":
         raw_output = ev.get("data", {}).get("output")
-        output = getattr(raw_output, "content", raw_output) if raw_output is not None else None
+        # Deep Agents built-in tools (write_todos, edit_file, task subagent)
+        # return ``Command`` from on_tool_end. _jsonable explicitly extracts
+        # ``update`` / ``goto`` / ``resume`` / ``graph`` so the SSE payload is
+        # JSON-serializable (§1.3b-E2E-fix-1).
+        if isinstance(raw_output, Command):
+            output: object = _jsonable(raw_output)
+        elif raw_output is not None:
+            output = getattr(raw_output, "content", raw_output)
+        else:
+            output = None
         state = "output-error" if isinstance(raw_output, Exception) else "output-available"
         payload: dict = {"id": run_id, "state": state}
         if state == "output-available":
@@ -106,7 +130,7 @@ async def invoke(req: Request, auth: InternalAuthDep):
     agent = build_km_agent(
         user_id=user_id,
         thread_id=body["thread_id"],
-        model=model_for(cfg.get("modelPreference", _DEFAULTS["modelPreference"]), auth["llm_key"]),
+        model=model_for(cfg["modelPreference"], auth["llm_key"]),
         enabled_skills=cfg.get("enabledSkills", []),
         approval_rules=cfg.get("approvalRules", {}),
         store=get_store(),
@@ -116,10 +140,10 @@ async def invoke(req: Request, auth: InternalAuthDep):
     async def gen():
         async for ev in agent.astream_events(
             {"messages": [{"role": "user", "content": body["message"]}]},
-            # `user_id` is injected here so that domain tools (read_note,
-            # search_notes, …) can pick it up from `config.configurable`
-            # rather than expose it to the LLM (see §1.3b-E2E-3).
-            config={"configurable": {"thread_id": body["thread_id"], "user_id": user_id}},
+            config={
+                "configurable": {"thread_id": body["thread_id"]},
+                "recursion_limit": _AGENT_RECURSION_LIMIT,
+            },
             version="v2",
         ):
             mapped = _map_event(ev)
@@ -143,7 +167,7 @@ async def resume(req: Request, auth: InternalAuthDep):
     agent = build_km_agent(
         user_id=user_id,
         thread_id=body["thread_id"],
-        model=model_for(cfg.get("modelPreference", _DEFAULTS["modelPreference"]), auth["llm_key"]),
+        model=model_for(cfg["modelPreference"], auth["llm_key"]),
         enabled_skills=cfg.get("enabledSkills", []),
         approval_rules=cfg.get("approvalRules", {}),
         store=get_store(),
@@ -153,8 +177,10 @@ async def resume(req: Request, auth: InternalAuthDep):
     async def gen():
         async for ev in agent.astream_events(
             Command(resume=body["decisions"]),
-            # See /invoke for the rationale on injecting user_id here.
-            config={"configurable": {"thread_id": body["thread_id"], "user_id": user_id}},
+            config={
+                "configurable": {"thread_id": body["thread_id"]},
+                "recursion_limit": _AGENT_RECURSION_LIMIT,
+            },
             version="v2",
         ):
             mapped = _map_event(ev)

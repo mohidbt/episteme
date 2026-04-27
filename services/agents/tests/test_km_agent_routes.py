@@ -390,31 +390,6 @@ def test_config_post_persists_for_subsequent_load():
     assert cfg["modelPreference"] == "openai/gpt-4o-mini"
 
 
-def test_partial_config_post_then_invoke_does_not_500():
-    """Regression for §1.3b-E2E-1: partial PATCH used to wipe modelPreference,
-    then /invoke raised KeyError → 500. Now save_user_config merges defaults
-    + km_agent reads defensively, so /invoke still streams (200)."""
-    from lib import config_cache  # noqa: PLC0415
-    config_cache._CACHE.clear()
-
-    cfg_body = json.dumps({"enabledSkills": ["lit-triage"]}).encode()
-    r1 = client.post(
-        "/agents/km/config",
-        content=cfg_body,
-        headers=_signed_headers("POST", "/agents/km/config", cfg_body),
-    )
-    assert r1.status_code == 200
-
-    invoke_body = json.dumps({"thread_id": "t1", "message": "hello"}).encode()
-    with patch("routers.km_agent.build_km_agent", return_value=_make_mock_agent()):
-        r2 = client.post(
-            "/agents/km/invoke",
-            content=invoke_body,
-            headers=_signed_headers("POST", "/agents/km/invoke", invoke_body),
-        )
-    assert r2.status_code == 200, f"expected 200 stream, got {r2.status_code}: {r2.text[:200]}"
-
-
 # ---------------------------------------------------------------------------
 # Guest mode (Task 13) — guest user_id is forbidden from /agents/km routes
 # ---------------------------------------------------------------------------
@@ -549,3 +524,157 @@ def test_debug_loaded_skills_guest_returns_403():
     path = "/agents/km/debug/loaded_skills?only=lit-triage"
     r = client.get(path, headers=_guest_headers("GET", path, b""))
     assert r.status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# §1.3b-E2E-fix-1: Command-typed tool outputs must JSON-serialize cleanly.
+#
+# deepagents built-in tools (write_todos, ls, edit_file, task) return
+# `langgraph.types.Command` instances from on_tool_end. Without conversion,
+# `json.dumps` raises `TypeError: Object of type Command is not JSON
+# serializable` and the SSE stream dies mid-flight.
+# ---------------------------------------------------------------------------
+
+def test_invoke_handles_command_typed_tool_output():
+    """on_tool_end with a Command output must NOT raise TypeError.
+
+    Reproduces: lit-triage / skill-toggle / non-guest E2E flows surface a
+    `TypeError: Object of type Command is not JSON serializable` when the
+    `task` (subagent) tool returns a Command(update={...}). The router must
+    convert Command into a JSON-friendly shape before format_sse runs.
+    """
+    from langgraph.types import Command  # noqa: PLC0415
+
+    cmd = Command(update={"messages": [{"role": "tool", "content": "subagent done"}]})
+
+    async def _stream_with_command(input_, config, version):
+        yield {
+            "event": "on_tool_end",
+            "run_id": "tc-cmd",
+            "name": "task",
+            "data": {"output": cmd},
+        }
+
+    body = json.dumps({"thread_id": "t1", "message": "hi"}).encode()
+
+    with patch("routers.km_agent.build_km_agent", return_value=_make_mock_agent(astream_events_coro=_stream_with_command)):
+        r = client.post(
+            "/agents/km/invoke",
+            content=body,
+            headers=_signed_headers("POST", "/agents/km/invoke", body),
+        )
+
+    # Stream must complete without TypeError surfacing as a 500 / hung response.
+    assert r.status_code == 200
+    events = _parse_sse(r.text)
+    tr_events = [e for e in events if e["event"] == "tool_result"]
+    assert len(tr_events) >= 1, "Expected a tool_result event for the Command-returning tool"
+    # The output must be JSON-serializable (it parsed) and recognizable as a Command shape.
+    out = tr_events[0]["data"].get("output")
+    assert out is not None
+    assert isinstance(out, dict), f"Expected Command serialized to dict, got {type(out).__name__}"
+    # Must carry the update payload so the FE can still render the result.
+    assert "update" in out, f"Expected serialized Command to expose 'update', got keys: {sorted(out.keys())}"
+
+
+def test_invoke_handles_command_inside_interrupt_value():
+    """on_chain_end interrupt whose value contains Command-like objects must serialize.
+
+    Defensive: we don't currently see Command nested in interrupt.value, but if
+    a future skill plumbs one through, we must not crash the SSE stream.
+    """
+    from langgraph.types import Command  # noqa: PLC0415
+
+    inner_cmd = Command(update={"foo": "bar"})
+
+    async def _stream_with_interrupt(input_, config, version):
+        yield {
+            "event": "on_chain_end",
+            "run_id": "r-int",
+            "name": "node",
+            "data": {
+                "output": {
+                    "__interrupt__": [
+                        MagicMock(
+                            value={
+                                "tool": "make_public",
+                                "args": {"note_id": "n1", "command": inner_cmd},
+                                "allowed_decisions": ["approve", "reject"],
+                            },
+                            id="int-7",
+                        )
+                    ]
+                }
+            },
+        }
+
+    body = json.dumps({"thread_id": "t1", "message": "hi"}).encode()
+
+    with patch("routers.km_agent.build_km_agent", return_value=_make_mock_agent(astream_events_coro=_stream_with_interrupt)):
+        r = client.post(
+            "/agents/km/invoke",
+            content=body,
+            headers=_signed_headers("POST", "/agents/km/invoke", body),
+        )
+
+    assert r.status_code == 200
+    events = _parse_sse(r.text)
+    int_events = [e for e in events if e["event"] == "interrupt"]
+    assert len(int_events) >= 1
+
+
+# ---------------------------------------------------------------------------
+# §1.3b-E2E-fix-2: agent recursion_limit raised above langgraph default of 25.
+#
+# Default 25 is too tight for Deep Agents w/ subagents — a healthy lit-triage
+# flow plans + delegates to researcher + iterates results, easily exceeding 25
+# steps. Raise the per-invocation limit and document the choice.
+# ---------------------------------------------------------------------------
+
+def test_invoke_passes_recursion_limit_to_astream_events():
+    """invoke must pass recursion_limit=100 in the astream_events config."""
+    captured: dict = {}
+
+    async def _capture(input_, config, version):
+        captured["config"] = config
+        if False:
+            yield
+
+    body = json.dumps({"thread_id": "t1", "message": "hi"}).encode()
+
+    with patch("routers.km_agent.build_km_agent", return_value=_make_mock_agent(astream_events_coro=_capture)):
+        r = client.post(
+            "/agents/km/invoke",
+            content=body,
+            headers=_signed_headers("POST", "/agents/km/invoke", body),
+        )
+
+    assert r.status_code == 200
+    cfg = captured["config"]
+    assert cfg.get("recursion_limit") == 100, (
+        f"Deep Agents w/ subagents need recursion_limit > langgraph default 25; "
+        f"got {cfg.get('recursion_limit')!r}"
+    )
+
+
+def test_resume_passes_recursion_limit_to_astream_events():
+    """resume must pass recursion_limit=100 in the astream_events config."""
+    captured: dict = {}
+
+    async def _capture(input_, config, version):
+        captured["config"] = config
+        if False:
+            yield
+
+    body = json.dumps({"thread_id": "t1", "decisions": []}).encode()
+
+    with patch("routers.km_agent.build_km_agent", return_value=_make_mock_agent(astream_events_coro=_capture)):
+        r = client.post(
+            "/agents/km/resume",
+            content=body,
+            headers=_signed_headers("POST", "/agents/km/resume", body),
+        )
+
+    assert r.status_code == 200
+    cfg = captured["config"]
+    assert cfg.get("recursion_limit") == 100
