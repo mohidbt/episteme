@@ -7,6 +7,8 @@ import pytest
 os.environ.setdefault("INHALE_INTERNAL_SECRET", "test-secret")
 
 USER = "user_test_1"
+# `user_id` is now passed via RunnableConfig.configurable (see §1.3b-E2E-3).
+CFG = {"configurable": {"user_id": USER}}
 
 
 def _make_backend(user_id: str = USER):
@@ -46,7 +48,7 @@ async def test_read_page_calls_get_page_text():
         patched.ainvoke = mock_tool
         result = await backend.read("/pdfs/42/page3.txt")
 
-    mock_tool.assert_awaited_once_with({"user_id": USER, "pdf_id": "42", "page": 3})
+    mock_tool.assert_awaited_once_with({"pdf_id": "42", "page": 3}, config=CFG)
     assert result == "page content here"
 
 
@@ -58,7 +60,7 @@ async def test_read_parses_pdf_id_and_page_correctly():
         patched.ainvoke = mock_tool
         await backend.read("/pdfs/my-uuid-abc/page12.txt")
 
-    mock_tool.assert_awaited_once_with({"user_id": USER, "pdf_id": "my-uuid-abc", "page": 12})
+    mock_tool.assert_awaited_once_with({"pdf_id": "my-uuid-abc", "page": 12}, config=CFG)
 
 
 # ---------------------------------------------------------------------------
@@ -75,5 +77,5 @@ async def test_ls_calls_list_pdfs():
         patched.ainvoke = mock_tool
         result = await backend.ls("/pdfs/")
 
-    mock_tool.assert_awaited_once_with({"user_id": USER})
+    mock_tool.assert_awaited_once_with({}, config=CFG)
     assert result == ["pdf-1", "pdf-2"]

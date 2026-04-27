@@ -116,7 +116,10 @@ async def invoke(req: Request, auth: InternalAuthDep):
     async def gen():
         async for ev in agent.astream_events(
             {"messages": [{"role": "user", "content": body["message"]}]},
-            config={"configurable": {"thread_id": body["thread_id"]}},
+            # `user_id` is injected here so that domain tools (read_note,
+            # search_notes, …) can pick it up from `config.configurable`
+            # rather than expose it to the LLM (see §1.3b-E2E-3).
+            config={"configurable": {"thread_id": body["thread_id"], "user_id": user_id}},
             version="v2",
         ):
             mapped = _map_event(ev)
@@ -150,7 +153,8 @@ async def resume(req: Request, auth: InternalAuthDep):
     async def gen():
         async for ev in agent.astream_events(
             Command(resume=body["decisions"]),
-            config={"configurable": {"thread_id": body["thread_id"]}},
+            # See /invoke for the rationale on injecting user_id here.
+            config={"configurable": {"thread_id": body["thread_id"], "user_id": user_id}},
             version="v2",
         ):
             mapped = _map_event(ev)

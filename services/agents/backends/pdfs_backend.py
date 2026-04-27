@@ -17,17 +17,22 @@ _PAGE_RE = re.compile(r"^/pdfs/([^/]+)/page(\d+)\.txt$")
 class PdfsBackend:
     def __init__(self, user_id: str) -> None:
         self._user_id = user_id
+        # `user_id` is now read from RunnableConfig.configurable by every tool
+        # (see §1.3b-E2E-3).
+        self._cfg = {"configurable": {"user_id": user_id}}
 
     async def read(self, path: str) -> str:
         m = _PAGE_RE.match(path)
         if not m:
             raise ValueError(f"Unrecognised pdfs path: {path!r}. Expected /pdfs/<id>/page<N>.txt")
         pdf_id, page = m.group(1), int(m.group(2))
-        result = await get_page_text.ainvoke({"user_id": self._user_id, "pdf_id": pdf_id, "page": page})
+        result = await get_page_text.ainvoke(
+            {"pdf_id": pdf_id, "page": page}, config=self._cfg
+        )
         return result["text"]
 
     async def ls(self, path: str) -> list[str]:
-        pdfs = await list_pdfs.ainvoke({"user_id": self._user_id})
+        pdfs = await list_pdfs.ainvoke({}, config=self._cfg)
         return [pdf["id"] for pdf in pdfs]
 
     async def write(self, path: str, content: str) -> None:

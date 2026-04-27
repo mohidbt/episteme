@@ -7,6 +7,8 @@ import pytest
 os.environ.setdefault("INHALE_INTERNAL_SECRET", "test-secret")
 
 USER = "user_test_1"
+# `user_id` is now passed via RunnableConfig.configurable (see §1.3b-E2E-3).
+CFG = {"configurable": {"user_id": USER}}
 
 
 def _make_backend(user_id: str = USER):
@@ -27,7 +29,7 @@ async def test_read_note_returns_content():
         patched.ainvoke = mock_tool
         result = await backend.read("/notes/welcome.md")
 
-    mock_tool.assert_awaited_once_with({"user_id": USER, "id_or_slug": "welcome"})
+    mock_tool.assert_awaited_once_with({"id_or_slug": "welcome"}, config=CFG)
     assert result == "# Hello world"
 
 
@@ -39,7 +41,7 @@ async def test_read_note_strips_prefix_and_suffix():
         patched.ainvoke = mock_tool
         await backend.read("/notes/my-note-slug.md")
 
-    mock_tool.assert_awaited_once_with({"user_id": USER, "id_or_slug": "my-note-slug"})
+    mock_tool.assert_awaited_once_with({"id_or_slug": "my-note-slug"}, config=CFG)
 
 
 # ---------------------------------------------------------------------------
@@ -89,9 +91,9 @@ async def test_write_calls_update_note_when_read_succeeds():
         patched_update.ainvoke = mock_update
         await backend.write("/notes/existing.md", "new content")
 
-    mock_read.assert_awaited_once_with({"user_id": USER, "id_or_slug": "existing"})
+    mock_read.assert_awaited_once_with({"id_or_slug": "existing"}, config=CFG)
     mock_update.assert_awaited_once_with(
-        {"user_id": USER, "id": "note-uuid-1", "contentMd": "new content"}
+        {"id": "note-uuid-1", "contentMd": "new content"}, config=CFG
     )
 
 
@@ -109,7 +111,7 @@ async def test_write_calls_create_note_when_read_fails():
         await backend.write("/notes/new-note.md", "content here")
 
     mock_create.assert_awaited_once_with(
-        {"user_id": USER, "title": "new-note", "contentMd": "content here"}
+        {"title": "new-note", "contentMd": "content here"}, config=CFG
     )
 
 
