@@ -10,13 +10,21 @@ import { db } from "@episteme/db";
 import { documents } from "@episteme/db/schema";
 import { and, eq } from "drizzle-orm";
 import { extractPdfPages } from "@/lib/ai/pdf-text";
-import { getAuthedUserId } from "@/lib/internal-auth";
+import { getAuthedUserId, MissingInternalSecretError } from "@/lib/internal-auth";
 
 type Ctx = { params: Promise<{ id: string; n: string }> };
 
 export async function GET(request: NextRequest, { params }: Ctx) {
-  const userId = await getAuthedUserId(request);
-  if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  let authed;
+  try { authed = await getAuthedUserId(request); }
+  catch (e) {
+    if (e instanceof MissingInternalSecretError) {
+      return NextResponse.json({ error: "internal auth misconfigured" }, { status: 500 });
+    }
+    throw e;
+  }
+  if (!authed) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const userId = authed.userId;
 
   const { id, n } = await params;
   const docId = parseInt(id, 10);

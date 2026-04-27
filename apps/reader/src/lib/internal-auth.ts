@@ -17,9 +17,18 @@ import { auth } from "@episteme/auth/server";
 
 const FRESHNESS_SECONDS = 60;
 
+export class MissingInternalSecretError extends Error {
+  constructor() {
+    super("INHALE_INTERNAL_SECRET is not configured");
+    this.name = "MissingInternalSecretError";
+  }
+}
+
 export type InternalAuthResult =
   | { ok: true; userId: string }
   | { ok: false; reason: string };
+
+export type AuthedUser = { userId: string; viaHmac: boolean };
 
 export async function verifyInternalAuth(
   req: Request,
@@ -37,7 +46,10 @@ export async function verifyInternalAuth(
     return { ok: false, reason: "stale" };
   }
   const secret = process.env.INHALE_INTERNAL_SECRET;
-  if (!secret) return { ok: false, reason: "secret not configured" };
+  if (!secret) {
+    console.error("[internal-auth] INHALE_INTERNAL_SECRET is not set");
+    throw new MissingInternalSecretError();
+  }
 
   const url = new URL(req.url);
   const signedPath = url.pathname + url.search;
@@ -56,19 +68,19 @@ export async function verifyInternalAuth(
 
 /**
  * Resolve the authed user via either Better Auth session OR a valid HMAC.
- * Returns null on failure. Callers should `return 401` on null.
- *
- * For HMAC requests, pass the already-read raw body string. For session
- * requests, body is unused.
+ * Returns null on auth failure. Throws `MissingInternalSecretError` on
+ * misconfigured server (HMAC path with no secret) — handler must map to 500.
  */
 export async function getAuthedUserId(
   req: Request,
   rawBody = "",
-): Promise<string | null> {
+): Promise<AuthedUser | null> {
   if (req.headers.get("x-inhale-sig")) {
     const result = await verifyInternalAuth(req, rawBody);
-    return result.ok ? result.userId : null;
+    return result.ok ? { userId: result.userId, viaHmac: true } : null;
   }
   const session = await auth.api.getSession({ headers: req.headers });
-  return session?.user?.id ?? null;
+  return session?.user?.id
+    ? { userId: session.user.id, viaHmac: false }
+    : null;
 }

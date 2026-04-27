@@ -14,7 +14,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@episteme/db";
 import { documents, userHighlights } from "@episteme/db/schema";
 import { and, eq } from "drizzle-orm";
-import { getAuthedUserId } from "@/lib/internal-auth";
+import { getAuthedUserId, MissingInternalSecretError } from "@/lib/internal-auth";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -30,8 +30,16 @@ function parseRange(range: unknown): { start: number; end: number } | null {
 
 export async function POST(request: NextRequest, { params }: Ctx) {
   const rawBody = await request.text();
-  const userId = await getAuthedUserId(request, rawBody);
-  if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  let authed;
+  try { authed = await getAuthedUserId(request, rawBody); }
+  catch (e) {
+    if (e instanceof MissingInternalSecretError) {
+      return NextResponse.json({ error: "internal auth misconfigured" }, { status: 500 });
+    }
+    throw e;
+  }
+  if (!authed) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const userId = authed.userId;
 
   const { id } = await params;
   const docId = parseInt(id, 10);

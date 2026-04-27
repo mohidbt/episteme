@@ -1,15 +1,18 @@
 import { and, asc, eq, ilike } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { notes } from "@episteme/db/schema";
-import { getAuthedUserId } from "@/lib/internal-auth";
+import { getAuthedUserId, MissingInternalSecretError } from "@/lib/internal-auth";
 import { jsonError } from "@/lib/crud";
 
 const DEFAULT_LIMIT = 10;
 const MAX_LIMIT = 50;
 
 export async function GET(req: Request) {
-  const userId = await getAuthedUserId(req);
-  if (!userId) return jsonError(401, "unauthorized");
+  let authed;
+  try { authed = await getAuthedUserId(req); }
+  catch (e) { if (e instanceof MissingInternalSecretError) return jsonError(500, "internal auth misconfigured"); throw e; }
+  if (!authed) return jsonError(401, "unauthorized");
+  const userId = authed.userId;
 
   const url = new URL(req.url);
   const q = (url.searchParams.get("q") ?? "").trim();

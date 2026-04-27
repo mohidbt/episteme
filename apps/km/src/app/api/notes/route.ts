@@ -2,14 +2,21 @@ import { and, asc, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { notes } from "@episteme/db/schema";
 import { libraries } from "@episteme/db/schema";
-import { getAuthedUserId } from "@/lib/internal-auth";
+import { getAuthedUserId, MissingInternalSecretError } from "@/lib/internal-auth";
 import { noteCreateSchema } from "@/lib/validators";
 import { jsonError, requireOwned, resolveNoteSlug } from "@/lib/crud";
 import { resolveUnresolvedNoteLinks, createRevisionIfNeeded } from "@episteme/notes-core";
 
+function misconfiguredResponse(): Response {
+  return jsonError(500, "internal auth misconfigured");
+}
+
 export async function GET(req: Request) {
-  const userId = await getAuthedUserId(req);
-  if (!userId) return jsonError(401, "unauthorized");
+  let authed;
+  try { authed = await getAuthedUserId(req); }
+  catch (e) { if (e instanceof MissingInternalSecretError) return misconfiguredResponse(); throw e; }
+  if (!authed) return jsonError(401, "unauthorized");
+  const userId = authed.userId;
   const url = new URL(req.url);
   const libraryIdStr = url.searchParams.get("libraryId");
   if (!libraryIdStr) return jsonError(400, "validation", { message: "libraryId required" });
@@ -38,14 +45,22 @@ async function resolveDefaultLibraryId(userId: string): Promise<number | null> {
 
 export async function POST(req: Request) {
   const rawBody = await req.text();
-  const userId = await getAuthedUserId(req, rawBody);
-  if (!userId) return jsonError(401, "unauthorized");
+  let authed;
+  try { authed = await getAuthedUserId(req, rawBody); }
+  catch (e) { if (e instanceof MissingInternalSecretError) return misconfiguredResponse(); throw e; }
+  if (!authed) return jsonError(401, "unauthorized");
+  const userId = authed.userId;
   let body: Record<string, unknown> | null = null;
   try { body = JSON.parse(rawBody); } catch { /* leaves body=null */ }
   // Agent tools (HMAC path) often omit `libraryId`. Resolve user's default
-  // library on the server in that case. Per Phase 1.3b decision (notebookId is
-  // ignored silently — column doesn't exist on the schema yet).
-  if (body && typeof body === "object" && body.libraryId == null) {
+  // library on the server only for HMAC-authed requests; cookie-authed users
+  // with a missing libraryId still get the original 400 validation error.
+  if (
+    authed.viaHmac &&
+    body &&
+    typeof body === "object" &&
+    body.libraryId == null
+  ) {
     const defaultLibraryId = await resolveDefaultLibraryId(userId);
     if (defaultLibraryId == null) {
       return jsonError(400, "no_library", {
@@ -54,8 +69,9 @@ export async function POST(req: Request) {
     }
     body.libraryId = defaultLibraryId;
   }
+  // notebookId is not in the schema yet; strip silently for forward compat
+  // (deliberate — applies to both auth paths so clients can future-proof).
   if (body && typeof body === "object" && "notebookId" in body) {
-    // notebookId is not in the schema yet; ignore silently for forward compat.
     delete (body as Record<string, unknown>).notebookId;
   }
   const parsed = noteCreateSchema.safeParse(body);

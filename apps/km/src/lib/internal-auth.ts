@@ -14,10 +14,24 @@ import { getUserIdFromRequest } from "./auth";
 
 const FRESHNESS_SECONDS = 60;
 
+export class MissingInternalSecretError extends Error {
+  constructor() {
+    super("INHALE_INTERNAL_SECRET is not configured");
+    this.name = "MissingInternalSecretError";
+  }
+}
+
 export type InternalAuthResult =
   | { ok: true; userId: string }
   | { ok: false; reason: string };
 
+export type AuthedUser = { userId: string; viaHmac: boolean };
+
+/**
+ * Verify an HMAC-signed internal request.
+ * Throws `MissingInternalSecretError` if the server is misconfigured (no secret).
+ * Returns ok=false for any other auth failure (bad sig, stale, missing headers).
+ */
 export async function verifyInternalAuth(
   req: Request,
   rawBody: string,
@@ -34,13 +48,15 @@ export async function verifyInternalAuth(
     return { ok: false, reason: "stale" };
   }
   const secret = process.env.INHALE_INTERNAL_SECRET;
-  if (!secret) return { ok: false, reason: "secret not configured" };
+  if (!secret) {
+    // Misconfiguration — caller should surface this as 500, not 401.
+    console.error("[internal-auth] INHALE_INTERNAL_SECRET is not set");
+    throw new MissingInternalSecretError();
+  }
 
   const url = new URL(req.url);
-  // Use path + search to match the FastAPI verifier's `request.url.path`?
-  // FastAPI's `request.url.path` does NOT include query string. The Python
-  // signer signs only the path passed to it, but our outbound `km_get` passes
-  // the full path WITH query (e.g. "/api/notes/search?q=foo&k=10"). Match that.
+  // Outbound `km_http.py` signs the path INCLUDING query string, so we match
+  // by signing `pathname + search`. The Python inbound verifier does the same.
   const signedPath = url.pathname + url.search;
 
   const expected = createHmac("sha256", secret)
@@ -57,7 +73,11 @@ export async function verifyInternalAuth(
 
 /**
  * Resolve the authed user via either Better Auth session OR a valid HMAC.
- * Returns null on failure. Callers should `if (!userId) return jsonError(401, "unauthorized")`.
+ * Returns null on auth failure. Callers should `if (!authed) return jsonError(401)`.
+ *
+ * Throws `MissingInternalSecretError` if INHALE_INTERNAL_SECRET is unset on an
+ * HMAC-headered request — the route handler should map that to a 500 response
+ * (not a misleading 401), since the server itself is misconfigured.
  *
  * For HMAC requests, pass the already-read raw body string. For session
  * requests, body is unused.
@@ -65,11 +85,12 @@ export async function verifyInternalAuth(
 export async function getAuthedUserId(
   req: Request,
   rawBody = "",
-): Promise<string | null> {
+): Promise<AuthedUser | null> {
   // Fast path: HMAC headers present -> verify HMAC only.
   if (req.headers.get("x-inhale-sig")) {
     const result = await verifyInternalAuth(req, rawBody);
-    return result.ok ? result.userId : null;
+    return result.ok ? { userId: result.userId, viaHmac: true } : null;
   }
-  return await getUserIdFromRequest(req);
+  const userId = await getUserIdFromRequest(req);
+  return userId ? { userId, viaHmac: false } : null;
 }
