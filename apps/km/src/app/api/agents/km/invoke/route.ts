@@ -4,9 +4,8 @@ import { getSessionInfo } from "@/lib/auth";
 import { signRequest } from "@/lib/agents/sign-request";
 import { tapAgentEvents } from "@/lib/agents/thread-lifecycle";
 import {
-  createThread,
-  getThread,
   updateThread,
+  upsertThreadOnInvoke,
   type AgentThreadStatus,
 } from "@/lib/threads";
 
@@ -39,26 +38,14 @@ export async function POST(req: Request) {
   const userId = session.userId;
   const threadId = body.thread_id;
 
-  // Upsert thread row before kicking off upstream call.
+  // Single-roundtrip UPSERT before kicking off upstream call.
   try {
-    const existing = await getThread(userId, threadId);
-    if (existing) {
-      await updateThread(userId, threadId, {
-        status: "running",
-        lastMessageAt: new Date(),
-      });
-    } else {
-      await createThread({
-        userId,
-        threadId,
-        skill: body.skill ?? null,
-        modelOverride: body.model_override ?? null,
-      });
-      await updateThread(userId, threadId, {
-        status: "running",
-        lastMessageAt: new Date(),
-      });
-    }
+    await upsertThreadOnInvoke({
+      userId,
+      threadId,
+      skill: body.skill ?? null,
+      modelOverride: body.model_override ?? null,
+    });
   } catch {
     return Response.json({ error: "db_error" }, { status: 500 });
   }

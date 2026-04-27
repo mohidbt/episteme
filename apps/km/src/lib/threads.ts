@@ -70,6 +70,46 @@ export async function createThread(input: CreateThreadInput): Promise<AgentThrea
   return row;
 }
 
+export interface UpsertThreadOnInvokeInput {
+  userId: string;
+  threadId: string;
+  skill?: string | null;
+  modelOverride?: string | null;
+}
+
+/**
+ * Single-roundtrip UPSERT for the invoke lifecycle.
+ *
+ * - INSERT (new row): set status=running, lastMessageAt=now, skill, modelOverride.
+ * - ON CONFLICT (user_id, thread_id): only bump status=running, lastMessageAt=now,
+ *   updatedAt=now. Preserve title/skill/modelOverride/createdAt on existing rows.
+ */
+export async function upsertThreadOnInvoke(
+  input: UpsertThreadOnInvokeInput,
+): Promise<AgentThreadRow> {
+  const now = new Date();
+  const [row] = await db
+    .insert(agentThreads)
+    .values({
+      userId: input.userId,
+      threadId: input.threadId,
+      skill: input.skill ?? null,
+      modelOverride: input.modelOverride ?? null,
+      status: "running",
+      lastMessageAt: now,
+    })
+    .onConflictDoUpdate({
+      target: [agentThreads.userId, agentThreads.threadId],
+      set: {
+        status: "running",
+        lastMessageAt: now,
+        updatedAt: now,
+      },
+    })
+    .returning();
+  return row;
+}
+
 export async function updateThread(
   userId: string,
   threadId: string,
