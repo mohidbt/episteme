@@ -18,6 +18,8 @@ agent's working-file context (scratch files, temp notes).  The domain
 backends from Task 3 (NotesBackend, PdfsBackend, etc.) are accessed through
 ALL_TOOLS — they are tool-based adapters, not filesystem backends.
 """
+import logging
+
 from deepagents import CompiledSubAgent, SubAgent, create_deep_agent
 from langchain_core.tools import BaseTool
 from langgraph.graph.state import CompiledStateGraph
@@ -25,6 +27,8 @@ from langgraph.graph.state import CompiledStateGraph
 from skills import SKILLS_ROOT, SkillSpec, load_skills
 from subagents import build_researcher, build_synthesizer, build_verifier
 from tools import ALL_TOOLS
+
+logger = logging.getLogger(__name__)
 
 
 def _apply_rule(
@@ -129,12 +133,24 @@ def _select_subagents(
         "synthesizer": build_synthesizer,
         "verifier": build_verifier,
     }
+    # Build a name → owning-skill index so warnings can name the offender.
+    name_to_skill: dict[str, str] = {}
+    for skill in loaded_skills:
+        for sub_name in skill.subagents:
+            name_to_skill.setdefault(sub_name, skill.name)
+
     out: list[SubAgent | CompiledSubAgent] = []
     for name in wanted:
         builder = builders.get(name)
         if builder is None:
-            # Unknown subagent name in a skill frontmatter — skip silently;
-            # skills validate their own contracts elsewhere.
+            # Unknown subagent name in a skill frontmatter — surface loudly so
+            # misconfigured frontmatter is visible in logs (was previously
+            # silent; see fix #6 / tech-debt §1.3b-T6-4).
+            logger.warning(
+                "skill %r references unknown subagent %r; ignoring",
+                name_to_skill.get(name, "<unknown>"),
+                name,
+            )
             continue
         out.append(builder(available_tools=pool))
     return out

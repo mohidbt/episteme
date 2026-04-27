@@ -244,3 +244,41 @@ def test_subagents_empty_when_no_skills():
     from km_agent import _select_subagents  # noqa: PLC0415
 
     assert _select_subagents([]) == []
+
+
+def test_unknown_subagent_in_skill_logs_warning(caplog):
+    """A skill listing a nonexistent subagent name must emit a WARNING log.
+
+    Today's behavior silently dropped unknown names. Misconfigured skill
+    frontmatter should be loud — a warning surfaces it without crashing the
+    agent build (other valid subagents still resolve).
+    """
+    import logging
+    from pathlib import Path
+
+    from km_agent import _select_subagents  # noqa: PLC0415
+    from skills import SkillSpec  # noqa: PLC0415
+
+    bogus = SkillSpec(
+        name="bogus-skill",
+        description="fixture",
+        tools=[],
+        subagents=["does-not-exist", "researcher"],
+        require_approval=[],
+        path=Path("/dev/null"),
+    )
+    with caplog.at_level(logging.WARNING, logger="km_agent"):
+        out = _select_subagents([bogus])
+
+    # researcher still resolves; unknown is dropped.
+    names = [s["name"] for s in out]
+    assert names == ["researcher"]
+
+    # Warning must mention skill name + bogus subagent name.
+    matched = [
+        rec for rec in caplog.records
+        if rec.levelno == logging.WARNING
+        and "does-not-exist" in rec.getMessage()
+        and "bogus-skill" in rec.getMessage()
+    ]
+    assert matched, f"expected WARNING about unknown subagent; got: {caplog.records!r}"
