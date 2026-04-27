@@ -11,6 +11,7 @@ Graph:
 """
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable, Sequence
 from typing import Annotated, Any, Literal, TypedDict
 
@@ -20,9 +21,14 @@ from langchain_core.tools import BaseTool
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
 
+logger = logging.getLogger(__name__)
+
 VERIFIER_TOOL_NAMES: list[str] = ["search_notes", "list_references"]
 
 _MAX_ATTEMPTS = 3
+
+# Module-level flag to ensure the no-score_fn warning fires once per process.
+_warned_no_score_fn: bool = False
 
 
 class VerifierState(TypedDict):
@@ -112,14 +118,32 @@ def build_verifier_graph(
     return g.compile()
 
 
-def build_verifier(*, available_tools: Sequence[BaseTool]) -> CompiledSubAgent:
+def build_verifier(
+    *,
+    available_tools: Sequence[BaseTool],
+    score_fn: Callable[[VerifierState], dict[str, Any]] | None = None,
+) -> CompiledSubAgent:
     """Build the verifier as a CompiledSubAgent for deepagents.
 
     `available_tools` is currently only used to wire the production
     fetch closure; the test-friendly `build_verifier_graph` is the seam
     the LangGraph tests target. Tool name allow-list is preserved for
     documentation + audit symmetry with the other subagents.
+
+    `score_fn` should be supplied by production callers wiring the real
+    LLM-backed scorer. When omitted, a one-shot warning is logged and the
+    stub `_default_score` is used — which always returns 'unsupported',
+    causing every claim to exhaust 3 attempts.
     """
+    global _warned_no_score_fn
+    if score_fn is None and not _warned_no_score_fn:
+        logger.warning(
+            "verifier built without score_fn — production verdicts will "
+            "always be 'unsupported'; pass score_fn from caller "
+            "(LLM-backed scorer) when wiring real subagent"
+        )
+        _warned_no_score_fn = True
+
     allow = set(VERIFIER_TOOL_NAMES)
     domain_tools = {t.name: t for t in available_tools if t.name in allow}
 
@@ -144,7 +168,7 @@ def build_verifier(*, available_tools: Sequence[BaseTool]) -> CompiledSubAgent:
             "attempts": state["attempts"] + 1,
         }
 
-    graph = build_verifier_graph(fetch_fn=_fetch)
+    graph = build_verifier_graph(fetch_fn=_fetch, score_fn=score_fn)
     return {
         "name": "verifier",
         "description": (

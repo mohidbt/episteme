@@ -11,9 +11,13 @@ scoring function that returns deterministic verdicts.
 """
 from __future__ import annotations
 
-import pytest
+import logging
 
-from subagents.verifier import VerifierState, build_verifier_graph
+import pytest
+from langchain_core.tools import tool
+
+import subagents.verifier as verifier_mod
+from subagents.verifier import VERIFIER_TOOL_NAMES, VerifierState, build_verifier, build_verifier_graph
 
 
 def _identity_fetch(state: VerifierState) -> dict:
@@ -85,3 +89,57 @@ async def test_verifier_emits_messages_summary():
     # The final message content carries the verdict for the parent agent.
     content = final.content if hasattr(final, "content") else final.get("content", "")
     assert "supported" in content.lower()
+
+
+# ------------------------------------------- score_fn warning
+
+
+@pytest.mark.asyncio
+async def test_build_verifier_warns_and_falls_back_when_score_fn_missing(caplog):
+    """When `score_fn` is None, log a one-shot warning and fall back to the
+    stub scorer (which always returns 'unsupported' → 3 attempts → END).
+    """
+    # Reset the module-level dedupe flag so the warning fires for this test.
+    verifier_mod._warned_no_score_fn = False  # type: ignore[attr-defined]
+
+    @tool("search_notes")
+    async def stub_search_notes(query: str) -> list[dict]:  # noqa: ARG001
+        """Stub."""
+        return []
+
+    with caplog.at_level(logging.WARNING, logger=verifier_mod.__name__):
+        spec = build_verifier(available_tools=[stub_search_notes])
+
+    assert any(
+        "score_fn" in rec.message and "unsupported" in rec.message
+        for rec in caplog.records
+    ), f"expected warning about missing score_fn, got: {[r.message for r in caplog.records]}"
+
+    runnable = spec["runnable"]
+    result = await runnable.ainvoke({
+        "claim": "x",
+        "candidate_sources": [],
+        "verdict": "pending",
+        "attempts": 0,
+        "messages": [],
+    })
+    assert result["verdict"] == "unsupported"
+    assert result["attempts"] == 3
+
+
+def test_build_verifier_warns_only_once_per_process(caplog):
+    """The dedupe flag must suppress the warning on subsequent calls."""
+    verifier_mod._warned_no_score_fn = False  # type: ignore[attr-defined]
+
+    with caplog.at_level(logging.WARNING, logger=verifier_mod.__name__):
+        build_verifier(available_tools=[])
+        first_count = sum(
+            1 for r in caplog.records if "score_fn" in r.message
+        )
+        build_verifier(available_tools=[])
+        second_count = sum(
+            1 for r in caplog.records if "score_fn" in r.message
+        )
+
+    assert first_count == 1
+    assert second_count == 1, "warning must not repeat on subsequent calls"
