@@ -14,7 +14,7 @@ from km_agent import build_km_agent
 from checkpointer import get_saver
 from skills import load_skills
 from store import get_store
-from lib.config_cache import GUEST_USER_ID, load_user_config, save_user_config
+from lib.config_cache import _DEFAULTS, GUEST_USER_ID, load_user_config, save_user_config
 from lib.openrouter_model import model_for
 from lib.sse_events import format_sse, format_typed
 
@@ -106,7 +106,7 @@ async def invoke(req: Request, auth: InternalAuthDep):
     agent = build_km_agent(
         user_id=user_id,
         thread_id=body["thread_id"],
-        model=model_for(cfg["modelPreference"], auth["llm_key"]),
+        model=model_for(cfg.get("modelPreference", _DEFAULTS["modelPreference"]), auth["llm_key"]),
         enabled_skills=cfg.get("enabledSkills", []),
         approval_rules=cfg.get("approvalRules", {}),
         store=get_store(),
@@ -140,7 +140,7 @@ async def resume(req: Request, auth: InternalAuthDep):
     agent = build_km_agent(
         user_id=user_id,
         thread_id=body["thread_id"],
-        model=model_for(cfg["modelPreference"], auth["llm_key"]),
+        model=model_for(cfg.get("modelPreference", _DEFAULTS["modelPreference"]), auth["llm_key"]),
         enabled_skills=cfg.get("enabledSkills", []),
         approval_rules=cfg.get("approvalRules", {}),
         store=get_store(),

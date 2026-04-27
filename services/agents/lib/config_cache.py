@@ -39,14 +39,27 @@ def load_user_config(user_id: str) -> dict:
     """Return the stored config for user_id, or defaults if not set.
 
     Guests always get the hardcoded reduced config — any persisted entry is ignored.
+
+    Defense in depth: if a persisted entry is partial (missing keys), defaults
+    are filled at read time so callers can rely on every key in _DEFAULTS being
+    present.
     """
     if user_id == GUEST_USER_ID:
         return _GUEST_CONFIG.copy()
     with _LOCK:
-        return _CACHE.get(user_id, _DEFAULTS.copy())
+        existing = _CACHE.get(user_id, {})
+        return {**_DEFAULTS, **existing}
 
 
 def save_user_config(user_id: str, body: dict) -> None:
-    """Persist body as the config for user_id (replaces any prior value)."""
+    """Merge body over the existing config (or defaults if no record).
+
+    Partial PATCHes (e.g. just {enabledSkills: [...]}) must not wipe other keys —
+    callers downstream rely on modelPreference/approvalRules being present.
+    Guests are a no-op: their config is hardcoded and load ignores _CACHE.
+    """
+    if user_id == GUEST_USER_ID:
+        return
     with _LOCK:
-        _CACHE[user_id] = body
+        existing = _CACHE.get(user_id, {})
+        _CACHE[user_id] = {**_DEFAULTS, **existing, **body}
