@@ -1,0 +1,50 @@
+[
+  { "type": "skill_load", "name": "deep-read" },
+  { "type": "thinking", "id": "th1", "step_id": "plan", "delta": "I'll outline " },
+  { "type": "thinking", "id": "th1", "step_id": "plan", "delta": "the steps." },
+  {
+    "type": "todos",
+    "items": [
+      { "id": "t1", "content": "Read paper", "status": "in_progress" },
+      { "id": "t2", "content": "Summarize", "status": "pending" }
+    ]
+  },
+  {
+    "type": "tool_call",
+    "id": "tc1",
+    "name": "fetch_paper",
+    "args": { "doi": "10.1/abc" },
+    "state": "input-available"
+  },
+  {
+    "type": "tool_result",
+    "id": "tc1",
+    "output": { "title": "Attention Is All You Need" },
+    "state": "output-available"
+  },
+  {
+    "type": "sources",
+    "message_id": "msg-1",
+    "citations": [
+      { "chunk_id": "c1", "title": "Attention Is All You Need", "page": 1 },
+      { "chunk_id": "c2", "title": "Attention Is All You Need", "page": 3 }
+    ]
+  },
+  { "type": "text", "id": "r1", "delta": "The paper introduces the Transformer." },
+  {
+    "type": "todos",
+    "items": [
+      { "id": "t1", "content": "Read paper", "status": "completed" },
+      { "id": "t2", "content": "Summarize", "status": "completed" }
+    ]
+  },
+  {
+    "type": "file_diff",
+    "note_id": "n-1",
+    "before_hash": "aaa",
+    "after_hash": "bbb",
+    "diff": "@@ -1 +1,2 @@\n+## Summary\n"
+  },
+  { "type": "suggestion", "items": ["Read related work", "Compare to RNN"] },
+  { "type": "done", "thread_id": "t-deep-read" }
+]

@@ -1,0 +1,5 @@
+[
+  { "type": "text", "id": "r1", "delta": "Hello, " },
+  { "type": "text", "id": "r1", "delta": "world!" },
+  { "type": "done", "thread_id": "t-text-only" }
+]

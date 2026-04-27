@@ -1,0 +1,18 @@
+[
+  { "type": "text", "id": "r1", "delta": "Let me search for that." },
+  {
+    "type": "tool_call",
+    "id": "tc1",
+    "name": "rag_search",
+    "args": { "query": "transformers" },
+    "state": "input-available"
+  },
+  {
+    "type": "tool_result",
+    "id": "tc1",
+    "output": { "hits": 2, "chunks": ["c1", "c2"] },
+    "state": "output-available"
+  },
+  { "type": "text", "id": "r2", "delta": "Found 2 results." },
+  { "type": "done", "thread_id": "t-tool-call" }
+]
