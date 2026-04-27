@@ -4,6 +4,7 @@ import { getUserPreferences } from "@/lib/preferences-server";
 import { Sidebar } from "@/components/Sidebar";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { AnonAutoSignIn } from "@/components/AnonAutoSignIn";
+import { AgentBall } from "@/components/agent/AgentBall";
 
 export default async function AppLayout({ children }: { children: ReactNode }) {
   const session = await getCurrentSession();
@@ -19,6 +20,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
       >
         {children}
       </main>
+      <AgentBall userId={session.userId} />
     </SidebarProvider>
   );
 }
