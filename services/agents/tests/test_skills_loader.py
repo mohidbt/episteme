@@ -122,6 +122,12 @@ def test_load_skills_missing_required_field_raises(tmp_path, monkeypatch):
 
 
 def test_load_skills_lazy_body_load(tmp_path, monkeypatch):
+    """Body must NOT be slurped during load_skills(); only on body() call.
+
+    We prove laziness by counting Path.read_text invocations: load_skills()
+    reads exactly once (frontmatter parse), body() adds one more read, and
+    the second body() call is a cache hit (no new read).
+    """
     p = _write_skill(
         tmp_path,
         "lazy",
@@ -131,15 +137,35 @@ def test_load_skills_lazy_body_load(tmp_path, monkeypatch):
     from skills import load_skills  # noqa: PLC0415
 
     monkeypatch.setattr("skills.SKILLS_ROOT", tmp_path)
+
+    # Spy on Path.read_text — count invocations against our SKILL.md path.
+    real_read_text = Path.read_text
+    counter = {"n": 0}
+
+    def counting_read_text(self, *args, **kwargs):
+        if self == p:
+            counter["n"] += 1
+        return real_read_text(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", counting_read_text)
+
     [s] = load_skills(only=["lazy"])
     assert s.path == p
+    # Frontmatter parse reads the file exactly once.
+    assert counter["n"] == 1, f"expected 1 read after load_skills, got {counter['n']}"
+
     body = s.body()
     assert "Lazy body" in body
     assert "Secret instructions" in body
     # Frontmatter should not be in body
     assert "name: lazy" not in body
-    # Cached
-    assert s.body() is body or s.body() == body
+    # First body() call triggers a read.
+    assert counter["n"] == 2, f"expected 2 reads after first body(), got {counter['n']}"
+
+    # Second body() call must be a cache hit — no new read.
+    body2 = s.body()
+    assert body2 == body
+    assert counter["n"] == 2, f"expected cached body(), got {counter['n']} reads"
 
 
 def test_load_skills_skips_non_skill_dirs(tmp_path, monkeypatch):
