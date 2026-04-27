@@ -5,10 +5,13 @@ plus the user's library + notes lookup. NEVER any write tools.
 """
 from __future__ import annotations
 
+import logging
 from collections.abc import Sequence
 
 from deepagents import SubAgent
 from langchain_core.tools import BaseTool
+
+logger = logging.getLogger(__name__)
 
 RESEARCHER_TOOL_NAMES: list[str] = [
     "arxiv_search",
@@ -18,6 +21,10 @@ RESEARCHER_TOOL_NAMES: list[str] = [
     "list_references",
     "search_notes",
 ]
+
+# MCP tools are external integrations whose absence is expected; only
+# `search_notes` is part of the local KM contract and considered required.
+_REQUIRED_TOOLS: frozenset[str] = frozenset({"search_notes"})
 
 _DESCRIPTION = (
     "Fetches external literature + cross-references the user's library. Never writes."
@@ -47,6 +54,12 @@ def build_researcher(*, available_tools: Sequence[BaseTool]) -> SubAgent:
     """
     allow = set(RESEARCHER_TOOL_NAMES)
     tools = [t for t in available_tools if t.name in allow]
+    present = {t.name for t in tools}
+    for name in _REQUIRED_TOOLS - present:
+        logger.info(
+            f"researcher built without required tool {name!r}; "
+            f"subagent will fail to call this tool at runtime"
+        )
     return {
         "name": "researcher",
         "description": _DESCRIPTION,

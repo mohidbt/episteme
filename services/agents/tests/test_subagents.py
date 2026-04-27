@@ -10,6 +10,8 @@ produces the right shape (deepagents `SubAgent` / `CompiledSubAgent` TypedDict).
 """
 from __future__ import annotations
 
+import logging
+
 from langchain_core.tools import tool
 
 from subagents import (
@@ -108,3 +110,74 @@ def test_build_verifier_returns_compiled_subagent():
 
 def test_all_subagents_exports_three_names():
     assert ALL_SUBAGENTS == ["researcher", "synthesizer", "verifier"]
+
+
+# ---------------------------------------------------------------- required-tool logs
+
+
+def test_build_researcher_logs_when_search_notes_missing(caplog):
+    """search_notes is the only required tool for the researcher; MCP tools
+    are external and may legitimately be absent."""
+    import subagents.researcher as researcher_mod
+
+    # Provide every allow-listed tool EXCEPT search_notes.
+    other = [n for n in RESEARCHER_TOOL_NAMES if n != "search_notes"]
+    tools = _stub_tools(other)
+
+    with caplog.at_level(logging.INFO, logger=researcher_mod.__name__):
+        build_researcher(available_tools=tools)
+
+    assert any(
+        "search_notes" in r.message and "researcher" in r.message
+        for r in caplog.records
+    ), f"expected info log re missing search_notes, got: {[r.message for r in caplog.records]}"
+
+
+def test_build_researcher_no_log_when_required_tools_present(caplog):
+    import subagents.researcher as researcher_mod
+
+    tools = _stub_tools(RESEARCHER_TOOL_NAMES)
+    with caplog.at_level(logging.INFO, logger=researcher_mod.__name__):
+        build_researcher(available_tools=tools)
+
+    assert not any(
+        "without required tool" in r.message for r in caplog.records
+    )
+
+
+def test_build_synthesizer_logs_when_required_tool_missing(caplog):
+    """synthesizer requires both search_notes AND read_note."""
+    import subagents.synthesizer as synth_mod
+
+    # Provide only search_notes; read_note missing.
+    tools = _stub_tools(["search_notes"])
+    with caplog.at_level(logging.INFO, logger=synth_mod.__name__):
+        build_synthesizer(available_tools=tools)
+
+    assert any(
+        "read_note" in r.message and "synthesizer" in r.message
+        for r in caplog.records
+    ), f"expected info log re missing read_note, got: {[r.message for r in caplog.records]}"
+
+
+def test_build_synthesizer_logs_each_missing_required_tool(caplog):
+    import subagents.synthesizer as synth_mod
+
+    with caplog.at_level(logging.INFO, logger=synth_mod.__name__):
+        build_synthesizer(available_tools=[])
+
+    msgs = [r.message for r in caplog.records]
+    assert any("search_notes" in m for m in msgs)
+    assert any("read_note" in m for m in msgs)
+
+
+def test_build_synthesizer_no_log_when_required_tools_present(caplog):
+    import subagents.synthesizer as synth_mod
+
+    tools = _stub_tools(SYNTHESIZER_TOOL_NAMES)
+    with caplog.at_level(logging.INFO, logger=synth_mod.__name__):
+        build_synthesizer(available_tools=tools)
+
+    assert not any(
+        "without required tool" in r.message for r in caplog.records
+    )

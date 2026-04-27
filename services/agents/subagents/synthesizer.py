@@ -7,12 +7,18 @@ default stack — no domain write tools are required (or permitted).
 """
 from __future__ import annotations
 
+import logging
 from collections.abc import Sequence
 
 from deepagents import SubAgent
 from langchain_core.tools import BaseTool
 
+logger = logging.getLogger(__name__)
+
 SYNTHESIZER_TOOL_NAMES: list[str] = ["search_notes", "read_note"]
+
+# Both read tools are essential — losing either silently breaks synthesis.
+_REQUIRED_TOOLS: frozenset[str] = frozenset({"search_notes", "read_note"})
 
 _DESCRIPTION = (
     "Drafts a cited markdown synthesis from the user's notes + PDFs into "
@@ -47,6 +53,12 @@ def build_synthesizer(*, available_tools: Sequence[BaseTool]) -> SubAgent:
     """Build the synthesizer SubAgent spec."""
     allow = set(SYNTHESIZER_TOOL_NAMES)
     tools = [t for t in available_tools if t.name in allow]
+    present = {t.name for t in tools}
+    for name in _REQUIRED_TOOLS - present:
+        logger.info(
+            f"synthesizer built without required tool {name!r}; "
+            f"subagent will fail to call this tool at runtime"
+        )
     return {
         "name": "synthesizer",
         "description": _DESCRIPTION,
