@@ -121,6 +121,16 @@ def build_km_agent(
 
     Returns:
         Compiled StateGraph ready to invoke.
+
+    Note:
+        deepagents `SkillsMiddleware` walks ``SKILLS_ROOT`` and advertises
+        **every** on-disk ``SKILL.md`` description in the system prompt
+        regardless of ``enabled_skills``. Tool filtering
+        (``_filter_tools_for_skills``) prevents disabled skills' tools from
+        being callable, but the disabled skills' descriptions still appear
+        in-context. Long-term: scope advertisement to enabled skills only —
+        see followup §1.3b-T5-1 in
+        ``docs/superpowers/plans/phases/phase-1.3b-agents.md`` tech-debt.
     """
     loaded = load_skills(only=enabled_skills) if enabled_skills else []
     tools = _filter_tools_for_skills(list(ALL_TOOLS), loaded_skills=loaded)
