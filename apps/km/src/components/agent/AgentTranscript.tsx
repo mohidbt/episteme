@@ -46,7 +46,20 @@ import {
   ToolOutput,
 } from "@/components/ai-elements/tool";
 import { Suggestions, Suggestion } from "@/components/ai-elements/suggestion";
-import { Button } from "@/components/ui/button";
+import {
+  Sources,
+  SourcesTrigger,
+  SourcesContent,
+  Source,
+} from "@/components/ai-elements/sources";
+import {
+  Confirmation,
+  ConfirmationRequest,
+  ConfirmationAccepted,
+  ConfirmationRejected,
+  ConfirmationActions,
+  ConfirmationAction,
+} from "@/components/ai-elements/confirmation";
 import { FileDiffCard } from "./FileDiffCard";
 import { SkillLoadCard } from "./SkillLoadCard";
 
@@ -206,20 +219,22 @@ export function AgentTranscript({
             </div>
           ) : null}
           {allCitations.length > 0 ? (
-            <details className="text-xs" data-testid="all-citations">
-              <summary className="cursor-pointer text-muted-foreground">
-                {allCitations.length} citation
-                {allCitations.length === 1 ? "" : "s"}
-              </summary>
-              <ul className="mt-1 list-disc pl-5">
-                {allCitations.map((c, i) => (
-                  <li key={`${c.chunk_id}-${i}`}>
-                    {c.title ?? c.chunk_id}
-                    {c.page ? ` · p${c.page}` : ""}
-                  </li>
-                ))}
-              </ul>
-            </details>
+            <div data-testid="all-citations">
+              <Sources>
+                <SourcesTrigger count={allCitations.length} />
+                <SourcesContent>
+                  {allCitations.map((c, i) => (
+                    <Source
+                      key={`${c.chunk_id}-${i}`}
+                      href={c.url ?? "#"}
+                      title={`${c.title ?? c.chunk_id}${
+                        c.page ? ` · p${c.page}` : ""
+                      }`}
+                    />
+                  ))}
+                </SourcesContent>
+              </Sources>
+            </div>
           ) : null}
           {streaming ? (
             <div className="text-muted-foreground text-xs" data-testid="streaming-indicator">
@@ -404,42 +419,59 @@ function InterruptCardView({ card, threadId }: InterruptCardViewProps) {
     [card.id, threadId, decided, submitting],
   );
 
+  // Confirmation is driven from our local reducer/interrupt state, not the AI
+  // SDK runtime. We map our pre/post-decision flags onto the AI SDK shape:
+  //   undecided  → state="approval-requested", approval={id}
+  //   approve    → state="approval-responded", approval={id, approved:true}
+  //   reject     → state="output-denied",      approval={id, approved:false}
+  const approval =
+    decided === null
+      ? { id: card.id }
+      : { id: card.id, approved: decided === "approve" };
+  const confState: "approval-requested" | "approval-responded" | "output-denied" =
+    decided === null
+      ? "approval-requested"
+      : decided === "approve"
+        ? "approval-responded"
+        : "output-denied";
+
   return (
-    <div
-      data-testid="card-interrupt"
-      className="rounded-md border border-amber-500/60 bg-amber-50/40 p-3 text-xs space-y-2 dark:bg-amber-950/20"
-    >
-      <div className="font-medium">
-        Approval required: <span className="font-mono">{card.tool}</span>
-      </div>
-      <pre className="whitespace-pre-wrap break-words font-mono text-[11px] rounded bg-muted/40 p-2 max-h-48 overflow-auto">
-        {JSON.stringify(card.args, null, 2)}
-      </pre>
-      {decided ? (
-        <div className="text-muted-foreground" data-testid="interrupt-decided">
-          {decided === "approve" ? "Approved" : "Rejected"}
-        </div>
-      ) : (
-        <div className="flex gap-2">
-          <Button
-            size="sm"
-            data-action="approve"
-            disabled={submitting}
-            onClick={() => decide("approve")}
-          >
-            Approve
-          </Button>
-          <Button
-            size="sm"
+    <div data-testid="card-interrupt">
+      <Confirmation approval={approval} state={confState}>
+        <ConfirmationRequest>
+          <div className="space-y-2 text-xs">
+            <div className="font-medium">
+              Approval required: <span className="font-mono">{card.tool}</span>
+            </div>
+            <pre className="whitespace-pre-wrap break-words font-mono text-[11px] rounded bg-muted/40 p-2 max-h-48 overflow-auto">
+              {JSON.stringify(card.args, null, 2)}
+            </pre>
+          </div>
+        </ConfirmationRequest>
+        <ConfirmationAccepted>
+          <span data-testid="interrupt-decided">Approved</span>
+        </ConfirmationAccepted>
+        <ConfirmationRejected>
+          <span data-testid="interrupt-decided">Rejected</span>
+        </ConfirmationRejected>
+        <ConfirmationActions>
+          <ConfirmationAction
             variant="outline"
             data-action="reject"
             disabled={submitting}
             onClick={() => decide("reject")}
           >
             Reject
-          </Button>
-        </div>
-      )}
+          </ConfirmationAction>
+          <ConfirmationAction
+            data-action="approve"
+            disabled={submitting}
+            onClick={() => decide("approve")}
+          >
+            Approve
+          </ConfirmationAction>
+        </ConfirmationActions>
+      </Confirmation>
     </div>
   );
 }
