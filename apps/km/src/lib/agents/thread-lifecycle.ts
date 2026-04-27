@@ -66,7 +66,7 @@ async function safeCall(
 ): Promise<void> {
   try {
     await fn(status);
-  } catch {
-    /* swallow — lifecycle updates must never break the stream */
+  } catch (err) {
+    console.warn("[thread-lifecycle] status update failed", status, err);
   }
 }

@@ -85,8 +85,8 @@ export async function POST(req: Request) {
       ...(status === "idle" || status === "error"
         ? { lastMessageAt: new Date() }
         : {}),
-    }).catch(() => {
-      /* swallow — status drift is acceptable; stream must not break */
+    }).catch((err) => {
+      console.warn("[invoke] thread status update failed", status, err);
     });
   };
 
