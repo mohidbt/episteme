@@ -5,7 +5,7 @@ Event format: event: <type>\ndata: <json>\n\n  (typed SSE per format_sse helper)
 """
 import logging
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from langgraph.types import Command
 
@@ -13,9 +13,21 @@ from deps.auth import InternalAuthDep
 from km_agent import build_km_agent
 from checkpointer import get_saver
 from store import get_store
-from lib.config_cache import load_user_config, save_user_config
+from lib.config_cache import GUEST_USER_ID, load_user_config, save_user_config
 from lib.openrouter_model import model_for
 from lib.sse_events import format_sse, format_typed
+
+_GUEST_FORBIDDEN = {"error": "guests cannot use agents", "code": "guest_forbidden"}
+
+
+def _reject_guest(user_id: str) -> None:
+    """Raise 403 if the request is from the guest sentinel.
+
+    Guests are restricted to the /complete and /chat P0 routes; agents require
+    a real user_id (real config, real BYOK key, real workspace).
+    """
+    if user_id == GUEST_USER_ID:
+        raise HTTPException(status_code=403, detail=_GUEST_FORBIDDEN)
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/agents/km", tags=["km-agent"])
@@ -86,6 +98,7 @@ def _map_event(ev: dict) -> tuple[str, dict] | None:
 
 @router.post("/invoke")
 async def invoke(req: Request, auth: InternalAuthDep):
+    _reject_guest(auth["user_id"])
     body = await req.json()
     user_id = auth["user_id"]
     cfg = load_user_config(user_id)
@@ -119,6 +132,7 @@ async def invoke(req: Request, auth: InternalAuthDep):
 
 @router.post("/resume")
 async def resume(req: Request, auth: InternalAuthDep):
+    _reject_guest(auth["user_id"])
     body = await req.json()
     user_id = auth["user_id"]
     cfg = load_user_config(user_id)
@@ -152,6 +166,7 @@ async def resume(req: Request, auth: InternalAuthDep):
 
 @router.get("/state/{thread_id}")
 async def state(thread_id: str, auth: InternalAuthDep):
+    _reject_guest(auth["user_id"])
     saver = get_saver()
     config = {"configurable": {"thread_id": thread_id}}
     tuple_ = await saver.aget_tuple(config)
@@ -165,6 +180,7 @@ async def state(thread_id: str, auth: InternalAuthDep):
 
 @router.post("/config")
 async def config_post(req: Request, auth: InternalAuthDep):
+    _reject_guest(auth["user_id"])
     body = await req.json()
     save_user_config(auth["user_id"], body)
     return {"ok": True}
