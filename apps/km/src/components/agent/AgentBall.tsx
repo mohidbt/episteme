@@ -10,15 +10,16 @@ import { derivePageContext } from "@/lib/page-context";
 const LS_KEY = "episteme.agent.lastThread";
 
 interface AgentBallProps {
-  userId: string;
+  /** Reserved for future per-user telemetry / overrides. */
+  userId?: string;
 }
 
-async function ensureThreadId(): Promise<string | null> {
+async function ensureThreadId(signal: AbortSignal): Promise<string | null> {
   try {
     const cached =
       typeof window !== "undefined" ? window.localStorage.getItem(LS_KEY) : null;
     if (cached) return cached;
-    const list = await fetch("/api/agent/threads", { credentials: "include" });
+    const list = await fetch("/api/agent/threads", { credentials: "include", signal });
     if (list.ok) {
       const data = (await list.json()) as { threads?: Array<{ id: string }> };
       const recent = data.threads?.[0]?.id;
@@ -32,6 +33,7 @@ async function ensureThreadId(): Promise<string | null> {
       credentials: "include",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({}),
+      signal,
     });
     if (created.ok) {
       const data = (await created.json()) as { thread?: { id: string } };
@@ -42,7 +44,7 @@ async function ensureThreadId(): Promise<string | null> {
       }
     }
   } catch {
-    // fall through
+    // aborted or network error — caller falls back to "Loading…"
   }
   return null;
 }
@@ -58,13 +60,11 @@ export function AgentBall(_props: AgentBallProps) {
 
   useEffect(() => {
     if (!open || threadId) return;
-    let cancelled = false;
-    void ensureThreadId().then((id) => {
-      if (!cancelled && id) setThreadId(id);
+    const ctl = new AbortController();
+    void ensureThreadId(ctl.signal).then((id) => {
+      if (!ctl.signal.aborted && id) setThreadId(id);
     });
-    return () => {
-      cancelled = true;
-    };
+    return () => ctl.abort();
   }, [open, threadId]);
 
   useEffect(() => {
