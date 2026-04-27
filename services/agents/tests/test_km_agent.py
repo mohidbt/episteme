@@ -69,6 +69,51 @@ def test_external_send_skipped_when_auto():
     assert interrupt_on.get("external_send") is False
 
 
+def test_filter_tools_no_skills_returns_all():
+    from km_agent import _filter_tools_for_skills  # noqa: PLC0415
+    from tools import ALL_TOOLS  # noqa: PLC0415
+
+    filtered = _filter_tools_for_skills(list(ALL_TOOLS), loaded_skills=[])
+    assert filtered == list(ALL_TOOLS)
+
+
+def test_filter_tools_with_lit_triage_skill_filters_to_allowed_set():
+    from km_agent import _filter_tools_for_skills  # noqa: PLC0415
+    from skills import load_skills  # noqa: PLC0415
+    from tools import ALL_TOOLS  # noqa: PLC0415
+
+    loaded = load_skills(only=["lit-triage"])
+    filtered = _filter_tools_for_skills(list(ALL_TOOLS), loaded_skills=loaded)
+    names = {t.name for t in filtered}
+    assert "search_notes" in names
+    assert "list_references" in names
+    assert "create_note" in names
+    # Tools not in lit-triage's allow-list must be excluded
+    assert "make_public" not in names
+    assert "extract_passages" not in names
+    assert "highlight" not in names
+
+
+def test_skill_require_approval_injects_into_interrupt_on():
+    from km_agent import _build_interrupt_on  # noqa: PLC0415
+    from skills import load_skills  # noqa: PLC0415
+
+    loaded = load_skills(only=["lit-triage"])
+    # Even though approval_rules sets write_note=auto, the skill's own
+    # require_approval list re-enables HITL for create_note.
+    interrupt_on = _build_interrupt_on({"write_note": "auto"}, loaded_skills=loaded)
+    assert interrupt_on.get("create_note") is True
+
+
+def test_skill_require_approval_for_highlight_via_deep_read():
+    from km_agent import _build_interrupt_on  # noqa: PLC0415
+    from skills import load_skills  # noqa: PLC0415
+
+    loaded = load_skills(only=["deep-read"])
+    interrupt_on = _build_interrupt_on({}, loaded_skills=loaded)
+    assert interrupt_on.get("highlight") is True
+
+
 def test_make_public_in_interrupt_on_from_tool_metadata():
     """make_public has require_approval=True in metadata — auto-detected."""
     from km_agent import _build_interrupt_on  # noqa: PLC0415
