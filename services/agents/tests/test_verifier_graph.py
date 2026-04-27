@@ -91,6 +91,45 @@ async def test_verifier_emits_messages_summary():
     assert "supported" in content.lower()
 
 
+# ------------------------------------------- production runnable end-to-end
+
+
+@pytest.mark.asyncio
+async def test_build_verifier_runnable_end_to_end_with_score_fn():
+    """Production `build_verifier` must produce a runnable that terminates
+    when a real `score_fn` is supplied (regression: stub scorer always
+    returned 'unsupported' so production exhausted 3 attempts).
+    """
+
+    @tool("search_notes")
+    async def stub_search_notes(query: str) -> list[dict]:  # noqa: ARG001
+        """Stub."""
+        return [{"id": "n1", "title": "stub"}]
+
+    def score_supported(state: VerifierState) -> dict:
+        return {"verdict": "supported"}
+
+    spec = build_verifier(
+        available_tools=[stub_search_notes],
+        score_fn=score_supported,
+    )
+    runnable = spec["runnable"]
+    result = await runnable.ainvoke({
+        "claim": "x",
+        "candidate_sources": [],
+        "verdict": "pending",
+        "attempts": 0,
+        "messages": [],
+    })
+
+    assert result["verdict"] == "supported"
+    assert result["attempts"] == 1
+    assert result["messages"], "must emit a summary message"
+    final = result["messages"][-1]
+    content = final.content if hasattr(final, "content") else final.get("content", "")
+    assert "supported" in content.lower()
+
+
 # ------------------------------------------- score_fn warning
 
 
