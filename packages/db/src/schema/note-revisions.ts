@@ -2,7 +2,9 @@ import { pgTable, uuid, text, timestamp, pgEnum, index } from "drizzle-orm/pg-co
 import { notes } from "./notes";
 import { user } from "./auth";
 
-export const revisionReasonEnum = pgEnum("revision_reason", ["autosave", "manual", "pre-ai-edit", "conflict-resolve"]);
+export const revisionReasonEnum = pgEnum("revision_reason", ["autosave", "manual", "pre-ai-edit", "conflict-resolve", "agent-write"]);
+
+export const noteRevisionAuthorKindEnum = pgEnum("note_revision_author_kind", ["user", "agent"]);
 
 export const noteRevisions = pgTable(
   "note_revisions",
@@ -12,6 +14,9 @@ export const noteRevisions = pgTable(
     authorId: text("author_id").references(() => user.id, { onDelete: "set null" }),
     contentMd: text("content_md").notNull(),
     reason: revisionReasonEnum("reason").notNull(),
+    authorKind: noteRevisionAuthorKindEnum("author_kind").default("user").notNull(),
+    agentInvocationId: uuid("agent_invocation_id"),
+    agentSkill: text("agent_skill"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (t) => [

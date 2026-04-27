@@ -1,4 +1,5 @@
 import logging
+import os
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from fastapi import FastAPI
@@ -16,9 +17,19 @@ from routers import (
     km_complete,
     km_chat,
 )
+from routers import km_agent
 
 logger = logging.getLogger(__name__)
 
+# ---------------------------------------------------------------------------
+# PostgresSaver / PostgresStore lifecycle
+#
+# These context managers (if EPISTEME_AGENTS_PG_URL is set) hold a long-lived
+# connection for the process lifetime.  We open them once at startup in the
+# lifespan hook and cache them on checkpointer.py / store.py module globals so
+# that subsequent get_saver() / get_store() calls return the same object
+# without re-entering the context manager.
+# ---------------------------------------------------------------------------
 
 async def _reap_orphan_runs(boot_time: datetime) -> None:
     """Mark ai_highlight_runs rows left in 'running' by a prior process as failed."""
@@ -41,7 +52,35 @@ async def _reap_orphan_runs(boot_time: datetime) -> None:
 async def lifespan(app: FastAPI):
     await init_pool()
     await _reap_orphan_runs(datetime.now(timezone.utc))
-    yield
+
+    url = os.environ.get("EPISTEME_AGENTS_PG_URL")
+    if url:
+        try:
+            from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver  # noqa: PLC0415
+            from langgraph.store.postgres.aio import AsyncPostgresStore  # noqa: PLC0415
+            import checkpointer as chk_mod  # noqa: PLC0415
+            import store as store_mod  # noqa: PLC0415
+
+            async with AsyncPostgresSaver.from_conn_string(url) as saver:
+                await saver.setup()
+                chk_mod._CACHED_SAVER = saver
+
+                async with AsyncPostgresStore.from_conn_string(url) as store_obj:
+                    await store_obj.setup()
+                    store_mod._CACHED_STORE = store_obj
+
+                    logger.info("AsyncPostgresSaver + AsyncPostgresStore opened for process lifetime")
+                    yield
+
+                store_mod._CACHED_STORE = None
+            chk_mod._CACHED_SAVER = None
+
+        except Exception:
+            logger.exception("Failed to open AsyncPostgresSaver/AsyncPostgresStore — falling back to in-memory")
+            yield
+    else:
+        yield
+
     await close_pool()
 
 
@@ -56,3 +95,4 @@ app.include_router(chandra_segments.router)
 app.include_router(km_embed.router)
 app.include_router(km_complete.router)
 app.include_router(km_chat.router)
+app.include_router(km_agent.router)
