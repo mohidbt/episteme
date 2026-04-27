@@ -12,7 +12,12 @@
     "lint": "pnpm -r --parallel lint",
     "db:migrate": "pnpm -F @episteme/db migrate",
     "db:generate": "pnpm -F @episteme/db generate",
-    "db:studio": "pnpm -F @episteme/db studio"
+    "db:studio": "pnpm -F @episteme/db studio",
+    "check:scalability": "tsx scripts/check-skill-addition.ts",
+    "test:scripts": "tsx --test scripts/check-skill-addition.test.ts"
+  },
+  "devDependencies": {
+    "tsx": "^4.21.0"
   },
   "engines": {
     "node": ">=20"
