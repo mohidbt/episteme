@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { formatDistanceToNow } from "date-fns";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { NewConversationButton } from "./NewConversationButton";
 import type { AgentThreadRow, AgentThreadStatus } from "@/lib/threads";
@@ -86,13 +87,23 @@ export function ThreadList({ initialThreads }: ThreadListProps) {
   const refresh = useCallback(async () => {
     try {
       const res = await fetch("/api/agent/threads", { cache: "no-store" });
+      if (res.status === 401) {
+        // Session expired: stop polling and bounce to sign-in.
+        if (intervalRef.current != null) {
+          clearInterval(intervalRef.current);
+          intervalRef.current = null;
+        }
+        toast.error("Session expired");
+        router.push("/sign-in");
+        return;
+      }
       if (!res.ok) return;
       const data = (await res.json()) as { threads: ThreadJson[] };
       setThreads(data.threads.map(reviveThread));
     } catch {
       // Silent — next tick will retry.
     }
-  }, []);
+  }, [router]);
 
   useEffect(() => {
     const start = () => {
