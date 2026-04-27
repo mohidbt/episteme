@@ -1,0 +1,32 @@
+# MCP server connections for the researcher subagent.
+#
+# Stub entries — replace `url` / `command` with real endpoints when MCP
+# servers are deployed. `enabled: false` means the loader will skip them
+# entirely; the researcher subagent stays constructable either way.
+#
+# TODO(1.3b): wire real MCP endpoints once the research-MCP fleet is up.
+
+- name: arxiv
+  transport: sse
+  url: https://arxiv-mcp.example.com/sse
+  tool_prefix: arxiv
+  enabled: false
+
+- name: biorxiv
+  transport: sse
+  url: https://biorxiv-mcp.example.com/sse
+  tool_prefix: biorxiv
+  enabled: false
+
+- name: pubmed
+  transport: sse
+  url: https://pubmed-mcp.example.com/sse
+  tool_prefix: pubmed
+  enabled: false
+
+- name: web-search
+  transport: stdio
+  command: npx
+  args: ["-y", "firecrawl-mcp"]
+  tool_prefix: web
+  enabled: false

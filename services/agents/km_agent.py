@@ -18,11 +18,12 @@ agent's working-file context (scratch files, temp notes).  The domain
 backends from Task 3 (NotesBackend, PdfsBackend, etc.) are accessed through
 ALL_TOOLS — they are tool-based adapters, not filesystem backends.
 """
-from deepagents import create_deep_agent
+from deepagents import CompiledSubAgent, SubAgent, create_deep_agent
 from langchain_core.tools import BaseTool
 from langgraph.graph.state import CompiledStateGraph
 
 from skills import SKILLS_ROOT, SkillSpec, load_skills
+from subagents import build_researcher, build_synthesizer, build_verifier
 from tools import ALL_TOOLS
 
 
@@ -97,6 +98,48 @@ def _filter_tools_for_skills(
     return [t for t in all_tools if t.name in allowed]
 
 
+def _select_subagents(
+    loaded_skills: list[SkillSpec],
+    *,
+    available_tools: list[BaseTool] | None = None,
+) -> list[SubAgent | CompiledSubAgent]:
+    """Materialize the subagents referenced by the enabled skills' frontmatter.
+
+    Each skill's `subagents:` array names which subagents that skill needs.
+    The union of those names is constructed via the per-subagent factory so
+    each gets its own filtered tool allow-list.
+
+    `available_tools` defaults to `ALL_TOOLS` so the subagent factory can
+    pick the BaseTool instances that match its declared name allow-list.
+    """
+    if not loaded_skills:
+        return []
+    wanted: list[str] = []
+    seen: set[str] = set()
+    for skill in loaded_skills:
+        for name in skill.subagents:
+            if name not in seen:
+                seen.add(name)
+                wanted.append(name)
+
+    pool: list[BaseTool] = list(available_tools if available_tools is not None else ALL_TOOLS)
+
+    builders = {
+        "researcher": build_researcher,
+        "synthesizer": build_synthesizer,
+        "verifier": build_verifier,
+    }
+    out: list[SubAgent | CompiledSubAgent] = []
+    for name in wanted:
+        builder = builders.get(name)
+        if builder is None:
+            # Unknown subagent name in a skill frontmatter — skip silently;
+            # skills validate their own contracts elsewhere.
+            continue
+        out.append(builder(available_tools=pool))
+    return out
+
+
 def build_km_agent(
     *,
     user_id: str,
@@ -139,10 +182,12 @@ def build_km_agent(
     # all SKILL.md descriptions get advertised in the system prompt.
     skill_sources = [str(SKILLS_ROOT) + "/"] if loaded else []
 
+    subagents = _select_subagents(loaded, available_tools=tools)
+
     return create_deep_agent(
         model=model,
         tools=tools,
-        subagents=[],
+        subagents=subagents,
         skills=skill_sources or None,
         store=store,
         checkpointer=saver,

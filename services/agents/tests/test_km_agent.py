@@ -200,3 +200,47 @@ def test_create_note_skill_override_wins_over_silent_default(tmp_path):
     interrupt_on = _build_interrupt_on({}, loaded_skills=loaded)
     # lit-triage lists create_note in require_approval → must be True.
     assert interrupt_on.get("create_note") is True
+
+
+# ------------------------------------------------------------- subagent wiring
+
+def test_subagents_for_skills_lit_triage_yields_researcher():
+    """A skill referencing `researcher` in its frontmatter triggers researcher inclusion."""
+    from km_agent import _select_subagents  # noqa: PLC0415
+    from skills import load_skills  # noqa: PLC0415
+
+    loaded = load_skills(only=["lit-triage"])
+    names = [s["name"] for s in _select_subagents(loaded)]
+    assert names == ["researcher"]
+
+
+def test_subagents_for_skills_synthesis_yields_synthesizer():
+    from km_agent import _select_subagents  # noqa: PLC0415
+    from skills import load_skills  # noqa: PLC0415
+
+    loaded = load_skills(only=["synthesis"])
+    names = [s["name"] for s in _select_subagents(loaded)]
+    assert names == ["synthesizer"]
+
+
+def test_subagents_for_skills_both_yields_both():
+    from km_agent import _select_subagents  # noqa: PLC0415
+    from skills import load_skills  # noqa: PLC0415
+
+    loaded = load_skills(only=["lit-triage", "synthesis"])
+    names = sorted(s["name"] for s in _select_subagents(loaded))
+    assert names == ["researcher", "synthesizer"]
+
+
+def test_subagents_for_deep_read_yields_none():
+    from km_agent import _select_subagents  # noqa: PLC0415
+    from skills import load_skills  # noqa: PLC0415
+
+    loaded = load_skills(only=["deep-read"])
+    assert _select_subagents(loaded) == []
+
+
+def test_subagents_empty_when_no_skills():
+    from km_agent import _select_subagents  # noqa: PLC0415
+
+    assert _select_subagents([]) == []
