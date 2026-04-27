@@ -62,6 +62,11 @@ const FIXTURE_SKILL_PATH = join(FIXTURE_DIR, "SKILL.md");
 const SECRET = process.env.INHALE_INTERNAL_SECRET || "test-secret-scalability";
 const TEST_USER_ID = `gate-user-${randomUUID()}`;
 
+// Module-scope handle so the SIGINT/SIGTERM handlers below can kill the
+// spawned uvicorn child. Without this, signal-driven exit orphans the port —
+// caller's next gate run would race a still-listening uvicorn (fix #7).
+let activeUvicornProc: ChildProcessWithoutNullStreams | null = null;
+
 // ---------------------------------------------------------------------------
 // Pure helpers (unit-tested by check-skill-addition.test.ts)
 // ---------------------------------------------------------------------------
@@ -342,6 +347,7 @@ async function main(): Promise<void> {
     // Step 3: spawn FastAPI on an ephemeral port.
     const port = await pickEphemeralPort();
     proc = await spawnFastapi(port);
+    activeUvicornProc = proc;
     const baseUrl = `http://127.0.0.1:${port}`;
 
     // Step 4: POST /agents/km/config — enable the fixture skill.
@@ -437,6 +443,7 @@ async function main(): Promise<void> {
         }
       }
     }
+    activeUvicornProc = null;
   }
 
   process.exit(exitCode);
@@ -452,16 +459,33 @@ const invokedAsCli = (() => {
 })();
 
 if (invokedAsCli) {
-  // Best-effort cleanup if the user ^C's mid-run.
+  // Best-effort cleanup if the user ^C's mid-run. Must kill the spawned
+  // uvicorn child before exiting — otherwise the port stays bound and a
+  // re-run would either pick a different port (good) but leave the orphan
+  // running (bad). Fix #7.
   for (const sig of ["SIGINT", "SIGTERM"] as const) {
     process.on(sig, () => {
       revertFixture();
+      if (activeUvicornProc && !activeUvicornProc.killed) {
+        try {
+          activeUvicornProc.kill("SIGTERM");
+        } catch {
+          // already dead — proceed to exit
+        }
+      }
       process.exit(130);
     });
   }
   main().catch((err) => {
     process.stderr.write(`unhandled: ${err}\n`);
     revertFixture();
+    if (activeUvicornProc && !activeUvicornProc.killed) {
+      try {
+        activeUvicornProc.kill("SIGTERM");
+      } catch {
+        // already dead
+      }
+    }
     process.exit(1);
   });
 }
