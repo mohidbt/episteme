@@ -27,3 +27,40 @@ def test_load_user_config_for_normal_user_returns_defaults():
     cfg = load_user_config("user_xyz")
     assert "enabledSkills" in cfg
     assert "modelPreference" in cfg
+
+
+# ---------------------------------------------------------------------------
+# Merge-on-write contract — partial save_user_config must NOT wipe defaults.
+# Regression for §1.3b-E2E-1: partial PATCH used to overwrite the whole record,
+# leaving load_user_config callers with a KeyError on modelPreference/approvalRules.
+# ---------------------------------------------------------------------------
+
+def test_partial_save_preserves_default_keys():
+    """save_user_config({enabledSkills:[x]}) must keep modelPreference/approvalRules from defaults."""
+    config_cache._CACHE.clear()
+    save_user_config("user_partial", {"enabledSkills": ["lit-triage"]})
+    cfg = load_user_config("user_partial")
+    assert cfg["enabledSkills"] == ["lit-triage"]
+    assert "modelPreference" in cfg
+    assert "approvalRules" in cfg
+    assert "attachedMcps" in cfg
+
+
+def test_partial_save_merges_over_existing():
+    """A second partial save merges over the first, not over defaults — prior keys survive."""
+    config_cache._CACHE.clear()
+    save_user_config("user_merge", {"enabledSkills": ["lit-triage"]})
+    save_user_config("user_merge", {"modelPreference": "openai/gpt-4o"})
+    cfg = load_user_config("user_merge")
+    assert cfg["enabledSkills"] == ["lit-triage"]
+    assert cfg["modelPreference"] == "openai/gpt-4o"
+
+
+def test_load_fills_defaults_for_partially_persisted_record():
+    """Defense in depth: even if _CACHE somehow holds a partial dict, load fills defaults."""
+    config_cache._CACHE.clear()
+    config_cache._CACHE["user_legacy"] = {"enabledSkills": ["x"]}  # bypass save
+    cfg = load_user_config("user_legacy")
+    assert cfg["enabledSkills"] == ["x"]
+    assert "modelPreference" in cfg
+    assert "approvalRules" in cfg

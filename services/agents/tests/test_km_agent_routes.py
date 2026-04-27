@@ -390,6 +390,31 @@ def test_config_post_persists_for_subsequent_load():
     assert cfg["modelPreference"] == "openai/gpt-4o-mini"
 
 
+def test_partial_config_post_then_invoke_does_not_500():
+    """Regression for §1.3b-E2E-1: partial PATCH used to wipe modelPreference,
+    then /invoke raised KeyError → 500. Now save_user_config merges defaults
+    + km_agent reads defensively, so /invoke still streams (200)."""
+    from lib import config_cache  # noqa: PLC0415
+    config_cache._CACHE.clear()
+
+    cfg_body = json.dumps({"enabledSkills": ["lit-triage"]}).encode()
+    r1 = client.post(
+        "/agents/km/config",
+        content=cfg_body,
+        headers=_signed_headers("POST", "/agents/km/config", cfg_body),
+    )
+    assert r1.status_code == 200
+
+    invoke_body = json.dumps({"thread_id": "t1", "message": "hello"}).encode()
+    with patch("routers.km_agent.build_km_agent", return_value=_make_mock_agent()):
+        r2 = client.post(
+            "/agents/km/invoke",
+            content=invoke_body,
+            headers=_signed_headers("POST", "/agents/km/invoke", invoke_body),
+        )
+    assert r2.status_code == 200, f"expected 200 stream, got {r2.status_code}: {r2.text[:200]}"
+
+
 # ---------------------------------------------------------------------------
 # Guest mode (Task 13) — guest user_id is forbidden from /agents/km routes
 # ---------------------------------------------------------------------------
