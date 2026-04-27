@@ -21,14 +21,55 @@ ALL_TOOLS — they are tool-based adapters, not filesystem backends.
 import logging
 
 from deepagents import CompiledSubAgent, SubAgent, create_deep_agent
+from deepagents.backends import CompositeBackend, StateBackend, StoreBackend
 from langchain_core.tools import BaseTool
 from langgraph.graph.state import CompiledStateGraph
+from langgraph.store.base import BaseStore
 
 from skills import SKILLS_ROOT, SkillSpec, load_skills
 from subagents import build_researcher, build_synthesizer, build_verifier
 from tools import ALL_TOOLS
 
 logger = logging.getLogger(__name__)
+
+
+# System prompt addendum that teaches the model the memory contract.
+# Without this, "Remember: my X is Y" prompts produce a friendly text reply
+# but no `write_file` call, so nothing persists across threads. The wording
+# is deliberately concrete: name the tool, name the path, give one example.
+_MEMORY_SYSTEM_PROMPT = """## Memory
+
+You have a persistent memory under `/memories/`. Anything you write there
+survives across threads — use it to remember facts the user tells you about
+themselves, their preferences, ongoing projects, or research interests.
+
+When the user says "Remember: <fact>" (or similar — "make a note that…",
+"keep in mind that…"), call the `write_file` tool with an absolute path
+under `/memories/` and the fact as the file's content. Choose a short,
+descriptive filename ending in `.md` (e.g. `/memories/research-interests.md`,
+`/memories/writing-style.md`).
+
+When a user asks something where prior memory might be relevant, read from
+`/memories/` first (use `ls /memories/` or `read_file`) before answering."""
+
+
+def _build_memory_backend(*, user_id: str, store: BaseStore) -> CompositeBackend:
+    """Build the deepagents filesystem backend with /memories/ routed to the store.
+
+    The agent's working files (scratch, temp notes) stay ephemeral in
+    StateBackend. Anything under /memories/ is routed to the persistent
+    StoreBackend so it survives across threads and process restarts.
+
+    Namespace shape: ``("memories:<user_id>",)`` — a single component so the
+    LangGraph PostgresStore stringifies the prefix as exactly
+    ``memories:<user_id>`` (it joins with ``.``). The ``store`` table E2E
+    query relies on that prefix to resolve cross-thread reads.
+    """
+    namespace = (f"memories:{user_id}",)
+    return CompositeBackend(
+        default=StateBackend(),
+        routes={"/memories/": StoreBackend(store=store, namespace=lambda _rt: namespace)},
+    )
 
 
 def _apply_rule(
@@ -205,7 +246,9 @@ def build_km_agent(
         tools=tools,
         subagents=subagents,
         skills=skill_sources or None,
+        system_prompt=_MEMORY_SYSTEM_PROMPT,
         store=store,
         checkpointer=saver,
+        backend=_build_memory_backend(user_id=user_id, store=store),
         interrupt_on=_build_interrupt_on(approval_rules, loaded_skills=loaded),
     )

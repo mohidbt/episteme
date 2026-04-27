@@ -56,8 +56,14 @@ async def test_research_interests_persists_across_threads(
 
     conn = await asyncpg.connect(os.environ["EPISTEME_AGENTS_PG_URL"])
     try:
+        # CompositeBackend strips the route prefix /memories/ from the file
+        # path before delegating to StoreBackend, leaving "/research-interests.md"
+        # as the persisted key. Match either with or without leading slash so
+        # this test isn't coupled to a deepagents implementation detail.
         row = await conn.fetchrow(
-            "SELECT value FROM store WHERE prefix = $1 AND key = 'research-interests.md'",
+            "SELECT key, value FROM store "
+            "WHERE prefix = $1 "
+            "AND (key = 'research-interests.md' OR key = '/research-interests.md')",
             f"memories:{user_id}",
         )
     finally:
