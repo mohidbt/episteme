@@ -99,6 +99,29 @@ describe("POST /api/agents/km/invoke", () => {
     expect(text).toContain("data: [DONE]");
   });
 
+  it("passes through 403 from upstream FastAPI without downgrading", async () => {
+    // Guest user_id case: FastAPI returns 403 with guest_forbidden body.
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({ detail: { error: "guests cannot use agents", code: "guest_forbidden" } }),
+        { status: 403 },
+      ),
+    );
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const r = await POST(
+      req("/api/agents/km/invoke", {
+        method: "POST",
+        cookie: "session=x",
+        body: JSON.stringify({ thread_id: "t1", message: "hello" }),
+      }),
+    );
+
+    expect(r.status).toBe(403);
+    const body = await r.json();
+    expect(body.detail.code).toBe("guest_forbidden");
+  });
+
   it("forwards signed X-Inhale-Sig header to upstream", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response("data: [DONE]\n\n", { status: 200 }),
