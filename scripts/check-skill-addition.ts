@@ -8,11 +8,13 @@
  *   2. Apply a fixture skill at services/agents/skills/<FIXTURE_SKILL_NAME>/SKILL.md.
  *   3. Spawn the FastAPI service (uvicorn) on an ephemeral port.
  *   4. POST /agents/km/config with enabledSkills=[<FIXTURE_SKILL_NAME>].
- *   5. POST /agents/km/invoke — assert the agent BUILDS without error
- *      (returns 200 streaming response). Building means load_skills() found
- *      our SKILL.md without any code changes — that's the gate.
- *   6. Always delete the fixture (finally).
- *   7. Re-snapshot diff outside skills/ and assert it didn't expand.
+ *   5. STRICT LOAD ASSERTION: GET /agents/km/debug/loaded_skills?only=<name>
+ *      and verify the response includes the fixture name. Without this step
+ *      a /invoke 200 could mask a silently-skipped skill — see strengthen #1.
+ *   6. POST /agents/km/invoke — assert the agent BUILDS without error
+ *      (returns 200 streaming response).
+ *   7. Always delete the fixture (finally).
+ *   8. Re-snapshot diff outside skills/ and assert it didn't expand.
  *
  * Notes:
  *   - The spec illustrated the fixture name as "__fixture-skill__", but the
@@ -20,12 +22,12 @@
  *     starting with "_" or ".". Changing the loader to allow underscored
  *     names would itself be a "core change" — the exact thing this gate
  *     forbids. So we use a non-underscored name for the fixture.
- *   - The "agent lists the skill" assertion (LLM call) is brittle without an
- *     LLM mock and a working OpenRouter key. We instead use the strongest
- *     deterministic signal: the agent build path runs load_skills() on
- *     /invoke; if the fixture SKILL.md is unparseable or the agent factory
- *     needs core changes, the request 500s. A 200 response = the new skill
- *     plugged in with zero code changes.
+ *   - The /debug/loaded_skills endpoint is HMAC-gated (no info leak). It
+ *     returns the `load_skills(only=...)` result as JSON; an unknown name
+ *     bubbles up as a 500 from load_skills' KeyError, which fails this gate.
+ *   - The "agent lists the skill" via LLM call assertion is brittle without
+ *     a working OpenRouter key — see tech-debt §1.3b-T12-1. The debug
+ *     endpoint replaces it with a deterministic equivalent.
  *   - Requires INHALE_INTERNAL_SECRET env var (HMAC) and EPISTEME_AGENTS_PG_URL
  *     for the saver/store. If EPISTEME_AGENTS_PG_URL is unset, the service
  *     falls back to in-memory checkpointer which is fine for this gate.
@@ -372,7 +374,34 @@ async function main(): Promise<void> {
       }
     }
 
-    // Step 5: POST /agents/km/invoke — assert agent BUILDS (200 streaming).
+    // Step 5 (Strengthen #1): strict load assertion. The /config + /invoke
+    // smoke alone does NOT prove the fixture skill was actually resolved by
+    // load_skills() — create_deep_agent could silently ignore an unresolved
+    // skill name. Hit the HMAC-gated debug endpoint and assert the fixture
+    // name is in the response payload. If load_skills KeyErrors here, the
+    // endpoint 500s and this gate fails as intended.
+    {
+      const path = `/agents/km/debug/loaded_skills?only=${FIXTURE_SKILL_NAME}`;
+      const res = await fetch(baseUrl + path, {
+        method: "GET",
+        headers: authHeaders("GET", path, ""),
+      });
+      if (res.status !== 200) {
+        const text = await res.text();
+        throw new Error(
+          `/debug/loaded_skills returned ${res.status}: ${text}`,
+        );
+      }
+      const payload = (await res.json()) as Array<{ name: string }>;
+      const names = payload.map((s) => s.name);
+      if (!names.includes(FIXTURE_SKILL_NAME)) {
+        throw new Error(
+          `/debug/loaded_skills did not include fixture ${FIXTURE_SKILL_NAME}; got ${JSON.stringify(names)}`,
+        );
+      }
+    }
+
+    // Step 6: POST /agents/km/invoke — assert agent BUILDS (200 streaming).
     {
       const threadId = randomUUID();
       const body = JSON.stringify({ thread_id: threadId, message: "list your skills" });
@@ -401,7 +430,7 @@ async function main(): Promise<void> {
       }
     }
 
-    // Step 7: re-snapshot. Diff invariant must hold.
+    // Step 8: re-snapshot. Diff invariant must hold.
     const finalDiff = gitDiffOutsideSkills();
     const finalUntracked = gitUntrackedOutsideSkills();
     if (!diffsEqual(baselineDiff, finalDiff)) {
@@ -429,7 +458,7 @@ async function main(): Promise<void> {
     if ((err as Error).stack) process.stderr.write(`${(err as Error).stack}\n`);
     exitCode = 1;
   } finally {
-    // Step 6: revert fixture unconditionally.
+    // Step 7: revert fixture unconditionally.
     revertFixture();
     if (proc && !proc.killed) {
       proc.kill("SIGTERM");
