@@ -678,3 +678,64 @@ def test_resume_passes_recursion_limit_to_astream_events():
     assert r.status_code == 200
     cfg = captured["config"]
     assert cfg.get("recursion_limit") == 100
+
+
+# ---------------------------------------------------------------------------
+# §1.3b-E2E-fix-5: configurable.user_id must be plumbed to astream_events.
+#
+# Tools (e.g. memory/store-backed tools, KM data tools) resolve the active
+# user from RunnableConfig.configurable["user_id"]. Without it the tools
+# default to GUEST or raise. Regression introduced in 488061e — both /invoke
+# and /resume must pass user_id explicitly in configurable.
+# ---------------------------------------------------------------------------
+
+def test_invoke_passes_user_id_in_configurable():
+    """invoke must pass auth user_id under config.configurable.user_id."""
+    captured: dict = {}
+
+    async def _capture(input_, config, version):
+        captured["config"] = config
+        if False:
+            yield
+
+    body = json.dumps({"thread_id": "t1", "message": "hi"}).encode()
+
+    with patch("routers.km_agent.build_km_agent", return_value=_make_mock_agent(astream_events_coro=_capture)):
+        r = client.post(
+            "/agents/km/invoke",
+            content=body,
+            headers=_signed_headers("POST", "/agents/km/invoke", body),
+        )
+
+    assert r.status_code == 200
+    configurable = captured["config"].get("configurable", {})
+    assert configurable.get("user_id") == "user_1", (
+        "Tools resolve the active user from RunnableConfig.configurable['user_id']; "
+        f"got {configurable!r}"
+    )
+
+
+def test_resume_passes_user_id_in_configurable():
+    """resume must pass auth user_id under config.configurable.user_id."""
+    captured: dict = {}
+
+    async def _capture(input_, config, version):
+        captured["config"] = config
+        if False:
+            yield
+
+    body = json.dumps({"thread_id": "t1", "decisions": []}).encode()
+
+    with patch("routers.km_agent.build_km_agent", return_value=_make_mock_agent(astream_events_coro=_capture)):
+        r = client.post(
+            "/agents/km/resume",
+            content=body,
+            headers=_signed_headers("POST", "/agents/km/resume", body),
+        )
+
+    assert r.status_code == 200
+    configurable = captured["config"].get("configurable", {})
+    assert configurable.get("user_id") == "user_1", (
+        "Tools resolve the active user from RunnableConfig.configurable['user_id']; "
+        f"got {configurable!r}"
+    )

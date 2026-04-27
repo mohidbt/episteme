@@ -141,7 +141,7 @@ async def invoke(req: Request, auth: InternalAuthDep):
         async for ev in agent.astream_events(
             {"messages": [{"role": "user", "content": body["message"]}]},
             config={
-                "configurable": {"thread_id": body["thread_id"]},
+                "configurable": {"thread_id": body["thread_id"], "user_id": user_id},
                 "recursion_limit": _AGENT_RECURSION_LIMIT,
             },
             version="v2",
@@ -178,7 +178,7 @@ async def resume(req: Request, auth: InternalAuthDep):
         async for ev in agent.astream_events(
             Command(resume=body["decisions"]),
             config={
-                "configurable": {"thread_id": body["thread_id"]},
+                "configurable": {"thread_id": body["thread_id"], "user_id": user_id},
                 "recursion_limit": _AGENT_RECURSION_LIMIT,
             },
             version="v2",
