@@ -2,14 +2,21 @@ import { and, asc, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { notes } from "@episteme/db/schema";
 import { libraries } from "@episteme/db/schema";
-import { getUserIdFromRequest } from "@/lib/auth";
+import { getAuthedUserId, MissingInternalSecretError } from "@/lib/internal-auth";
 import { noteCreateSchema } from "@/lib/validators";
 import { jsonError, requireOwned, resolveNoteSlug } from "@/lib/crud";
 import { resolveUnresolvedNoteLinks, createRevisionIfNeeded } from "@episteme/notes-core";
 
+function misconfiguredResponse(): Response {
+  return jsonError(500, "internal auth misconfigured");
+}
+
 export async function GET(req: Request) {
-  const userId = await getUserIdFromRequest(req);
-  if (!userId) return jsonError(401, "unauthorized");
+  let authed;
+  try { authed = await getAuthedUserId(req); }
+  catch (e) { if (e instanceof MissingInternalSecretError) return misconfiguredResponse(); throw e; }
+  if (!authed) return jsonError(401, "unauthorized");
+  const userId = authed.userId;
   const url = new URL(req.url);
   const libraryIdStr = url.searchParams.get("libraryId");
   if (!libraryIdStr) return jsonError(400, "validation", { message: "libraryId required" });
@@ -22,10 +29,51 @@ export async function GET(req: Request) {
   return Response.json(rows);
 }
 
+/**
+ * Resolve the user's default (lowest-id) library. Used for HMAC-authed
+ * agent-tool calls where the body may omit `libraryId`.
+ */
+async function resolveDefaultLibraryId(userId: string): Promise<number | null> {
+  const rows = await db
+    .select({ id: libraries.id })
+    .from(libraries)
+    .where(eq(libraries.userId, userId))
+    .orderBy(asc(libraries.id))
+    .limit(1);
+  return rows[0]?.id ?? null;
+}
+
 export async function POST(req: Request) {
-  const userId = await getUserIdFromRequest(req);
-  if (!userId) return jsonError(401, "unauthorized");
-  const body = await req.json().catch(() => null);
+  const rawBody = await req.text();
+  let authed;
+  try { authed = await getAuthedUserId(req, rawBody); }
+  catch (e) { if (e instanceof MissingInternalSecretError) return misconfiguredResponse(); throw e; }
+  if (!authed) return jsonError(401, "unauthorized");
+  const userId = authed.userId;
+  let body: Record<string, unknown> | null = null;
+  try { body = JSON.parse(rawBody); } catch { /* leaves body=null */ }
+  // Agent tools (HMAC path) often omit `libraryId`. Resolve user's default
+  // library on the server only for HMAC-authed requests; cookie-authed users
+  // with a missing libraryId still get the original 400 validation error.
+  if (
+    authed.viaHmac &&
+    body &&
+    typeof body === "object" &&
+    body.libraryId == null
+  ) {
+    const defaultLibraryId = await resolveDefaultLibraryId(userId);
+    if (defaultLibraryId == null) {
+      return jsonError(400, "no_library", {
+        message: "user has no library; create one before creating notes",
+      });
+    }
+    body.libraryId = defaultLibraryId;
+  }
+  // notebookId is not in the schema yet; strip silently for forward compat
+  // (deliberate — applies to both auth paths so clients can future-proof).
+  if (body && typeof body === "object" && "notebookId" in body) {
+    delete (body as Record<string, unknown>).notebookId;
+  }
   const parsed = noteCreateSchema.safeParse(body);
   if (!parsed.success) return jsonError(400, "validation", { issues: parsed.error.issues });
   const lib = await requireOwned<any>(libraries, parsed.data.libraryId, userId);

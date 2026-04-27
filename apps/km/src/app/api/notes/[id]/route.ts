@@ -1,27 +1,51 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { notes } from "@episteme/db/schema";
-import { getUserIdFromRequest } from "@/lib/auth";
+import { getAuthedUserId, MissingInternalSecretError } from "@/lib/internal-auth";
 import { noteUpdateSchema } from "@/lib/validators";
 import { jsonError, requireOwned, resolveNoteSlug } from "@/lib/crud";
 import { getTrashFolderId, moveItemToFolder } from "@/lib/folders-server";
 
 type Ctx = { params: Promise<{ id: string }> };
 
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export async function GET(req: Request, { params }: Ctx) {
-  const userId = await getUserIdFromRequest(req);
-  if (!userId) return jsonError(401, "unauthorized");
+  let authed;
+  try { authed = await getAuthedUserId(req); }
+  catch (e) { if (e instanceof MissingInternalSecretError) return jsonError(500, "internal auth misconfigured"); throw e; }
+  if (!authed) return jsonError(401, "unauthorized");
+  const userId = authed.userId;
   const { id } = await params;
-  const res = await requireOwned<any>(notes, id, userId);
-  if (!res.ok) return jsonError(res.status, res.status === 404 ? "not_found" : "forbidden");
-  return Response.json(res.row);
+  // Treat path param as either UUID or slug. Agent tools call this route with
+  // both forms via the `read_note` tool (id_or_slug).
+  if (UUID_RE.test(id)) {
+    const res = await requireOwned<any>(notes, id, userId);
+    if (!res.ok) return jsonError(res.status, res.status === 404 ? "not_found" : "forbidden");
+    return Response.json(res.row);
+  }
+  const [row] = await db
+    .select()
+    .from(notes)
+    .where(and(eq(notes.userId, userId), eq(notes.slug, id)))
+    .limit(1);
+  if (!row) return jsonError(404, "not_found");
+  return Response.json(row);
 }
 
 export async function PATCH(req: Request, { params }: Ctx) {
-  const userId = await getUserIdFromRequest(req);
-  if (!userId) return jsonError(401, "unauthorized");
+  // Read body once so HMAC verification (when present) can be done over the
+  // exact bytes; then parse the cached string.
+  const rawBody = await req.text();
+  let authed;
+  try { authed = await getAuthedUserId(req, rawBody); }
+  catch (e) { if (e instanceof MissingInternalSecretError) return jsonError(500, "internal auth misconfigured"); throw e; }
+  if (!authed) return jsonError(401, "unauthorized");
+  const userId = authed.userId;
   const { id } = await params;
-  const body = await req.json().catch(() => null);
+  let body: unknown = null;
+  try { body = JSON.parse(rawBody); } catch { /* leaves body=null */ }
   const parsed = noteUpdateSchema.safeParse(body);
   if (!parsed.success) return jsonError(400, "validation", { issues: parsed.error.issues });
   const res = await requireOwned<any>(notes, id, userId);
@@ -53,8 +77,11 @@ export async function PATCH(req: Request, { params }: Ctx) {
 }
 
 export async function DELETE(req: Request, { params }: Ctx) {
-  const userId = await getUserIdFromRequest(req);
-  if (!userId) return jsonError(401, "unauthorized");
+  let authed;
+  try { authed = await getAuthedUserId(req); }
+  catch (e) { if (e instanceof MissingInternalSecretError) return jsonError(500, "internal auth misconfigured"); throw e; }
+  if (!authed) return jsonError(401, "unauthorized");
+  const userId = authed.userId;
   const { id } = await params;
   const res = await requireOwned<any>(notes, id, userId);
   if (!res.ok) return jsonError(res.status, res.status === 404 ? "not_found" : "forbidden");

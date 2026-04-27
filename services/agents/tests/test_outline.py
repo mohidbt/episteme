@@ -48,7 +48,7 @@ def test_outline_returns_cached_sections():
     app.dependency_overrides[deps.db.get_conn] = override
     try:
         path = "/agents/outline?documentId=1"
-        r = client.get(path, headers=_signed_headers("GET", "/agents/outline"))
+        r = client.get(path, headers=_signed_headers("GET", path))
         assert r.status_code == 200
         data = r.json()
         assert len(data["sections"]) == 2
@@ -98,7 +98,7 @@ def test_outline_generates_via_llm():
             patch("routers.outline.extract_pages", return_value=fake_pages),
         ):
             path = "/agents/outline?documentId=1"
-            r = client.get(path, headers=_signed_headers("GET", "/agents/outline"))
+            r = client.get(path, headers=_signed_headers("GET", path))
             assert r.status_code == 200
             data = r.json()
             assert len(data["sections"]) == 2
@@ -120,7 +120,7 @@ def test_outline_404_when_doc_not_found():
     app.dependency_overrides[deps.db.get_conn] = override
     try:
         path = "/agents/outline?documentId=999"
-        r = client.get(path, headers=_signed_headers("GET", "/agents/outline"))
+        r = client.get(path, headers=_signed_headers("GET", path))
         assert r.status_code == 404
     finally:
         app.dependency_overrides.clear()

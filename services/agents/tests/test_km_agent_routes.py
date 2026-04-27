@@ -388,3 +388,139 @@ def test_config_post_persists_for_subsequent_load():
     from lib.config_cache import load_user_config  # noqa: PLC0415
     cfg = load_user_config("user_1")
     assert cfg["modelPreference"] == "openai/gpt-4o-mini"
+
+
+# ---------------------------------------------------------------------------
+# Guest mode (Task 13) — guest user_id is forbidden from /agents/km routes
+# ---------------------------------------------------------------------------
+
+def _guest_headers(method: str, path: str, body: bytes) -> dict:
+    ts = str(int(time.time()))
+    sig = hmac.new(
+        SECRET.encode(),
+        ts.encode() + method.encode() + path.encode() + body,
+        hashlib.sha256,
+    ).hexdigest()
+    return {
+        "X-Inhale-User-Id": "guest",
+        "X-Inhale-LLM-Key": "sk-test",
+        "X-Inhale-Ts": ts,
+        "X-Inhale-Sig": sig,
+        "Content-Type": "application/json",
+    }
+
+
+def test_guest_invoke_returns_403():
+    body = json.dumps({"thread_id": "t1", "message": "hi"}).encode()
+    r = client.post(
+        "/agents/km/invoke",
+        content=body,
+        headers=_guest_headers("POST", "/agents/km/invoke", body),
+    )
+    assert r.status_code == 403
+    assert r.json()["detail"] == {
+        "error": "guests cannot use agents",
+        "code": "guest_forbidden",
+    }
+
+
+def test_guest_resume_returns_403():
+    body = json.dumps({"thread_id": "t1", "decisions": []}).encode()
+    r = client.post(
+        "/agents/km/resume",
+        content=body,
+        headers=_guest_headers("POST", "/agents/km/resume", body),
+    )
+    assert r.status_code == 403
+    assert r.json()["detail"]["code"] == "guest_forbidden"
+
+
+def test_guest_state_returns_403():
+    path = "/agents/km/state/whatever"
+    r = client.get(
+        path,
+        headers=_guest_headers("GET", path, b""),
+    )
+    assert r.status_code == 403
+    assert r.json()["detail"]["code"] == "guest_forbidden"
+
+
+def test_guest_config_post_returns_403():
+    body = json.dumps({"modelPreference": "openai/gpt-4o"}).encode()
+    r = client.post(
+        "/agents/km/config",
+        content=body,
+        headers=_guest_headers("POST", "/agents/km/config", body),
+    )
+    assert r.status_code == 403
+    assert r.json()["detail"]["code"] == "guest_forbidden"
+
+
+def test_guest_config_post_does_not_persist():
+    """Guest 403 must not write to the cache."""
+    from lib import config_cache  # noqa: PLC0415
+    config_cache._CACHE.clear()
+
+    body = json.dumps({"modelPreference": "openai/gpt-4o"}).encode()
+    client.post(
+        "/agents/km/config",
+        content=body,
+        headers=_guest_headers("POST", "/agents/km/config", body),
+    )
+    assert "guest" not in config_cache._CACHE
+
+
+# ---------------------------------------------------------------------------
+# /agents/km/debug/loaded_skills — test-only debug endpoint (HMAC-gated).
+#
+# Used by scripts/check-skill-addition.ts to assert load_skills() resolved
+# the fixture skill before the /invoke smoke. Without this, /invoke 200
+# could mask a silently-skipped skill — see strengthen #1.
+# ---------------------------------------------------------------------------
+
+def test_debug_loaded_skills_requires_auth():
+    r = client.get("/agents/km/debug/loaded_skills?only=lit-triage")
+    assert r.status_code == 401
+
+
+def test_debug_loaded_skills_returns_resolved_specs():
+    """A real skill name resolves and reports its tool/subagent allow-list."""
+    path = "/agents/km/debug/loaded_skills?only=lit-triage"
+    r = client.get(path, headers=_signed_headers("GET", path, b""))
+    assert r.status_code == 200
+    payload = r.json()
+    assert isinstance(payload, list)
+    assert len(payload) == 1
+    spec = payload[0]
+    assert spec["name"] == "lit-triage"
+    assert isinstance(spec["tools"], list)
+    assert isinstance(spec["subagents"], list)
+    # lit-triage references researcher per its frontmatter
+    assert "researcher" in spec["subagents"]
+
+
+def test_debug_loaded_skills_unknown_returns_500():
+    """Unknown skill in `only` surfaces load_skills() KeyError as 500.
+
+    The scalability gate relies on this — a fixture name that fails to load
+    should fail the gate loudly rather than be silently skipped.
+    """
+    path = "/agents/km/debug/loaded_skills?only=does-not-exist"
+    r = client.get(path, headers=_signed_headers("GET", path, b""))
+    assert r.status_code == 500
+
+
+def test_debug_loaded_skills_multiple_only_values():
+    """Multiple `only` query repeats are aggregated."""
+    path = "/agents/km/debug/loaded_skills?only=lit-triage&only=synthesis"
+    r = client.get(path, headers=_signed_headers("GET", path, b""))
+    assert r.status_code == 200
+    names = sorted(s["name"] for s in r.json())
+    assert names == ["lit-triage", "synthesis"]
+
+
+def test_debug_loaded_skills_guest_returns_403():
+    """Guests cannot probe agent state."""
+    path = "/agents/km/debug/loaded_skills?only=lit-triage"
+    r = client.get(path, headers=_guest_headers("GET", path, b""))
+    assert r.status_code == 403

@@ -29,7 +29,13 @@ async def require_internal(
         raise HTTPException(status_code=401, detail="stale")
 
     body = await request.body()
-    msg = x_inhale_ts.encode() + request.method.encode() + request.url.path.encode() + body
+    # Sign path + query string to match the outbound signer in
+    # services/agents/lib/km_http.py and the Next.js inbound verifiers in
+    # apps/{km,reader}/src/lib/internal-auth.ts.
+    signed_path = request.url.path
+    if request.url.query:
+        signed_path = f"{signed_path}?{request.url.query}"
+    msg = x_inhale_ts.encode() + request.method.encode() + signed_path.encode() + body
     expected = hmac.new(secret.encode(), msg, hashlib.sha256).hexdigest()
     if not hmac.compare_digest(expected, x_inhale_sig):
         raise HTTPException(status_code=401, detail="sig mismatch")
