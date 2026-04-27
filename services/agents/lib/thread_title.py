@@ -43,15 +43,14 @@ async def generate_title(
     Returns a stripped string. On any failure, returns "" so the caller
     can fall back to a default like "Conversation #abc123".
 
-    The `model` argument is currently informational — call_model uses
-    its own configured default. Kept in signature for forward-compat.
+    Routes through call_model with explicit model override.
     """
     msg = (first_user_message or "").strip()
     if not msg:
         return ""
     truncated = msg[:MAX_INPUT_LEN]
     try:
-        raw = await call_model(api_key, _SYSTEM_PROMPT, truncated)
+        raw = await call_model(api_key, _SYSTEM_PROMPT, truncated, model=model)
     except Exception:
         return ""
     if not raw:

@@ -8,7 +8,7 @@ from lib import thread_title as tt
 
 @pytest.mark.asyncio
 async def test_generate_title_happy_path(monkeypatch):
-    async def fake_call(api_key, system, user_content):
+    async def fake_call(api_key, system, user_content, model=None):
         return "Summarize attention paper"
 
     monkeypatch.setattr(tt, "call_model", fake_call)
@@ -18,7 +18,7 @@ async def test_generate_title_happy_path(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_generate_title_strips_trailing_period(monkeypatch):
-    async def fake_call(api_key, system, user_content):
+    async def fake_call(api_key, system, user_content, model=None):
         return "Triage arxiv stack."
 
     monkeypatch.setattr(tt, "call_model", fake_call)
@@ -28,7 +28,7 @@ async def test_generate_title_strips_trailing_period(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_generate_title_strips_surrounding_quotes(monkeypatch):
-    async def fake_call(api_key, system, user_content):
+    async def fake_call(api_key, system, user_content, model=None):
         return '"Title here"'
 
     monkeypatch.setattr(tt, "call_model", fake_call)
@@ -40,7 +40,7 @@ async def test_generate_title_strips_surrounding_quotes(monkeypatch):
 async def test_generate_title_caps_at_60_chars(monkeypatch):
     long = "x" * 200
 
-    async def fake_call(api_key, system, user_content):
+    async def fake_call(api_key, system, user_content, model=None):
         return long
 
     monkeypatch.setattr(tt, "call_model", fake_call)
@@ -51,7 +51,7 @@ async def test_generate_title_caps_at_60_chars(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_generate_title_returns_empty_on_exception(monkeypatch):
-    async def boom(api_key, system, user_content):
+    async def boom(api_key, system, user_content, model=None):
         raise RuntimeError("network down")
 
     monkeypatch.setattr(tt, "call_model", boom)
@@ -63,7 +63,7 @@ async def test_generate_title_returns_empty_on_exception(monkeypatch):
 async def test_generate_title_empty_input_skips_call(monkeypatch):
     called = False
 
-    async def fake_call(api_key, system, user_content):
+    async def fake_call(api_key, system, user_content, model=None):
         nonlocal called
         called = True
         return "Should not happen"
@@ -76,7 +76,7 @@ async def test_generate_title_empty_input_skips_call(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_maybe_set_thread_title_updates_when_no_title(monkeypatch):
-    async def fake_call(api_key, system, user_content):
+    async def fake_call(api_key, system, user_content, model=None):
         return "Cool new thread"
 
     monkeypatch.setattr(tt, "call_model", fake_call)
@@ -98,7 +98,7 @@ async def test_maybe_set_thread_title_updates_when_no_title(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_maybe_set_thread_title_noop_when_title_set(monkeypatch):
-    async def fake_call(api_key, system, user_content):
+    async def fake_call(api_key, system, user_content, model=None):
         return "Should not be used"
 
     monkeypatch.setattr(tt, "call_model", fake_call)
@@ -116,7 +116,7 @@ async def test_maybe_set_thread_title_noop_when_title_set(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_maybe_set_thread_title_row_missing(monkeypatch):
-    async def fake_call(api_key, system, user_content):
+    async def fake_call(api_key, system, user_content, model=None):
         return "X"
 
     monkeypatch.setattr(tt, "call_model", fake_call)
@@ -136,7 +136,7 @@ async def test_maybe_set_thread_title_row_missing(monkeypatch):
 async def test_maybe_set_thread_title_empty_message(monkeypatch):
     called = False
 
-    async def fake_call(api_key, system, user_content):
+    async def fake_call(api_key, system, user_content, model=None):
         nonlocal called
         called = True
         return "X"
@@ -156,7 +156,7 @@ async def test_maybe_set_thread_title_empty_message(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_maybe_set_thread_title_skips_update_on_empty_generation(monkeypatch):
-    async def fake_call(api_key, system, user_content):
+    async def fake_call(api_key, system, user_content, model=None):
         raise RuntimeError("boom")
 
     monkeypatch.setattr(tt, "call_model", fake_call)
