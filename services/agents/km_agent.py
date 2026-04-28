@@ -21,12 +21,12 @@ ALL_TOOLS — they are tool-based adapters, not filesystem backends.
 import logging
 
 from deepagents import CompiledSubAgent, SubAgent, create_deep_agent
-from deepagents.backends import CompositeBackend, StateBackend, StoreBackend
+from deepagents.backends import CompositeBackend, StateBackend
 from langchain_core.tools import BaseTool
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.store.base import BaseStore
 
-from skills import SKILLS_ROOT, SkillSpec, load_skills
+from skills import SkillSpec, load_skills
 from subagents import build_researcher, build_synthesizer, build_verifier
 from tools import ALL_TOOLS
 
@@ -39,36 +39,42 @@ logger = logging.getLogger(__name__)
 # is deliberately concrete: name the tool, name the path, give one example.
 _MEMORY_SYSTEM_PROMPT = """## Memory
 
-You have a persistent memory under `/memories/`. Anything you write there
-survives across threads — use it to remember facts the user tells you about
-themselves, their preferences, ongoing projects, or research interests.
+You have a persistent memory under `/.episteme/agents/memories/`. Anything you
+write there survives across threads — use it to remember facts the user tells
+you about themselves, their preferences, ongoing projects, or research
+interests. These memories live as real notes in the user's drive (under the
+`.episteme/agents/memories` folder), so they ride along with library exports
+and the user can edit them directly.
 
 When the user says "Remember: <fact>" (or similar — "make a note that…",
-"keep in mind that…"), call the `write_file` tool with an absolute path
-under `/memories/` and the fact as the file's content. Choose a short,
-descriptive filename ending in `.md` (e.g. `/memories/research-interests.md`,
-`/memories/writing-style.md`).
+"keep in mind that…"), call the `write_file` tool with an absolute path under
+`/.episteme/agents/memories/` and the fact as the file's content. Choose a
+short, descriptive filename ending in `.md` (e.g.
+`/.episteme/agents/memories/research-interests.md`,
+`/.episteme/agents/memories/writing-style.md`). For sub-topics, organize
+into subfolders (e.g. `/.episteme/agents/memories/research/transformers.md`).
 
 When a user asks something where prior memory might be relevant, read from
-`/memories/` first (use `ls /memories/` or `read_file`) before answering."""
+`/.episteme/agents/memories/` first (use `ls` or `read_file`) before
+answering."""
 
 
 def _build_memory_backend(*, user_id: str, store: BaseStore) -> CompositeBackend:
-    """Build the deepagents filesystem backend with /memories/ routed to the store.
+    """Build the deepagents filesystem backend with `/.episteme/agents/memories/`
+    routed to real notes in the user's drive via NotesBackend.
 
-    The agent's working files (scratch, temp notes) stay ephemeral in
-    StateBackend. Anything under /memories/ is routed to the persistent
-    StoreBackend so it survives across threads and process restarts.
+    Working files (`/draft.txt`, scratch) stay ephemeral in StateBackend.
+    Anything under `/.episteme/agents/memories/` is persisted as notes in
+    Postgres (default library, `.episteme/agents/memories` folder), so library
+    export captures them and the user can edit them in the drive UI.
 
-    Namespace shape: ``("memories:<user_id>",)`` — a single component so the
-    LangGraph PostgresStore stringifies the prefix as exactly
-    ``memories:<user_id>`` (it joins with ``.``). The ``store`` table E2E
-    query relies on that prefix to resolve cross-thread reads.
+    `store` is unused here but kept on the signature because deepagents may
+    still require a `BaseStore` for unrelated middleware plumbing.
     """
-    namespace = (f"memories:{user_id}",)
+    from backends.notes_backend import NotesBackend
     return CompositeBackend(
         default=StateBackend(),
-        routes={"/memories/": StoreBackend(store=store, namespace=lambda _rt: namespace)},
+        routes={"/.episteme/agents/memories/": NotesBackend(user_id=user_id)},
     )
 
 
@@ -246,19 +252,29 @@ def build_km_agent(
     """
     loaded = load_skills(only=enabled_skills) if enabled_skills else []
     tools = _filter_tools_for_skills(list(ALL_TOOLS), loaded_skills=loaded)
-    # deepagents skills= takes a list of source directories; the middleware
-    # walks each for `<skill>/SKILL.md`. We point it at our skills root so
-    # all SKILL.md descriptions get advertised in the system prompt.
-    skill_sources = [str(SKILLS_ROOT) + "/"] if loaded else []
-
     subagents = _select_subagents(loaded, available_tools=tools)
+
+    # Inline a sanitized skill summary into the system prompt instead of
+    # passing `skills=` to deepagents — the SkillsMiddleware advertises raw
+    # source paths verbatim, leaking the host's absolute filesystem path
+    # (e.g. "/Users/<name>/...") into model context. We only advertise
+    # name + description for enabled skills; tool gating handles the rest.
+    system_prompt = _MEMORY_SYSTEM_PROMPT
+    if loaded:
+        bullets = "\n".join(f"- **{s.name}**: {s.description}" for s in loaded)
+        system_prompt += (
+            "\n\n## Skills\n\nThe following skills are enabled for this "
+            "conversation. Their tools are already available to you; pick "
+            "the skill whose description matches the user's request:\n\n"
+            f"{bullets}"
+        )
 
     return create_deep_agent(
         model=model,
         tools=tools,
         subagents=subagents,
-        skills=skill_sources or None,
-        system_prompt=_MEMORY_SYSTEM_PROMPT,
+        skills=None,
+        system_prompt=system_prompt,
         store=store,
         checkpointer=saver,
         backend=_build_memory_backend(user_id=user_id, store=store),
