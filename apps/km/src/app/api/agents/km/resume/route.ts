@@ -1,5 +1,8 @@
+import { eq } from "drizzle-orm";
 import { getDecryptedApiKey } from "@episteme/auth/byok";
 import { getSessionInfo } from "@/lib/auth";
+import { db } from "@/lib/db";
+import { agentConfigs } from "@episteme/db/schema";
 import { signRequest } from "@/lib/agents/sign-request";
 import { streamPassthrough } from "@/lib/agents/stream-passthrough";
 
@@ -15,11 +18,37 @@ export async function POST(req: Request) {
   }
 
   const bodyText = await req.text();
+
+  // Mirror /invoke: pass modelPreference + enabledSkills from Postgres so
+  // resume turns also use the real model and SkillsMiddleware stays wired.
+  let modelPreference: string | null = null;
+  let enabledSkills: string[] | null = null;
+  try {
+    const rows = await db
+      .select({
+        modelPreference: agentConfigs.modelPreference,
+        enabledSkills: agentConfigs.enabledSkills,
+      })
+      .from(agentConfigs)
+      .where(eq(agentConfigs.userId, session.userId))
+      .limit(1);
+    modelPreference = rows[0]?.modelPreference ?? null;
+    enabledSkills = rows[0]?.enabledSkills ?? null;
+  } catch (err) {
+    console.warn("[resume] agentConfigs lookup failed", err);
+  }
+
+  const upstreamBody = JSON.stringify({
+    ...JSON.parse(bodyText),
+    ...(modelPreference ? { model_preference: modelPreference } : {}),
+    ...(Array.isArray(enabledSkills) ? { enabled_skills: enabledSkills } : {}),
+  });
+
   const path = "/agents/km/resume";
   const { headers } = signRequest({
     method: "POST",
     path,
-    body: bodyText,
+    body: upstreamBody,
     userId: session.userId,
     llmKey,
   });
@@ -27,7 +56,7 @@ export async function POST(req: Request) {
   const upstream = await fetch(`${process.env.AGENTS_URL}${path}`, {
     method: "POST",
     headers: { ...headers, "Content-Type": "application/json" },
-    body: bodyText,
+    body: upstreamBody,
   });
 
   return streamPassthrough(upstream);

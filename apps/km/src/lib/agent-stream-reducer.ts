@@ -31,6 +31,7 @@ export type TodoItem = {
 export interface TextCard {
   kind: "text";
   id: string;
+  role: "user" | "assistant";
   text: string;
 }
 
@@ -77,6 +78,13 @@ export interface SuggestionCard {
   items: string[];
 }
 
+export interface ErrorCard {
+  kind: "error";
+  code: string;
+  message: string;
+  retriable: boolean;
+}
+
 export type TranscriptCard =
   | TextCard
   | ThinkingCard
@@ -84,7 +92,8 @@ export type TranscriptCard =
   | InterruptCard
   | SkillLoadCard
   | FileDiffCard
-  | SuggestionCard;
+  | SuggestionCard
+  | ErrorCard;
 
 export interface AgentTranscriptState {
   cards: TranscriptCard[];
@@ -92,6 +101,7 @@ export interface AgentTranscriptState {
   sourcesByMessage: Record<string, Citation[]>;
   pendingInterrupts: InterruptCard[];
   terminated: boolean;
+  recursionStep?: number;
 }
 
 export const initialAgentTranscriptState: AgentTranscriptState = {
@@ -102,10 +112,52 @@ export const initialAgentTranscriptState: AgentTranscriptState = {
   terminated: false,
 };
 
+/**
+ * UI-only action injected by the client to add the user's outgoing message
+ * to the transcript before the server stream begins. Keeping this separate
+ * from `AgentEvent` preserves the server contract (see `agent-events.ts`).
+ *
+ * Dispatching `__user_message` also resets `terminated`, allowing a new
+ * turn's events to flow after a prior `done`.
+ */
+export type UserMessageAction = {
+  type: "__user_message";
+  id: string;
+  text: string;
+};
+
+/**
+ * Resume action: clears `terminated` so the resume stream's events
+ * (tool_call, tool_result, text, done) flow through the reducer instead
+ * of being dropped after the prior turn's `done`.
+ */
+export type ResumeAction = { type: "__resume" };
+
+export type ReducerAction = AgentEvent | UserMessageAction | ResumeAction;
+
 export function agentStreamReducer(
   state: AgentTranscriptState,
-  event: AgentEvent,
+  event: ReducerAction,
 ): AgentTranscriptState {
+  if (event.type === "__user_message") {
+    const card: TextCard = {
+      kind: "text",
+      id: event.id,
+      role: "user",
+      text: event.text,
+    };
+    return {
+      ...state,
+      cards: [...state.cards, card],
+      terminated: false,
+      recursionStep: undefined,
+    };
+  }
+
+  if (event.type === "__resume") {
+    return { ...state, terminated: false };
+  }
+
   if (state.terminated) {
     console.warn(
       `[agent-stream-reducer] event "${event.type}" received after done; ignoring`,
@@ -123,6 +175,7 @@ export function agentStreamReducer(
         const merged: TextCard = {
           kind: "text",
           id: event.id,
+          role: "assistant",
           text: prev.text + event.delta,
         };
         const out = state.cards.slice();
@@ -132,6 +185,7 @@ export function agentStreamReducer(
       const card: TextCard = {
         kind: "text",
         id: event.id,
+        role: "assistant",
         text: event.delta,
       };
       return { ...state, cards: [...state.cards, card] };
@@ -248,8 +302,22 @@ export function agentStreamReducer(
       return { ...state, cards: [...state.cards, card] };
     }
 
+    case "error": {
+      const card: ErrorCard = {
+        kind: "error",
+        code: event.code,
+        message: event.message,
+        retriable: event.retriable,
+      };
+      return { ...state, cards: [...state.cards, card] };
+    }
+
     case "done": {
       return { ...state, terminated: true };
+    }
+
+    case "recursion_step": {
+      return { ...state, recursionStep: event.step };
     }
 
     default: {

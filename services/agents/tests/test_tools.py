@@ -21,7 +21,7 @@ CFG = {"configurable": {"user_id": USER}}
 def test_all_tools_count():
     from tools import ALL_TOOLS  # noqa: PLC0415
 
-    assert len(ALL_TOOLS) == 17, f"Expected 17, got {len(ALL_TOOLS)}"
+    assert len(ALL_TOOLS) == 15, f"Expected 15, got {len(ALL_TOOLS)}"
 
 
 def test_all_tools_are_base_tool():
@@ -46,22 +46,32 @@ def test_all_tools_contains_expected_names():
         "search_notes",
         "read_note",
         "create_note",
+        "list_folders",
         "update_note",
         "list_links",
         "list_backlinks",
         "list_pdfs",
-        "extract_passages",
+        "search_pdfs",
         "highlight",
-        "get_page_text",
+        "list_libraries",
         "list_references",
         "get_reference",
-        "diff_revision",
-        "week_summary",
-        "activity",
         "make_public",
-    }
+    } - {"make_public"}  # publish handled separately below
+    expected.add("make_public")
     actual = {t.name for t in ALL_TOOLS}
     assert actual == expected, f"Missing: {expected - actual}, Extra: {actual - expected}"
+
+
+def test_stubbed_tools_not_in_all_tools():
+    """extract_passages, get_page_text, diff_revision, week_summary, activity
+    are stubbed (no KM equivalent) and must NOT be exposed to the LLM."""
+    from tools import ALL_TOOLS  # noqa: PLC0415
+
+    names = {t.name for t in ALL_TOOLS}
+    for stub in ("extract_passages", "get_page_text", "diff_revision",
+                 "week_summary", "activity"):
+        assert stub not in names, f"stub tool {stub!r} should not be exposed"
 
 
 # ---------------------------------------------------------------------------
@@ -132,6 +142,69 @@ async def test_create_note_calls_km_post():
 
 
 @pytest.mark.asyncio
+async def test_create_note_omits_library_and_folder_when_unspecified():
+    """Default library is resolved server-side (KM POST handler) — the tool
+    must NOT send a libraryId / folderPath when the LLM omits them, so the
+    KM HMAC default-library fallback fires."""
+    from tools.notes import create_note  # noqa: PLC0415
+
+    with patch("tools.notes.km_post", new_callable=AsyncMock) as mock_post:
+        mock_post.return_value = {"id": "n2"}
+        await create_note.ainvoke(
+            {"title": "T", "contentMd": "body"}, config=CFG
+        )
+
+    body = mock_post.call_args.args[1]
+    assert "libraryId" not in body
+    assert "folderPath" not in body
+    assert "notebookId" not in body
+
+
+@pytest.mark.asyncio
+async def test_create_note_forwards_library_and_folder():
+    from tools.notes import create_note  # noqa: PLC0415
+
+    with patch("tools.notes.km_post", new_callable=AsyncMock) as mock_post:
+        mock_post.return_value = {"id": "n3"}
+        await create_note.ainvoke(
+            {
+                "title": "T",
+                "contentMd": "b",
+                "library_id": 7,
+                "folder_path": "research/2026",
+            },
+            config=CFG,
+        )
+
+    body = mock_post.call_args.args[1]
+    assert body["libraryId"] == 7
+    assert body["folderPath"] == "research/2026"
+
+
+@pytest.mark.asyncio
+async def test_list_folders_calls_km_get_default_library():
+    from tools.notes import list_folders  # noqa: PLC0415
+
+    assert isinstance(list_folders, BaseTool)
+    with patch("tools.notes.km_get", new_callable=AsyncMock) as mock_get:
+        mock_get.return_value = {"libraryId": 1, "folders": []}
+        await list_folders.ainvoke({}, config=CFG)
+
+    mock_get.assert_awaited_once_with("/api/folders", user_id=USER)
+
+
+@pytest.mark.asyncio
+async def test_list_folders_passes_library_id():
+    from tools.notes import list_folders  # noqa: PLC0415
+
+    with patch("tools.notes.km_get", new_callable=AsyncMock) as mock_get:
+        mock_get.return_value = {"libraryId": 4, "folders": []}
+        await list_folders.ainvoke({"library_id": 4}, config=CFG)
+
+    mock_get.assert_awaited_once_with("/api/folders?libraryId=4", user_id=USER)
+
+
+@pytest.mark.asyncio
 async def test_update_note_calls_km_patch():
     from tools.notes import update_note  # noqa: PLC0415
 
@@ -176,161 +249,186 @@ async def test_list_backlinks_calls_km_get():
 
 
 # ---------------------------------------------------------------------------
-# pdfs tools
+# pdfs tools (now KM-backed)
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_list_pdfs_calls_reader_get():
+async def test_list_pdfs_calls_km_get():
     from tools.pdfs import list_pdfs  # noqa: PLC0415
 
     assert isinstance(list_pdfs, BaseTool)
 
-    with patch("tools.pdfs.reader_get", new_callable=AsyncMock) as mock_get:
+    with patch("tools.pdfs.km_get", new_callable=AsyncMock) as mock_get:
         mock_get.return_value = []
-        await list_pdfs.ainvoke({}, config=CFG)
+        await list_pdfs.ainvoke({"libraryId": 1}, config=CFG)
 
-    mock_get.assert_awaited_once_with("/api/pdfs", user_id=USER)
+    mock_get.assert_awaited_once_with("/api/papers?libraryId=1", user_id=USER)
 
 
 @pytest.mark.asyncio
-async def test_extract_passages_calls_reader_get():
-    from tools.pdfs import extract_passages  # noqa: PLC0415
+async def test_search_pdfs_calls_km_get():
+    from tools.pdfs import search_pdfs  # noqa: PLC0415
 
-    assert isinstance(extract_passages, BaseTool)
+    assert isinstance(search_pdfs, BaseTool)
 
-    with patch("tools.pdfs.reader_get", new_callable=AsyncMock) as mock_get:
-        mock_get.return_value = []
-        await extract_passages.ainvoke(
-            {"pdf_id": "pdf1", "query": "attention", "k": 3}, config=CFG
-        )
+    with patch("tools.pdfs.km_get", new_callable=AsyncMock) as mock_get:
+        mock_get.return_value = {"results": []}
+        await search_pdfs.ainvoke({"query": "attention"}, config=CFG)
 
-    mock_get.assert_awaited_once_with(
-        "/api/pdfs/pdf1/passages?q=attention&k=3", user_id=USER
-    )
+    mock_get.assert_awaited_once_with("/api/pdfs/search?q=attention", user_id=USER)
 
 
 @pytest.mark.asyncio
-async def test_highlight_calls_reader_post():
+async def test_highlight_calls_km_post():
     from tools.pdfs import highlight  # noqa: PLC0415
 
     assert isinstance(highlight, BaseTool)
 
-    with patch("tools.pdfs.reader_post", new_callable=AsyncMock) as mock_post:
+    with patch("tools.pdfs.km_post", new_callable=AsyncMock) as mock_post:
         mock_post.return_value = {"id": "hl1"}
         await highlight.ainvoke(
-            {"pdf_id": "pdf1", "page": 3, "range_": "0-50"}, config=CFG
+            {"pdf_id": "pdf1", "page": 3, "note": "important"}, config=CFG
         )
 
     call_args = mock_post.call_args
-    assert call_args.args[0] == "/api/pdfs/pdf1/highlights"
+    assert call_args.args[0] == "/api/paper-highlights"
     body = call_args.args[1]
+    assert body["paperId"] == "pdf1"
     assert body["page"] == 3
-    assert body["range"] == "0-50"
+    assert body["noteMd"] == "important"
     assert call_args.kwargs["user_id"] == USER
 
 
 @pytest.mark.asyncio
-async def test_get_page_text_calls_reader_get():
+async def test_extract_passages_stubbed():
+    from tools.pdfs import extract_passages  # noqa: PLC0415
+
+    result = await extract_passages.ainvoke(
+        {"pdf_id": "p1", "query": "x"}, config=CFG
+    )
+    assert isinstance(result, dict)
+    assert result.get("error") is True
+
+
+@pytest.mark.asyncio
+async def test_get_page_text_stubbed():
     from tools.pdfs import get_page_text  # noqa: PLC0415
 
-    assert isinstance(get_page_text, BaseTool)
-
-    with patch("tools.pdfs.reader_get", new_callable=AsyncMock) as mock_get:
-        mock_get.return_value = {"text": "page content"}
-        await get_page_text.ainvoke({"pdf_id": "pdf1", "page": 2}, config=CFG)
-
-    mock_get.assert_awaited_once_with("/api/pdfs/pdf1/pages/2/text", user_id=USER)
+    result = await get_page_text.ainvoke({"pdf_id": "p1", "page": 1}, config=CFG)
+    assert isinstance(result, dict)
+    assert result.get("error") is True
+    # pdfs_backend.read() expects {"text": ...} on success; on error it gets a
+    # dict without "text" — its KeyError surfaces upstream as a tool failure,
+    # which is the intended fail-loud behaviour while these are stubbed.
 
 
 # ---------------------------------------------------------------------------
-# library tools
+# library tools (now KM-backed)
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_list_references_calls_reader_get():
+async def test_list_libraries_calls_km_get():
+    from tools.library import list_libraries  # noqa: PLC0415
+
+    assert isinstance(list_libraries, BaseTool)
+
+    with patch("tools.library.km_get", new_callable=AsyncMock) as mock_get:
+        mock_get.return_value = [{"id": 1, "name": "Default"}]
+        await list_libraries.ainvoke({}, config=CFG)
+
+    mock_get.assert_awaited_once_with("/api/libraries", user_id=USER)
+
+
+@pytest.mark.asyncio
+async def test_list_references_calls_km_get():
     from tools.library import list_references  # noqa: PLC0415
 
     assert isinstance(list_references, BaseTool)
 
-    with patch("tools.library.reader_get", new_callable=AsyncMock) as mock_get:
+    with patch("tools.library.km_get", new_callable=AsyncMock) as mock_get:
         mock_get.return_value = []
-        await list_references.ainvoke({}, config=CFG)
+        await list_references.ainvoke({"libraryId": 2}, config=CFG)
 
-    mock_get.assert_awaited_once_with("/api/library", user_id=USER)
+    mock_get.assert_awaited_once_with(
+        "/api/references?libraryId=2&limit=20&offset=0", user_id=USER
+    )
 
 
 @pytest.mark.asyncio
 async def test_list_references_with_query():
     from tools.library import list_references  # noqa: PLC0415
 
-    with patch("tools.library.reader_get", new_callable=AsyncMock) as mock_get:
+    with patch("tools.library.km_get", new_callable=AsyncMock) as mock_get:
         mock_get.return_value = []
-        await list_references.ainvoke({"q": "neural"}, config=CFG)
-
-    mock_get.assert_awaited_once_with("/api/library?q=neural", user_id=USER)
-
-
-@pytest.mark.asyncio
-async def test_get_reference_calls_reader_get():
-    from tools.library import get_reference  # noqa: PLC0415
-
-    assert isinstance(get_reference, BaseTool)
-
-    with patch("tools.library.reader_get", new_callable=AsyncMock) as mock_get:
-        mock_get.return_value = {"id": "ref1"}
-        await get_reference.ainvoke({"id": "ref1"}, config=CFG)
-
-    mock_get.assert_awaited_once_with("/api/library/ref1", user_id=USER)
-
-
-# ---------------------------------------------------------------------------
-# revisions tools
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.asyncio
-async def test_diff_revision_calls_km_get():
-    from tools.revisions import diff_revision  # noqa: PLC0415
-
-    assert isinstance(diff_revision, BaseTool)
-
-    with patch("tools.revisions.km_get", new_callable=AsyncMock) as mock_get:
-        mock_get.return_value = {"diff": "..."}
-        await diff_revision.ainvoke(
-            {"note_id": "n1", "rev_a": "1", "rev_b": "2"}, config=CFG
-        )
+        await list_references.ainvoke({"libraryId": 2, "q": "neural"}, config=CFG)
 
     mock_get.assert_awaited_once_with(
-        "/api/notes/n1/revisions/diff?rev_a=1&rev_b=2", user_id=USER
+        "/api/references?libraryId=2&q=neural&limit=20&offset=0", user_id=USER
     )
 
 
 @pytest.mark.asyncio
-async def test_week_summary_calls_km_get():
-    from tools.revisions import week_summary  # noqa: PLC0415
+async def test_list_references_forwards_limit_and_offset():
+    from tools.library import list_references  # noqa: PLC0415
 
-    assert isinstance(week_summary, BaseTool)
+    with patch("tools.library.km_get", new_callable=AsyncMock) as mock_get:
+        mock_get.return_value = []
+        await list_references.ainvoke(
+            {"libraryId": 2, "limit": 50, "offset": 10}, config=CFG
+        )
 
-    with patch("tools.revisions.km_get", new_callable=AsyncMock) as mock_get:
-        mock_get.return_value = {}
-        await week_summary.ainvoke({"weeks": 2}, config=CFG)
-
-    mock_get.assert_awaited_once_with("/api/activity/summary?weeks=2", user_id=USER)
+    mock_get.assert_awaited_once_with(
+        "/api/references?libraryId=2&limit=50&offset=10", user_id=USER
+    )
 
 
 @pytest.mark.asyncio
-async def test_activity_calls_km_get():
+async def test_get_reference_calls_km_get():
+    from tools.library import get_reference  # noqa: PLC0415
+
+    assert isinstance(get_reference, BaseTool)
+
+    with patch("tools.library.km_get", new_callable=AsyncMock) as mock_get:
+        mock_get.return_value = {"id": "ref1"}
+        await get_reference.ainvoke({"id": "ref1"}, config=CFG)
+
+    mock_get.assert_awaited_once_with("/api/references/ref1", user_id=USER)
+
+
+# ---------------------------------------------------------------------------
+# revisions tools (all stubbed — no KM equivalent)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_diff_revision_stubbed():
+    from tools.revisions import diff_revision  # noqa: PLC0415
+
+    result = await diff_revision.ainvoke(
+        {"note_id": "n1", "rev_a": "1", "rev_b": "2"}, config=CFG
+    )
+    assert isinstance(result, dict)
+    assert result.get("error") is True
+
+
+@pytest.mark.asyncio
+async def test_week_summary_stubbed():
+    from tools.revisions import week_summary  # noqa: PLC0415
+
+    result = await week_summary.ainvoke({"weeks": 2}, config=CFG)
+    assert isinstance(result, dict)
+    assert result.get("error") is True
+
+
+@pytest.mark.asyncio
+async def test_activity_stubbed():
     from tools.revisions import activity  # noqa: PLC0415
 
-    assert isinstance(activity, BaseTool)
-
-    with patch("tools.revisions.km_get", new_callable=AsyncMock) as mock_get:
-        mock_get.return_value = []
-        await activity.ainvoke({"days": 7}, config=CFG)
-
-    mock_get.assert_awaited_once_with("/api/activity?days=7", user_id=USER)
+    result = await activity.ainvoke({"days": 7}, config=CFG)
+    assert isinstance(result, dict)
+    assert result.get("error") is True
 
 
 # ---------------------------------------------------------------------------

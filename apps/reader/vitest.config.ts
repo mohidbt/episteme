@@ -17,6 +17,7 @@ export default defineConfig({
       "@episteme/auth/byok": path.resolve(__dirname, "../../packages/auth/src/byok.ts"),
       "@episteme/auth/client": path.resolve(__dirname, "../../packages/auth/src/client.ts"),
       "@episteme/auth/encryption": path.resolve(__dirname, "../../packages/auth/src/encryption.ts"),
+      "@episteme/auth/internal": path.resolve(__dirname, "../../packages/auth/src/internal.ts"),
       "@episteme/auth": path.resolve(__dirname, "../../packages/auth/src/index.ts"),
       "@episteme/db/schema": path.resolve(__dirname, "../../packages/db/src/schema/index.ts"),
       "@episteme/db/client": path.resolve(__dirname, "../../packages/db/src/client.ts"),

@@ -1,26 +1,63 @@
-"""LangChain tools for the reference library in apps/reader.
+"""LangChain tools for the reference library in apps/km.
 
 The authenticated user_id is injected at runtime via ``RunnableConfig``
 (``configurable.user_id``) — never accepted from the LLM. See
 ``tools/_auth.py`` and §1.3b-E2E-3.
+
+Note: prior versions of this module pointed at the (now-defunct) reader
+app; KM is the source of truth for libraries, references, papers, and
+PDFs. KM's `/api/references` requires a `libraryId`, so the agent uses
+``list_libraries`` first to discover available library IDs.
 """
+from urllib.parse import quote_plus
+
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
 
-from lib.km_http import reader_get
+from lib.km_http import km_get
 from tools._auth import user_id_from_config
 
 
 @tool
-async def list_references(q: str | None = None, *, config: RunnableConfig) -> object:
-    """List references in the calling user's library, optionally filtered by a query.
+async def list_libraries(*, config: RunnableConfig) -> object:
+    """List the calling user's libraries (id, name).
 
-    Args:
-        q: Optional search query to filter references by title/author/abstract.
+    Use this FIRST before list_references / list_pdfs — those endpoints
+    require a libraryId.
     """
     user_id = user_id_from_config(config)
-    path = "/api/library" if q is None else f"/api/library?q={q}"
-    return await reader_get(path, user_id=user_id)
+    return await km_get("/api/libraries", user_id=user_id)
+
+
+@tool
+async def list_references(
+    libraryId: int,
+    q: str | None = None,
+    limit: int = 20,
+    offset: int = 0,
+    *,
+    config: RunnableConfig,
+) -> object:
+    """List bibliographic references in a given library, optionally filtered.
+
+    Use this to enumerate all references (papers cited / catalogued) inside
+    one of the user's libraries. For a free-form discovery flow, call
+    ``list_libraries`` first to obtain a libraryId.
+
+    Returns at most 20 by default. Server caps at 100 regardless.
+
+    Args:
+        libraryId: Numeric library ID (from list_libraries).
+        q: Optional substring filter applied to citationKey and title.
+        limit: Max rows to return (default 20, server caps at 100).
+        offset: Rows to skip for pagination (default 0).
+    """
+    user_id = user_id_from_config(config)
+    path = f"/api/references?libraryId={libraryId}"
+    if q:
+        path += f"&q={quote_plus(q)}"
+    path += f"&limit={limit}&offset={offset}"
+    return await km_get(path, user_id=user_id)
 
 
 @tool
@@ -31,7 +68,7 @@ async def get_reference(id: str, *, config: RunnableConfig) -> object:
         id: Reference UUID.
     """
     user_id = user_id_from_config(config)
-    return await reader_get(f"/api/library/{id}", user_id=user_id)
+    return await km_get(f"/api/references/{id}", user_id=user_id)
 
 
-TOOLS = [list_references, get_reference]
+TOOLS = [list_libraries, list_references, get_reference]

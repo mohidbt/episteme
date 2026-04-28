@@ -17,8 +17,17 @@ from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver  # noqa: F401 â
 # Set by main.py lifespan when EPISTEME_AGENTS_PG_URL is configured.
 _CACHED_SAVER = None
 
+# Process-wide MemorySaver fallback for dev/test. Must be a singleton so
+# checkpoints persist across requests within the same uvicorn process â€”
+# otherwise every /invoke gets a fresh empty saver and the agent has no
+# conversation memory across turns.
+_DEV_SAVER: MemorySaver | None = None
+
 
 def get_saver():
+    global _DEV_SAVER
     if _CACHED_SAVER is not None:
         return _CACHED_SAVER
-    return MemorySaver()
+    if _DEV_SAVER is None:
+        _DEV_SAVER = MemorySaver()
+    return _DEV_SAVER

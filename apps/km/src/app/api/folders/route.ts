@@ -4,8 +4,67 @@ import { createFolder } from "@/lib/folders-server";
 import { validateFolderName, normalizeFolderName } from "@/lib/folders";
 import { db } from "@/lib/db";
 import { libraries, folders } from "@episteme/db/schema";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, isNull } from "drizzle-orm";
 import { getUserIdFromRequest } from "@/lib/auth";
+import { getAuthedUserId, MissingInternalSecretError } from "@/lib/internal-auth";
+import { jsonError } from "@/lib/crud";
+
+/**
+ * GET /api/folders?libraryId=<int>
+ * Returns folder rows for the given library owned by the authed user.
+ * Dual-auth: session cookie OR internal HMAC (used by the agent tool
+ * `list_folders` to discover where notes can be filed).
+ *
+ * If `libraryId` is omitted on an HMAC-authed request, the user's default
+ * (lowest-id) library is used — mirrors the /api/notes GET pattern.
+ */
+export async function GET(req: Request) {
+  let authed;
+  try { authed = await getAuthedUserId(req); }
+  catch (e) {
+    if (e instanceof MissingInternalSecretError) return jsonError(500, "internal auth misconfigured");
+    throw e;
+  }
+  if (!authed) return jsonError(401, "unauthorized");
+  const userId = authed.userId;
+  const url = new URL(req.url);
+  const libraryIdStr = url.searchParams.get("libraryId");
+  let libraryId: number;
+  if (libraryIdStr) {
+    libraryId = Number(libraryIdStr);
+    if (!Number.isFinite(libraryId)) return jsonError(400, "validation");
+  } else if (authed.viaHmac) {
+    const [defaultLib] = await db
+      .select({ id: libraries.id })
+      .from(libraries)
+      .where(eq(libraries.userId, userId))
+      .orderBy(asc(libraries.id))
+      .limit(1);
+    if (!defaultLib) return jsonError(400, "no_library", { message: "user has no library" });
+    libraryId = defaultLib.id;
+  } else {
+    return jsonError(400, "validation", { message: "libraryId required" });
+  }
+  // Verify ownership of the library.
+  const [lib] = await db
+    .select({ id: libraries.id })
+    .from(libraries)
+    .where(and(eq(libraries.id, libraryId), eq(libraries.userId, userId)))
+    .limit(1);
+  if (!lib) return jsonError(404, "not_found");
+  const rows = await db
+    .select({
+      id: folders.id,
+      name: folders.name,
+      parentId: folders.parentId,
+      isTrash: folders.isTrash,
+      sortOrder: folders.sortOrder,
+    })
+    .from(folders)
+    .where(and(eq(folders.libraryId, libraryId), eq(folders.userId, userId)))
+    .orderBy(asc(folders.sortOrder), asc(folders.name));
+  return Response.json({ libraryId, folders: rows });
+}
 
 const Body = z.object({
   libraryId: z.number().int().positive(),

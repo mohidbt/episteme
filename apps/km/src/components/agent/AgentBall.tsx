@@ -2,12 +2,10 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
-import { Sparkles, X } from "lucide-react";
+import { Sparkles, X, PlusIcon } from "lucide-react";
 import { AgentTranscript } from "./AgentTranscript";
 import { useDoubleTapSpace } from "@/hooks/useDoubleTapSpace";
 import { derivePageContext } from "@/lib/page-context";
-
-const LS_KEY = "episteme.agent.lastThread";
 
 interface AgentBallProps {
   /** Reserved for future per-user telemetry / overrides. */
@@ -16,18 +14,6 @@ interface AgentBallProps {
 
 async function ensureThreadId(signal: AbortSignal): Promise<string | null> {
   try {
-    const cached =
-      typeof window !== "undefined" ? window.localStorage.getItem(LS_KEY) : null;
-    if (cached) return cached;
-    const list = await fetch("/api/agent/threads", { credentials: "include", signal });
-    if (list.ok) {
-      const data = (await list.json()) as { threads?: Array<{ threadId: string }> };
-      const recent = data.threads?.[0]?.threadId;
-      if (recent) {
-        window.localStorage.setItem(LS_KEY, recent);
-        return recent;
-      }
-    }
     const created = await fetch("/api/agent/threads", {
       method: "POST",
       credentials: "include",
@@ -38,10 +24,7 @@ async function ensureThreadId(signal: AbortSignal): Promise<string | null> {
     if (created.ok) {
       const data = (await created.json()) as { thread?: { threadId: string } };
       const id = data.thread?.threadId;
-      if (id) {
-        window.localStorage.setItem(LS_KEY, id);
-        return id;
-      }
+      if (id) return id;
     }
   } catch {
     // aborted or network error — caller falls back to "Loading…"
@@ -58,6 +41,30 @@ export function AgentBall(_props: AgentBallProps) {
   const toggle = useCallback(() => setOpen((v) => !v), []);
   useDoubleTapSpace(toggle);
 
+  const startNewChat = useCallback(async () => {
+    try {
+      const res = await fetch("/api/agent/threads", {
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      if (!res.ok) return;
+      const data = (await res.json()) as { thread?: { threadId: string } };
+      const id = data.thread?.threadId;
+      if (id) {
+        setThreadId(id);
+      }
+    } catch {
+      // network error — keep current thread
+    }
+  }, []);
+
+  const closePanel = useCallback(() => {
+    setOpen(false);
+    setThreadId(null);
+  }, []);
+
   useEffect(() => {
     if (!open || threadId) return;
     const ctl = new AbortController();
@@ -70,11 +77,11 @@ export function AgentBall(_props: AgentBallProps) {
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
+      if (e.key === "Escape") closePanel();
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [open]);
+  }, [open, closePanel]);
 
   if (!open) {
     return (
@@ -102,18 +109,35 @@ export function AgentBall(_props: AgentBallProps) {
           <Sparkles className="h-4 w-4" />
           Agent
         </div>
-        <button
-          type="button"
-          onClick={() => setOpen(false)}
-          aria-label="Close agent"
-          className="rounded p-1 hover:bg-muted"
-        >
-          <X className="h-4 w-4" />
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={startNewChat}
+            aria-label="New chat"
+            title="New chat"
+            className="rounded p-1 hover:bg-muted"
+            data-testid="agent-new-chat"
+          >
+            <PlusIcon className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={closePanel}
+            aria-label="Close agent"
+            className="rounded p-1 hover:bg-muted"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
       </div>
       <div className="flex-1 min-h-0">
         {threadId ? (
-          <AgentTranscript threadId={threadId} pageContext={pageContext} fullHeight />
+          <AgentTranscript
+            key={threadId}
+            threadId={threadId}
+            pageContext={pageContext}
+            fullHeight
+          />
         ) : (
           <div className="p-3 text-xs text-muted-foreground">Loading…</div>
         )}

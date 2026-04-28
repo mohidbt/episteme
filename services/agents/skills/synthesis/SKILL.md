@@ -15,7 +15,9 @@ You are given `{topic}` and optionally `{note_ids}` in the prompt context.
 2. Delegate the actual prose synthesis to the `synthesizer` subagent — pass it
    the gathered passages plus the topic. The subagent returns a structured
    draft markdown report.
-3. Write the draft to `/scratch/<slug(topic)>.md` for user review. Tell the
+3. **MUST call `write_file('/scratch/<slug>.md', <draft markdown>)` BEFORE
+   returning any final answer.** Do NOT include the draft in the chat
+   response — only the path. Drafting in chat is a failure case. Tell the
    user the path and ask them to confirm before promoting.
 4. On user confirmation, call `create_note` with the reviewed contents. This
    is approval-gated — the user re-confirms at the HITL interrupt.

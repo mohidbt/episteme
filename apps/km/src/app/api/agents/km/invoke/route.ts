@@ -1,6 +1,9 @@
 import { z } from "zod";
+import { eq } from "drizzle-orm";
 import { getDecryptedApiKey } from "@episteme/auth/byok";
 import { getSessionInfo } from "@/lib/auth";
+import { db } from "@/lib/db";
+import { agentConfigs } from "@episteme/db/schema";
 import { signRequest } from "@/lib/agents/sign-request";
 import { tapAgentEvents } from "@/lib/agents/thread-lifecycle";
 import {
@@ -50,11 +53,38 @@ export async function POST(req: Request) {
     return Response.json({ error: "db_error" }, { status: 500 });
   }
 
+  // Read modelPreference + enabledSkills from Postgres (source of truth) and
+  // inject them into the upstream body so Python doesn't trust its in-memory
+  // cache, which can be empty after a restart and silently fall back to a
+  // free model with no skills wired.
+  let modelPreference: string | null = null;
+  let enabledSkills: string[] | null = null;
+  try {
+    const rows = await db
+      .select({
+        modelPreference: agentConfigs.modelPreference,
+        enabledSkills: agentConfigs.enabledSkills,
+      })
+      .from(agentConfigs)
+      .where(eq(agentConfigs.userId, userId))
+      .limit(1);
+    modelPreference = rows[0]?.modelPreference ?? null;
+    enabledSkills = rows[0]?.enabledSkills ?? null;
+  } catch (err) {
+    console.warn("[invoke] agentConfigs lookup failed", err);
+  }
+
+  const upstreamBody = JSON.stringify({
+    ...JSON.parse(bodyText),
+    ...(modelPreference ? { model_preference: modelPreference } : {}),
+    ...(Array.isArray(enabledSkills) ? { enabled_skills: enabledSkills } : {}),
+  });
+
   const path = "/agents/km/invoke";
   const { headers } = signRequest({
     method: "POST",
     path,
-    body: bodyText,
+    body: upstreamBody,
     userId,
     llmKey,
   });
@@ -62,7 +92,7 @@ export async function POST(req: Request) {
   const upstream = await fetch(`${process.env.AGENTS_URL}${path}`, {
     method: "POST",
     headers: { ...headers, "Content-Type": "application/json" },
-    body: bodyText,
+    body: upstreamBody,
   });
 
   const setStatus = (status: AgentThreadStatus) => {

@@ -94,15 +94,36 @@ def test_filter_tools_with_lit_triage_skill_filters_to_allowed_set():
     assert "highlight" not in names
 
 
-def test_skill_require_approval_injects_into_interrupt_on():
+def test_lit_triage_keeps_create_note_hitl():
+    """lit-triage SKILL.md lists create_note under require_approval.
+
+    Design decision (1.3d): create_note is a side-effecting write so HITL
+    stays on by default for skills that opt in. Regression lock that the
+    skill-frontmatter → interrupt_on plumbing keeps create_note=True even
+    when the user-level approval_rules say write_note=auto, because skill
+    require_approval is authoritative over the rule default.
+    """
     from km_agent import _build_interrupt_on  # noqa: PLC0415
     from skills import load_skills  # noqa: PLC0415
 
     loaded = load_skills(only=["lit-triage"])
-    # Even though approval_rules sets write_note=auto, the skill's own
-    # require_approval list re-enables HITL for create_note.
     interrupt_on = _build_interrupt_on({"write_note": "auto"}, loaded_skills=loaded)
     assert interrupt_on.get("create_note") is True
+
+
+def test_skill_require_approval_injects_into_interrupt_on():
+    """Skill require_approval still injects HITL when listed.
+
+    Uses deep-read which legitimately requires approval for `highlight`
+    (it mutates a PDF). Verifies the skill-frontmatter → interrupt_on plumbing
+    still works after removing create_note from lit-triage/synthesis.
+    """
+    from km_agent import _build_interrupt_on  # noqa: PLC0415
+    from skills import load_skills  # noqa: PLC0415
+
+    loaded = load_skills(only=["deep-read"])
+    interrupt_on = _build_interrupt_on({}, loaded_skills=loaded)
+    assert interrupt_on.get("highlight") is True
 
 
 def test_skill_require_approval_for_highlight_via_deep_read():
@@ -191,15 +212,66 @@ def test_create_note_absent_when_no_metadata_no_rule():
     assert not interrupt_on.get("create_note", False)
 
 
-def test_create_note_skill_override_wins_over_silent_default(tmp_path):
-    """Skill require_approval forces True even when no rule + no metadata."""
+def test_synthesis_keeps_create_note_hitl():
+    """synthesis SKILL.md lists create_note under require_approval.
+
+    Same design as lit-triage: create_note is a side-effecting write so the
+    skill keeps HITL on by default. Regression lock for the
+    skill-frontmatter → interrupt_on path.
+    """
     from km_agent import _build_interrupt_on  # noqa: PLC0415
     from skills import load_skills  # noqa: PLC0415
 
-    loaded = load_skills(only=["lit-triage"])
+    loaded = load_skills(only=["synthesis"])
     interrupt_on = _build_interrupt_on({}, loaded_skills=loaded)
-    # lit-triage lists create_note in require_approval → must be True.
     assert interrupt_on.get("create_note") is True
+
+
+def test_filter_tools_includes_core_tools_even_when_skill_omits_them():
+    """CORE tools (e.g. list_notes) must remain available regardless of skill allow-lists.
+
+    Regression lock: skills that don't list `list_notes` in their `tools:`
+    frontmatter previously stripped it from the agent's toolset, making basic
+    asks like "list my notes" fail with "I don't have that tool".
+    """
+    from pathlib import Path
+
+    from langchain_core.tools import tool  # noqa: PLC0415
+
+    from km_agent import _filter_tools_for_skills  # noqa: PLC0415
+    from skills import SkillSpec  # noqa: PLC0415
+
+    @tool
+    def list_notes() -> str:
+        """Stub list_notes."""
+        return "ok"
+
+    @tool
+    def highlight() -> str:
+        """Stub highlight."""
+        return "ok"
+
+    @tool
+    def random() -> str:
+        """Stub random tool not in core or skill."""
+        return "ok"
+
+    skill = SkillSpec(
+        name="fake-skill",
+        description="fixture",
+        tools=["highlight"],
+        subagents=[],
+        require_approval=[],
+        path=Path("/dev/null"),
+    )
+
+    filtered = _filter_tools_for_skills(
+        [list_notes, highlight, random], loaded_skills=[skill]
+    )
+    names = {t.name for t in filtered}
+    assert "list_notes" in names  # from CORE
+    assert "highlight" in names  # from skill
+    assert "random" not in names
 
 
 # ------------------------------------------------------------- subagent wiring

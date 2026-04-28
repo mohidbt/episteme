@@ -13,35 +13,41 @@ def test_get_store_returns_inmemory_when_env_unset(monkeypatch):
 
     s = get_store()
     from langgraph.store.memory import InMemoryStore  # noqa: PLC0415
+    from lib.safe_store import SafeStore  # noqa: PLC0415
 
-    assert isinstance(s, InMemoryStore)
+    assert isinstance(s, SafeStore)
+    assert isinstance(s._inner, InMemoryStore)
 
 
 def test_get_store_returns_cached_when_set():
-    """When lifespan caches an async store, get_store() returns it."""
+    """When lifespan caches an async store, get_store() wraps it in SafeStore."""
     import store  # noqa: PLC0415
+    from lib.safe_store import SafeStore  # noqa: PLC0415
 
     fake_store = MagicMock()
     original = store._CACHED_STORE
     try:
         store._CACHED_STORE = fake_store
         result = store.get_store()
-        assert result is fake_store
+        assert isinstance(result, SafeStore)
+        assert result._inner is fake_store
     finally:
         store._CACHED_STORE = original
 
 
 def test_get_store_returns_inmemory_when_cache_empty(monkeypatch):
-    """Without cached store, always returns InMemoryStore regardless of env var."""
+    """Without cached store, always returns SafeStore-wrapped InMemoryStore regardless of env var."""
     import store  # noqa: PLC0415
     from langgraph.store.memory import InMemoryStore  # noqa: PLC0415
+    from lib.safe_store import SafeStore  # noqa: PLC0415
 
     monkeypatch.setenv("EPISTEME_AGENTS_PG_URL", "postgresql://u:p@host/db")
     original = store._CACHED_STORE
     try:
         store._CACHED_STORE = None
         result = store.get_store()
-        assert isinstance(result, InMemoryStore)
+        assert isinstance(result, SafeStore)
+        assert isinstance(result._inner, InMemoryStore)
     finally:
         store._CACHED_STORE = original
 

@@ -338,6 +338,79 @@ describe("references GET ?q=", () => {
   });
 });
 
+// ── GET pagination (limit/offset) ───────────────────────────────────────────
+
+describe("references GET pagination", () => {
+  let pagLib: number;
+  beforeAll(async () => {
+    const r = await POST_LIB(
+      req("/api/libraries", {
+        method: "POST",
+        cookie: u.cookie,
+        body: JSON.stringify({ name: "Pagination Lib" }),
+      }),
+    );
+    pagLib = (await r.json()).id;
+    // Seed 25 references so we can exercise limits.
+    for (let i = 0; i < 25; i++) {
+      const r2 = await POST(
+        req("/api/references", {
+          method: "POST",
+          cookie: u.cookie,
+          body: JSON.stringify({
+            libraryId: pagLib,
+            citationKey: `pag${Date.now()}-${i}`,
+            cslJson: { type: "article-journal", title: `P${i}` },
+          }),
+        }),
+      );
+      expect(r2.status).toBe(201);
+    }
+  });
+
+  it("default limit caps at 20", async () => {
+    const r = await GET(req(`/api/references?libraryId=${pagLib}`, { cookie: u.cookie }));
+    const rows = (await r.json()) as unknown[];
+    expect(rows.length).toBe(20);
+  });
+
+  it("limit=200 is clamped to 100 (and we only have 25 here)", async () => {
+    const r = await GET(
+      req(`/api/references?libraryId=${pagLib}&limit=200`, { cookie: u.cookie }),
+    );
+    const rows = (await r.json()) as unknown[];
+    // Only 25 seeded, but limit must accept and cap to 100; result count <= 100.
+    expect(rows.length).toBe(25);
+  });
+
+  it("offset=10 skips first 10 rows", async () => {
+    const all = await GET(
+      req(`/api/references?libraryId=${pagLib}&limit=100`, { cookie: u.cookie }),
+    );
+    const allRows = (await all.json()) as Array<{ id: string }>;
+    const r = await GET(
+      req(`/api/references?libraryId=${pagLib}&limit=100&offset=10`, { cookie: u.cookie }),
+    );
+    const rows = (await r.json()) as Array<{ id: string }>;
+    expect(rows.length).toBe(allRows.length - 10);
+    expect(rows[0].id).toBe(allRows[10].id);
+  });
+
+  it("400 on invalid limit", async () => {
+    const r = await GET(
+      req(`/api/references?libraryId=${pagLib}&limit=0`, { cookie: u.cookie }),
+    );
+    expect(r.status).toBe(400);
+  });
+
+  it("400 on negative offset", async () => {
+    const r = await GET(
+      req(`/api/references?libraryId=${pagLib}&offset=-1`, { cookie: u.cookie }),
+    );
+    expect(r.status).toBe(400);
+  });
+});
+
 // ── PATCH { paperId } attaches/detaches a paper ─────────────────────────────
 
 describe("references PATCH { paperId }", () => {

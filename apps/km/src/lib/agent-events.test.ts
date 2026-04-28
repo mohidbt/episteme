@@ -1,7 +1,7 @@
 /**
  * RED tests for agent-events.ts discriminated union (Task 7 / 1.3a).
  *
- * Type-level coverage: AGENT_EVENT_TYPES has exactly 11 members.
+ * Type-level coverage: AGENT_EVENT_TYPES has exactly 13 members.
  * Runtime coverage: switch narrows AgentEvent to every variant.
  */
 
@@ -13,8 +13,8 @@ import {
 } from "./agent-events";
 
 describe("AGENT_EVENT_TYPES", () => {
-  it("contains exactly 11 event types", () => {
-    expect(AGENT_EVENT_TYPES).toHaveLength(11);
+  it("contains exactly 13 event types", () => {
+    expect(AGENT_EVENT_TYPES).toHaveLength(13);
   });
 
   it("contains all expected event names", () => {
@@ -30,6 +30,8 @@ describe("AGENT_EVENT_TYPES", () => {
       "file_diff",
       "suggestion",
       "done",
+      "error",
+      "recursion_step",
     ] as const;
     for (const name of expected) {
       expect(AGENT_EVENT_TYPES).toContain(name);
@@ -66,6 +68,10 @@ describe("AgentEvent discriminated union", () => {
         return `suggestion:${ev.items.length}`;
       case "done":
         return `done:${ev.thread_id}`;
+      case "error":
+        return `error:${ev.code}`;
+      case "recursion_step":
+        return `recursion_step:${ev.step}`;
       default: {
         // exhaustive check — never reached at runtime
         const _exhaustive: never = ev;
@@ -181,12 +187,27 @@ describe("AgentEvent discriminated union", () => {
     const ev: AgentEvent = { type: "done", thread_id: "t-123" };
     expect(getEventLabel(ev)).toBe("done:t-123");
   });
+
+  it("narrows error event", () => {
+    const ev: AgentEvent = {
+      type: "error",
+      code: "rate_limited",
+      message: "upstream 429",
+      retriable: true,
+    };
+    expect(getEventLabel(ev)).toBe("error:rate_limited");
+  });
+
+  it("narrows recursion_step event", () => {
+    const ev: AgentEvent = { type: "recursion_step", step: 10 };
+    expect(getEventLabel(ev)).toBe("recursion_step:10");
+  });
 });
 
 describe("AgentEventType", () => {
   it("is assignable from each event type string", () => {
     // Type-level — just confirm runtime constant is stable
     const types: AgentEventType[] = [...AGENT_EVENT_TYPES];
-    expect(types).toHaveLength(11);
+    expect(types).toHaveLength(13);
   });
 });

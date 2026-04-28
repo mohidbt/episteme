@@ -2,6 +2,7 @@ import { and, asc, eq, ilike, or, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { references_, libraries } from "@episteme/db/schema";
 import { getUserIdFromRequest } from "@/lib/auth";
+import { getAuthedUserId, MissingInternalSecretError } from "@/lib/internal-auth";
 import {
   referenceCreateSchema,
   referenceCreateFromCslSchema,
@@ -13,15 +14,56 @@ import { fetchCrossRef } from "@/lib/crossref";
 import { isUniqueViolation, suggestNextCitationKey } from "@/lib/references";
 
 export async function GET(req: Request) {
-  const userId = await getUserIdFromRequest(req);
-  if (!userId) return jsonError(401, "unauthorized");
+  // Dual-auth: cookie session OR HMAC (for agent tools like list_references).
+  let authed;
+  try { authed = await getAuthedUserId(req); }
+  catch (e) {
+    if (e instanceof MissingInternalSecretError) return jsonError(500, "internal auth misconfigured");
+    throw e;
+  }
+  if (!authed) return jsonError(401, "unauthorized");
+  const userId = authed.userId;
   const url = new URL(req.url);
   const libraryIdStr = url.searchParams.get("libraryId");
-  if (!libraryIdStr) return jsonError(400, "validation", { message: "libraryId required" });
-  const libraryId = Number(libraryIdStr);
-  if (!Number.isFinite(libraryId)) return jsonError(400, "validation");
+  let libraryId: number;
+  if (libraryIdStr) {
+    libraryId = Number(libraryIdStr);
+    if (!Number.isFinite(libraryId)) return jsonError(400, "validation");
+  } else if (authed.viaHmac) {
+    // HMAC-authed agent tool calls (e.g. list_references) may omit libraryId;
+    // resolve user's default library on the server.
+    const rows = await db
+      .select({ id: libraries.id })
+      .from(libraries)
+      .where(eq(libraries.userId, userId))
+      .orderBy(asc(libraries.id))
+      .limit(1);
+    const defaultId = rows[0]?.id;
+    if (defaultId == null) return jsonError(400, "no_library", { message: "user has no library" });
+    libraryId = defaultId;
+  } else {
+    return jsonError(400, "validation", { message: "libraryId required" });
+  }
   const folderPath = url.searchParams.get("folderPath");
   const q = url.searchParams.get("q");
+  const limitRaw = url.searchParams.get("limit");
+  const offsetRaw = url.searchParams.get("offset");
+  let limit = 20;
+  if (limitRaw !== null) {
+    const n = Number(limitRaw);
+    if (!Number.isFinite(n) || !Number.isInteger(n) || n < 1) {
+      return jsonError(400, "validation", { message: "limit must be integer >= 1" });
+    }
+    limit = Math.min(n, 100);
+  }
+  let offset = 0;
+  if (offsetRaw !== null) {
+    const n = Number(offsetRaw);
+    if (!Number.isFinite(n) || !Number.isInteger(n) || n < 0) {
+      return jsonError(400, "validation", { message: "offset must be integer >= 0" });
+    }
+    offset = n;
+  }
   const conds = [eq(references_.userId, userId), eq(references_.libraryId, libraryId)];
   if (folderPath !== null) conds.push(eq(references_.folderPath, folderPath));
   if (q) {
@@ -32,7 +74,13 @@ export async function GET(req: Request) {
     );
     if (qCond) conds.push(qCond);
   }
-  const rows = await db.select().from(references_).where(and(...conds)).orderBy(asc(references_.createdAt));
+  const rows = await db
+    .select()
+    .from(references_)
+    .where(and(...conds))
+    .orderBy(asc(references_.createdAt))
+    .limit(limit)
+    .offset(offset);
   return Response.json(rows);
 }
 

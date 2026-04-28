@@ -12,10 +12,45 @@ Headers sent on every request:
 import hashlib
 import hmac
 import json
+import logging
 import os
 import time
 
 import httpx
+
+logger = logging.getLogger(__name__)
+
+
+def _safe_response(resp: httpx.Response) -> object:
+    """Convert a non-2xx httpx response into a tool-friendly error dict.
+
+    Tools must never raise into the LangGraph stream — uncaught exceptions
+    abort `astream_events`, leaving the tool card stuck on "Running" with
+    no `on_tool_end` event ever emitted. Returning a structured error keeps
+    the agent loop alive so the LLM can adapt or report the error.
+    """
+    body: object
+    try:
+        body = resp.json()
+    except Exception:  # noqa: BLE001 — body may be HTML / empty / non-JSON
+        body = resp.text or None
+    return {
+        "error": True,
+        "status": resp.status_code,
+        "path": str(resp.request.url),
+        "body": body,
+    }
+
+
+def _safe_request_error(exc: httpx.RequestError, *, method: str, url: str) -> object:
+    """Map a transport-layer httpx error into a tool-friendly error dict."""
+    logger.warning("km_http %s %s failed: %s", method, url, exc)
+    return {
+        "error": True,
+        "status": None,
+        "path": url,
+        "body": f"{type(exc).__name__}: {exc}",
+    }
 
 def _km_base_url() -> str:
     return os.environ.get("EPISTEME_KM_BASE_URL", "http://localhost:3001")
@@ -55,29 +90,44 @@ def _auth_headers(method: str, path: str, body: bytes, user_id: str) -> dict:
 
 
 async def km_get(path: str, *, user_id: str) -> object:
-    """GET from apps/km and return parsed JSON. Raises on non-2xx."""
+    """GET from apps/km and return parsed JSON, or a structured error dict on failure."""
+    url = _km_base_url() + path
     headers = _auth_headers("GET", path, b"", user_id)
-    resp = await _client.get(_km_base_url() + path, headers=headers)
-    resp.raise_for_status()
-    return resp.json()
+    try:
+        resp = await _client.get(url, headers=headers)
+    except httpx.RequestError as e:
+        return _safe_request_error(e, method="GET", url=url)
+    if resp.is_success:
+        return resp.json()
+    return _safe_response(resp)
 
 
 async def km_post(path: str, body: dict, *, user_id: str) -> object:
-    """POST JSON to apps/km and return parsed JSON. Raises on non-2xx."""
+    """POST JSON to apps/km and return parsed JSON, or a structured error dict on failure."""
     body_bytes = json.dumps(body).encode()
+    url = _km_base_url() + path
     headers = _auth_headers("POST", path, body_bytes, user_id)
-    resp = await _client.post(_km_base_url() + path, content=body_bytes, headers=headers)
-    resp.raise_for_status()
-    return resp.json()
+    try:
+        resp = await _client.post(url, content=body_bytes, headers=headers)
+    except httpx.RequestError as e:
+        return _safe_request_error(e, method="POST", url=url)
+    if resp.is_success:
+        return resp.json()
+    return _safe_response(resp)
 
 
 async def km_patch(path: str, body: dict, *, user_id: str) -> object:
-    """PATCH JSON on apps/km and return parsed JSON. Raises on non-2xx."""
+    """PATCH JSON on apps/km and return parsed JSON, or a structured error dict on failure."""
     body_bytes = json.dumps(body).encode()
+    url = _km_base_url() + path
     headers = _auth_headers("PATCH", path, body_bytes, user_id)
-    resp = await _client.patch(_km_base_url() + path, content=body_bytes, headers=headers)
-    resp.raise_for_status()
-    return resp.json()
+    try:
+        resp = await _client.patch(url, content=body_bytes, headers=headers)
+    except httpx.RequestError as e:
+        return _safe_request_error(e, method="PATCH", url=url)
+    if resp.is_success:
+        return resp.json()
+    return _safe_response(resp)
 
 
 # ---------------------------------------------------------------------------
@@ -86,17 +136,27 @@ async def km_patch(path: str, body: dict, *, user_id: str) -> object:
 
 
 async def reader_get(path: str, *, user_id: str) -> object:
-    """GET from apps/reader and return parsed JSON. Raises on non-2xx."""
+    """GET from apps/reader and return parsed JSON, or a structured error dict on failure."""
+    url = _reader_base_url() + path
     headers = _auth_headers("GET", path, b"", user_id)
-    resp = await _reader_client.get(_reader_base_url() + path, headers=headers)
-    resp.raise_for_status()
-    return resp.json()
+    try:
+        resp = await _reader_client.get(url, headers=headers)
+    except httpx.RequestError as e:
+        return _safe_request_error(e, method="GET", url=url)
+    if resp.is_success:
+        return resp.json()
+    return _safe_response(resp)
 
 
 async def reader_post(path: str, body: dict, *, user_id: str) -> object:
-    """POST JSON to apps/reader and return parsed JSON. Raises on non-2xx."""
+    """POST JSON to apps/reader and return parsed JSON, or a structured error dict on failure."""
     body_bytes = json.dumps(body).encode()
+    url = _reader_base_url() + path
     headers = _auth_headers("POST", path, body_bytes, user_id)
-    resp = await _reader_client.post(_reader_base_url() + path, content=body_bytes, headers=headers)
-    resp.raise_for_status()
-    return resp.json()
+    try:
+        resp = await _reader_client.post(url, content=body_bytes, headers=headers)
+    except httpx.RequestError as e:
+        return _safe_request_error(e, method="POST", url=url)
+    if resp.is_success:
+        return resp.json()
+    return _safe_response(resp)

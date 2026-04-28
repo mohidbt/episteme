@@ -46,6 +46,25 @@ def test_get_saver_returns_memory_saver_when_cache_empty(monkeypatch):
         checkpointer._CACHED_SAVER = original
 
 
+def test_get_saver_dev_returns_singleton(monkeypatch):
+    """Dev fallback (no PG URL) must return the same MemorySaver instance
+    across calls so checkpoints persist across requests within a process."""
+    import checkpointer  # noqa: PLC0415
+
+    monkeypatch.delenv("EPISTEME_AGENTS_PG_URL", raising=False)
+    original_cached = checkpointer._CACHED_SAVER
+    original_dev = checkpointer._DEV_SAVER
+    try:
+        checkpointer._CACHED_SAVER = None
+        checkpointer._DEV_SAVER = None
+        first = checkpointer.get_saver()
+        second = checkpointer.get_saver()
+        assert first is second
+    finally:
+        checkpointer._CACHED_SAVER = original_cached
+        checkpointer._DEV_SAVER = original_dev
+
+
 def test_async_postgres_saver_importable():
     """AsyncPostgresSaver must be importable from checkpointer module namespace."""
     from checkpointer import AsyncPostgresSaver  # noqa: PLC0415

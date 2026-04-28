@@ -19,9 +19,18 @@ export async function GET(req: Request) {
   const userId = authed.userId;
   const url = new URL(req.url);
   const libraryIdStr = url.searchParams.get("libraryId");
-  if (!libraryIdStr) return jsonError(400, "validation", { message: "libraryId required" });
-  const libraryId = Number(libraryIdStr);
-  if (!Number.isFinite(libraryId)) return jsonError(400, "validation");
+  let libraryId: number;
+  if (libraryIdStr) {
+    libraryId = Number(libraryIdStr);
+    if (!Number.isFinite(libraryId)) return jsonError(400, "validation");
+  } else if (authed.viaHmac) {
+    // HMAC-authed agent tool calls (e.g. list_notes) omit libraryId.
+    const defaultId = await resolveDefaultLibraryId(userId);
+    if (defaultId == null) return jsonError(400, "no_library", { message: "user has no library" });
+    libraryId = defaultId;
+  } else {
+    return jsonError(400, "validation", { message: "libraryId required" });
+  }
   const folderPath = url.searchParams.get("folderPath");
   const conds = [eq(notes.userId, userId), eq(notes.libraryId, libraryId)];
   if (folderPath !== null) conds.push(eq(notes.folderPath, folderPath));

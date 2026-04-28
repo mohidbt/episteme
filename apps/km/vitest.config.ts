@@ -58,6 +58,14 @@ export default defineConfig({
         __dirname,
         "../../packages/auth/src/client.ts",
       ),
+      "@episteme/auth/server": path.resolve(
+        __dirname,
+        "../../packages/auth/src/server.ts",
+      ),
+      "@episteme/auth/internal": path.resolve(
+        __dirname,
+        "../../packages/auth/src/internal.ts",
+      ),
       "@episteme/auth": path.resolve(
         __dirname,
         "../../packages/auth/src/index.ts",

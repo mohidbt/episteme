@@ -2,6 +2,7 @@ import { and, desc, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { papers, libraries } from "@episteme/db/schema";
 import { getUserIdFromRequest } from "@/lib/auth";
+import { getAuthedUserId, MissingInternalSecretError } from "@/lib/internal-auth";
 import { paperUploadInitSchema } from "@/lib/validators";
 import { jsonError, requireOwned } from "@/lib/crud";
 import { storage, paperSourceKey } from "@/lib/storage";
@@ -12,8 +13,15 @@ export const runtime = "nodejs";
 const UPLOAD_TTL_SEC = 600;
 
 export async function GET(req: Request) {
-  const userId = await getUserIdFromRequest(req);
-  if (!userId) return jsonError(401, "unauthorized");
+  // Dual-auth: cookie session OR HMAC (for agent tools like list_pdfs).
+  let authed;
+  try { authed = await getAuthedUserId(req); }
+  catch (e) {
+    if (e instanceof MissingInternalSecretError) return jsonError(500, "internal auth misconfigured");
+    throw e;
+  }
+  if (!authed) return jsonError(401, "unauthorized");
+  const userId = authed.userId;
   const url = new URL(req.url);
   const libraryIdStr = url.searchParams.get("libraryId");
   if (!libraryIdStr) return jsonError(400, "validation", { message: "libraryId required" });

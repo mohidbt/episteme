@@ -86,6 +86,16 @@ class DoneEvent(TypedDict):
     thread_id: str
 
 
+class ErrorEvent(TypedDict):
+    code: str
+    message: str
+    retriable: bool
+
+
+class RecursionStepEvent(TypedDict):
+    step: int
+
+
 # ---------------------------------------------------------------------------
 # EventType literal + required-key map (drives format_typed validation)
 # ---------------------------------------------------------------------------
@@ -93,6 +103,7 @@ class DoneEvent(TypedDict):
 EventType = Literal[
     "text", "thinking", "tool_call", "tool_result", "interrupt",
     "todos", "sources", "skill_load", "file_diff", "suggestion", "done",
+    "error", "recursion_step",
 ]
 
 _REQUIRED_KEYS: dict[str, frozenset[str]] = {
@@ -107,6 +118,8 @@ _REQUIRED_KEYS: dict[str, frozenset[str]] = {
     "file_diff":  frozenset({"note_id", "before_hash", "after_hash", "diff"}),
     "suggestion": frozenset({"items"}),
     "done":       frozenset({"thread_id"}),
+    "error":      frozenset({"code", "message", "retriable"}),
+    "recursion_step": frozenset({"step"}),
 }
 
 

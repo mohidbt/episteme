@@ -8,10 +8,12 @@ import {
   useRef,
   useState,
 } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
   agentStreamReducer,
   initialAgentTranscriptState,
+  type ErrorCard as ErrorCardData,
   type FileDiffCard as FileDiffCardData,
   type InterruptCard as InterruptCardData,
   type SkillLoadCard as SkillLoadCardData,
@@ -61,6 +63,23 @@ import {
   ConfirmationActions,
   ConfirmationAction,
 } from "@/components/ai-elements/confirmation";
+import { Shimmer } from "@/components/ai-elements/shimmer";
+import {
+  Task,
+  TaskTrigger,
+  TaskContent,
+  TaskItem,
+} from "@/components/ai-elements/task";
+import {
+  Alert,
+  AlertTitle,
+  AlertDescription,
+} from "@/components/ui/alert";
+import {
+  ListChecksIcon,
+  ChevronDownIcon,
+  AlertTriangleIcon,
+} from "lucide-react";
 import { FileDiffCard } from "./FileDiffCard";
 import { SkillLoadCard } from "./SkillLoadCard";
 
@@ -104,6 +123,18 @@ function parseSseChunk(
   return { events, rest };
 }
 
+// Tools that mutate persisted state. After a stream containing any of
+// these, call router.refresh() so Server Components on the current page
+// (drive view, sidebar tree) re-render with the new data instead of
+// requiring a manual reload.
+const MUTATING_TOOLS = new Set([
+  "create_note",
+  "update_note",
+  "make_public",
+  "edit_file",
+  "write_file",
+]);
+
 export function AgentTranscript({
   threadId,
   fullHeight = false,
@@ -117,6 +148,7 @@ export function AgentTranscript({
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
+  const router = useRouter();
 
   useEffect(() => {
     return () => {
@@ -129,6 +161,11 @@ export function AgentTranscript({
       abortRef.current?.abort();
       const controller = new AbortController();
       abortRef.current = controller;
+      dispatch({
+        type: "__user_message",
+        id: `u-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+        text,
+      });
       setStreaming(true);
       try {
         const res = await fetch("/api/agents/km/invoke", {
@@ -142,28 +179,37 @@ export function AgentTranscript({
           signal: controller.signal,
         });
         if (!res.ok || !res.body) {
+          toast.error(
+            `Agent request failed (${res.status}). Please try again.`,
+          );
           setStreaming(false);
           return;
         }
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
         let buf = "";
-        // Stream loop.
+        let mutated = false;
         while (true) {
           const { value, done } = await reader.read();
           if (done) break;
           buf += decoder.decode(value, { stream: true });
           const { events, rest } = parseSseChunk(buf);
           buf = rest;
-          for (const ev of events) dispatch(ev);
+          for (const ev of events) {
+            if (ev.type === "tool_call" && MUTATING_TOOLS.has(ev.name)) {
+              mutated = true;
+            }
+            dispatch(ev);
+          }
         }
+        if (mutated) router.refresh();
       } catch {
         // Aborted or network — silent for MVP.
       } finally {
         setStreaming(false);
       }
     },
-    [threadId, pageContext],
+    [threadId, pageContext, router],
   );
 
   const handleSend = useCallback(
@@ -175,6 +221,55 @@ export function AgentTranscript({
       else void defaultSend(text);
     },
     [input, onSendMessage, defaultSend],
+  );
+
+  const sendDecision = useCallback(
+    async (cardId: string, type: "approve" | "reject"): Promise<boolean> => {
+      abortRef.current?.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
+      dispatch({ type: "__resume" });
+      setStreaming(true);
+      try {
+        const res = await fetch("/api/agents/km/resume", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            thread_id: threadId,
+            decisions: [{ tool_call_id: cardId, type }],
+          }),
+          signal: controller.signal,
+        });
+        if (!res.ok || !res.body) {
+          setStreaming(false);
+          return false;
+        }
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buf = "";
+        let mutated = false;
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buf += decoder.decode(value, { stream: true });
+          const { events, rest } = parseSseChunk(buf);
+          buf = rest;
+          for (const ev of events) {
+            if (ev.type === "tool_call" && MUTATING_TOOLS.has(ev.name)) {
+              mutated = true;
+            }
+            dispatch(ev);
+          }
+        }
+        if (mutated) router.refresh();
+        return true;
+      } catch {
+        return false;
+      } finally {
+        setStreaming(false);
+      }
+    },
+    [threadId, router],
   );
 
   const handleSuggestionClick = useCallback(
@@ -211,12 +306,49 @@ export function AgentTranscript({
                 streaming={streaming}
                 onSuggestionClick={handleSuggestionClick}
                 threadId={threadId}
+                onDecision={sendDecision}
               />
             ))
           )}
           {state.todos.length > 0 ? (
-            <div className="text-xs text-muted-foreground" data-testid="todo-count">
-              {state.todos.length} todos
+            <div data-testid="todo-list">
+              <Task>
+                <TaskTrigger title={`Plan · ${state.todos.length} todos`}>
+                  <div className="flex w-full cursor-pointer items-center gap-2 text-muted-foreground text-sm transition-colors hover:text-foreground">
+                    <ListChecksIcon className="size-4" />
+                    <p className="text-sm" data-testid="todo-count">
+                      Plan · {state.todos.length} todos
+                    </p>
+                    <ChevronDownIcon className="size-4 transition-transform group-data-[state=open]:rotate-180" />
+                  </div>
+                </TaskTrigger>
+                <TaskContent>
+                  {state.todos.map((t, idx) => {
+                    const marker =
+                      t.status === "completed"
+                        ? "[x]"
+                        : t.status === "in_progress"
+                          ? "[~]"
+                          : "[ ]";
+                    return (
+                      <TaskItem
+                        key={t.id ?? `todo-${idx}`}
+                        data-status={t.status}
+                        className={
+                          t.status === "completed"
+                            ? "line-through opacity-60"
+                            : t.status === "in_progress"
+                              ? "text-foreground font-medium"
+                              : ""
+                        }
+                      >
+                        <span className="font-mono mr-2">{marker}</span>
+                        {t.content}
+                      </TaskItem>
+                    );
+                  })}
+                </TaskContent>
+              </Task>
             </div>
           ) : null}
           {allCitations.length > 0 ? (
@@ -238,8 +370,19 @@ export function AgentTranscript({
             </div>
           ) : null}
           {streaming ? (
-            <div className="text-muted-foreground text-xs" data-testid="streaming-indicator">
-              …
+            <div
+              data-testid="streaming-indicator"
+              className="flex items-center gap-2"
+            >
+              <Shimmer duration={1}>Thinking…</Shimmer>
+              {state.recursionStep !== undefined ? (
+                <span
+                  data-testid="recursion-step"
+                  className="text-xs text-muted-foreground"
+                >
+                  step {state.recursionStep} / 100
+                </span>
+              ) : null}
             </div>
           ) : null}
         </ConversationContent>
@@ -278,6 +421,7 @@ interface CardViewProps {
   streaming: boolean;
   onSuggestionClick: (suggestion: string) => void;
   threadId: string;
+  onDecision: (cardId: string, type: "approve" | "reject") => Promise<boolean>;
 }
 
 function CardView({
@@ -285,6 +429,7 @@ function CardView({
   streaming,
   onSuggestionClick,
   threadId,
+  onDecision,
 }: CardViewProps) {
   switch (card.kind) {
     case "text":
@@ -294,13 +439,15 @@ function CardView({
     case "tool":
       return <ToolCardView card={card} />;
     case "interrupt":
-      return <InterruptCardView card={card} threadId={threadId} />;
+      return <InterruptCardView card={card} threadId={threadId} onDecision={onDecision} />;
     case "skill_load":
       return <SkillLoadCard name={card.name} />;
     case "file_diff":
       return <FileDiffCardView card={card} />;
     case "suggestion":
       return <SuggestionCardView card={card} onClick={onSuggestionClick} />;
+    case "error":
+      return <ErrorCardView card={card} />;
     default: {
       const _: never = card;
       void _;
@@ -311,8 +458,8 @@ function CardView({
 
 function TextCardView({ card }: { card: TextCardData }) {
   return (
-    <div data-testid="card-text">
-      <Message from="assistant">
+    <div data-testid="card-text" data-role={card.role}>
+      <Message from={card.role}>
         <MessageContent>
           <MessageResponse>{card.text}</MessageResponse>
         </MessageContent>
@@ -341,7 +488,7 @@ function ThinkingCardView({
 function ToolCardView({ card }: { card: ToolCardData }) {
   return (
     <div data-testid="card-tool">
-      <Tool defaultOpen={card.state !== "input-available"}>
+      <Tool defaultOpen>
         <ToolHeader
           type={`tool-${card.name}` as `tool-${string}`}
           state={card.state}
@@ -363,6 +510,23 @@ function FileDiffCardView({ card }: { card: FileDiffCardData }) {
       afterHash={card.afterHash}
       diff={card.diff}
     />
+  );
+}
+
+function ErrorCardView({ card }: { card: ErrorCardData }) {
+  return (
+    <Alert variant="destructive" data-testid="card-error">
+      <AlertTriangleIcon className="h-4 w-4" />
+      <AlertTitle>
+        {card.code === "rate_limited" ? "Rate limited" : "Error"}
+      </AlertTitle>
+      <AlertDescription>
+        {card.message}
+        {card.retriable ? (
+          <div className="mt-2 text-xs">You can try again in a moment.</div>
+        ) : null}
+      </AlertDescription>
+    </Alert>
   );
 }
 
@@ -391,9 +555,10 @@ function SuggestionCardView({
 interface InterruptCardViewProps {
   card: InterruptCardData;
   threadId: string;
+  onDecision: (cardId: string, type: "approve" | "reject") => Promise<boolean>;
 }
 
-function InterruptCardView({ card, threadId }: InterruptCardViewProps) {
+function InterruptCardView({ card, onDecision }: InterruptCardViewProps) {
   const [decided, setDecided] = useState<"approve" | "reject" | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -401,30 +566,15 @@ function InterruptCardView({ card, threadId }: InterruptCardViewProps) {
     async (type: "approve" | "reject") => {
       if (decided || submitting) return;
       setSubmitting(true);
-      // Optimistically reflect decision in UI; revert on failure so the
-      // user can retry without a stale "decided" badge stuck on the card.
       setDecided(type);
-      try {
-        const res = await fetch("/api/agents/km/resume", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            thread_id: threadId,
-            decisions: [{ tool_call_id: card.id, type }],
-          }),
-        });
-        if (!res.ok) {
-          setDecided(null);
-          toast.error("Failed to send decision. Try again.");
-        }
-      } catch {
+      const ok = await onDecision(card.id, type);
+      if (!ok) {
         setDecided(null);
         toast.error("Failed to send decision. Try again.");
-      } finally {
-        setSubmitting(false);
       }
+      setSubmitting(false);
     },
-    [card.id, threadId, decided, submitting],
+    [card.id, onDecision, decided, submitting],
   );
 
   // Confirmation is driven from our local reducer/interrupt state, not the AI

@@ -125,19 +125,31 @@ def _build_interrupt_on(
     return interrupt_on
 
 
+# Tools the agent must always have access to, regardless of which skills are
+# enabled. Skills curate ADDITIONAL skill-specific tools on top of these. Without
+# the core, basic conversational asks ("list my notes", "show references")
+# silently fail when any skill is toggled on.
+_CORE_TOOL_NAMES: frozenset[str] = frozenset({
+    "list_notes",
+    "search_notes",
+    "read_note",
+    "create_note",
+    "update_note",
+    "list_links",
+    "list_backlinks",
+    "list_references",
+    "get_reference",
+})
+
+
 def _filter_tools_for_skills(
     all_tools: list[BaseTool],
     loaded_skills: list[SkillSpec],
 ) -> list[BaseTool]:
-    """Filter tools to the union of allow-lists declared by enabled skills.
-
-    Without skills enabled, the agent gets ALL_TOOLS unchanged. With skills
-    enabled, only tools whose name appears in some enabled skill's `tools`
-    list are exposed.
-    """
+    """Filter tools to CORE ∪ enabled-skills allowlists."""
     if not loaded_skills:
         return all_tools
-    allowed: set[str] = set()
+    allowed: set[str] = set(_CORE_TOOL_NAMES)
     for skill in loaded_skills:
         allowed.update(skill.tools)
     return [t for t in all_tools if t.name in allowed]

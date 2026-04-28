@@ -266,6 +266,57 @@ describe("agentStreamReducer — skill_load / file_diff / suggestion", () => {
   });
 });
 
+describe("agentStreamReducer — error events", () => {
+  it("appends an ErrorCard with code/message/retriable", () => {
+    const s = fold([
+      {
+        type: "error",
+        code: "rate_limited",
+        message: "upstream 429",
+        retriable: true,
+      },
+    ]);
+    expect(s.cards).toHaveLength(1);
+    const c = s.cards[0];
+    if (c.kind !== "error") throw new Error("expected error card");
+    expect(c.code).toBe("rate_limited");
+    expect(c.message).toBe("upstream 429");
+    expect(c.retriable).toBe(true);
+    expect(s.terminated).toBe(false);
+  });
+});
+
+describe("agentStreamReducer — recursion_step events", () => {
+  it("stores latest step in state.recursionStep without adding a card", () => {
+    const s = fold([
+      { type: "recursion_step", step: 10 },
+      { type: "recursion_step", step: 20 },
+    ]);
+    expect(s.recursionStep).toBe(20);
+    expect(s.cards).toHaveLength(0);
+  });
+
+  it("sets recursionStep to step value and adds no card", () => {
+    const s = fold([{ type: "recursion_step", step: 30 }]);
+    expect(s.recursionStep).toBe(30);
+    expect(s.cards).toHaveLength(0);
+  });
+
+  it("__user_message resets recursionStep back to undefined", () => {
+    const after = [
+      { type: "recursion_step", step: 30 } as const,
+    ].reduce(agentStreamReducer, initialAgentTranscriptState);
+    expect(after.recursionStep).toBe(30);
+
+    const s = agentStreamReducer(after, {
+      type: "__user_message",
+      id: "u1",
+      text: "next turn",
+    });
+    expect(s.recursionStep).toBeUndefined();
+  });
+});
+
 describe("agentStreamReducer — done & termination", () => {
   it("done event sets terminated=true and adds no card", () => {
     const s = fold([{ type: "done", thread_id: "t1" }]);
@@ -288,6 +339,40 @@ describe("agentStreamReducer — done & termination", () => {
     } finally {
       warn?.mockRestore();
     }
+  });
+});
+
+describe("agentStreamReducer — __user_message UI action", () => {
+  it("appends a user-role text card", () => {
+    const s = agentStreamReducer(initialAgentTranscriptState, {
+      type: "__user_message",
+      id: "u1",
+      text: "hello agent",
+    });
+    expect(s.cards).toHaveLength(1);
+    const c = s.cards[0] as TextCard;
+    expect(c.kind).toBe("text");
+    expect(c.role).toBe("user");
+    expect(c.text).toBe("hello agent");
+  });
+
+  it("resets terminated so a new turn's events flow", () => {
+    const after = [
+      { type: "text", id: "r1", delta: "first" } as const,
+      { type: "done", thread_id: "t1" } as const,
+    ].reduce(agentStreamReducer, initialAgentTranscriptState);
+    expect(after.terminated).toBe(true);
+
+    const s = [
+      { type: "__user_message", id: "u1", text: "next" } as const,
+      { type: "text", id: "r2", delta: "second" } as const,
+    ].reduce(agentStreamReducer, after);
+
+    expect(s.terminated).toBe(false);
+    expect(s.cards).toHaveLength(3);
+    expect((s.cards[1] as TextCard).role).toBe("user");
+    expect((s.cards[2] as TextCard).text).toBe("second");
+    expect((s.cards[2] as TextCard).role).toBe("assistant");
   });
 });
 

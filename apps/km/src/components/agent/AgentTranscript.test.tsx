@@ -102,9 +102,10 @@ describe("AgentTranscript", () => {
     fireEvent.click(screen.getByRole("button", { name: /send/i }));
 
     await waitFor(() => {
-      expect(screen.getByTestId("card-text").textContent).toContain(
-        "Hello, world!",
-      );
+      const assistant = screen
+        .getAllByTestId("card-text")
+        .find((el) => el.getAttribute("data-role") === "assistant");
+      expect(assistant?.textContent).toContain("Hello, world!");
     });
     expect(screen.getByTestId("card-tool")).toBeTruthy();
     expect(screen.getByTestId("card-skill_load")).toBeTruthy();
@@ -132,7 +133,7 @@ describe("AgentTranscript", () => {
     });
     expect(screen.getByTestId("card-thinking")).toBeTruthy();
     expect(screen.getByTestId("card-tool")).toBeTruthy();
-    expect(screen.getByTestId("card-text")).toBeTruthy();
+    expect(screen.getAllByTestId("card-text").length).toBeGreaterThan(0);
     expect(screen.getByTestId("card-file_diff")).toBeTruthy();
     expect(screen.getByTestId("card-suggestion")).toBeTruthy();
     expect(screen.getByTestId("todo-count").textContent).toContain("2 todos");

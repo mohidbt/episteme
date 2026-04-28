@@ -230,31 +230,275 @@ def test_invoke_done_event_contains_thread_id():
     assert done_events[0]["data"]["thread_id"] == "t1"
 
 
-def test_invoke_no_error_sse_event_on_exception():
-    """Exceptions in astream_events must NOT produce an error SSE event — they propagate.
-
-    We verify this by checking that if the exception bubbles, it isn't wrapped in SSE.
-    The TestClient re-raises streaming exceptions, so we catch the RuntimeError directly.
+def test_invoke_emits_error_sse_event_on_exception():
+    """Exceptions in astream_events must produce an `event: error` SSE frame
+    followed by `event: done`, so the FE can show an inline error card and
+    clear the streaming indicator instead of hanging on "Thinking…".
     """
-    import pytest  # noqa: PLC0415
-
     async def boom(*args, **kwargs):
         raise RuntimeError("agent blew up")
         yield  # pragma: no cover
 
     body = json.dumps({"thread_id": "t1", "message": "hi"}).encode()
 
-    no_raise_client = TestClient(app, raise_server_exceptions=False)
-
     with patch("routers.km_agent.build_km_agent", return_value=_make_mock_agent(astream_events_coro=boom)):
-        r = no_raise_client.post(
+        r = client.post(
             "/agents/km/invoke",
             content=body,
             headers=_signed_headers("POST", "/agents/km/invoke", body),
         )
 
-    # Response text must NOT contain an SSE error event
-    assert "event: error" not in r.text
+    assert r.status_code == 200
+    events = _parse_sse(r.text)
+    types = [e["event"] for e in events]
+    assert "error" in types, f"expected error frame, got {types!r}"
+    err = next(e for e in events if e["event"] == "error")
+    assert err["data"]["code"] == "internal_error"
+    assert err["data"]["retriable"] is False
+    assert "agent blew up" in err["data"]["message"]
+    # error must precede done
+    assert types.index("error") < types.index("done")
+
+
+def test_invoke_free_model_rate_limit_uses_friendly_message():
+    """When the running model is a `:free` OpenRouter id and OpenAI raises
+    RateLimitError, the user-facing `message` is overridden with a clear
+    free-tier explanation rather than the raw upstream text.
+    """
+    import openai  # noqa: PLC0415
+    import httpx  # noqa: PLC0415
+    from lib import config_cache  # noqa: PLC0415
+
+    # Force the cached config for user_1 to a free model.
+    config_cache._CACHE["user_1"] = {
+        **config_cache._DEFAULTS,
+        "modelPreference": "google/gemma-4-31b-it:free",
+    }
+
+    response = httpx.Response(
+        status_code=429,
+        request=httpx.Request("POST", "https://openrouter.ai/api/v1/chat/completions"),
+    )
+    err = openai.RateLimitError(
+        message="Rate limit exceeded",
+        response=response,
+        body={"error": {"metadata": {"raw": "raw upstream text"}}},
+    )
+
+    async def rate_limited(*args, **kwargs):
+        raise err
+        yield  # pragma: no cover
+
+    body = json.dumps({"thread_id": "t1", "message": "hi"}).encode()
+
+    try:
+        with patch("routers.km_agent.build_km_agent", return_value=_make_mock_agent(astream_events_coro=rate_limited)):
+            r = client.post(
+                "/agents/km/invoke",
+                content=body,
+                headers=_signed_headers("POST", "/agents/km/invoke", body),
+            )
+    finally:
+        config_cache._CACHE.clear()
+
+    assert r.status_code == 200
+    events = _parse_sse(r.text)
+    err_events = [e for e in events if e["event"] == "error"]
+    assert len(err_events) == 1
+    data = err_events[0]["data"]
+    assert data["code"] == "rate_limited"
+    assert data["retriable"] is True
+    assert "free-tier" in data["message"]
+    assert "Settings" in data["message"]
+    # Raw upstream text must NOT appear when the model is :free.
+    assert "raw upstream text" not in data["message"]
+
+
+def test_invoke_paid_model_rate_limit_still_uses_extracted_message():
+    """When the running model is NOT `:free`, the rate-limit message falls
+    back to _extract_error_message (raw upstream text), preserving the
+    existing behaviour for paid models.
+    """
+    import openai  # noqa: PLC0415
+    import httpx  # noqa: PLC0415
+    from lib import config_cache  # noqa: PLC0415
+
+    config_cache._CACHE["user_1"] = {
+        **config_cache._DEFAULTS,
+        "modelPreference": "openai/gpt-5-nano",
+    }
+
+    raw_msg = "Provider returned 429 for paid model"
+    response = httpx.Response(
+        status_code=429,
+        request=httpx.Request("POST", "https://openrouter.ai/api/v1/chat/completions"),
+    )
+    err = openai.RateLimitError(
+        message="Rate limit exceeded",
+        response=response,
+        body={"error": {"metadata": {"raw": raw_msg}}},
+    )
+
+    async def rate_limited(*args, **kwargs):
+        raise err
+        yield  # pragma: no cover
+
+    body = json.dumps({"thread_id": "t1", "message": "hi"}).encode()
+
+    try:
+        with patch("routers.km_agent.build_km_agent", return_value=_make_mock_agent(astream_events_coro=rate_limited)):
+            r = client.post(
+                "/agents/km/invoke",
+                content=body,
+                headers=_signed_headers("POST", "/agents/km/invoke", body),
+            )
+    finally:
+        config_cache._CACHE.clear()
+
+    assert r.status_code == 200
+    events = _parse_sse(r.text)
+    err_events = [e for e in events if e["event"] == "error"]
+    assert len(err_events) == 1
+    assert err_events[0]["data"]["message"] == raw_msg
+
+
+def test_invoke_uses_model_preference_from_body_over_cache():
+    """When the request body includes `model_preference`, it must override
+    whatever the in-memory cache says — Postgres is source of truth.
+    """
+    from lib import config_cache  # noqa: PLC0415
+
+    config_cache._CACHE["user_1"] = {
+        **config_cache._DEFAULTS,
+        "modelPreference": "google/gemma-4-31b-it:free",
+    }
+
+    captured: dict = {}
+
+    def _capture_model_for(model_id, llm_key):
+        captured["model_id"] = model_id
+        return MagicMock()
+
+    async def _empty(*args, **kwargs):
+        if False:
+            yield
+
+    body = json.dumps({
+        "thread_id": "t1",
+        "message": "hi",
+        "model_preference": "openai/gpt-5-nano",
+    }).encode()
+
+    try:
+        with patch("routers.km_agent.model_for", side_effect=_capture_model_for), \
+             patch("routers.km_agent.build_km_agent", return_value=_make_mock_agent(astream_events_coro=_empty)):
+            r = client.post(
+                "/agents/km/invoke",
+                content=body,
+                headers=_signed_headers("POST", "/agents/km/invoke", body),
+            )
+    finally:
+        config_cache._CACHE.clear()
+
+    assert r.status_code == 200
+    assert captured.get("model_id") == "openai/gpt-5-nano"
+
+
+def test_invoke_uses_enabled_skills_from_body_over_cache():
+    """When the request body includes `enabled_skills`, it must override
+    whatever the in-memory cache says — Postgres is source of truth so
+    SkillsMiddleware stays wired even after a cold Python svc restart.
+    """
+    from lib import config_cache  # noqa: PLC0415
+
+    config_cache._CACHE["user_1"] = {
+        **config_cache._DEFAULTS,
+        "enabledSkills": [],
+    }
+
+    captured: dict = {}
+
+    def _capture_build(*args, **kwargs):
+        captured["enabled_skills"] = kwargs.get("enabled_skills")
+        return _make_mock_agent(astream_events_coro=_empty)
+
+    async def _empty(*args, **kwargs):
+        if False:
+            yield
+
+    body = json.dumps({
+        "thread_id": "t1",
+        "message": "hi",
+        "enabled_skills": ["lit-triage", "synthesis"],
+    }).encode()
+
+    try:
+        with patch("routers.km_agent.build_km_agent", side_effect=_capture_build):
+            r = client.post(
+                "/agents/km/invoke",
+                content=body,
+                headers=_signed_headers("POST", "/agents/km/invoke", body),
+            )
+    finally:
+        config_cache._CACHE.clear()
+
+    assert r.status_code == 200
+    assert captured.get("enabled_skills") == ["lit-triage", "synthesis"]
+
+
+def test_invoke_emits_rate_limited_error_on_openai_rate_limit():
+    """openai.RateLimitError raised from astream_events must surface as a
+    structured `error` SSE frame with code=rate_limited and retriable=True,
+    pulling the upstream raw provider message when present.
+    """
+    import openai  # noqa: PLC0415
+    import httpx  # noqa: PLC0415
+    from lib import config_cache  # noqa: PLC0415
+
+    # Use a paid model so the raw upstream message is preserved (free models
+    # get a friendlier override — covered by a separate test).
+    config_cache._CACHE["user_1"] = {
+        **config_cache._DEFAULTS,
+        "modelPreference": "openai/gpt-5-nano",
+    }
+
+    raw_msg = "Provider returned 429: rate-limited by upstream"
+    response = httpx.Response(
+        status_code=429,
+        request=httpx.Request("POST", "https://openrouter.ai/api/v1/chat/completions"),
+    )
+    err = openai.RateLimitError(
+        message="Rate limit exceeded",
+        response=response,
+        body={"error": {"metadata": {"raw": raw_msg}}},
+    )
+
+    async def rate_limited(*args, **kwargs):
+        raise err
+        yield  # pragma: no cover
+
+    body = json.dumps({"thread_id": "t1", "message": "hi"}).encode()
+
+    try:
+        with patch("routers.km_agent.build_km_agent", return_value=_make_mock_agent(astream_events_coro=rate_limited)):
+            r = client.post(
+                "/agents/km/invoke",
+                content=body,
+                headers=_signed_headers("POST", "/agents/km/invoke", body),
+            )
+    finally:
+        config_cache._CACHE.clear()
+
+    assert r.status_code == 200
+    events = _parse_sse(r.text)
+    err_events = [e for e in events if e["event"] == "error"]
+    assert len(err_events) == 1
+    data = err_events[0]["data"]
+    assert data["code"] == "rate_limited"
+    assert data["retriable"] is True
+    assert data["message"] == raw_msg
+    # done still emitted
+    assert any(e["event"] == "done" for e in events)
 
 
 # ---------------------------------------------------------------------------
@@ -262,7 +506,14 @@ def test_invoke_no_error_sse_event_on_exception():
 # ---------------------------------------------------------------------------
 
 def test_resume_calls_astream_events_with_command():
-    """resume must pass Command(resume=decisions) to agent.astream_events."""
+    """resume must pass Command(resume={"decisions": [...]}) to agent.astream_events.
+
+    The langchain HumanInTheLoopMiddleware reads the resume payload as
+    ``interrupt(...)["decisions"]`` so the route wraps the bare list in a
+    ``{"decisions": [...]}`` envelope. It also normalizes the frontend's
+    ``action`` field to ``type`` (the middleware's expected key) and strips
+    incidental keys like ``id`` that the middleware does not read.
+    """
     captured = {}
 
     async def capture_input(input_, config, version):
@@ -285,7 +536,7 @@ def test_resume_calls_astream_events_with_command():
 
     assert r.status_code == 200
     assert captured["is_command"] is True
-    assert captured["resume_value"] == [{"id": "int-1", "action": "approve"}]
+    assert captured["resume_value"] == {"decisions": [{"type": "approve"}]}
 
 
 def test_resume_streams_done_event():
@@ -739,3 +990,33 @@ def test_resume_passes_user_id_in_configurable():
         "Tools resolve the active user from RunnableConfig.configurable['user_id']; "
         f"got {configurable!r}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Recursion-step telemetry (T9)
+# ---------------------------------------------------------------------------
+
+def test_invoke_emits_recursion_step_every_10_chain_ends():
+    """Every 10th on_chain_end event must yield a `recursion_step` SSE frame."""
+    async def fake_25_chain_ends(input_, config, version):
+        for _ in range(25):
+            yield {"event": "on_chain_end", "run_id": "x", "data": {"output": {}}}
+
+    body = json.dumps({"thread_id": "t1", "message": "hi"}).encode()
+
+    with patch(
+        "routers.km_agent.build_km_agent",
+        return_value=_make_mock_agent(astream_events_coro=fake_25_chain_ends),
+    ):
+        r = client.post(
+            "/agents/km/invoke",
+            content=body,
+            headers=_signed_headers("POST", "/agents/km/invoke", body),
+        )
+
+    assert r.status_code == 200
+    events = _parse_sse(r.text)
+    rs = [e for e in events if e["event"] == "recursion_step"]
+    assert len(rs) == 2, f"expected 2 recursion_step frames, got {len(rs)}: {rs!r}"
+    assert rs[0]["data"]["step"] == 10
+    assert rs[1]["data"]["step"] == 20

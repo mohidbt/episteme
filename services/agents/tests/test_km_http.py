@@ -145,22 +145,46 @@ async def test_km_patch_sends_correct_hmac_headers():
 
 
 @pytest.mark.asyncio
-async def test_km_post_raises_on_non_2xx():
-    """Non-2xx must raise httpx.HTTPStatusError."""
+async def test_km_post_returns_error_dict_on_non_2xx():
+    """Non-2xx must return a structured error dict (not raise) so the
+    LangGraph tool stream stays alive and the LLM can see the failure."""
     from lib.km_http import km_post  # noqa: PLC0415
 
     async def mock_post(url, *, content, headers, **kwargs):
         resp = MagicMock(spec=httpx.Response)
         resp.status_code = 403
-        resp.raise_for_status.side_effect = httpx.HTTPStatusError(
-            "403", request=MagicMock(), response=resp
-        )
+        resp.is_success = False
+        resp.json.return_value = {"error": "forbidden"}
+        resp.text = '{"error":"forbidden"}'
+        resp.request = MagicMock()
+        resp.request.url = url
         return resp
 
     with patch("lib.km_http._client") as mock_client:
         mock_client.post = mock_post
-        with pytest.raises(httpx.HTTPStatusError):
-            await km_post("/api/notes", {}, user_id="u1")
+        result = await km_post("/api/notes", {}, user_id="u1")
+    assert isinstance(result, dict)
+    assert result["error"] is True
+    assert result["status"] == 403
+    assert result["body"] == {"error": "forbidden"}
+
+
+@pytest.mark.asyncio
+async def test_km_get_returns_error_dict_on_request_error():
+    """Transport-layer errors (e.g. ConnectError when target is down) must
+    surface as a structured error dict, not propagate up the stream."""
+    from lib.km_http import km_get  # noqa: PLC0415
+
+    async def mock_get(url, *, headers, **kwargs):
+        raise httpx.ConnectError("connection refused", request=MagicMock())
+
+    with patch("lib.km_http._client") as mock_client:
+        mock_client.get = mock_get
+        result = await km_get("/api/notes", user_id="u1")
+    assert isinstance(result, dict)
+    assert result["error"] is True
+    assert result["status"] is None
+    assert "ConnectError" in result["body"]
 
 
 @pytest.mark.asyncio

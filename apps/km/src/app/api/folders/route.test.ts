@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { notes, papers } from "@episteme/db/schema";
-import { POST } from "./route";
+import { GET, POST } from "./route";
 import { POST as POST_RENAME } from "./rename/route";
 import { POST as POST_DELETE } from "./delete/route";
 import { POST as POST_LIB } from "../libraries/route";
@@ -95,5 +95,35 @@ describe("POST /api/folders", () => {
       body: JSON.stringify({ libraryId, parentId: null, name: "X" }),
     }));
     expect(res.status).toBe(404);
+  });
+});
+
+describe("GET /api/folders", () => {
+  it("401 without auth", async () => {
+    const r = await GET(req(`/api/folders?libraryId=${libraryId}`));
+    expect(r.status).toBe(401);
+  });
+
+  it("400 when libraryId missing on cookie path", async () => {
+    const r = await GET(req("/api/folders", { cookie: u.cookie }));
+    expect(r.status).toBe(400);
+  });
+
+  it("returns folder rows for the owner", async () => {
+    const r = await GET(req(`/api/folders?libraryId=${libraryId}`, { cookie: u.cookie }));
+    expect(r.status).toBe(200);
+    const body = await r.json();
+    expect(body.libraryId).toBe(libraryId);
+    expect(Array.isArray(body.folders)).toBe(true);
+    expect(body.folders.length).toBeGreaterThan(0);
+    for (const f of body.folders) {
+      expect(typeof f.id).toBe("string");
+      expect(typeof f.name).toBe("string");
+    }
+  });
+
+  it("404 when the user does not own the library", async () => {
+    const r = await GET(req(`/api/folders?libraryId=${libraryId}`, { cookie: other.cookie }));
+    expect(r.status).toBe(404);
   });
 });
