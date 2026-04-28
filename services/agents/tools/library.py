@@ -31,7 +31,7 @@ async def list_libraries(*, config: RunnableConfig) -> object:
 
 @tool
 async def list_references(
-    libraryId: int,
+    libraryId: int | None = None,
     q: str | None = None,
     limit: int = 20,
     offset: int = 0,
@@ -41,18 +41,28 @@ async def list_references(
     """List bibliographic references in a given library, optionally filtered.
 
     Use this to enumerate all references (papers cited / catalogued) inside
-    one of the user's libraries. For a free-form discovery flow, call
-    ``list_libraries`` first to obtain a libraryId.
+    one of the user's libraries.
+
+    IMPORTANT: If you don't know the user's libraryId, either omit it (uses
+    default library) or call list_libraries first. NEVER guess or invent a
+    libraryId — they are opaque integers (e.g. 587, 17018), not sequential.
 
     Returns at most 20 by default. Server caps at 100 regardless.
 
     Args:
-        libraryId: Numeric library ID (from list_libraries).
+        libraryId: Numeric library ID (from list_libraries). If omitted, lists
+            references from the user's first (default) library.
         q: Optional substring filter applied to citationKey and title.
         limit: Max rows to return (default 20, server caps at 100).
         offset: Rows to skip for pagination (default 0).
     """
     user_id = user_id_from_config(config)
+    if libraryId is None:
+        libs = await km_get("/api/libraries", user_id=user_id)
+        if isinstance(libs, list) and libs:
+            libraryId = libs[0]["id"]
+        else:
+            return {"error": True, "message": "No libraries found for user"}
     path = f"/api/references?libraryId={libraryId}"
     if q:
         path += f"&q={quote_plus(q)}"

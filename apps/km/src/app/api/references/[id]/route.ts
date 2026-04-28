@@ -1,17 +1,24 @@
 import { and, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { references_, noteLinks } from "@episteme/db/schema";
-import { getUserIdFromRequest } from "@/lib/auth";
+import { getAuthedUserId, MissingInternalSecretError } from "@/lib/internal-auth";
 import { referenceUpdateSchema } from "@/lib/validators";
 import { jsonError, requireOwned } from "@/lib/crud";
 import { getTrashFolderId, moveItemToFolder } from "@/lib/folders-server";
 import { isUniqueViolation, suggestNextCitationKey } from "@/lib/references";
 
+function misconfiguredResponse(): Response {
+  return jsonError(500, "internal auth misconfigured");
+}
+
 type Ctx = { params: Promise<{ id: string }> };
 
 export async function GET(req: Request, { params }: Ctx) {
-  const userId = await getUserIdFromRequest(req);
-  if (!userId) return jsonError(401, "unauthorized");
+  let authed;
+  try { authed = await getAuthedUserId(req); }
+  catch (e) { if (e instanceof MissingInternalSecretError) return misconfiguredResponse(); throw e; }
+  if (!authed) return jsonError(401, "unauthorized");
+  const userId = authed.userId;
   const { id } = await params;
   const res = await requireOwned<any>(references_, id, userId);
   if (!res.ok) return jsonError(res.status, res.status === 404 ? "not_found" : "forbidden");
@@ -19,10 +26,14 @@ export async function GET(req: Request, { params }: Ctx) {
 }
 
 export async function PATCH(req: Request, { params }: Ctx) {
-  const userId = await getUserIdFromRequest(req);
-  if (!userId) return jsonError(401, "unauthorized");
+  let authed;
+  const rawBody = await req.text();
+  try { authed = await getAuthedUserId(req, rawBody); }
+  catch (e) { if (e instanceof MissingInternalSecretError) return misconfiguredResponse(); throw e; }
+  if (!authed) return jsonError(401, "unauthorized");
+  const userId = authed.userId;
   const { id } = await params;
-  const body = await req.json().catch(() => null);
+  const body = JSON.parse(rawBody);
   const parsed = referenceUpdateSchema.safeParse(body);
   if (!parsed.success) return jsonError(400, "validation", { issues: parsed.error.issues });
   const res = await requireOwned<any>(references_, id, userId);
@@ -60,8 +71,11 @@ export async function PATCH(req: Request, { params }: Ctx) {
 }
 
 export async function DELETE(req: Request, { params }: Ctx) {
-  const userId = await getUserIdFromRequest(req);
-  if (!userId) return jsonError(401, "unauthorized");
+  let authed;
+  try { authed = await getAuthedUserId(req); }
+  catch (e) { if (e instanceof MissingInternalSecretError) return misconfiguredResponse(); throw e; }
+  if (!authed) return jsonError(401, "unauthorized");
+  const userId = authed.userId;
   const { id } = await params;
   const res = await requireOwned<any>(references_, id, userId);
   if (!res.ok) return jsonError(res.status, res.status === 404 ? "not_found" : "forbidden");
