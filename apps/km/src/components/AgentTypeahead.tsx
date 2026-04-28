@@ -29,13 +29,13 @@ export const AgentTypeahead = forwardRef<AgentTypeaheadRef, AgentTypeaheadProps>
 
     useEffect(() => {
       let cancelled = false;
-      fetch("/api/agents/config")
+      fetch("/api/agents/km/config")
         .then((r) => {
-          if (!r.ok) return { enabled_skills: [] };
-          return r.json() as Promise<{ enabled_skills: string[] }>;
+          if (!r.ok) return { enabledSkills: [] };
+          return r.json() as Promise<{ enabledSkills: string[] }>;
         })
         .then((data) => {
-          if (!cancelled) setSkills(data.enabled_skills ?? []);
+          if (!cancelled) setSkills(data.enabledSkills ?? []);
         })
         .catch(() => {
           if (!cancelled) setSkills([]);
