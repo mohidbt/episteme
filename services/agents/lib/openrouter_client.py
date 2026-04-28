@@ -10,10 +10,15 @@ OPENROUTER_BASE = "https://openrouter.ai/api/v1"
 CHAT_MODEL = "openai/gpt-4o-mini"
 
 
-async def call_model(api_key: str, system: str, user_content: str) -> str:
+async def call_model(
+    api_key: str,
+    system: str,
+    user_content: str,
+    model: str | None = None,
+) -> str:
     """Non-streaming model call. Returns full text response."""
-    model = ChatOpenAI(
-        model=CHAT_MODEL,
+    chat = ChatOpenAI(
+        model=model or CHAT_MODEL,
         base_url=OPENROUTER_BASE,
         api_key=api_key,
     )
@@ -21,7 +26,7 @@ async def call_model(api_key: str, system: str, user_content: str) -> str:
         {"role": "system", "content": system},
         {"role": "user", "content": user_content},
     ]
-    response = await model.ainvoke(messages)
+    response = await chat.ainvoke(messages)
     return response.content
 
 

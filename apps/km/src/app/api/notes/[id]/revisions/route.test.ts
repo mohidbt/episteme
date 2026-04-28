@@ -184,8 +184,52 @@ describe("GET /api/notes/:id/revisions", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]).not.toHaveProperty("contentMd");
     expect(Object.keys(rows[0]).sort()).toEqual(
-      ["charCount", "createdAt", "id", "reason"].sort(),
+      ["agentSkill", "authorKind", "charCount", "createdAt", "id", "reason"].sort(),
     );
+  });
+
+  it("returns authorKind and agentSkill columns (defaults + agent rows)", async () => {
+    const [seed] = await db
+      .insert(notes)
+      .values({
+        userId: u.id,
+        libraryId,
+        title: "Rev GET agent cols",
+        slug: `rev-get-agent-${Date.now()}`,
+      })
+      .returning();
+    await db.insert(noteRevisions).values([
+      { noteId: seed.id, authorId: u.id, contentMd: "u", reason: "manual" },
+      {
+        noteId: seed.id,
+        authorId: u.id,
+        contentMd: "a",
+        reason: "agent-write",
+        authorKind: "agent",
+        agentSkill: "lit-triage",
+      },
+    ]);
+    const r = await GET(
+      req(`/api/notes/${seed.id}/revisions`, {
+        method: "GET",
+        cookie: u.cookie,
+      }),
+      params({ id: seed.id }),
+    );
+    expect(r.status).toBe(200);
+    const rows = (await r.json()) as Array<{
+      authorKind: string;
+      agentSkill: string | null;
+      reason: string;
+    }>;
+    expect(rows).toHaveLength(2);
+    const agentRow = rows.find((x) => x.authorKind === "agent");
+    const userRow = rows.find((x) => x.authorKind === "user");
+    expect(agentRow).toBeTruthy();
+    expect(agentRow!.agentSkill).toBe("lit-triage");
+    expect(agentRow!.reason).toBe("agent-write");
+    expect(userRow).toBeTruthy();
+    expect(userRow!.agentSkill).toBeNull();
   });
 });
 

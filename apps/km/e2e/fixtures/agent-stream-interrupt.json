@@ -1,0 +1,11 @@
+[
+  { "type": "text", "id": "r1", "delta": "About to delete the note." },
+  {
+    "type": "interrupt",
+    "id": "i1",
+    "tool": "delete_note",
+    "args": { "note_id": "n-42" },
+    "allowed_decisions": ["approve", "reject"]
+  },
+  { "type": "done", "thread_id": "t-interrupt" }
+]

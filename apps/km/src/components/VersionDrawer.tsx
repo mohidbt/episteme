@@ -26,7 +26,11 @@ type Revision = {
   createdAt: string;
   reason: string;
   charCount: number;
+  authorKind: "user" | "agent";
+  agentSkill: string | null;
 };
+
+type AuthorFilter = "all" | "user" | "agent";
 
 const REASON_CLASS: Record<string, string> = {
   autosave: "bg-muted text-muted-foreground",
@@ -44,6 +48,17 @@ function ReasonBadge({ reason }: { reason: string }) {
       className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${cls}`}
     >
       {reason}
+    </span>
+  );
+}
+
+function AgentChip({ skill }: { skill: string | null }) {
+  return (
+    <span
+      data-testid="agent-chip"
+      className="inline-flex items-center rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-medium text-violet-900 dark:bg-violet-950/40 dark:text-violet-300"
+    >
+      {skill ? `\u{1F916} agent · ${skill}` : "\u{1F916} agent"}
     </span>
   );
 }
@@ -67,6 +82,7 @@ export function VersionDrawer({
   const [isConfirmingRestore, setIsConfirmingRestore] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [authorFilter, setAuthorFilter] = useState<AuthorFilter>("all");
 
   const loadList = useCallback(async () => {
     try {
@@ -154,7 +170,7 @@ export function VersionDrawer({
         <SheetContent className="flex w-full flex-col gap-0 p-0 sm:max-w-md">
           <SheetHeader className="border-b">
             <SheetTitle>Versions</SheetTitle>
-            <div className="mt-2 flex gap-2">
+            <div className="mt-2 flex items-center gap-2">
               <Button
                 variant="outline"
                 size="sm"
@@ -163,6 +179,18 @@ export function VersionDrawer({
               >
                 {isSaving ? "Saving..." : "Save version"}
               </Button>
+              <select
+                aria-label="Filter revisions by author"
+                value={authorFilter}
+                onChange={(e) =>
+                  setAuthorFilter(e.target.value as AuthorFilter)
+                }
+                className="rounded border bg-background px-2 py-1 text-xs"
+              >
+                <option value="all">All</option>
+                <option value="user">User only</option>
+                <option value="agent">Agent only</option>
+              </select>
             </div>
           </SheetHeader>
           <div className="flex-1 overflow-auto">
@@ -174,30 +202,41 @@ export function VersionDrawer({
               </div>
             ) : (
               <ul className="divide-y">
-                {revisions.map((rev) => {
-                  const isSel = rev.id === selected;
-                  return (
-                    <li
-                      key={rev.id}
-                      onClick={() => handleSelect(rev)}
-                      className={`cursor-pointer px-4 py-3 text-xs transition-colors hover:bg-muted ${
-                        isSel ? "bg-muted" : ""
-                      }`}
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-muted-foreground">
-                          {formatDistanceToNow(new Date(rev.createdAt), {
-                            addSuffix: true,
-                          })}
-                        </span>
-                        <ReasonBadge reason={rev.reason} />
-                      </div>
-                      <div className="mt-1 text-[10px] text-muted-foreground">
-                        {rev.charCount} chars
-                      </div>
-                    </li>
-                  );
-                })}
+                {revisions
+                  .filter((rev) =>
+                    authorFilter === "all"
+                      ? true
+                      : rev.authorKind === authorFilter,
+                  )
+                  .map((rev) => {
+                    const isSel = rev.id === selected;
+                    return (
+                      <li
+                        key={rev.id}
+                        onClick={() => handleSelect(rev)}
+                        className={`cursor-pointer px-4 py-3 text-xs transition-colors hover:bg-muted ${
+                          isSel ? "bg-muted" : ""
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-muted-foreground">
+                            {formatDistanceToNow(new Date(rev.createdAt), {
+                              addSuffix: true,
+                            })}
+                          </span>
+                          <div className="flex items-center gap-1">
+                            <ReasonBadge reason={rev.reason} />
+                            {rev.authorKind === "agent" && (
+                              <AgentChip skill={rev.agentSkill} />
+                            )}
+                          </div>
+                        </div>
+                        <div className="mt-1 text-[10px] text-muted-foreground">
+                          {rev.charCount} chars
+                        </div>
+                      </li>
+                    );
+                  })}
               </ul>
             )}
           </div>
@@ -228,7 +267,15 @@ export function VersionDrawer({
       <Dialog open={isConfirmingRestore} onOpenChange={setIsConfirmingRestore}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Restore this version?</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              <span>Restore this version?</span>
+              {(() => {
+                const sel = revisions?.find((r) => r.id === selected);
+                return sel && sel.authorKind === "agent" ? (
+                  <AgentChip skill={sel.agentSkill} />
+                ) : null;
+              })()}
+            </DialogTitle>
             <DialogDescription>
               Your current content will be saved as an autosave revision
               before being replaced.

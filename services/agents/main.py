@@ -18,6 +18,7 @@ from routers import (
     km_chat,
 )
 from routers import km_agent
+from routers import openrouter_catalog
 
 logger = logging.getLogger(__name__)
 
@@ -96,3 +97,4 @@ app.include_router(km_embed.router)
 app.include_router(km_complete.router)
 app.include_router(km_chat.router)
 app.include_router(km_agent.router)
+app.include_router(openrouter_catalog.router)

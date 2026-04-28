@@ -28,6 +28,8 @@ export async function GET(req: Request, { params }: Ctx) {
       createdAt: noteRevisions.createdAt,
       reason: noteRevisions.reason,
       charCount: sql<number>`length(${noteRevisions.contentMd})`,
+      authorKind: noteRevisions.authorKind,
+      agentSkill: noteRevisions.agentSkill,
     })
     .from(noteRevisions)
     .where(eq(noteRevisions.noteId, id))

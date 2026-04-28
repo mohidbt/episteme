@@ -10,7 +10,14 @@ import {
 } from "@testing-library/react";
 import { VersionDrawer } from "./VersionDrawer";
 
-type Rev = { id: string; createdAt: string; reason: string; charCount: number };
+type Rev = {
+  id: string;
+  createdAt: string;
+  reason: string;
+  charCount: number;
+  authorKind: "user" | "agent";
+  agentSkill: string | null;
+};
 
 function mockFetch(impl: (url: string, init?: RequestInit) => Response | Promise<Response>) {
   const fn = vi.fn(
@@ -38,12 +45,32 @@ const rev1: Rev = {
   createdAt: new Date(Date.now() - 5 * 60_000).toISOString(),
   reason: "autosave",
   charCount: 100,
+  authorKind: "user",
+  agentSkill: null,
 };
 const rev2: Rev = {
   id: "r-2",
   createdAt: new Date(Date.now() - 10 * 60_000).toISOString(),
   reason: "manual",
   charCount: 80,
+  authorKind: "user",
+  agentSkill: null,
+};
+const revAgent: Rev = {
+  id: "r-agent",
+  createdAt: new Date(Date.now() - 15 * 60_000).toISOString(),
+  reason: "agent-write",
+  charCount: 50,
+  authorKind: "agent",
+  agentSkill: "lit-triage",
+};
+const revAgentNoSkill: Rev = {
+  id: "r-agent-2",
+  createdAt: new Date(Date.now() - 20 * 60_000).toISOString(),
+  reason: "agent-write",
+  charCount: 40,
+  authorKind: "agent",
+  agentSkill: null,
 };
 
 describe("VersionDrawer", () => {
@@ -301,5 +328,98 @@ describe("VersionDrawer", () => {
       expect(posts.length).toBe(1);
     });
     await waitFor(() => expect(onAfterRestore).toHaveBeenCalledTimes(1));
+  });
+
+  it("renders agent chip with skill name for agent revision", async () => {
+    mockFetch(() =>
+      new Response(JSON.stringify([revAgent]), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    render(<VersionDrawer noteId="n-1" currentMd="abc" />);
+    fireEvent.click(screen.getByRole("button", { name: /versions/i }));
+    await waitFor(() =>
+      expect(screen.getAllByRole("listitem").length).toBe(1),
+    );
+    const chip = screen.getByTestId("agent-chip");
+    expect(chip.textContent).toMatch(/lit-triage/);
+    expect(chip.textContent).toMatch(/agent/);
+  });
+
+  it("renders agent chip without skill suffix when agentSkill is null", async () => {
+    mockFetch(() =>
+      new Response(JSON.stringify([revAgentNoSkill]), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    render(<VersionDrawer noteId="n-1" currentMd="abc" />);
+    fireEvent.click(screen.getByRole("button", { name: /versions/i }));
+    await waitFor(() =>
+      expect(screen.getAllByRole("listitem").length).toBe(1),
+    );
+    const chip = screen.getByTestId("agent-chip");
+    expect(chip.textContent).toMatch(/agent/);
+    expect(chip.textContent).not.toMatch(/·/);
+  });
+
+  it("does not render an agent chip for user revisions", async () => {
+    mockFetch(() =>
+      new Response(JSON.stringify([rev1, rev2]), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    render(<VersionDrawer noteId="n-1" currentMd="abc" />);
+    fireEvent.click(screen.getByRole("button", { name: /versions/i }));
+    await waitFor(() =>
+      expect(screen.getAllByRole("listitem").length).toBe(2),
+    );
+    expect(screen.queryByTestId("agent-chip")).toBeNull();
+  });
+
+  it("filter 'Agent only' hides user revisions", async () => {
+    mockFetch(() =>
+      new Response(JSON.stringify([rev1, rev2, revAgent]), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    render(<VersionDrawer noteId="n-1" currentMd="abc" />);
+    fireEvent.click(screen.getByRole("button", { name: /versions/i }));
+    await waitFor(() =>
+      expect(screen.getAllByRole("listitem").length).toBe(3),
+    );
+    const select = screen.getByLabelText(
+      /filter revisions by author/i,
+    ) as HTMLSelectElement;
+    fireEvent.change(select, { target: { value: "agent" } });
+    await waitFor(() =>
+      expect(screen.getAllByRole("listitem").length).toBe(1),
+    );
+    expect(screen.getByTestId("agent-chip")).toBeTruthy();
+  });
+
+  it("filter 'User only' hides agent revisions", async () => {
+    mockFetch(() =>
+      new Response(JSON.stringify([rev1, rev2, revAgent]), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    render(<VersionDrawer noteId="n-1" currentMd="abc" />);
+    fireEvent.click(screen.getByRole("button", { name: /versions/i }));
+    await waitFor(() =>
+      expect(screen.getAllByRole("listitem").length).toBe(3),
+    );
+    const select = screen.getByLabelText(
+      /filter revisions by author/i,
+    ) as HTMLSelectElement;
+    fireEvent.change(select, { target: { value: "user" } });
+    await waitFor(() =>
+      expect(screen.getAllByRole("listitem").length).toBe(2),
+    );
+    expect(screen.queryByTestId("agent-chip")).toBeNull();
   });
 });
