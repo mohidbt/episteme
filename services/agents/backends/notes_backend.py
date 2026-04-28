@@ -92,7 +92,7 @@ class NotesBackend(BackendProtocol):
         self._folder_ids: dict[tuple[str, ...], str | None] = {(): None}
         self._lock = asyncio.Lock()
 
-    async def _bootstrap(self) -> str:
+    async def bootstrap(self) -> str:
         """Resolve default library and ensure `.episteme/agents/memories` chain.
 
         Returns the leaf (`memories`) folderId.
@@ -110,9 +110,9 @@ class NotesBackend(BackendProtocol):
                 for f in resp.get("folders") or []:
                     if f.get("parentId") is None and f.get("name"):
                         self._folder_ids[(f["name"],)] = f["id"]
-            return await self._ensure_folder_chain(_AGENT_FOLDER_SEGMENTS)
+            return await self.ensure_folder_chain(_AGENT_FOLDER_SEGMENTS)
 
-    async def _ensure_folder_chain(self, segments: tuple[str, ...]) -> str:
+    async def ensure_folder_chain(self, segments: tuple[str, ...]) -> str:
         """Walk-or-create each segment under default library. Returns leaf folderId."""
         assert self._library_id is not None
         parent_id: str | None = None
@@ -151,14 +151,18 @@ class NotesBackend(BackendProtocol):
         assert parent_id is not None
         return parent_id
 
+    # Back-compat aliases (one cycle); prefer the public names above.
+    _bootstrap = bootstrap
+    _ensure_folder_chain = ensure_folder_chain
+
     # -- BackendProtocol async surface -----------------------------------
 
     async def awrite(self, file_path: str, content: str) -> WriteResult:
-        leaf = await self._bootstrap()
+        leaf = await self.bootstrap()
         subfolders, slug = _split_path(file_path)
         if subfolders:
             full = _AGENT_FOLDER_SEGMENTS + tuple(subfolders)
-            leaf = await self._ensure_folder_chain(full)
+            leaf = await self.ensure_folder_chain(full)
         body = {
             "libraryId": self._library_id,
             "folderId": leaf,
@@ -172,11 +176,11 @@ class NotesBackend(BackendProtocol):
 
     async def _get_note_row(self, file_path: str) -> dict | None:
         """Return the raw note row matching file_path, or None if missing."""
-        leaf = await self._bootstrap()
+        leaf = await self.bootstrap()
         subfolders, slug = _split_path(file_path)
         if subfolders:
             full = _AGENT_FOLDER_SEGMENTS + tuple(subfolders)
-            leaf = await self._ensure_folder_chain(full)
+            leaf = await self.ensure_folder_chain(full)
         listing = await km_get(
             f"/api/notes?libraryId={self._library_id}",
             user_id=self.user_id,
@@ -242,7 +246,7 @@ class NotesBackend(BackendProtocol):
     async def _resolve_folder_id(self, path: str) -> str:
         """Resolve backend-relative path to its folderId (creating if missing)."""
         full = self._full_segments(path)
-        return await self._ensure_folder_chain(full)
+        return await self.ensure_folder_chain(full)
 
     async def _list_subfolders(self, parent_id: str) -> list[dict]:
         """GET children folders under parent_id, scoped to default library."""
@@ -296,7 +300,7 @@ class NotesBackend(BackendProtocol):
     # -- BackendProtocol async surface (continued) -----------------------
 
     async def als(self, path: str = "/") -> LsResult:
-        await self._bootstrap()
+        await self.bootstrap()
         target_id = await self._resolve_folder_id(path)
         subfolders = await self._list_subfolders(target_id)
         notes = await self._list_all_notes()
@@ -311,7 +315,7 @@ class NotesBackend(BackendProtocol):
         return LsResult(entries=entries)
 
     async def aglob(self, pattern: str, path: str = "/") -> GlobResult:
-        await self._bootstrap()
+        await self.bootstrap()
         folder_path_by_id, notes = await self._walk_tree(path)
         matches = []
         for n in notes:
@@ -335,7 +339,7 @@ class NotesBackend(BackendProtocol):
         path: str | None = None,
         glob: str | None = None,
     ) -> GrepResult:
-        await self._bootstrap()
+        await self.bootstrap()
         search_root = path or "/"
         glob_result = await self.aglob(glob or "**/*", search_root)
         if glob_result.error:
