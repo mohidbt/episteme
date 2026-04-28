@@ -13,7 +13,7 @@ from __future__ import annotations
 import asyncio
 import re
 
-from deepagents.backends.protocol import BackendProtocol, WriteResult
+from deepagents.backends.protocol import BackendProtocol, ReadResult, WriteResult
 
 from lib.km_http import km_get, km_post
 
@@ -126,8 +126,34 @@ class NotesBackend(BackendProtocol):
             return WriteResult(error=str(resp))
         return WriteResult(error=None, path=file_path)
 
-    async def aread(self, file_path: str, offset: int = 0, limit: int = 2000):
-        raise NotImplementedError("Phase 1.3e Task 3")
+    async def aread(self, file_path: str, offset: int = 0, limit: int = 2000) -> ReadResult:
+        leaf = await self._bootstrap()
+        subfolders, slug = _split_path(file_path)
+        if subfolders:
+            full = _AGENT_FOLDER_SEGMENTS + tuple(subfolders)
+            leaf = await self._ensure_folder_chain(full)
+        # GET filters by libraryId only; we filter client-side. memories
+        # folder is small (agent-managed), so this is acceptable per plan.
+        listing = await km_get(
+            f"/api/notes?libraryId={self._library_id}",
+            user_id=self.user_id,
+        )
+        if isinstance(listing, dict) and listing.get("error"):
+            return ReadResult(error=str(listing))
+        rows = listing if isinstance(listing, list) else []
+        match = next(
+            (r for r in rows if r.get("folderId") == leaf and r.get("title") == slug),
+            None,
+        )
+        if match is None:
+            return ReadResult(error="file_not_found")
+        return ReadResult(
+            error=None,
+            file_data={
+                "content": match.get("contentMd") or "",
+                "encoding": "utf-8",
+            },
+        )
 
     async def aedit(self, file_path: str, old_string: str, new_string: str, replace_all: bool = False):
         raise NotImplementedError("Phase 1.3e Task 4")

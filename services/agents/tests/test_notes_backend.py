@@ -76,3 +76,72 @@ async def test_awrite_bootstrap_creates_episteme_agents_memories_chain(monkeypat
     assert body["libraryId"] == 1
     assert body["title"] == "preferences"
     assert body["contentMd"] == "I prefer concise responses."
+
+
+# ---------------------------------------------------------------------------
+# Phase 1.3e Task 3 — aread + folder cache reuse
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_aread_returns_content_after_awrite_uses_cache(monkeypatch):
+    """aread after awrite must hit the folder cache: no re-walk of /api/folders."""
+    notes_db: list[dict] = []
+    calls: list[tuple[str, str]] = []
+
+    async def fake_get(path, *, user_id):
+        calls.append(("GET", path))
+        if path == "/api/folders":
+            return {"libraryId": 1, "folders": []}
+        if path.startswith("/api/folders?"):
+            return {"libraryId": 1, "folders": []}
+        if path.startswith("/api/notes?") or path == "/api/notes":
+            # Return all notes for this library — backend filters client-side.
+            return list(notes_db)
+        raise AssertionError(f"unexpected GET {path}")
+
+    async def fake_post(path, body, *, user_id):
+        if path == "/api/folders":
+            return {
+                "id": f"folder-{body['name']}",
+                "name": body["name"],
+                "parentId": body.get("parentId"),
+            }
+        if path == "/api/notes":
+            row = {
+                "id": f"note-{len(notes_db) + 1}",
+                "libraryId": body["libraryId"],
+                "folderId": body.get("folderId"),
+                "title": body["title"],
+                "contentMd": body["contentMd"],
+            }
+            notes_db.append(row)
+            return row
+        raise AssertionError(f"unexpected POST {path}")
+
+    monkeypatch.setattr("backends.notes_backend.km_get", fake_get, raising=False)
+    monkeypatch.setattr("backends.notes_backend.km_post", fake_post, raising=False)
+
+    backend = _make_backend()
+    write = await backend.awrite("/preferences.md", "v1")
+    assert write.error is None
+
+    # Snapshot folder GET count after bootstrap.
+    folder_gets_after_write = sum(
+        1 for kind, p in calls if kind == "GET" and p.startswith("/api/folders")
+    )
+    assert folder_gets_after_write >= 1, "bootstrap should have hit /api/folders at least once"
+
+    read = await backend.aread("/preferences.md")
+    assert read.error is None
+    assert read.file_data is not None
+    assert read.file_data["content"] == "v1"
+
+    # Cache hit — no additional /api/folders GETs after the read.
+    folder_gets_after_read = sum(
+        1 for kind, p in calls if kind == "GET" and p.startswith("/api/folders")
+    )
+    assert folder_gets_after_read == folder_gets_after_write, (
+        "aread must reuse cached folder chain — no extra /api/folders calls. "
+        f"got {folder_gets_after_read - folder_gets_after_write} extra."
+    )
