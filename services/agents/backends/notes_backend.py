@@ -13,7 +13,15 @@ from __future__ import annotations
 import asyncio
 import re
 
-from deepagents.backends.protocol import BackendProtocol, EditResult, ReadResult, WriteResult
+from deepagents.backends.protocol import (
+    BackendProtocol,
+    EditResult,
+    GlobResult,
+    GrepResult,
+    LsResult,
+    ReadResult,
+    WriteResult,
+)
 
 from lib.km_http import km_get, km_patch, km_post
 
@@ -24,6 +32,42 @@ _SLUG_RE = re.compile(r"[^a-z0-9]+")
 def _slugify(name: str) -> str:
     base = _SLUG_RE.sub("-", name.lower()).strip("-")
     return base or "untitled"
+
+
+def _glob_match(pattern: str, path: str) -> bool:
+    """Match `path` against a glob `pattern` with `**` recursive support.
+
+    Translates `**` to match any number of path segments (including zero),
+    `*` to non-slash chars, then defers to fnmatch.translate for the rest.
+    """
+    # Build a regex piece by piece, escaping non-glob chars.
+    i = 0
+    out = ["(?s:"]
+    while i < len(pattern):
+        c = pattern[i]
+        if c == "*":
+            if i + 1 < len(pattern) and pattern[i + 1] == "*":
+                # `**/` or trailing `**`
+                if i + 2 < len(pattern) and pattern[i + 2] == "/":
+                    out.append("(?:.*/)?")
+                    i += 3
+                else:
+                    out.append(".*")
+                    i += 2
+                continue
+            out.append("[^/]*")
+            i += 1
+        elif c == "?":
+            out.append("[^/]")
+            i += 1
+        elif c in ".+(){}|^$\\":
+            out.append("\\" + c)
+            i += 1
+        else:
+            out.append(re.escape(c) if not c.isalnum() and c not in "/-_" else c)
+            i += 1
+    out.append(")\\Z")
+    return re.match("".join(out), path) is not None
 
 
 def _split_path(path: str) -> tuple[list[str], str]:
@@ -185,14 +229,142 @@ class NotesBackend(BackendProtocol):
             return EditResult(error=str(resp))
         return EditResult(error=None, path=file_path, occurrences=occurrences)
 
-    async def als(self, path: str):
-        raise NotImplementedError("Phase 1.3e Task 5")
+    # -- helpers for ls/glob/grep ----------------------------------------
 
-    async def aglob(self, pattern: str, path: str = "/"):
-        raise NotImplementedError("Phase 1.3e Task 5")
+    def _path_segments(self, path: str) -> tuple[str, ...]:
+        """Backend-relative path -> tuple of segments (no leading/trailing slash)."""
+        return tuple(p for p in (path or "").strip("/").split("/") if p)
 
-    async def agrep(self, pattern: str, path: str | None = None, glob: str | None = None):
-        raise NotImplementedError("Phase 1.3e Task 5")
+    def _full_segments(self, path: str) -> tuple[str, ...]:
+        """Backend-relative path -> full segment tuple incl. memories prefix."""
+        return _AGENT_FOLDER_SEGMENTS + self._path_segments(path)
+
+    async def _resolve_folder_id(self, path: str) -> str:
+        """Resolve backend-relative path to its folderId (creating if missing)."""
+        full = self._full_segments(path)
+        return await self._ensure_folder_chain(full)
+
+    async def _list_subfolders(self, parent_id: str) -> list[dict]:
+        """GET children folders under parent_id, scoped to default library."""
+        assert self._library_id is not None
+        qs = f"libraryId={self._library_id}&parentId={parent_id}"
+        listing = await km_get(f"/api/folders?{qs}", user_id=self.user_id)
+        if not isinstance(listing, dict) or listing.get("error"):
+            return []
+        return [
+            f for f in (listing.get("folders") or [])
+            if f.get("parentId") == parent_id
+        ]
+
+    async def _list_all_notes(self) -> list[dict]:
+        assert self._library_id is not None
+        listing = await km_get(
+            f"/api/notes?libraryId={self._library_id}",
+            user_id=self.user_id,
+        )
+        if isinstance(listing, dict) and listing.get("error"):
+            return []
+        return listing if isinstance(listing, list) else []
+
+    async def _walk_tree(self, root_path: str) -> tuple[dict[str, str], list[dict]]:
+        """Walk all subfolders under root_path. Returns:
+        - folder_id -> backend-relative dir path (e.g. "/research")
+        - flat list of all note rows in the library (caller filters).
+        """
+        root_id = await self._resolve_folder_id(root_path)
+        # BFS through subfolders, caching as we go.
+        folder_path_by_id: dict[str, str] = {root_id: root_path.rstrip("/") or ""}
+        root_full = self._full_segments(root_path)
+        queue: list[tuple[str, tuple[str, ...]]] = [(root_id, root_full)]
+        while queue:
+            parent_id, parent_full = queue.pop(0)
+            children = await self._list_subfolders(parent_id)
+            for child in children:
+                cid = child.get("id")
+                cname = child.get("name")
+                if not cid or not cname:
+                    continue
+                child_full = parent_full + (cname,)
+                self._folder_ids[child_full] = cid
+                # backend-relative path = strip the memories prefix.
+                rel = child_full[len(_AGENT_FOLDER_SEGMENTS):]
+                folder_path_by_id[cid] = "/" + "/".join(rel)
+                queue.append((cid, child_full))
+        notes = await self._list_all_notes()
+        return folder_path_by_id, notes
+
+    # -- BackendProtocol async surface (continued) -----------------------
+
+    async def als(self, path: str = "/") -> LsResult:
+        await self._bootstrap()
+        target_id = await self._resolve_folder_id(path)
+        subfolders = await self._list_subfolders(target_id)
+        notes = await self._list_all_notes()
+        base = path.rstrip("/")  # "" for root
+        entries = []
+        for f in subfolders:
+            entries.append({"path": f"{base}/{f['name']}", "is_dir": True})
+        for n in notes:
+            if n.get("folderId") == target_id:
+                title = n.get("title") or "untitled"
+                entries.append({"path": f"{base}/{title}.md", "is_dir": False})
+        return LsResult(entries=entries)
+
+    async def aglob(self, pattern: str, path: str = "/") -> GlobResult:
+        await self._bootstrap()
+        folder_path_by_id, notes = await self._walk_tree(path)
+        matches = []
+        for n in notes:
+            fid = n.get("folderId")
+            if fid not in folder_path_by_id:
+                continue
+            dir_path = folder_path_by_id[fid]
+            title = n.get("title") or "untitled"
+            note_path = f"{dir_path}/{title}.md" if dir_path else f"/{title}.md"
+            # Match pattern against path relative to search root.
+            base = path.rstrip("/")
+            rel = note_path[len(base):] if base and note_path.startswith(base) else note_path
+            rel = rel.lstrip("/")
+            if _glob_match(pattern, rel):
+                matches.append({"path": note_path, "is_dir": False})
+        return GlobResult(matches=matches)
+
+    async def agrep(
+        self,
+        pattern: str,
+        path: str | None = None,
+        glob: str | None = None,
+    ) -> GrepResult:
+        await self._bootstrap()
+        search_root = path or "/"
+        glob_result = await self.aglob(glob or "**/*", search_root)
+        if glob_result.error:
+            return GrepResult(error=glob_result.error)
+        try:
+            regex = re.compile(pattern)
+        except re.error as e:
+            return GrepResult(error=f"invalid_pattern: {e}")
+        # Map (folderId, title) -> note row for content lookup.
+        notes = await self._list_all_notes()
+        by_key = {(n.get("folderId"), n.get("title")): n for n in notes}
+        # Reverse: backend-rel path -> note row. Reuse the cache plus a fresh walk.
+        folder_path_by_id, _ = await self._walk_tree("/")
+        path_to_note: dict[str, dict] = {}
+        for (fid, title), row in by_key.items():
+            if fid in folder_path_by_id and title:
+                dir_path = folder_path_by_id[fid]
+                p = f"{dir_path}/{title}.md" if dir_path else f"/{title}.md"
+                path_to_note[p] = row
+        matches: list[dict] = []
+        for m in glob_result.matches or []:
+            row = path_to_note.get(m["path"])
+            if row is None:
+                continue
+            content = row.get("contentMd") or ""
+            for i, line in enumerate(content.splitlines(), start=1):
+                if regex.search(line):
+                    matches.append({"path": m["path"], "line": i, "text": line})
+        return GrepResult(matches=matches)
 
     async def aupload_files(self, files):
         raise NotImplementedError

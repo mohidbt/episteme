@@ -326,3 +326,137 @@ async def test_aedit_file_not_found(monkeypatch):
     backend = _make_backend()
     edit = await backend.aedit("/nope.md", "a", "b")
     assert edit.error == "file_not_found"
+
+
+# ---------------------------------------------------------------------------
+# Phase 1.3e Task 5 — als + aglob + agrep over memories tree
+# ---------------------------------------------------------------------------
+
+
+def _make_fake_km_with_folders(
+    notes_db: list[dict],
+    folders_db: list[dict],
+    calls: list[tuple[str, str, dict | None]],
+):
+    """fake_get/fake_post that maintain folders_db reflecting parentId chain."""
+
+    async def fake_get(path, *, user_id):
+        calls.append(("GET", path, None))
+        if path == "/api/folders":
+            return {
+                "libraryId": 1,
+                "folders": [
+                    {"id": f["id"], "name": f["name"], "parentId": f["parentId"]}
+                    for f in folders_db
+                    if f["parentId"] is None
+                ],
+            }
+        if path.startswith("/api/folders?"):
+            # Parse parentId from query for chain walk + als subdir listing.
+            from urllib.parse import parse_qs, urlparse  # noqa: PLC0415
+            q = parse_qs(urlparse(path).query)
+            parent = q.get("parentId", [None])[0]
+            return {
+                "libraryId": 1,
+                "folders": [
+                    {"id": f["id"], "name": f["name"], "parentId": f["parentId"]}
+                    for f in folders_db
+                    if f["parentId"] == parent
+                ],
+            }
+        if path.startswith("/api/notes?") or path == "/api/notes":
+            return list(notes_db)
+        raise AssertionError(f"unexpected GET {path}")
+
+    async def fake_post(path, body, *, user_id):
+        calls.append(("POST", path, body))
+        if path == "/api/folders":
+            row = {
+                "id": f"folder-{body['name']}-{len(folders_db)}",
+                "name": body["name"],
+                "parentId": body.get("parentId"),
+            }
+            folders_db.append(row)
+            return row
+        if path == "/api/notes":
+            row = {
+                "id": f"note-{len(notes_db) + 1}",
+                "libraryId": body["libraryId"],
+                "folderId": body.get("folderId"),
+                "title": body["title"],
+                "contentMd": body["contentMd"],
+            }
+            notes_db.append(row)
+            return row
+        raise AssertionError(f"unexpected POST {path}")
+
+    return fake_get, fake_post
+
+
+@pytest.mark.asyncio
+async def test_als_returns_files_and_subdirs_at_memories_root(monkeypatch):
+    notes_db: list[dict] = []
+    folders_db: list[dict] = []
+    calls: list[tuple[str, str, dict | None]] = []
+    fake_get, fake_post = _make_fake_km_with_folders(notes_db, folders_db, calls)
+    monkeypatch.setattr("backends.notes_backend.km_get", fake_get, raising=False)
+    monkeypatch.setattr("backends.notes_backend.km_post", fake_post, raising=False)
+
+    backend = _make_backend()
+    await backend.awrite("/preferences.md", "I prefer concise responses.")
+    await backend.awrite("/research/transformers.md", "transformers are great")
+
+    result = await backend.als("/")
+    assert result.error is None
+    assert result.entries is not None
+    by_path = {e["path"]: e for e in result.entries}
+    # Files at root
+    assert "/preferences.md" in by_path
+    assert by_path["/preferences.md"].get("is_dir") is False
+    # Subdir
+    assert "/research" in by_path
+    assert by_path["/research"].get("is_dir") is True
+
+
+@pytest.mark.asyncio
+async def test_aglob_recursive_returns_all_md_files(monkeypatch):
+    notes_db: list[dict] = []
+    folders_db: list[dict] = []
+    calls: list[tuple[str, str, dict | None]] = []
+    fake_get, fake_post = _make_fake_km_with_folders(notes_db, folders_db, calls)
+    monkeypatch.setattr("backends.notes_backend.km_get", fake_get, raising=False)
+    monkeypatch.setattr("backends.notes_backend.km_post", fake_post, raising=False)
+
+    backend = _make_backend()
+    await backend.awrite("/preferences.md", "x")
+    await backend.awrite("/research/transformers.md", "y")
+
+    result = await backend.aglob("**/*.md")
+    assert result.error is None
+    assert result.matches is not None
+    paths = sorted(m["path"] for m in result.matches)
+    assert paths == ["/preferences.md", "/research/transformers.md"]
+
+
+@pytest.mark.asyncio
+async def test_agrep_matches_content_across_notes(monkeypatch):
+    notes_db: list[dict] = []
+    folders_db: list[dict] = []
+    calls: list[tuple[str, str, dict | None]] = []
+    fake_get, fake_post = _make_fake_km_with_folders(notes_db, folders_db, calls)
+    monkeypatch.setattr("backends.notes_backend.km_get", fake_get, raising=False)
+    monkeypatch.setattr("backends.notes_backend.km_post", fake_post, raising=False)
+
+    backend = _make_backend()
+    await backend.awrite("/preferences.md", "I prefer concise responses.\nNo fluff.")
+    await backend.awrite("/research/transformers.md", "Long-form here.\nStill concise on bullets.")
+
+    result = await backend.agrep("concise")
+    assert result.error is None
+    assert result.matches is not None
+    assert len(result.matches) == 2
+    paths = sorted(m["path"] for m in result.matches)
+    assert paths == ["/preferences.md", "/research/transformers.md"]
+    for m in result.matches:
+        assert m["line"] >= 1
+        assert "concise" in m["text"]
