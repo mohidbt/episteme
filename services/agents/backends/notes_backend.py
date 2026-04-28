@@ -13,9 +13,9 @@ from __future__ import annotations
 import asyncio
 import re
 
-from deepagents.backends.protocol import BackendProtocol, ReadResult, WriteResult
+from deepagents.backends.protocol import BackendProtocol, EditResult, ReadResult, WriteResult
 
-from lib.km_http import km_get, km_post
+from lib.km_http import km_get, km_patch, km_post
 
 _AGENT_FOLDER_SEGMENTS: tuple[str, ...] = (".episteme", "agents", "memories")
 _SLUG_RE = re.compile(r"[^a-z0-9]+")
@@ -126,25 +126,27 @@ class NotesBackend(BackendProtocol):
             return WriteResult(error=str(resp))
         return WriteResult(error=None, path=file_path)
 
-    async def aread(self, file_path: str, offset: int = 0, limit: int = 2000) -> ReadResult:
+    async def _get_note_row(self, file_path: str) -> dict | None:
+        """Return the raw note row matching file_path, or None if missing."""
         leaf = await self._bootstrap()
         subfolders, slug = _split_path(file_path)
         if subfolders:
             full = _AGENT_FOLDER_SEGMENTS + tuple(subfolders)
             leaf = await self._ensure_folder_chain(full)
-        # GET filters by libraryId only; we filter client-side. memories
-        # folder is small (agent-managed), so this is acceptable per plan.
         listing = await km_get(
             f"/api/notes?libraryId={self._library_id}",
             user_id=self.user_id,
         )
         if isinstance(listing, dict) and listing.get("error"):
-            return ReadResult(error=str(listing))
+            return None
         rows = listing if isinstance(listing, list) else []
-        match = next(
+        return next(
             (r for r in rows if r.get("folderId") == leaf and r.get("title") == slug),
             None,
         )
+
+    async def aread(self, file_path: str, offset: int = 0, limit: int = 2000) -> ReadResult:
+        match = await self._get_note_row(file_path)
         if match is None:
             return ReadResult(error="file_not_found")
         return ReadResult(
@@ -155,8 +157,33 @@ class NotesBackend(BackendProtocol):
             },
         )
 
-    async def aedit(self, file_path: str, old_string: str, new_string: str, replace_all: bool = False):
-        raise NotImplementedError("Phase 1.3e Task 4")
+    async def aedit(
+        self,
+        file_path: str,
+        old_string: str,
+        new_string: str,
+        replace_all: bool = False,
+    ) -> EditResult:
+        match = await self._get_note_row(file_path)
+        if match is None:
+            return EditResult(error="file_not_found")
+        content = match.get("contentMd") or ""
+        if replace_all:
+            occurrences = content.count(old_string)
+            new_content = content.replace(old_string, new_string)
+        else:
+            occurrences = 1 if old_string in content else 0
+            new_content = content.replace(old_string, new_string, 1)
+        if occurrences == 0:
+            return EditResult(error="string_not_found", path=file_path, occurrences=0)
+        resp = await km_patch(
+            f"/api/notes/{match['id']}",
+            {"contentMd": new_content},
+            user_id=self.user_id,
+        )
+        if isinstance(resp, dict) and resp.get("error"):
+            return EditResult(error=str(resp))
+        return EditResult(error=None, path=file_path, occurrences=occurrences)
 
     async def als(self, path: str):
         raise NotImplementedError("Phase 1.3e Task 5")
