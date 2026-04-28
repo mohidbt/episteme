@@ -31,3 +31,4 @@ export * from "./agent-memories";
 export * from "./user-preferences";
 export * from "./agent-threads";
 export * from "./openrouter-catalog";
+export * from "./papersets";

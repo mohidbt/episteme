@@ -1,6 +1,6 @@
 {
-  "id": "f28571b87dfe574ed96087569db5334be0ee",
-  "prevId": "14ee683a-4659-4dce-bd0d-268be47936d6",
+  "id": "b05fcd7c-ed87-4aeb-9f45-aaa6bd71ecef",
+  "prevId": "f28571b87dfe574ed96087569db5334be0ee",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -2477,6 +2477,159 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.assets": {
+      "name": "assets",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "library_id": {
+          "name": "library_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "folder_id": {
+          "name": "folder_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "filename": {
+          "name": "filename",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "storage_url": {
+          "name": "storage_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "mime_type": {
+          "name": "mime_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "size_bytes": {
+          "name": "size_bytes",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "assets_library_idx": {
+          "name": "assets_library_idx",
+          "columns": [
+            {
+              "expression": "library_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "assets_library_folder_idx": {
+          "name": "assets_library_folder_idx",
+          "columns": [
+            {
+              "expression": "library_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "folder_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "assets_library_id_libraries_id_fk": {
+          "name": "assets_library_id_libraries_id_fk",
+          "tableFrom": "assets",
+          "tableTo": "libraries",
+          "columnsFrom": [
+            "library_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "assets_user_id_user_id_fk": {
+          "name": "assets_user_id_user_id_fk",
+          "tableFrom": "assets",
+          "tableTo": "user",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "assets_folder_id_folders_id_fk": {
+          "name": "assets_folder_id_folders_id_fk",
+          "tableFrom": "assets",
+          "tableTo": "folders",
+          "columnsFrom": [
+            "folder_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.paper_highlights": {
       "name": "paper_highlights",
       "schema": "",
@@ -3247,13 +3400,6 @@
           "primaryKey": false,
           "notNull": true
         },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
         "author_kind": {
           "name": "author_kind",
           "type": "note_revision_author_kind",
@@ -3273,6 +3419,13 @@
           "type": "text",
           "primaryKey": false,
           "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
         }
       },
       "indexes": {
@@ -3753,7 +3906,7 @@
     },
     "public.agent_threads": {
       "name": "agent_threads",
-      "schema": "public",
+      "schema": "",
       "columns": {
         "user_id": {
           "name": "user_id",
@@ -3820,7 +3973,6 @@
           "name": "agent_threads_user_id_user_id_fk",
           "tableFrom": "agent_threads",
           "tableTo": "user",
-          "schemaTo": "public",
           "columnsFrom": [
             "user_id"
           ],
@@ -3847,7 +3999,7 @@
     },
     "public.openrouter_catalog": {
       "name": "openrouter_catalog",
-      "schema": "public",
+      "schema": "",
       "columns": {
         "model_id": {
           "name": "model_id",
@@ -3877,8 +4029,8 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.assets": {
-      "name": "assets",
+    "public.papersets": {
+      "name": "papersets",
       "schema": "",
       "columns": {
         "id": {
@@ -3906,29 +4058,52 @@
           "primaryKey": false,
           "notNull": false
         },
+        "prev_folder_id": {
+          "name": "prev_folder_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "filename": {
           "name": "filename",
           "type": "text",
           "primaryKey": false,
           "notNull": true
         },
-        "storage_url": {
-          "name": "storage_url",
+        "columns": {
+          "name": "columns",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
+        },
+        "row_refs": {
+          "name": "row_refs",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
+        },
+        "cell_grounding": {
+          "name": "cell_grounding",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        },
+        "running_cells": {
+          "name": "running_cells",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
+        },
+        "content": {
+          "name": "content",
           "type": "text",
           "primaryKey": false,
-          "notNull": false
-        },
-        "mime_type": {
-          "name": "mime_type",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "size_bytes": {
-          "name": "size_bytes",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "default": "''"
         },
         "created_at": {
           "name": "created_at",
@@ -3945,48 +4120,11 @@
           "default": "now()"
         }
       },
-      "indexes": {
-        "assets_library_idx": {
-          "name": "assets_library_idx",
-          "columns": [
-            {
-              "expression": "library_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "assets_library_folder_idx": {
-          "name": "assets_library_folder_idx",
-          "columns": [
-            {
-              "expression": "library_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "folder_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
+      "indexes": {},
       "foreignKeys": {
-        "assets_library_id_libraries_id_fk": {
-          "name": "assets_library_id_libraries_id_fk",
-          "tableFrom": "assets",
+        "papersets_library_id_libraries_id_fk": {
+          "name": "papersets_library_id_libraries_id_fk",
+          "tableFrom": "papersets",
           "tableTo": "libraries",
           "columnsFrom": [
             "library_id"
@@ -3997,9 +4135,9 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "assets_user_id_user_id_fk": {
-          "name": "assets_user_id_user_id_fk",
-          "tableFrom": "assets",
+        "papersets_user_id_user_id_fk": {
+          "name": "papersets_user_id_user_id_fk",
+          "tableFrom": "papersets",
           "tableTo": "user",
           "columnsFrom": [
             "user_id"
@@ -4010,12 +4148,25 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "assets_folder_id_folders_id_fk": {
-          "name": "assets_folder_id_folders_id_fk",
-          "tableFrom": "assets",
+        "papersets_folder_id_folders_id_fk": {
+          "name": "papersets_folder_id_folders_id_fk",
+          "tableFrom": "papersets",
           "tableTo": "folders",
           "columnsFrom": [
             "folder_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "papersets_prev_folder_id_folders_id_fk": {
+          "name": "papersets_prev_folder_id_folders_id_fk",
+          "tableFrom": "papersets",
+          "tableTo": "folders",
+          "columnsFrom": [
+            "prev_folder_id"
           ],
           "columnsTo": [
             "id"
@@ -4127,6 +4278,14 @@
         "reference"
       ]
     },
+    "public.note_revision_author_kind": {
+      "name": "note_revision_author_kind",
+      "schema": "public",
+      "values": [
+        "user",
+        "agent"
+      ]
+    },
     "public.revision_reason": {
       "name": "revision_reason",
       "schema": "public",
@@ -4145,14 +4304,6 @@
         "sans",
         "serif",
         "mono"
-      ]
-    },
-    "public.note_revision_author_kind": {
-      "name": "note_revision_author_kind",
-      "schema": "public",
-      "values": [
-        "user",
-        "agent"
       ]
     },
     "public.agent_thread_status": {
