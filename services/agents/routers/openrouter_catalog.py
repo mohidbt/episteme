@@ -49,7 +49,7 @@ async def refresh_catalog(conn, api_key: str | None = None) -> int:
     entries = await _fetch_openrouter(api_key)
     if not entries:
         return 0
-    now = datetime.now(timezone.utc)
+    now = datetime.utcnow()
     rows = [
         (entry["id"], entry, now)
         for entry in entries

@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev --port 3001",
+    "dev:warm": "next dev --port 3001 & sleep 15 && curl -sf http://localhost:3001/ > /dev/null && curl -sf http://localhost:3001/drive > /dev/null && curl -sf http://localhost:3001/agents > /dev/null && curl -sf http://localhost:3001/settings/agents > /dev/null && echo 'routes warmed'",
     "build": "next build",
     "start": "next start --port 3001",
     "typecheck": "tsc --noEmit",

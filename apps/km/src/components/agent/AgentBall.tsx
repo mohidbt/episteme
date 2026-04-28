@@ -21,8 +21,8 @@ async function ensureThreadId(signal: AbortSignal): Promise<string | null> {
     if (cached) return cached;
     const list = await fetch("/api/agent/threads", { credentials: "include", signal });
     if (list.ok) {
-      const data = (await list.json()) as { threads?: Array<{ id: string }> };
-      const recent = data.threads?.[0]?.id;
+      const data = (await list.json()) as { threads?: Array<{ threadId: string }> };
+      const recent = data.threads?.[0]?.threadId;
       if (recent) {
         window.localStorage.setItem(LS_KEY, recent);
         return recent;
@@ -36,8 +36,8 @@ async function ensureThreadId(signal: AbortSignal): Promise<string | null> {
       signal,
     });
     if (created.ok) {
-      const data = (await created.json()) as { thread?: { id: string } };
-      const id = data.thread?.id;
+      const data = (await created.json()) as { thread?: { threadId: string } };
+      const id = data.thread?.threadId;
       if (id) {
         window.localStorage.setItem(LS_KEY, id);
         return id;
