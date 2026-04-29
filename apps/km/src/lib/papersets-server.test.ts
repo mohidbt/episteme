@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { db } from "@/lib/db";
 import { folders, libraries, papers, papersets } from "@episteme/db/schema";
-import { papersetCountForPaper, papersetsForPaper } from "./papersets-server";
+import { listAllPapersets, papersetCountForPaper, papersetsForPaper } from "./papersets-server";
 import { createTestUser, deleteTestUser, type TestUser } from "@/app/api/_test-utils";
 
 let u: TestUser;
@@ -65,6 +65,33 @@ describe("papersetCountForPaper", () => {
     });
     // count should still be 2 (the two non-trashed from previous test)
     expect(await papersetCountForPaper(paperId, u.id)).toBe(2);
+  });
+});
+
+describe("listAllPapersets", () => {
+  it("returns all papersets in the library ordered by updatedAt desc", async () => {
+    const rows = await listAllPapersets(libraryId, u.id);
+    // From earlier inserts: a.csv, b.csv, trashed.csv (caller filters trash)
+    const filenames = rows.map((r) => r.filename);
+    expect(filenames).toContain("a.csv");
+    expect(filenames).toContain("b.csv");
+    expect(filenames).toContain("trashed.csv");
+    // ordering: most recent updatedAt first
+    for (let i = 1; i < rows.length; i++) {
+      expect(new Date(rows[i - 1].updatedAt).getTime()).toBeGreaterThanOrEqual(
+        new Date(rows[i].updatedAt).getTime(),
+      );
+    }
+  });
+
+  it("scopes to the given library + user", async () => {
+    const other = await createTestUser();
+    try {
+      const rows = await listAllPapersets(libraryId, other.id);
+      expect(rows).toHaveLength(0);
+    } finally {
+      await deleteTestUser(other.id);
+    }
   });
 });
 

@@ -1,5 +1,6 @@
-import { sql } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
+import { papersets } from "@episteme/db/schema";
 
 // postgres-js's drizzle returns row arrays directly (array-like).
 // Some callers/tests have seen `.rows` shapes; normalize defensively.
@@ -24,6 +25,24 @@ export async function papersetCountForPaper(
   const rows = toRows<{ n: number }>(result);
   return rows[0]?.n ?? 0;
 }
+
+/** Returns all papersets for the library regardless of folder. Used by /papersets page. */
+export async function listAllPapersets(libraryId: number, userId: string) {
+  return db
+    .select({
+      id: papersets.id,
+      filename: papersets.filename,
+      folderId: papersets.folderId,
+      columns: papersets.columns,
+      rowRefs: papersets.rowRefs,
+      updatedAt: papersets.updatedAt,
+    })
+    .from(papersets)
+    .where(and(eq(papersets.libraryId, libraryId), eq(papersets.userId, userId)))
+    .orderBy(desc(papersets.updatedAt));
+}
+
+export type PapersetListRow = Awaited<ReturnType<typeof listAllPapersets>>[number];
 
 export async function papersetsForPaper(
   paperId: string,
