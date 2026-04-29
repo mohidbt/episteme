@@ -26,7 +26,8 @@ from langchain_core.tools import BaseTool
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.store.base import BaseStore
 
-from skills import SkillSpec, load_skills
+from skills import SkillSpec
+from skills.drive_loader import DriveSkillsLoader
 from subagents import build_researcher, build_synthesizer, build_verifier
 from tools import ALL_TOOLS
 
@@ -215,7 +216,7 @@ def _select_subagents(
     return out
 
 
-def build_km_agent(
+async def build_km_agent(
     *,
     user_id: str,
     thread_id: str,
@@ -250,7 +251,10 @@ def build_km_agent(
         see followup §1.3b-T5-1 in
         ``docs/superpowers/plans/phases/phase-1.3b-agents.md`` tech-debt.
     """
-    loaded = load_skills(only=enabled_skills) if enabled_skills else []
+    loaded = (
+        await DriveSkillsLoader().load(enabled_skills, user_id=user_id)
+        if enabled_skills else []
+    )
     tools = _filter_tools_for_skills(list(ALL_TOOLS), loaded_skills=loaded)
     subagents = _select_subagents(loaded, available_tools=tools)
 

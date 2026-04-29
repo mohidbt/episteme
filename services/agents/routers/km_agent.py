@@ -22,8 +22,8 @@ from langgraph.types import Command
 
 from deps.auth import InternalAuthDep
 from km_agent import build_km_agent
+from skills.drive_loader import DriveSkillsLoader
 from checkpointer import get_saver
-from skills import load_skills
 from store import get_store
 from lib.config_cache import GUEST_USER_ID, load_user_config, save_user_config
 from lib.openrouter_model import model_for
@@ -282,7 +282,7 @@ async def invoke(req: Request, auth: InternalAuthDep):
     enabled = body.get("enabled_skills")
     if not isinstance(enabled, list):
         enabled = cfg.get("enabledSkills", [])
-    agent = build_km_agent(
+    agent = await build_km_agent(
         user_id=user_id,
         thread_id=body["thread_id"],
         model=model_for(model_pref, auth["llm_key"]),
@@ -361,7 +361,7 @@ async def resume(req: Request, auth: InternalAuthDep):
     enabled = body.get("enabled_skills")
     if not isinstance(enabled, list):
         enabled = cfg.get("enabledSkills", [])
-    agent = build_km_agent(
+    agent = await build_km_agent(
         user_id=user_id,
         thread_id=body["thread_id"],
         model=model_for(model_pref, auth["llm_key"]),
@@ -485,16 +485,13 @@ async def debug_loaded_skills(
 
     Behavior contract:
     - Empty `only` → []
-    - Unknown name in `only` → 500 (load_skills raises KeyError)
+    - Unknown name in `only` → 500 (DriveSkillsLoader raises KeyError)
     - Known names → list of {name, tools, subagents} per resolved spec
     """
     _reject_guest(auth["user_id"])
     try:
-        specs = load_skills(only=only)
+        specs = await DriveSkillsLoader().load(only, user_id=auth["user_id"])
     except KeyError as exc:
-        # load_skills raises KeyError on unknown names — surface as 500 so
-        # the scalability gate fails loudly when a fixture isn't resolved
-        # rather than masking it behind a 200.
         raise HTTPException(status_code=500, detail={"error": str(exc)}) from exc
     return [
         {

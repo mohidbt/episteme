@@ -1,13 +1,14 @@
 """RED tests for km_agent factory."""
+import pytest
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.store.memory import InMemoryStore
 
 
-def _build(approval_rules=None, **kwargs):
+async def _build(approval_rules=None, **kwargs):
     """Helper — build with sensible test defaults."""
     from km_agent import build_km_agent  # noqa: PLC0415
 
-    return build_km_agent(
+    return await build_km_agent(
         user_id="u1",
         thread_id="t1",
         model="claude-sonnet-4-5-20250929",
@@ -19,8 +20,9 @@ def _build(approval_rules=None, **kwargs):
     )
 
 
-def test_build_km_agent_returns_compiled_graph():
-    agent = _build()
+@pytest.mark.asyncio
+async def test_build_km_agent_returns_compiled_graph():
+    agent = await _build()
     assert agent is not None
     # CompiledStateGraph has an invoke method
     assert callable(getattr(agent, "invoke", None))

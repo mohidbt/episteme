@@ -4,7 +4,9 @@ import hashlib
 import json
 import os
 import time
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 SECRET = "test-secret-abc"
 os.environ["INHALE_INTERNAL_SECRET"] = SECRET
@@ -104,6 +106,30 @@ def _make_mock_agent(astream_events_coro=None):
 
 
 # ---------------------------------------------------------------------------
+# Phase 1.3f: DriveSkillsLoader hits HTTP. For these route-level tests we
+# stub it to delegate to the on-disk seed loader so /debug/loaded_skills and
+# any other code path that resolves skills behaves like the legacy FS loader.
+# ---------------------------------------------------------------------------
+
+from skills import load_skills as _disk_load_skills  # noqa: E402
+
+
+class _DiskBackedDriveLoader:
+    async def load(self, only, *, user_id):  # noqa: ARG002
+        return _disk_load_skills(only=only) if only else []
+
+
+@pytest.fixture(autouse=True)
+def _stub_drive_skills_loader():
+    """Phase 1.3f: route-level tests stub the HTTP-backed loader with an on-disk
+    delegate so /debug/loaded_skills and indirect resolution paths behave like
+    the legacy FS loader.
+    """
+    with patch("routers.km_agent.DriveSkillsLoader", _DiskBackedDriveLoader):
+        yield
+
+
+# ---------------------------------------------------------------------------
 # Auth guard — all routes must reject unsigned requests
 # ---------------------------------------------------------------------------
 
@@ -137,7 +163,7 @@ def test_config_post_requires_auth():
 def test_invoke_streams_sse_events():
     body = json.dumps({"thread_id": "t1", "message": "hello"}).encode()
 
-    with patch("routers.km_agent.build_km_agent", return_value=_make_mock_agent()):
+    with patch("routers.km_agent.build_km_agent", new_callable=AsyncMock, return_value=_make_mock_agent()):
         r = client.post(
             "/agents/km/invoke",
             content=body,
@@ -161,7 +187,7 @@ def test_invoke_streams_sse_events():
 def test_invoke_text_event_has_delta():
     body = json.dumps({"thread_id": "t1", "message": "hello"}).encode()
 
-    with patch("routers.km_agent.build_km_agent", return_value=_make_mock_agent()):
+    with patch("routers.km_agent.build_km_agent", new_callable=AsyncMock, return_value=_make_mock_agent()):
         r = client.post(
             "/agents/km/invoke",
             content=body,
@@ -178,7 +204,7 @@ def test_invoke_text_event_has_delta():
 def test_invoke_tool_call_event_shape():
     body = json.dumps({"thread_id": "t1", "message": "hello"}).encode()
 
-    with patch("routers.km_agent.build_km_agent", return_value=_make_mock_agent()):
+    with patch("routers.km_agent.build_km_agent", new_callable=AsyncMock, return_value=_make_mock_agent()):
         r = client.post(
             "/agents/km/invoke",
             content=body,
@@ -197,7 +223,7 @@ def test_invoke_tool_call_event_shape():
 def test_invoke_tool_result_event_shape():
     body = json.dumps({"thread_id": "t1", "message": "hello"}).encode()
 
-    with patch("routers.km_agent.build_km_agent", return_value=_make_mock_agent()):
+    with patch("routers.km_agent.build_km_agent", new_callable=AsyncMock, return_value=_make_mock_agent()):
         r = client.post(
             "/agents/km/invoke",
             content=body,
@@ -217,7 +243,7 @@ def test_invoke_tool_result_event_shape():
 def test_invoke_done_event_contains_thread_id():
     body = json.dumps({"thread_id": "t1", "message": "hello"}).encode()
 
-    with patch("routers.km_agent.build_km_agent", return_value=_make_mock_agent()):
+    with patch("routers.km_agent.build_km_agent", new_callable=AsyncMock, return_value=_make_mock_agent()):
         r = client.post(
             "/agents/km/invoke",
             content=body,
@@ -241,7 +267,7 @@ def test_invoke_emits_error_sse_event_on_exception():
 
     body = json.dumps({"thread_id": "t1", "message": "hi"}).encode()
 
-    with patch("routers.km_agent.build_km_agent", return_value=_make_mock_agent(astream_events_coro=boom)):
+    with patch("routers.km_agent.build_km_agent", new_callable=AsyncMock, return_value=_make_mock_agent(astream_events_coro=boom)):
         r = client.post(
             "/agents/km/invoke",
             content=body,
@@ -292,7 +318,7 @@ def test_invoke_free_model_rate_limit_uses_friendly_message():
     body = json.dumps({"thread_id": "t1", "message": "hi"}).encode()
 
     try:
-        with patch("routers.km_agent.build_km_agent", return_value=_make_mock_agent(astream_events_coro=rate_limited)):
+        with patch("routers.km_agent.build_km_agent", new_callable=AsyncMock, return_value=_make_mock_agent(astream_events_coro=rate_limited)):
             r = client.post(
                 "/agents/km/invoke",
                 content=body,
@@ -346,7 +372,7 @@ def test_invoke_paid_model_rate_limit_still_uses_extracted_message():
     body = json.dumps({"thread_id": "t1", "message": "hi"}).encode()
 
     try:
-        with patch("routers.km_agent.build_km_agent", return_value=_make_mock_agent(astream_events_coro=rate_limited)):
+        with patch("routers.km_agent.build_km_agent", new_callable=AsyncMock, return_value=_make_mock_agent(astream_events_coro=rate_limited)):
             r = client.post(
                 "/agents/km/invoke",
                 content=body,
@@ -391,7 +417,7 @@ def test_invoke_uses_model_preference_from_body_over_cache():
 
     try:
         with patch("routers.km_agent.model_for", side_effect=_capture_model_for), \
-             patch("routers.km_agent.build_km_agent", return_value=_make_mock_agent(astream_events_coro=_empty)):
+             patch("routers.km_agent.build_km_agent", new_callable=AsyncMock, return_value=_make_mock_agent(astream_events_coro=_empty)):
             r = client.post(
                 "/agents/km/invoke",
                 content=body,
@@ -418,7 +444,7 @@ def test_invoke_uses_enabled_skills_from_body_over_cache():
 
     captured: dict = {}
 
-    def _capture_build(*args, **kwargs):
+    async def _capture_build(*args, **kwargs):
         captured["enabled_skills"] = kwargs.get("enabled_skills")
         return _make_mock_agent(astream_events_coro=_empty)
 
@@ -480,7 +506,7 @@ def test_invoke_emits_rate_limited_error_on_openai_rate_limit():
     body = json.dumps({"thread_id": "t1", "message": "hi"}).encode()
 
     try:
-        with patch("routers.km_agent.build_km_agent", return_value=_make_mock_agent(astream_events_coro=rate_limited)):
+        with patch("routers.km_agent.build_km_agent", new_callable=AsyncMock, return_value=_make_mock_agent(astream_events_coro=rate_limited)):
             r = client.post(
                 "/agents/km/invoke",
                 content=body,
@@ -527,7 +553,7 @@ def test_resume_calls_astream_events_with_command():
     agent = _make_mock_agent(astream_events_coro=capture_input)
     body = json.dumps({"thread_id": "t1", "decisions": [{"id": "int-1", "action": "approve"}]}).encode()
 
-    with patch("routers.km_agent.build_km_agent", return_value=agent):
+    with patch("routers.km_agent.build_km_agent", new_callable=AsyncMock, return_value=agent):
         r = client.post(
             "/agents/km/resume",
             content=body,
@@ -546,7 +572,7 @@ def test_resume_streams_done_event():
         if False:
             yield
 
-    with patch("routers.km_agent.build_km_agent", return_value=_make_mock_agent(astream_events_coro=empty)):
+    with patch("routers.km_agent.build_km_agent", new_callable=AsyncMock, return_value=_make_mock_agent(astream_events_coro=empty)):
         r = client.post(
             "/agents/km/resume",
             content=body,
@@ -808,7 +834,7 @@ def test_invoke_handles_command_typed_tool_output():
 
     body = json.dumps({"thread_id": "t1", "message": "hi"}).encode()
 
-    with patch("routers.km_agent.build_km_agent", return_value=_make_mock_agent(astream_events_coro=_stream_with_command)):
+    with patch("routers.km_agent.build_km_agent", new_callable=AsyncMock, return_value=_make_mock_agent(astream_events_coro=_stream_with_command)):
         r = client.post(
             "/agents/km/invoke",
             content=body,
@@ -861,7 +887,7 @@ def test_invoke_handles_command_inside_interrupt_value():
 
     body = json.dumps({"thread_id": "t1", "message": "hi"}).encode()
 
-    with patch("routers.km_agent.build_km_agent", return_value=_make_mock_agent(astream_events_coro=_stream_with_interrupt)):
+    with patch("routers.km_agent.build_km_agent", new_callable=AsyncMock, return_value=_make_mock_agent(astream_events_coro=_stream_with_interrupt)):
         r = client.post(
             "/agents/km/invoke",
             content=body,
@@ -893,7 +919,7 @@ def test_invoke_passes_recursion_limit_to_astream_events():
 
     body = json.dumps({"thread_id": "t1", "message": "hi"}).encode()
 
-    with patch("routers.km_agent.build_km_agent", return_value=_make_mock_agent(astream_events_coro=_capture)):
+    with patch("routers.km_agent.build_km_agent", new_callable=AsyncMock, return_value=_make_mock_agent(astream_events_coro=_capture)):
         r = client.post(
             "/agents/km/invoke",
             content=body,
@@ -919,7 +945,7 @@ def test_resume_passes_recursion_limit_to_astream_events():
 
     body = json.dumps({"thread_id": "t1", "decisions": []}).encode()
 
-    with patch("routers.km_agent.build_km_agent", return_value=_make_mock_agent(astream_events_coro=_capture)):
+    with patch("routers.km_agent.build_km_agent", new_callable=AsyncMock, return_value=_make_mock_agent(astream_events_coro=_capture)):
         r = client.post(
             "/agents/km/resume",
             content=body,
@@ -951,7 +977,7 @@ def test_invoke_passes_user_id_in_configurable():
 
     body = json.dumps({"thread_id": "t1", "message": "hi"}).encode()
 
-    with patch("routers.km_agent.build_km_agent", return_value=_make_mock_agent(astream_events_coro=_capture)):
+    with patch("routers.km_agent.build_km_agent", new_callable=AsyncMock, return_value=_make_mock_agent(astream_events_coro=_capture)):
         r = client.post(
             "/agents/km/invoke",
             content=body,
@@ -977,7 +1003,7 @@ def test_resume_passes_user_id_in_configurable():
 
     body = json.dumps({"thread_id": "t1", "decisions": []}).encode()
 
-    with patch("routers.km_agent.build_km_agent", return_value=_make_mock_agent(astream_events_coro=_capture)):
+    with patch("routers.km_agent.build_km_agent", new_callable=AsyncMock, return_value=_make_mock_agent(astream_events_coro=_capture)):
         r = client.post(
             "/agents/km/resume",
             content=body,
@@ -1006,6 +1032,7 @@ def test_invoke_emits_recursion_step_every_10_chain_ends():
 
     with patch(
         "routers.km_agent.build_km_agent",
+        new_callable=AsyncMock,
         return_value=_make_mock_agent(astream_events_coro=fake_25_chain_ends),
     ):
         r = client.post(
