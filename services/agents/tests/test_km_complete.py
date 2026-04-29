@@ -4,7 +4,7 @@ from unittest.mock import patch
 SECRET = "test-secret-abc"
 os.environ["INHALE_INTERNAL_SECRET"] = SECRET
 
-from main import app  # noqa: E402
+from app import app  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
 client = TestClient(app)

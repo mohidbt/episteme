@@ -23,7 +23,7 @@ os.environ["INHALE_STUB_EMBEDDINGS"] = "1"
 import deps.db  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 from lib.auto_highlight_tools import is_stale_rect  # noqa: E402
-from main import app  # noqa: E402
+from app import app  # noqa: E402
 
 client = TestClient(app)
 

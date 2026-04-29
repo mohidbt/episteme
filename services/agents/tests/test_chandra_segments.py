@@ -15,7 +15,7 @@ SECRET = "test-secret-abc"
 os.environ["INHALE_INTERNAL_SECRET"] = SECRET
 
 import deps.db  # noqa: E402
-from main import app  # noqa: E402
+from app import app  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 from datalab_sdk.models import ConversionResult  # noqa: E402
 

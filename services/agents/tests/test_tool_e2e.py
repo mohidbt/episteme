@@ -167,6 +167,8 @@ CASES: list[tuple[str, str, list[str] | None]] = [
     ("create_note", "Create note titled 'E2E Test Note' with content 'Created by E2E test.'", None),
     ("update_note", "Update the note 'E2E Test Note' — set content to 'Updated by E2E.' Use search_notes, read_note, then update_note.", None),
     ("make_public", "Make the note 'E2E Test Note' public. Use list_notes then make_public.", None),
+    # Paper search — requires paper-search skill enabled
+    ("agentic_search_papers", "Search for a paper PDF for the first reference in my library. Use list_references to get a reference ID, then agentic_search_papers to find candidate papers.", ["paper-search"]),
 ]
 
 
@@ -193,9 +195,9 @@ async def test_tool_invoked_and_returns_data(tool: str, prompt: str, skills: lis
     trace = traces[tool]
     assert trace["state"] != "output-error", f"Tool error: {trace.get('error', '')[:300]}"
 
-    # For make_public, HITL interrupt is the expected success path
+    # For approval-gated tools, HITL interrupt is the expected success path
     if trace["state"] == "interrupt":
-        assert tool == "make_public", f"Unexpected HITL interrupt for {tool}"
+        assert tool in ("make_public", "agentic_fetch_papers"), f"Unexpected HITL interrupt for {tool}"
         return
 
     output = trace["output"]
@@ -210,3 +212,5 @@ async def test_tool_invoked_and_returns_data(tool: str, prompt: str, skills: lis
         assert isinstance(output, dict) and "id" in output, f"{tool} missing 'id' in output"
     elif tool == "list_folders":
         assert isinstance(output, dict) and "folders" in output, f"list_folders missing 'folders' key"
+    elif tool == "agentic_search_papers":
+        assert isinstance(output, dict) and "found" in output, f"agentic_search_papers missing 'found' key"

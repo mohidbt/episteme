@@ -13,7 +13,7 @@ import pytest
 os.environ.setdefault("INHALE_INTERNAL_SECRET", "test-secret-abc")
 
 import deps.db  # noqa: E402
-from main import app  # noqa: E402
+from app import app  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 from routers import openrouter_catalog as cat  # noqa: E402
 

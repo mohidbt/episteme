@@ -76,19 +76,12 @@ references, and library files are NOT on this filesystem. Calling
 `glob("**/*.pdf")` or `ls("/")` will NEVER return drive content — it will
 return an empty list (or only your memories/skills) and waste a turn.
 
-To work with drive content, use the dedicated tools instead:
-
-| Want                                           | Tool                          |
-|------------------------------------------------|-------------------------------|
-| List notes in the user's library               | `list_notes`                  |
-| Semantic search over notes                     | `search_notes`                |
-| Read a specific note's content                 | `read_note`                   |
-| Create / update a note                         | `create_note` / `update_note` |
-| List folders                                   | `list_folders`                |
-| List PDFs / papers in the library              | `list_pdfs`                   |
-| Search PDFs by content                         | `search_pdfs`                 |
-| List references / citations                    | `list_references` / `get_reference` |
-| List libraries                                 | `list_libraries`              |
+To work with drive content, use the dedicated tools (list_notes, search_notes,
+read_note, create_note, update_note, list_folders, list_pdfs, search_pdfs,
+list_references, get_reference, list_libraries, highlight, make_public,
+agentic_search_papers, agentic_fetch_papers). Each tool's description explains
+what it does and what to pass — read the tool descriptions carefully before
+calling.
 
 **PDF full-text reading is NOT yet available in this build.** You can find
 candidate papers with `search_pdfs`, see metadata with `list_pdfs`, and add
@@ -97,7 +90,7 @@ text. Do not promise the user a deep summary of a paper's contents — say
 what you can and cannot do.
 
 Never use `glob`, `grep`, `ls`, or `read_file` to look for PDFs, notes, or
-papers. If you need drive content, pick a tool from the table above."""
+papers. If you need drive content, use the dedicated tools instead."""
 
 
 def _build_memory_backend(*, user_id: str, store: BaseStore) -> CompositeBackend:
@@ -302,11 +295,11 @@ async def build_km_agent(
     tools = _filter_tools_for_skills(list(ALL_TOOLS), loaded_skills=loaded)
     subagents = _select_subagents(loaded, available_tools=tools)
 
-    # Inline a sanitized skill summary into the system prompt instead of
-    # passing `skills=` to deepagents — the SkillsMiddleware advertises raw
-    # source paths verbatim, leaking the host's absolute filesystem path
-    # (e.g. "/Users/<name>/...") into model context. We only advertise
-    # name + description for enabled skills; tool gating handles the rest.
+    # Advertise enabled skills in the system prompt (name + description only).
+    # Full skill bodies are not inlined to avoid token bloat; the agent reads
+    # them on-demand via the filesystem tools when a skill matches the prompt.
+    # SkillsMiddleware is disabled (skills=None) because it leaks absolute
+    # filesystem paths in its advertisement.
     system_prompt = _MEMORY_SYSTEM_PROMPT
     if loaded:
         bullets = "\n".join(f"- **{s.name}**: {s.description}" for s in loaded)
@@ -318,7 +311,8 @@ async def build_km_agent(
             "as a `subagent_type` — `task` only accepts the subagent types its "
             "own description lists.\n\n"
             "When the user's request matches a skill's description, follow the "
-            "skill's instructions inline:\n\n"
+            "skill's instructions inline. If you need the full workflow, read "
+            f"the skill's SKILL.md from `/.episteme/agents/skills/<name>/SKILL.md`.\n\n"
             f"{bullets}"
         )
 
