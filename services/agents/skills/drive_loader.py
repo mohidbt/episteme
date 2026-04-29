@@ -11,10 +11,14 @@ which is what makes user edits propagate.
 """
 from __future__ import annotations
 
+import logging
+
 from backends import notes_backend as _nb
 from backends.notes_backend import NotesBackend
 
 from . import SKILLS_ROOT, SkillSpec, _parse_skill_md_text
+
+logger = logging.getLogger(__name__)
 
 _SKILLS_FOLDER_SEGMENTS: tuple[str, ...] = (".episteme", "agents", "skills")
 _SKILL_NOTE_TITLE = "SKILL"
@@ -23,7 +27,9 @@ _SKILL_NOTE_TITLE = "SKILL"
 class DriveSkillsLoader:
     """Load `SkillSpec`s from `.episteme/agents/skills/<name>/SKILL` notes."""
 
-    async def load(self, only: list[str], *, user_id: str) -> list[SkillSpec]:
+    async def load(
+        self, only: list[str], *, user_id: str, tolerant: bool = False
+    ) -> list[SkillSpec]:
         if not only:
             return []
         backend = NotesBackend(user_id=user_id)
@@ -37,6 +43,11 @@ class DriveSkillsLoader:
 
         missing = [n for n in only if n not in specs]
         if missing:
+            if tolerant:
+                logger.warning(
+                    "DriveSkillsLoader: dropping unknown skill(s): %s", missing
+                )
+                return [specs[n] for n in only if n in specs]
             raise KeyError(f"unknown skill(s): {missing}")
         return [specs[n] for n in only]
 

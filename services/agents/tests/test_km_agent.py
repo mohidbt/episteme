@@ -116,24 +116,24 @@ def test_lit_triage_keeps_create_note_hitl():
 def test_skill_require_approval_injects_into_interrupt_on():
     """Skill require_approval still injects HITL when listed.
 
-    Uses deep-read which legitimately requires approval for `highlight`
-    (it mutates a PDF). Verifies the skill-frontmatter → interrupt_on plumbing
-    still works after removing create_note from lit-triage/synthesis.
+    Uses a synthetic SkillSpec since deep-read is parked under _deep-read
+    in this build (Phase 1.3h — body relies on stubbed PDF tools). Restore
+    a real-skill check in 1.5.1 once deep-read is revived.
     """
+    from pathlib import Path
+
     from km_agent import _build_interrupt_on  # noqa: PLC0415
-    from skills import load_skills  # noqa: PLC0415
+    from skills import SkillSpec  # noqa: PLC0415
 
-    loaded = load_skills(only=["deep-read"])
-    interrupt_on = _build_interrupt_on({}, loaded_skills=loaded)
-    assert interrupt_on.get("highlight") is True
-
-
-def test_skill_require_approval_for_highlight_via_deep_read():
-    from km_agent import _build_interrupt_on  # noqa: PLC0415
-    from skills import load_skills  # noqa: PLC0415
-
-    loaded = load_skills(only=["deep-read"])
-    interrupt_on = _build_interrupt_on({}, loaded_skills=loaded)
+    fake = SkillSpec(
+        name="fake-skill",
+        description="fixture",
+        tools=["highlight"],
+        subagents=[],
+        require_approval=["highlight"],
+        path=Path("/virtual/fake/SKILL.md"),
+    )
+    interrupt_on = _build_interrupt_on({}, loaded_skills=[fake])
     assert interrupt_on.get("highlight") is True
 
 
@@ -306,12 +306,26 @@ def test_subagents_for_skills_both_yields_both():
     assert names == ["researcher", "synthesizer"]
 
 
-def test_subagents_for_deep_read_yields_none():
-    from km_agent import _select_subagents  # noqa: PLC0415
-    from skills import load_skills  # noqa: PLC0415
+def test_subagents_for_skill_with_no_subagents_yields_none():
+    """Synthetic skill with subagents=[] returns no subagents.
 
-    loaded = load_skills(only=["deep-read"])
-    assert _select_subagents(loaded) == []
+    Replaces the deep-read variant — deep-read is parked in Phase 1.3h
+    (body relies on stubbed PDF tools); revive in 1.5.1.
+    """
+    from pathlib import Path
+
+    from km_agent import _select_subagents  # noqa: PLC0415
+    from skills import SkillSpec  # noqa: PLC0415
+
+    spec = SkillSpec(
+        name="no-subs",
+        description="fixture",
+        tools=[],
+        subagents=[],
+        require_approval=[],
+        path=Path("/virtual/no-subs/SKILL.md"),
+    )
+    assert _select_subagents([spec]) == []
 
 
 def test_subagents_empty_when_no_skills():

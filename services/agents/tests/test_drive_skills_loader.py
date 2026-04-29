@@ -163,6 +163,22 @@ async def test_unknown_skill_name_raises_keyerror(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_load_tolerant_skips_unknown_with_warning(monkeypatch, caplog):
+    """tolerant=True warns and drops unknown skill names instead of raising."""
+    from skills.drive_loader import DriveSkillsLoader  # noqa: PLC0415
+    import logging
+
+    _install_fake_km(monkeypatch)
+    caplog.set_level(logging.WARNING)
+    specs = await DriveSkillsLoader().load(
+        ["lit-triage", "does-not-exist"], user_id=USER, tolerant=True,
+    )
+    names = {s.name for s in specs}
+    assert names == {"lit-triage"}
+    assert any("does-not-exist" in r.message for r in caplog.records)
+
+
+@pytest.mark.asyncio
 async def test_empty_only_returns_empty(monkeypatch):
     from skills.drive_loader import DriveSkillsLoader  # noqa: PLC0415
 

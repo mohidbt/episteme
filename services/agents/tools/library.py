@@ -38,7 +38,14 @@ async def list_references(
     *,
     config: RunnableConfig,
 ) -> object:
-    """List bibliographic references in a given library, optionally filtered.
+    """List BIBLIOGRAPHIC references (Zotero-style citations from `.bib` import
+    or manual entry) in a given library — NOT the user's stored PDF files.
+
+    If the user asks to find a paper they have, use `search_pdfs` (search by
+    title substring) or `list_pdfs` (enumerate all PDFs in a library).
+    References are a separate table (`library_references`) used for citation
+    management; PDFs live in `papers`. The two are linked via
+    `library_references.paperId` once a matching PDF has been located.
 
     Use this to enumerate all references (papers cited / catalogued) inside
     one of the user's libraries.

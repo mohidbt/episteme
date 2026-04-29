@@ -87,9 +87,14 @@ To work with drive content, use the dedicated tools instead:
 | List folders                                   | `list_folders`                |
 | List PDFs / papers in the library              | `list_pdfs`                   |
 | Search PDFs by content                         | `search_pdfs`                 |
-| Extract passages or read a PDF page            | `extract_passages` / `get_page_text` |
 | List references / citations                    | `list_references` / `get_reference` |
 | List libraries                                 | `list_libraries`              |
+
+**PDF full-text reading is NOT yet available in this build.** You can find
+candidate papers with `search_pdfs`, see metadata with `list_pdfs`, and add
+page-anchored highlights with `highlight`, but you cannot read a PDF's body
+text. Do not promise the user a deep summary of a paper's contents — say
+what you can and cannot do.
 
 Never use `glob`, `grep`, `ls`, or `read_file` to look for PDFs, notes, or
 papers. If you need drive content, pick a tool from the table above."""
@@ -287,7 +292,7 @@ async def build_km_agent(
         ``docs/superpowers/plans/phases/phase-1.3b-agents.md`` tech-debt.
     """
     loaded = (
-        await DriveSkillsLoader().load(enabled_skills, user_id=user_id)
+        await DriveSkillsLoader().load(enabled_skills, user_id=user_id, tolerant=True)
         if enabled_skills else []
     )
     tools = _filter_tools_for_skills(list(ALL_TOOLS), loaded_skills=loaded)
@@ -302,9 +307,14 @@ async def build_km_agent(
     if loaded:
         bullets = "\n".join(f"- **{s.name}**: {s.description}" for s in loaded)
         system_prompt += (
-            "\n\n## Skills\n\nThe following skills are enabled for this "
-            "conversation. Their tools are already available to you; pick "
-            "the skill whose description matches the user's request:\n\n"
+            "\n\n## Skills (workflows you execute INLINE)\n\n"
+            "The following skills are enabled for this conversation. A skill is "
+            "a workflow YOU execute step-by-step yourself, using your tools. "
+            "Skills are NOT subagents and MUST NOT be passed to the `task` tool "
+            "as a `subagent_type` — `task` only accepts the subagent types its "
+            "own description lists.\n\n"
+            "When the user's request matches a skill's description, follow the "
+            "skill's instructions inline:\n\n"
             f"{bullets}"
         )
 
