@@ -57,7 +57,42 @@ into subfolders (e.g. `/.episteme/agents/memories/research/transformers.md`).
 
 When a user asks something where prior memory might be relevant, read from
 `/.episteme/agents/memories/` first (use `ls` or `read_file`) before
-answering."""
+answering.
+
+## Filesystem tool scope (STRICT)
+
+The filesystem tools (`ls`, `read_file`, `write_file`, `edit_file`, `glob`,
+`grep`) operate ONLY on the agent state filesystem. The ONLY paths these
+tools can see are:
+
+- `/.episteme/agents/memories/**` — your persistent memories (read+write).
+- `/.episteme/agents/skills/**`   — skill definitions (read-only; do not
+  write here unless the user explicitly asks to author a new skill).
+- `/<scratch>.md`                 — ephemeral per-turn scratch (lost after
+  the thread).
+
+**These tools DO NOT see the user's drive content.** Notes, PDFs, papers,
+references, and library files are NOT on this filesystem. Calling
+`glob("**/*.pdf")` or `ls("/")` will NEVER return drive content — it will
+return an empty list (or only your memories/skills) and waste a turn.
+
+To work with drive content, use the dedicated tools instead:
+
+| Want                                           | Tool                          |
+|------------------------------------------------|-------------------------------|
+| List notes in the user's library               | `list_notes`                  |
+| Semantic search over notes                     | `search_notes`                |
+| Read a specific note's content                 | `read_note`                   |
+| Create / update a note                         | `create_note` / `update_note` |
+| List folders                                   | `list_folders`                |
+| List PDFs / papers in the library              | `list_pdfs`                   |
+| Search PDFs by content                         | `search_pdfs`                 |
+| Extract passages or read a PDF page            | `extract_passages` / `get_page_text` |
+| List references / citations                    | `list_references` / `get_reference` |
+| List libraries                                 | `list_libraries`              |
+
+Never use `glob`, `grep`, `ls`, or `read_file` to look for PDFs, notes, or
+papers. If you need drive content, pick a tool from the table above."""
 
 
 def _build_memory_backend(*, user_id: str, store: BaseStore) -> CompositeBackend:
