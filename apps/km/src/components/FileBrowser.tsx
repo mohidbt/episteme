@@ -152,7 +152,14 @@ function flatten(contents: FolderContents): FileBrowserItemData[] {
     href: null,
     mimeType: a.mimeType,
   }));
-  return [...folders, ...papers, ...refs, ...notes, ...assets];
+  const papersets: FileBrowserItemData[] = contents.papersets.map((p) => ({
+    id: p.id,
+    kind: "paperset" as ItemKind,
+    title: p.filename,
+    updatedAt: toMs(p.updatedAt),
+    href: `/d/${p.id}`,
+  }));
+  return [...folders, ...papers, ...refs, ...notes, ...assets, ...papersets];
 }
 
 function apiRouteForKind(kind: ItemKind): string | null {
@@ -318,6 +325,7 @@ export function FileBrowser({
       note: 3,
       asset: 4,
       data: 5,
+      paperset: 6,
     };
     const copy = [...items];
     copy.sort((a, b) => {

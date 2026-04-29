@@ -9,6 +9,7 @@ import {
   NotebookPen,
   Table as TableIcon,
   Sheet,
+  Database,
   File as FileIcon,
   type LucideIcon,
 } from "lucide-react";
@@ -21,7 +22,7 @@ import {
   type FileBrowserContextMenuHandlers,
 } from "./FileBrowserContextMenu";
 
-export type ItemKind = "folder" | "paper" | "reference" | "note" | "data" | "asset";
+export type ItemKind = "folder" | "paper" | "reference" | "note" | "data" | "asset" | "paperset";
 
 export const KIND_ICON: Record<ItemKind, LucideIcon> = {
   folder: Folder,
@@ -30,6 +31,7 @@ export const KIND_ICON: Record<ItemKind, LucideIcon> = {
   note: NotebookPen,
   data: TableIcon,
   asset: FileIcon,
+  paperset: Database,
 };
 
 /**
@@ -147,6 +149,16 @@ function KindGlyph({ kind, item }: { kind: ItemKind; item?: FileBrowserItemData 
       />
     );
   }
+  if (kind === "paperset") {
+    return (
+      <Database
+        aria-hidden
+        data-testid="kind-icon-paperset"
+        className="h-16 w-16 text-sky-600/80"
+        strokeWidth={1.5}
+      />
+    );
+  }
   if (kind === "asset") {
     if (item && item.mimeType && IMAGE_MIMES.has(item.mimeType)) {
       return <AssetImageThumb id={item.id} alt={item.title} />;
@@ -178,6 +190,7 @@ const KIND_LABEL: Record<ItemKind, string> = {
   note: "Note",
   data: "Data",
   asset: "Asset",
+  paperset: "Paperset",
 };
 
 const IMAGE_MIMES = new Set([

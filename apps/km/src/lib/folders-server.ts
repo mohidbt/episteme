@@ -1,6 +1,6 @@
 import { and, eq, inArray, isNull, or } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { folders, papers, notes, references_, assets } from "@episteme/db/schema";
+import { folders, papers, notes, references_, assets, papersets } from "@episteme/db/schema";
 import { isDescendantOf } from "./folders";
 
 /**
@@ -16,6 +16,7 @@ export interface FolderContents {
   references: { kind: "reference"; id: string; title: string;        folderId: string | null; citationKey: string; updatedAt: SerializableDate }[];
   notes:      { kind: "note";      id: string; title: string;        folderId: string | null; slug: string; updatedAt: SerializableDate }[];
   assets:     { kind: "asset";     id: string; filename: string;     folderId: string | null; mimeType: string; updatedAt: SerializableDate }[];
+  papersets:  { kind: "paperset";  id: string; filename: string;     folderId: string | null; updatedAt: SerializableDate }[];
 }
 
 async function assertFolder(libraryId: number, userId: string, folderId: string | null) {
@@ -54,7 +55,7 @@ export async function listFolderContents(
     ? isNull(folders.parentId)
     : eq(folders.parentId, folderId);
 
-  const [foldersRows, papersRows, refsRows, notesRows, assetsRows] = await Promise.all([
+  const [foldersRows, papersRows, refsRows, notesRows, assetsRows, papersetsRows] = await Promise.all([
     db.select({
       id: folders.id, name: folders.name, isTrash: folders.isTrash,
       sortOrder: folders.sortOrder, updatedAt: folders.updatedAt,
@@ -94,6 +95,14 @@ export async function listFolderContents(
       eq(assets.userId, userId),
       folderId == null ? isNull(assets.folderId) : eq(assets.folderId, folderId),
     )),
+    db.select({
+      id: papersets.id, filename: papersets.filename,
+      folderId: papersets.folderId, updatedAt: papersets.updatedAt,
+    }).from(papersets).where(and(
+      eq(papersets.libraryId, libraryId),
+      eq(papersets.userId, userId),
+      folderId == null ? isNull(papersets.folderId) : eq(papersets.folderId, folderId),
+    )),
   ]);
 
   return {
@@ -109,6 +118,7 @@ export async function listFolderContents(
     })),
     notes: notesRows.map((n) => ({ kind: "note", ...n })),
     assets: assetsRows.map((a) => ({ kind: "asset" as const, ...a })),
+    papersets: papersetsRows.map((p) => ({ kind: "paperset" as const, ...p })),
   };
 }
 

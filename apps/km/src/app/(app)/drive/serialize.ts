@@ -13,5 +13,6 @@ export function serializeFolderContents(c: FolderContents): FolderContents {
     references: c.references.map((r) => ({ ...r, updatedAt: toMs(r.updatedAt) })),
     notes: c.notes.map((n) => ({ ...n, updatedAt: toMs(n.updatedAt) })),
     assets: c.assets.map((a) => ({ ...a, updatedAt: toMs(a.updatedAt) })),
+    papersets: c.papersets.map((p) => ({ ...p, updatedAt: toMs(p.updatedAt) })),
   };
 }

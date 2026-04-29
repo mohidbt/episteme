@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { db } from "@/lib/db";
-import { folders, libraries, notes } from "@episteme/db/schema";
+import { folders, libraries, notes, papersets } from "@episteme/db/schema";
 import { eq, and, isNull } from "drizzle-orm";
 import {
   createFolder, moveFolder, moveToTrash, restoreFromTrash, emptyTrash,
@@ -49,6 +49,20 @@ describe("moveToTrash / restoreFromTrash (item)", () => {
       .from(notes).where(eq(notes.id, n.id));
     expect(restored.folderId).toBe(f.id);
     expect(restored.prev).toBeNull();
+  });
+});
+
+describe("listFolderContents", () => {
+  it("returns papersets in folder", async () => {
+    const [folder] = await db.insert(folders)
+      .values({ libraryId, userId: u.id, name: "Eval" })
+      .returning({ id: folders.id });
+    await db.insert(papersets).values({
+      libraryId, userId: u.id, folderId: folder.id, filename: "bench.csv",
+    });
+    const out = await listFolderContents(libraryId, u.id, folder.id);
+    expect(out.papersets).toHaveLength(1);
+    expect(out.papersets[0].filename).toBe("bench.csv");
   });
 });
 

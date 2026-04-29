@@ -78,6 +78,7 @@ const baseContents: FolderContents = {
       updatedAt: NOW,
     },
   ],
+  papersets: [],
 };
 
 const baseFolders: FolderRow[] = [
@@ -197,7 +198,7 @@ describe("FileBrowser", () => {
         libraryName="Default"
         folderId={null}
         folderChain={[]}
-        contents={{ folders: [], papers: [], references: [], notes: [], assets: [] }}
+        contents={{ folders: [], papers: [], references: [], notes: [], assets: [], papersets: [] }}
         folders={[]}
       />,
     );
