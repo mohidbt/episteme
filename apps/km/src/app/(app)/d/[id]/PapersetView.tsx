@@ -19,6 +19,7 @@ import { readSse } from "./lib/sse";
 
 interface Props {
   id: string;
+  libraryId: number;
   initial: {
     columns: ColumnSpec[];
     rowRefs: RowRef[];
@@ -38,7 +39,7 @@ interface Props {
  * State lives here so the toolbar can read `canRun` / `isRunning` and call
  * `runEnrichment` without going through a global event bus.
  */
-export function PapersetView({ id, initial, paperById }: Props) {
+export function PapersetView({ id, libraryId, initial, paperById }: Props) {
   const router = useRouter();
   const [columns, setColumns] = useState<ColumnSpec[]>(initial.columns);
   const rowRefs = initial.rowRefs;
@@ -174,7 +175,11 @@ export function PapersetView({ id, initial, paperById }: Props) {
 
   return (
     <PapersetSelectionProvider value={ctxValue}>
-      <PapersetToolbar id={id} />
+      <PapersetToolbar
+        id={id}
+        libraryId={libraryId}
+        existingPaperIds={rowRefs.map((r) => r.paper_id)}
+      />
       <PapersetGrid
         id={id}
         columns={columns}

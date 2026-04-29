@@ -66,6 +66,7 @@ export default async function PapersetPage({
       </div>
       <PapersetView
         id={ps.id}
+        libraryId={ps.libraryId}
         initial={{
           columns,
           rowRefs: refs,

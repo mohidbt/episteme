@@ -1,21 +1,18 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { Plus, FilePlus2, Sparkles, Loader2 } from "lucide-react";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { PaperPickerDialog } from "@/components/PaperPickerDialog";
 import { AddColumnDialog } from "./AddColumnDialog";
 import { usePapersetSelection } from "./lib/PapersetSelectionContext";
 
 interface Props {
   id: string;
+  libraryId: number;
+  existingPaperIds: string[];
 }
 
 /**
@@ -23,7 +20,8 @@ interface Props {
  * `PapersetSelectionContext` — the grid is the source of truth for both
  * the selection model and the running state.
  */
-export function PapersetToolbar({ id }: Props) {
+export function PapersetToolbar({ id, libraryId, existingPaperIds }: Props) {
+  const router = useRouter();
   const [paperPickerOpen, setPaperPickerOpen] = useState(false);
   const [addColumnOpen, setAddColumnOpen] = useState(false);
   const { canRun, isRunning, runEnrichment } = usePapersetSelection();
@@ -62,9 +60,25 @@ export function PapersetToolbar({ id }: Props) {
         </kbd>
       </Button>
 
-      <PaperPickerStubDialog
+      <PaperPickerDialog
         open={paperPickerOpen}
         onOpenChange={setPaperPickerOpen}
+        libraryId={libraryId}
+        excludeIds={existingPaperIds}
+        onConfirm={async (paperIds) => {
+          const res = await fetch(`/api/papersets/${id}/rows`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ paperIds }),
+          });
+          if (!res.ok) {
+            const payload = await res.json().catch(() => ({}));
+            toast.error(payload.error ?? "Failed to add papers");
+            return;
+          }
+          setPaperPickerOpen(false);
+          router.refresh();
+        }}
       />
       <AddColumnDialog
         papersetId={id}
@@ -72,34 +86,5 @@ export function PapersetToolbar({ id }: Props) {
         onOpenChange={setAddColumnOpen}
       />
     </div>
-  );
-}
-
-/**
- * Placeholder dialog. The real paper-picker ships in T11; this lets the
- * button live in the UI without faking data or wiring.
- */
-function PaperPickerStubDialog({
-  open,
-  onOpenChange,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}) {
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Add papers</DialogTitle>
-          <DialogDescription>
-            The paper picker ships in the next task (T11). For now, papers can
-            be added via API.
-          </DialogDescription>
-        </DialogHeader>
-        <DialogFooter>
-          <Button onClick={() => onOpenChange(false)}>Close</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   );
 }

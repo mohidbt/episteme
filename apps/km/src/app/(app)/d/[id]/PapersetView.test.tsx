@@ -24,6 +24,7 @@ import { PapersetView } from "./PapersetView";
 
 const baseProps = {
   id: "ps-1",
+  libraryId: 1,
   initial: {
     columns: [
       { name: "x", description: "Description for x" },
