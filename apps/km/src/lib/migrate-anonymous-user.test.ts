@@ -5,6 +5,7 @@ import {
   libraries,
   notes,
   papers,
+  papersets,
   references_,
   user as userTable,
 } from "@episteme/db/schema";
@@ -71,6 +72,12 @@ describe("migrateAnonymousUser via onLinkAccount", () => {
         .where(eq(references_.userId, anonId)),
     ).toHaveLength(5);
 
+    // Seed a paperset for the anon user — verifies migrate re-parents papersets too.
+    const [libRow] = await db.select().from(libraries).where(eq(libraries.userId, anonId));
+    const [anonPs] = await db.insert(papersets).values({
+      libraryId: libRow.id, userId: anonId, folderId: null, filename: "anon.csv",
+    }).returning({ id: papersets.id });
+
     // 2. Sign-up while holding the anon session cookie → onLinkAccount fires.
     const tag = `${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36)}`;
     const headers = new Headers();
@@ -133,5 +140,8 @@ describe("migrateAnonymousUser via onLinkAccount", () => {
     expect(
       refsForNew.some((r) => r.citationKey === "jumper2021highly"),
     ).toBe(true);
+
+    const [psRow] = await db.select().from(papersets).where(eq(papersets.id, anonPs.id));
+    expect(psRow.userId).toBe(newId);
   });
 });

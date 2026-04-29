@@ -10,6 +10,7 @@ import {
   notes,
   paperHighlights,
   papers,
+  papersets,
   references_,
   userPreferences,
 } from "@episteme/db/schema";
@@ -50,6 +51,10 @@ export async function migrateAnonymousUser(
       .update(references_)
       .set({ userId: newUserId })
       .where(eq(references_.userId, anonUserId));
+    await tx
+      .update(papersets)
+      .set({ userId: newUserId })
+      .where(eq(papersets.userId, anonUserId));
     await tx
       .update(paperHighlights)
       .set({ userId: newUserId })

@@ -274,7 +274,7 @@ export async function restoreFromTrash(opts: {
 
 export async function emptyTrash(opts: { libraryId: number; userId: string }): Promise<void> {
   const trashId = await getTrashFolderId(opts.libraryId, opts.userId);
-  for (const t of [papers, notes, references_] as const) {
+  for (const t of [papers, notes, references_, papersets] as const) {
     await db.delete(t).where(and(
       eq(t.userId, opts.userId),
       eq(t.folderId, trashId),
