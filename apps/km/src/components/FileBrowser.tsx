@@ -419,7 +419,9 @@ export function FileBrowser({
             ? `references/${id}`
             : kind === "asset"
               ? `assets/${id}`
-              : `notes/${id}`;
+              : kind === "paperset"
+                ? `papersets/${id}`
+                : `notes/${id}`;
     try {
       const res = await fetch(`/api/${route}`, {
         method: "PATCH",
@@ -460,7 +462,9 @@ export function FileBrowser({
                 ? "references"
                 : moveTarget.kind === "asset"
                   ? "assets"
-                  : "notes";
+                  : moveTarget.kind === "paperset"
+                    ? "papersets"
+                    : "notes";
           const res = await fetch(`/api/${route}/${moveTarget.id}`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },

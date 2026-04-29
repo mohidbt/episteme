@@ -81,6 +81,19 @@ const baseContents: FolderContents = {
   papersets: [],
 };
 
+const contentsWithPaperset: FolderContents = {
+  ...baseContents,
+  papersets: [
+    {
+      kind: "paperset",
+      id: "ps1",
+      filename: "My set",
+      folderId: null,
+      updatedAt: NOW,
+    },
+  ],
+};
+
 const baseFolders: FolderRow[] = [
   { id: "f1", parentId: null, name: "Research", isTrash: false },
 ];
@@ -525,6 +538,82 @@ describe("FileBrowser context menu (T19)", () => {
     });
     await waitFor(() => {
       expect(screen.getByText("Move to folder")).toBeTruthy();
+    });
+  });
+
+  it("rename of a paperset PATCHes /api/papersets/:id with { title }", async () => {
+    render(
+      <FileBrowser
+        libraryId={1}
+        libraryName="Default"
+        folderId={null}
+        folderChain={[]}
+        contents={contentsWithPaperset}
+        folders={baseFolders}
+      />,
+    );
+    const psEl = screen.getByTestId("fb-item-ps1");
+    await act(async () => {
+      fireEvent.contextMenu(psEl);
+    });
+    await waitFor(() =>
+      expect(screen.getByRole("menuitem", { name: "Rename" })).toBeTruthy(),
+    );
+    await act(async () => {
+      fireEvent.click(screen.getByRole("menuitem", { name: "Rename" }));
+    });
+    const input = await screen.findByTestId("rename-input");
+    fireEvent.change(input, { target: { value: "Renamed set" } });
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("rename-save"));
+    });
+    await waitFor(() => {
+      const calls = (global.fetch as unknown as { mock: { calls: unknown[][] } }).mock.calls;
+      const patch = calls.find((c) => String(c[0]) === "/api/papersets/ps1");
+      expect(patch).toBeTruthy();
+      const opts = patch![1] as { method: string; body: string };
+      expect(opts.method).toBe("PATCH");
+      expect(JSON.parse(opts.body)).toEqual({ title: "Renamed set" });
+    });
+  });
+
+  it("MoveTo of a paperset PATCHes /api/papersets/:id with { folderId }", async () => {
+    render(
+      <FileBrowser
+        libraryId={1}
+        libraryName="Default"
+        folderId={null}
+        folderChain={[]}
+        contents={contentsWithPaperset}
+        folders={baseFolders}
+      />,
+    );
+    const psEl = screen.getByTestId("fb-item-ps1");
+    await act(async () => {
+      fireEvent.contextMenu(psEl);
+    });
+    await waitFor(() =>
+      expect(screen.getByRole("menuitem", { name: "Move to…" })).toBeTruthy(),
+    );
+    await act(async () => {
+      fireEvent.click(screen.getByRole("menuitem", { name: "Move to…" }));
+    });
+    await waitFor(() =>
+      expect(screen.getByTestId("move-item-f1")).toBeTruthy(),
+    );
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("move-item-f1"));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("move-confirm"));
+    });
+    await waitFor(() => {
+      const calls = (global.fetch as unknown as { mock: { calls: unknown[][] } }).mock.calls;
+      const patch = calls.find((c) => String(c[0]) === "/api/papersets/ps1");
+      expect(patch).toBeTruthy();
+      const opts = patch![1] as { method: string; body: string };
+      expect(opts.method).toBe("PATCH");
+      expect(JSON.parse(opts.body)).toEqual({ folderId: "f1" });
     });
   });
 
