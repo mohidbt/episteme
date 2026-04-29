@@ -53,12 +53,13 @@ class SkillSpec:
         return self._body_cache
 
 
-def _parse_skill_md(path: Path) -> SkillSpec | None:
-    """Parse a SKILL.md file. Returns None if frontmatter missing/invalid YAML.
+def _parse_skill_md_text(text: str, path: Path) -> SkillSpec | None:
+    """Parse SKILL.md frontmatter from a raw string.
 
-    Raises ValueError if frontmatter is present but missing required fields.
+    Returns None if frontmatter missing/invalid YAML. Raises ValueError if
+    frontmatter is present but missing required fields. The `path` parameter
+    is used for SkillSpec.path attribute and for error messages.
     """
-    text = path.read_text(encoding="utf-8")
     m = _FRONTMATTER_RE.match(text)
     if not m:
         return None
@@ -94,6 +95,11 @@ def _parse_skill_md(path: Path) -> SkillSpec | None:
         read=_as_list(data.get("read")),
         write=_as_list(data.get("write")),
     )
+
+
+def _parse_skill_md(path: Path) -> SkillSpec | None:
+    """Parse a SKILL.md file. Thin wrapper around `_parse_skill_md_text`."""
+    return _parse_skill_md_text(path.read_text(encoding="utf-8"), path)
 
 
 def _discover() -> dict[str, SkillSpec]:
