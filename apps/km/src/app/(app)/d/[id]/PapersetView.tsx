@@ -179,6 +179,11 @@ export function PapersetView({ id, libraryId, initial, paperById }: Props) {
         id={id}
         libraryId={libraryId}
         existingPaperIds={rowRefs.map((r) => r.paper_id)}
+        onColumnAdded={(col) =>
+          setColumns((prev) =>
+            prev.some((c) => c.name === col.name) ? prev : [...prev, col],
+          )
+        }
       />
       <PapersetGrid
         id={id}

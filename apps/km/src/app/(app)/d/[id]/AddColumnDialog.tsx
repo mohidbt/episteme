@@ -1,7 +1,6 @@
 "use client";
 
 import { useId, useState } from "react";
-import { useRouter } from "next/navigation";
 import {
   Dialog,
   DialogContent,
@@ -14,15 +13,21 @@ import { FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
+import type { ColumnSpec } from "./lib/grid-helpers";
 
 interface Props {
   papersetId: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onColumnAdded: (column: ColumnSpec) => void;
 }
 
-export function AddColumnDialog({ papersetId, open, onOpenChange }: Props) {
-  const router = useRouter();
+export function AddColumnDialog({
+  papersetId,
+  open,
+  onOpenChange,
+  onColumnAdded,
+}: Props) {
   const nameId = useId();
   const descId = useId();
   const [name, setName] = useState("");
@@ -59,9 +64,18 @@ export function AddColumnDialog({ papersetId, open, onOpenChange }: Props) {
         setError(payload.error ?? "Failed to add column.");
         return;
       }
+      const payload = (await res.json().catch(() => ({}))) as {
+        columns?: ColumnSpec[];
+      };
+      const columns = Array.isArray(payload.columns) ? payload.columns : [];
+      const added =
+        columns.find((c) => c.name === name.trim()) ?? {
+          name: name.trim(),
+          description: description.trim(),
+        };
+      onColumnAdded(added);
       onOpenChange(false);
       reset();
-      router.refresh();
     } catch {
       setError("Failed to add column.");
     } finally {

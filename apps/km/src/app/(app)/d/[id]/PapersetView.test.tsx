@@ -170,6 +170,43 @@ describe("PapersetView", () => {
     });
   });
 
+  it("Add column dialog appends column to grid header without reload", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        columns: [
+          { name: "x", description: "Description for x" },
+          { name: "y", description: "Description for y" },
+          { name: "assay_type", description: "What kind of assay?" },
+        ],
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<PapersetView {...baseProps} />);
+    fireEvent.click(screen.getByRole("button", { name: /Add column/ }));
+
+    const nameInput = await screen.findByPlaceholderText("assay_type");
+    fireEvent.change(nameInput, { target: { value: "assay_type" } });
+    const descInput = screen.getByPlaceholderText(
+      /What kind of biological assay/,
+    );
+    fireEvent.change(descInput, { target: { value: "What kind of assay?" } });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^Add$/ }));
+    });
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/papersets/ps-1/columns",
+        expect.objectContaining({ method: "POST" }),
+      );
+      expect(screen.getByTestId("col-header-assay_type")).toBeTruthy();
+    });
+  });
+
   it("⌘↵ triggers enrichment when a cell is selected", async () => {
     const stream = new ReadableStream<Uint8Array>({
       start(c) {

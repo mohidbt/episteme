@@ -8,11 +8,13 @@ import { Button } from "@/components/ui/button";
 import { PaperPickerDialog } from "@/components/PaperPickerDialog";
 import { AddColumnDialog } from "./AddColumnDialog";
 import { usePapersetSelection } from "./lib/PapersetSelectionContext";
+import type { ColumnSpec } from "./lib/grid-helpers";
 
 interface Props {
   id: string;
   libraryId: number;
   existingPaperIds: string[];
+  onColumnAdded: (column: ColumnSpec) => void;
 }
 
 /**
@@ -20,7 +22,12 @@ interface Props {
  * `PapersetSelectionContext` — the grid is the source of truth for both
  * the selection model and the running state.
  */
-export function PapersetToolbar({ id, libraryId, existingPaperIds }: Props) {
+export function PapersetToolbar({
+  id,
+  libraryId,
+  existingPaperIds,
+  onColumnAdded,
+}: Props) {
   const router = useRouter();
   const [paperPickerOpen, setPaperPickerOpen] = useState(false);
   const [addColumnOpen, setAddColumnOpen] = useState(false);
@@ -84,6 +91,7 @@ export function PapersetToolbar({ id, libraryId, existingPaperIds }: Props) {
         papersetId={id}
         open={addColumnOpen}
         onOpenChange={setAddColumnOpen}
+        onColumnAdded={onColumnAdded}
       />
     </div>
   );
