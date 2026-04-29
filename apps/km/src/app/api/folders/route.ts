@@ -5,7 +5,6 @@ import { validateFolderName, normalizeFolderName } from "@/lib/folders";
 import { db } from "@/lib/db";
 import { libraries, folders } from "@episteme/db/schema";
 import { and, asc, eq, isNull } from "drizzle-orm";
-import { getUserIdFromRequest } from "@/lib/auth";
 import { getAuthedUserId, MissingInternalSecretError } from "@/lib/internal-auth";
 import { jsonError } from "@/lib/crud";
 
@@ -73,10 +72,19 @@ const Body = z.object({
 });
 
 export async function POST(req: Request) {
-  const userId = await getUserIdFromRequest(req);
-  if (!userId) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const rawBody = await req.text();
+  let authed;
+  try { authed = await getAuthedUserId(req, rawBody); }
+  catch (e) {
+    if (e instanceof MissingInternalSecretError) return jsonError(500, "internal auth misconfigured");
+    throw e;
+  }
+  if (!authed) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const userId = authed.userId;
 
-  const parsed = Body.safeParse(await req.json().catch(() => null));
+  let parsedJson: unknown = null;
+  try { parsedJson = JSON.parse(rawBody); } catch { /* leaves null */ }
+  const parsed = Body.safeParse(parsedJson);
   if (!parsed.success) return NextResponse.json({ error: "bad request" }, { status: 400 });
   const { libraryId, parentId, name } = parsed.data;
 
