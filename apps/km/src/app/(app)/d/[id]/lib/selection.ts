@@ -111,4 +111,26 @@ export class CellSelection {
   has(c: Cell): boolean {
     return this.set.has(this.key(c));
   }
+
+  /**
+   * Replace the underlying grid options. Drops any selected cells that are
+   * now filled or out-of-range. Used after SSE updates rewrite the grid.
+   */
+  setOpts(next: CellSelectionOpts): void {
+    this.opts = next;
+    for (const k of [...this.set]) {
+      const [r, c] = k.split(":");
+      const row = Number.parseInt(r, 10);
+      if (
+        row >= next.rowCount ||
+        !next.cols.includes(c) ||
+        next.filledKeys.has(k)
+      ) {
+        this.set.delete(k);
+      }
+    }
+    if (this.anchor && !this.set.has(this.anchor)) {
+      this.anchor = null;
+    }
+  }
 }
