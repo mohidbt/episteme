@@ -541,7 +541,7 @@ describe("FileBrowser context menu (T19)", () => {
     });
   });
 
-  it("rename of a paperset PATCHes /api/papersets/:id with { title }", async () => {
+  it("rename of a paperset PATCHes /api/papersets/:id with { filename }", async () => {
     render(
       <FileBrowser
         libraryId={1}
@@ -573,7 +573,7 @@ describe("FileBrowser context menu (T19)", () => {
       expect(patch).toBeTruthy();
       const opts = patch![1] as { method: string; body: string };
       expect(opts.method).toBe("PATCH");
-      expect(JSON.parse(opts.body)).toEqual({ title: "Renamed set" });
+      expect(JSON.parse(opts.body)).toEqual({ filename: "Renamed set" });
     });
   });
 

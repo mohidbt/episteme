@@ -407,7 +407,7 @@ export function FileBrowser({
     const body =
       kind === "folder"
         ? { name }
-        : kind === "asset"
+        : kind === "asset" || kind === "paperset"
           ? { filename: name }
           : { title: name };
     const route =
