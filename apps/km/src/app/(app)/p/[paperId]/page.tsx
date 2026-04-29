@@ -8,11 +8,13 @@ import { db } from "@/lib/db";
 import { papers } from "@episteme/db/schema";
 import { getDefaultLibrary } from "@/lib/default-library";
 import { getReferencesForPaper } from "@/lib/references-server";
+import { papersetCountForPaper, papersetsForPaper } from "@/lib/papersets-server";
 import { denormaliseForList, validateCslJson } from "@/lib/csl";
 import { PathPill, type PathPillSegment } from "@/components/PathPill";
 import { splitFolderPath } from "@/lib/tree";
 import { PaperMetadataPanel } from "@/components/PaperMetadataPanel";
 import { PaperHighlightsList } from "@/components/PaperHighlightsList";
+import { InPapersetsBadge } from "@/components/InPapersetsBadge";
 
 type PaperRow = typeof papers.$inferSelect;
 
@@ -44,9 +46,11 @@ export default async function PaperPage({
   const paper = await loadPaper(paperId, userId);
   if (!paper) notFound();
 
-  const [library, refs] = await Promise.all([
+  const [library, refs, papersetCount, papersetList] = await Promise.all([
     getDefaultLibrary(userId),
     getReferencesForPaper(paper.id, userId),
+    papersetCountForPaper(paper.id, userId),
+    papersetsForPaper(paper.id, userId),
   ]);
   const displayTitle = paper.title && paper.title.trim().length > 0 ? paper.title : paper.filename;
   const firstRef = refs[0];
@@ -84,6 +88,7 @@ export default async function PaperPage({
             {firstRefYear != null && <span>· {firstRefYear}</span>}
           </Link>
         )}
+        <InPapersetsBadge count={papersetCount} papersets={papersetList} />
         <h1 className="font-display text-2xl leading-tight">{displayTitle}</h1>
       </div>
       <div className="mt-4 grid flex-1 min-h-0 grid-cols-1 border-t border-border/60 lg:grid-cols-[minmax(0,1fr)_420px]">
