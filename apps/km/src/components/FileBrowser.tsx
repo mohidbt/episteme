@@ -167,6 +167,7 @@ function apiRouteForKind(kind: ItemKind): string | null {
   if (kind === "reference") return "references";
   if (kind === "note") return "notes";
   if (kind === "asset") return "assets";
+  if (kind === "paperset") return "papersets";
   return null;
 }
 

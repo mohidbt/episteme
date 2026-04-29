@@ -386,6 +386,28 @@ describe("FileBrowser resolveDrop", () => {
     expect(JSON.parse(opts.body)).toEqual({ folderId: "f1" });
   });
 
+  it("paperset leaf → folder PATCHes /api/papersets/:id with folderId=target.id", async () => {
+    const folders: FolderRow[] = [
+      { id: "f1", parentId: null, name: "Research", isTrash: false },
+    ];
+    await resolveDrop(
+      {
+        kind: "leaf",
+        itemKind: "paperset",
+        id: "ps1",
+        title: "My set",
+        currentFolderId: null,
+      },
+      { kind: "folder", id: "f1" },
+      folders,
+    );
+    const calls = (global.fetch as unknown as { mock: { calls: unknown[][] } }).mock.calls;
+    expect(calls[0][0]).toBe("/api/papersets/ps1");
+    const opts = calls[0][1] as { method: string; body: string };
+    expect(opts.method).toBe("PATCH");
+    expect(JSON.parse(opts.body)).toEqual({ folderId: "f1" });
+  });
+
   it("folder → descendant is rejected with toast and no fetch", async () => {
     const folders: FolderRow[] = [
       { id: "a", parentId: null, name: "A", isTrash: false },
