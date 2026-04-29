@@ -173,19 +173,23 @@ def _build_interrupt_on(
 
 
 # Tools the agent must always have access to, regardless of which skills are
-# enabled. Skills curate ADDITIONAL skill-specific tools on top of these. Without
-# the core, basic conversational asks ("list my notes", "show references")
-# silently fail when any skill is toggled on.
+# enabled. Skills curate ADDITIONAL skill-specific tools (highlights, MCPs,
+# extractors) on top of these. Without core discovery tools, basic asks ("list
+# my notes", "find the X paper", "what libraries do I have") silently fail
+# when any skill is toggled on. Action tools that should remain skill-scoped
+# (highlight, etc.) are deliberately excluded.
 _CORE_TOOL_NAMES: frozenset[str] = frozenset({
-    "list_notes",
-    "search_notes",
-    "read_note",
-    "create_note",
-    "update_note",
-    "list_links",
-    "list_backlinks",
-    "list_references",
-    "get_reference",
+    # notes
+    "list_notes", "search_notes", "read_note", "create_note", "update_note",
+    "list_links", "list_backlinks",
+    # references (bibliography)
+    "list_references", "get_reference",
+    # libraries / folders
+    "list_libraries", "list_folders",
+    # papers/PDFs (discovery only — action tools like `highlight` stay skill-scoped)
+    "list_pdfs", "search_pdfs",
+    # paper search (agentic — fetch is HITL-protected via skill require_approval)
+    "agentic_search_papers", "agentic_fetch_papers",
 })
 
 
