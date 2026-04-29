@@ -209,8 +209,12 @@ export async function moveFolder(opts: {
   await db.update(folders).set({ parentId: opts.targetParentId }).where(eq(folders.id, opts.folderId));
 }
 
-type ItemKind = "paper" | "reference" | "note";
-const tableFor = (k: ItemKind) => (k === "paper" ? papers : k === "note" ? notes : references_);
+type ItemKind = "paper" | "reference" | "note" | "paperset";
+const tableFor = (k: ItemKind) =>
+  k === "paper" ? papers
+  : k === "note" ? notes
+  : k === "paperset" ? papersets
+  : references_;
 
 export async function moveItemToFolder(opts: {
   kind: ItemKind; itemId: string; userId: string; targetFolderId: string | null;
