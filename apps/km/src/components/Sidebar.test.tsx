@@ -27,6 +27,7 @@ function baseTree(overrides?: Partial<TreeResponse>): TreeResponse {
     papers: [],
     references: [],
     notes: [],
+    papersets: [],
     agent: [
       { kind: "skills", label: "skills.md" },
       { kind: "memory", label: "memory.md" },

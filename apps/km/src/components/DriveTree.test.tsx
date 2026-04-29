@@ -81,6 +81,7 @@ function makeDriveTree(overrides: Partial<Parameters<typeof DriveTree>[0]> = {})
         papers={[{ id: "p1", title: "On Attention", folderId: null }]}
         references={[]}
         notes={[]}
+        papersets={[]}
         trashId={null}
         onMutate={() => {}}
         {...overrides}
@@ -111,6 +112,18 @@ describe("DriveTree render", () => {
     // Now expanded — content visible
     expect(screen.getByText("Research")).toBeTruthy();
     expect(screen.getByText("On Attention")).toBeTruthy();
+  });
+
+  it("renders papersets at root with /d/<id> href", () => {
+    render(
+      makeDriveTree({
+        papersets: [{ id: "ps1", title: "My Paperset", folderId: null }],
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /drive/i }));
+    const link = screen.getByText("My Paperset").closest("a");
+    expect(link).toBeTruthy();
+    expect(link?.getAttribute("href")).toBe("/d/ps1");
   });
 
   it("expansion state persists in localStorage", async () => {

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ChevronRight, Folder as FolderIcon, FolderTree, Trash2 } from "lucide-react";
+import { ChevronRight, Database, Folder as FolderIcon, FolderTree, Trash2 } from "lucide-react";
 import {
   DndContext,
   DragOverlay,
@@ -35,6 +35,7 @@ import type {
   FolderRowOut,
   NoteItem,
   PaperItem,
+  PapersetItem,
   ReferenceItem,
 } from "@/lib/tree-server";
 
@@ -44,13 +45,14 @@ interface Props {
   papers: PaperItem[];
   references: ReferenceItem[];
   notes: NoteItem[];
+  papersets: PapersetItem[];
   trashId: string | null;
   onMutate: () => void;
 }
 
 // ── Drag / Drop payload types (exported for tests) ────────────────────────────
 
-type ItemKind = "paper" | "reference" | "note";
+type ItemKind = "paper" | "reference" | "note" | "paperset";
 
 export interface SidebarDragActive {
   kind: "leaf" | "folder";
@@ -73,6 +75,7 @@ export interface SidebarDragOver {
 function itemHrefFor(item: TreeItem): string {
   if (item.kind === "paper") return `/p/${item.id}`;
   if (item.kind === "reference") return `/r/${item.id}`;
+  if (item.kind === "paperset") return `/d/${item.id}`;
   const slug = (item as TreeItem & { slug?: string }).slug;
   return `/n/${slug ?? item.id}`;
 }
@@ -86,6 +89,7 @@ function itemLabel(item: TreeItem): string {
 function apiRouteForKind(kind: ItemKind): string {
   if (kind === "paper") return "papers";
   if (kind === "reference") return "references";
+  if (kind === "paperset") return "papersets";
   return "notes";
 }
 
@@ -191,6 +195,7 @@ export function DriveTree({
   papers,
   references,
   notes,
+  papersets,
   trashId,
   onMutate,
 }: Props) {
@@ -216,8 +221,14 @@ export function DriveTree({
       // Preserve slug for href.
       ...{ slug: x.slug },
     })) as TreeItem[];
-    return [...p, ...r, ...n];
-  }, [papers, references, notes]);
+    const d: TreeItem[] = papersets.map((x) => ({
+      id: x.id,
+      title: x.title,
+      folderId: x.folderId,
+      kind: "paperset",
+    }));
+    return [...p, ...r, ...n, ...d];
+  }, [papers, references, notes, papersets]);
 
   const root = useMemo(
     () => buildFolderTree(folders, treeItems, { includeTrash: false }),
@@ -472,6 +483,7 @@ function DriveLeafRow({ item }: { item: TreeItem }) {
         isActive={pathname === href}
         className={`data-[active=true]:bg-transparent data-[active=true]:border-l-2 data-[active=true]:border-foreground data-[active=true]:font-medium data-[active=true]:rounded-l-none data-[active=true]:pl-[calc(0.5rem-2px)]${hasTitle ? "" : " text-muted-foreground italic"}${isDragging ? " opacity-50" : ""}`}
       >
+        {item.kind === "paperset" ? <Database aria-hidden /> : null}
         <span>{itemLabel(item)}</span>
       </SidebarMenuButton>
     </SidebarMenuItem>
@@ -512,6 +524,7 @@ function DriveSubLeaf({ item }: { item: TreeItem }) {
       isActive={pathname === href}
       className={`data-[active=true]:bg-transparent data-[active=true]:border-l-2 data-[active=true]:border-foreground data-[active=true]:font-medium data-[active=true]:rounded-l-none data-[active=true]:pl-[calc(0.5rem-2px)]${hasTitle ? "" : " text-muted-foreground italic"}${isDragging ? " opacity-50" : ""}`}
     >
+      {item.kind === "paperset" ? <Database aria-hidden /> : null}
       <span>{itemLabel(item)}</span>
     </SidebarMenuSubButton>
   );

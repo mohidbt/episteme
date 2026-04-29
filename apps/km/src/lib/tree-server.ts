@@ -1,7 +1,7 @@
 import { cache } from "react";
 import { and, asc, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { folders, libraries, notes, papers, references_ } from "@episteme/db/schema";
+import { folders, libraries, notes, papers, papersets, references_ } from "@episteme/db/schema";
 
 const AGENT_ITEMS = [
   { kind: "skills", label: "skills.md" },
@@ -37,6 +37,12 @@ export interface NoteItem {
   folderId: string | null;
 }
 
+export interface PapersetItem {
+  id: string;
+  title: string;
+  folderId: string | null;
+}
+
 export interface AgentItem {
   kind: "skills" | "memory" | "settings";
   label: string;
@@ -48,6 +54,7 @@ export interface TreeResponse {
   papers: PaperItem[];
   references: ReferenceItem[];
   notes: NoteItem[];
+  papersets: PapersetItem[];
   agent: readonly AgentItem[];
 }
 
@@ -61,7 +68,7 @@ export const getTreeForUser = cache(
     const lib = libRows[0];
     if (!lib) return null;
 
-    const [folderRows, papersRows, refsRowsRaw, notesRows] = await Promise.all([
+    const [folderRows, papersRows, refsRowsRaw, notesRows, papersetsRows] = await Promise.all([
       db
         .select({
           id: folders.id,
@@ -98,6 +105,15 @@ export const getTreeForUser = cache(
         .from(notes)
         .where(and(eq(notes.libraryId, libraryId), eq(notes.userId, userId)))
         .orderBy(asc(notes.createdAt)),
+      db
+        .select({
+          id: papersets.id,
+          filename: papersets.filename,
+          folderId: papersets.folderId,
+        })
+        .from(papersets)
+        .where(and(eq(papersets.libraryId, libraryId), eq(papersets.userId, userId)))
+        .orderBy(asc(papersets.createdAt)),
     ]);
 
     const refsRows: ReferenceItem[] = refsRowsRaw.map((r) => {
@@ -117,6 +133,11 @@ export const getTreeForUser = cache(
       papers: papersRows,
       references: refsRows,
       notes: notesRows,
+      papersets: papersetsRows.map((p) => ({
+        id: p.id,
+        title: p.filename,
+        folderId: p.folderId,
+      })),
       agent: AGENT_ITEMS,
     };
   },

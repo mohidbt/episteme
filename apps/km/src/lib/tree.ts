@@ -13,7 +13,7 @@ export interface TreeItem {
   id: string;
   title: string | null;
   folderId: string | null;
-  kind: "paper" | "reference" | "note";
+  kind: "paper" | "reference" | "note" | "paperset";
 }
 
 export interface FolderNode {

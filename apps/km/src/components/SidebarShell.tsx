@@ -46,6 +46,7 @@ export function SidebarShell({ library, tree, isAnonymous }: SidebarShellProps) 
           papers={tree.papers}
           references={tree.references}
           notes={tree.notes}
+          papersets={tree.papersets}
           trashId={trashFolder?.id ?? null}
           onMutate={onMutate}
         />
