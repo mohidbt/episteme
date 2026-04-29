@@ -50,31 +50,45 @@ async def list_references(
     Use this to enumerate all references (papers cited / catalogued) inside
     one of the user's libraries.
 
-    IMPORTANT: If you don't know the user's libraryId, either omit it (uses
-    default library) or call list_libraries first. NEVER guess or invent a
-    libraryId — they are opaque integers (e.g. 587, 17018), not sequential.
+    Behavior:
+    - If `libraryId` is omitted, returns the UNION of references across
+      EVERY library the user owns. Avoids silently picking one when the
+      user has multiple libraries.
+    - If `libraryId` is provided, scopes to that one library.
 
-    Returns at most 20 by default. Server caps at 100 regardless.
+    NEVER guess or invent a libraryId — they are opaque integers (e.g.
+    587, 17018), not sequential.
+
+    Returns at most 20 per library by default. Server caps at 100 per call.
 
     Args:
-        libraryId: Numeric library ID (from list_libraries). If omitted, lists
-            references from the user's first (default) library.
+        libraryId: Optional numeric library ID (from list_libraries). Omit
+            to span every library the user has.
         q: Optional substring filter applied to citationKey and title.
-        limit: Max rows to return (default 20, server caps at 100).
+        limit: Max rows to return PER LIBRARY (default 20, server caps at 100).
         offset: Rows to skip for pagination (default 0).
     """
     user_id = user_id_from_config(config)
-    if libraryId is None:
-        libs = await km_get("/api/libraries", user_id=user_id)
-        if isinstance(libs, list) and libs:
-            libraryId = libs[0]["id"]
-        else:
-            return {"error": True, "message": "No libraries found for user"}
-    path = f"/api/references?libraryId={libraryId}"
-    if q:
-        path += f"&q={quote_plus(q)}"
-    path += f"&limit={limit}&offset={offset}"
-    return await km_get(path, user_id=user_id)
+
+    def _qs(lib_id: int) -> str:
+        path = f"/api/references?libraryId={lib_id}"
+        if q:
+            path += f"&q={quote_plus(q)}"
+        path += f"&limit={limit}&offset={offset}"
+        return path
+
+    if libraryId is not None:
+        return await km_get(_qs(libraryId), user_id=user_id)
+
+    libs = await km_get("/api/libraries", user_id=user_id)
+    if not isinstance(libs, list) or not libs:
+        return {"error": True, "message": "No libraries found for user"}
+    out: list = []
+    for lib in libs:
+        rows = await km_get(_qs(lib["id"]), user_id=user_id)
+        if isinstance(rows, list):
+            out.extend(rows)
+    return out
 
 
 @tool

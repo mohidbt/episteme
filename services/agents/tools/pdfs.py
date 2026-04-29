@@ -32,27 +32,37 @@ _UNAVAILABLE = {
 
 @tool
 async def list_pdfs(libraryId: int | None = None, *, config: RunnableConfig) -> object:
-    """List ALL PDFs/papers inside a specific library.
+    """List PDFs/papers belonging to the user.
 
     USE THIS when the user asks to enumerate, list, show all, or count
-    PDFs/papers in a library — do NOT use search_pdfs for that.
+    PDFs/papers — do NOT use search_pdfs for that.
 
-    IMPORTANT: If you don't know the user's libraryId, either omit it (uses
-    default library) or call list_libraries first. NEVER guess or invent a
-    libraryId — they are opaque integers (e.g. 587, 17018), not sequential.
+    Behavior:
+    - If `libraryId` is omitted, returns the UNION of papers across EVERY
+      library the user owns. This is the right default for "which papers
+      do I have?" — users often have more than one library and the model
+      should not silently pick one.
+    - If `libraryId` is provided, scopes to that one library.
+
+    NEVER guess or invent a libraryId — they are opaque integers (e.g.
+    587, 17018), not sequential.
 
     Args:
-        libraryId: Numeric library ID (from list_libraries). If omitted, uses
-            the user's default library.
+        libraryId: Optional numeric library ID (from list_libraries) to
+            restrict the query. Omit to see every paper the user has.
     """
     user_id = user_id_from_config(config)
-    if libraryId is None:
-        libs = await km_get("/api/libraries", user_id=user_id)
-        if isinstance(libs, list) and libs:
-            libraryId = libs[0]["id"]
-        else:
-            return {"error": True, "message": "No libraries found for user"}
-    return await km_get(f"/api/papers?libraryId={libraryId}", user_id=user_id)
+    if libraryId is not None:
+        return await km_get(f"/api/papers?libraryId={libraryId}", user_id=user_id)
+    libs = await km_get("/api/libraries", user_id=user_id)
+    if not isinstance(libs, list) or not libs:
+        return {"error": True, "message": "No libraries found for user"}
+    out: list = []
+    for lib in libs:
+        rows = await km_get(f"/api/papers?libraryId={lib['id']}", user_id=user_id)
+        if isinstance(rows, list):
+            out.extend(rows)
+    return out
 
 
 @tool
