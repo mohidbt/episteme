@@ -88,6 +88,10 @@ export interface AgentTranscriptProps {
   fullHeight?: boolean;
   pageContext?: PageContext;
   onSendMessage?: (text: string) => void;
+  /** If provided, auto-send this prompt on mount (first render only). */
+  initialPrompt?: string | null;
+  /** If provided, auto-enable this skill for the first invoke. */
+  initialSkill?: string | null;
 }
 
 /**
@@ -140,6 +144,8 @@ export function AgentTranscript({
   fullHeight = false,
   pageContext,
   onSendMessage,
+  initialPrompt,
+  initialSkill,
 }: AgentTranscriptProps) {
   const [state, dispatch] = useReducer(
     agentStreamReducer,
@@ -148,13 +154,10 @@ export function AgentTranscript({
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
+  const initialPromptSent = useRef(false);
+  const defaultSendRef = useRef<((text: string) => Promise<void>) | null>(null);
+  const initialSkillRef = useRef(initialSkill);
   const router = useRouter();
-
-  useEffect(() => {
-    return () => {
-      abortRef.current?.abort();
-    };
-  }, []);
 
   const defaultSend = useCallback(
     async (text: string) => {
@@ -167,6 +170,8 @@ export function AgentTranscript({
         text,
       });
       setStreaming(true);
+      const skill = initialSkillRef.current;
+      initialSkillRef.current = null;
       try {
         const res = await fetch("/api/agents/km/invoke", {
           method: "POST",
@@ -175,6 +180,7 @@ export function AgentTranscript({
             thread_id: threadId,
             message: text,
             page_context: pageContext ?? {},
+            ...(skill ? { skill } : {}),
           }),
           signal: controller.signal,
         });
@@ -211,6 +217,27 @@ export function AgentTranscript({
     },
     [threadId, pageContext, router],
   );
+
+  // Keep ref in sync so the auto-send effect can access it without TDZ
+  defaultSendRef.current = defaultSend;
+
+  // Auto-send initial prompt on first mount (once only)
+  useEffect(() => {
+    if (initialPrompt && !initialPromptSent.current) {
+      initialPromptSent.current = true;
+      const text = initialPrompt;
+      requestAnimationFrame(() => {
+        if (onSendMessage) onSendMessage(text);
+        else void defaultSendRef.current?.(text);
+      });
+    }
+  }, [initialPrompt, onSendMessage]);
+
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort();
+    };
+  }, []);
 
   const handleSend = useCallback(
     (textArg?: string) => {

@@ -74,10 +74,22 @@ export async function POST(req: Request) {
     console.warn("[invoke] agentConfigs lookup failed", err);
   }
 
+  // If the frontend sent a `skill` hint (e.g. "paper-search" from the
+  // Agentic Search button), merge it into enabled_skills so the Python
+  // agent picks up the skill's workflow instructions and tool allow-list.
+  const skillHint: string | undefined = body.skill ?? undefined;
+  let mergedSkills: string[] | null = enabledSkills
+    ? [...enabledSkills]
+    : null;
+  if (skillHint) {
+    mergedSkills ??= [];
+    if (!mergedSkills.includes(skillHint)) mergedSkills.push(skillHint);
+  }
+
   const upstreamBody = JSON.stringify({
     ...JSON.parse(bodyText),
     ...(modelPreference ? { model_preference: modelPreference } : {}),
-    ...(Array.isArray(enabledSkills) ? { enabled_skills: enabledSkills } : {}),
+    ...(Array.isArray(mergedSkills) ? { enabled_skills: mergedSkills } : {}),
   });
 
   const path = "/agents/km/invoke";

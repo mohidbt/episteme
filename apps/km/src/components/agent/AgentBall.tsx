@@ -6,6 +6,7 @@ import { Sparkles, X, PlusIcon } from "lucide-react";
 import { AgentTranscript } from "./AgentTranscript";
 import { useDoubleTapSpace } from "@/hooks/useDoubleTapSpace";
 import { derivePageContext } from "@/lib/page-context";
+import { useAgentBall } from "./agent-ball-context";
 
 interface AgentBallProps {
   /** Reserved for future per-user telemetry / overrides. */
@@ -33,12 +34,27 @@ async function ensureThreadId(signal: AbortSignal): Promise<string | null> {
 }
 
 export function AgentBall(_props: AgentBallProps) {
-  const [open, setOpen] = useState(false);
+  const agentBall = useAgentBall();
   const [threadId, setThreadId] = useState<string | null>(null);
+  const [prefilledPrompt, setPrefilledPrompt] = useState<string | null>(null);
+  const [prefilledSkill, setPrefilledSkill] = useState<string | null>(null);
+  const open = agentBall.open;
   const pathname = usePathname() ?? "/";
   const pageContext = derivePageContext(pathname);
 
-  const toggle = useCallback(() => setOpen((v) => !v), []);
+  // When opened externally (via context), consume the initial prompt + skill
+  useEffect(() => {
+    if (open) {
+      const { prompt, skill } = agentBall.consumeInitialPrompt();
+      if (prompt) setPrefilledPrompt(prompt);
+      if (skill) setPrefilledSkill(skill);
+    }
+  }, [open, agentBall]);
+
+  const toggle = useCallback(() => {
+    if (open) agentBall.close();
+    else agentBall.openWithPrompt("");
+  }, [open, agentBall]);
   useDoubleTapSpace(toggle);
 
   const startNewChat = useCallback(async () => {
@@ -61,9 +77,11 @@ export function AgentBall(_props: AgentBallProps) {
   }, []);
 
   const closePanel = useCallback(() => {
-    setOpen(false);
+    agentBall.close();
     setThreadId(null);
-  }, []);
+    setPrefilledPrompt(null);
+    setPrefilledSkill(null);
+  }, [agentBall]);
 
   useEffect(() => {
     if (!open || threadId) return;
@@ -87,7 +105,7 @@ export function AgentBall(_props: AgentBallProps) {
     return (
       <button
         type="button"
-        onClick={() => setOpen(true)}
+        onClick={() => agentBall.openWithPrompt("")}
         aria-label="Open agent"
         className="fixed bottom-4 right-4 z-50 flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg hover:opacity-90"
         data-testid="agent-ball"
@@ -137,6 +155,8 @@ export function AgentBall(_props: AgentBallProps) {
             threadId={threadId}
             pageContext={pageContext}
             fullHeight
+            initialPrompt={prefilledPrompt}
+            initialSkill={prefilledSkill}
           />
         ) : (
           <div className="p-3 text-xs text-muted-foreground">Loading…</div>

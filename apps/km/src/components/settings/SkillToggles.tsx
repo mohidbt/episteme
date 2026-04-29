@@ -13,6 +13,11 @@ import { Empty, EmptyTitle, EmptyDescription } from "@/components/ui/empty";
 
 const SKILLS = [
   {
+    name: "paper-search",
+    title: "Paper Search",
+    description: "Find and download paper PDFs for references using Semantic Scholar.",
+  },
+  {
     name: "lit-triage",
     title: "Literature Triage",
     description: "Skim incoming references and decide what's worth a deeper read.",

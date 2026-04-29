@@ -8,6 +8,7 @@ import { PathPill, type PathPillSegment } from "@/components/PathPill";
 import { splitFolderPath } from "@/lib/tree";
 import { ReferenceForm } from "@/components/ReferenceForm";
 import { ReferenceAttachToPaperButton } from "@/components/ReferenceAttachToPaperButton";
+import { ReferenceAgenticSearchButton } from "@/components/ReferenceAgenticSearchButton";
 
 export default async function ReferencePage({
   params,
@@ -52,6 +53,10 @@ export default async function ReferencePage({
     <div className="mx-auto max-w-3xl p-6">
       {library && <PathPill className="mb-4" segments={pillSegments} />}
       <div className="mb-4 flex flex-wrap items-center gap-2">
+        <ReferenceAgenticSearchButton
+          referenceId={ref.id}
+          citationKey={ref.citationKey}
+        />
         <ReferenceAttachToPaperButton
           referenceId={ref.id}
           currentPaperId={ref.paperId ?? null}
