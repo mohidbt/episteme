@@ -8,6 +8,11 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { SidebarProvider, SidebarMenu } from "@/components/ui/sidebar";
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
+}));
+
 import { NewItemTrigger } from "./NewItemTrigger";
 
 type FetchImpl = (url: string, init?: RequestInit) => Response | Promise<Response>;
@@ -107,6 +112,13 @@ describe("NewItemTrigger", () => {
       expect(body.libraryId).toBe(1);
       expect(body.title).toBe("Hello");
     });
+  });
+
+  it("dropdown menu includes a Paperset option", async () => {
+    renderTrigger();
+    fireEvent.click(screen.getByRole("button", { name: /new/i }));
+    await waitFor(() => screen.getByText(/^paperset$/i));
+    expect(screen.getByText(/^paperset$/i)).toBeTruthy();
   });
 
   it("clicking Folder opens name dialog; submit POSTs /api/folders with parentId=folderId", async () => {

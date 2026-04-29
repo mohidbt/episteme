@@ -25,6 +25,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { validateFolderName } from "@/lib/folders";
+import { PapersetCreateDialog } from "./PapersetCreateDialog";
 
 type Variant = "group" | "menu-item" | "sub-menu-item" | "toolbar";
 
@@ -46,7 +47,7 @@ const VARIANT_CLASS: Record<Exclude<Variant, "toolbar">, string> = {
     "top-0.5 right-1 opacity-0 group-hover/menu-sub-item:opacity-100 group-focus-within/menu-sub-item:opacity-100 aria-expanded:opacity-100",
 };
 
-type DialogKind = "note" | "reference" | "folder" | null;
+type DialogKind = "note" | "reference" | "paperset" | "folder" | null;
 
 async function jsonFetch(url: string, init: RequestInit): Promise<Response> {
   const headers = new Headers(init.headers);
@@ -112,6 +113,9 @@ export function NewItemTrigger({
           <DropdownMenuItem onClick={() => setDialog("reference")}>
             Reference
           </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => setDialog("paperset")}>
+            Paperset
+          </DropdownMenuItem>
           <DropdownMenuItem onClick={() => setDialog("folder")}>
             Folder
           </DropdownMenuItem>
@@ -131,6 +135,11 @@ export function NewItemTrigger({
         libraryId={libraryId}
         folderId={folderId}
         onMutate={onMutate}
+      />
+      <PapersetCreateDialog
+        open={dialog === "paperset"}
+        onOpenChange={(o) => setDialog(o ? "paperset" : null)}
+        folderId={folderId}
       />
       <FolderCreateDialog
         open={dialog === "folder"}
