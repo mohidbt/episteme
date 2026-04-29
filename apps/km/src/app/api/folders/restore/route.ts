@@ -6,7 +6,7 @@ import { getUserIdFromRequest } from "@/lib/auth";
 const Body = z.object({
   libraryId: z.number().int().positive(),
   target: z.object({
-    kind: z.enum(["paper", "reference", "note", "folder"]),
+    kind: z.enum(["paper", "reference", "note", "folder", "paperset"]),
     id: z.string().uuid(),
   }),
 });
