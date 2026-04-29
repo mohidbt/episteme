@@ -62,9 +62,18 @@ export function PapersetToolbar({
           <Sparkles className="size-4" aria-hidden />
         )}
         Run enrichment
-        <kbd className="ml-2 rounded border border-border/60 bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
-          ⌘↵
-        </kbd>
+        <span
+          className="ml-2 inline-flex items-center gap-1 text-[10px] text-muted-foreground"
+          aria-label="Cmd+Enter"
+        >
+          <kbd className="inline-flex items-center justify-center rounded border border-border/60 bg-muted px-1.5 py-0.5 font-mono leading-none">
+            ⌘
+          </kbd>
+          <span aria-hidden>+</span>
+          <kbd className="inline-flex items-center justify-center rounded border border-border/60 bg-muted px-1.5 py-0.5 font-mono leading-none">
+            ↵
+          </kbd>
+        </span>
       </Button>
 
       <PaperPickerDialog
