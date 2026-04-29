@@ -1,0 +1,2 @@
+CREATE INDEX "papersets_row_refs_gin" ON "papersets" USING gin ("row_refs" jsonb_path_ops);--> statement-breakpoint
+CREATE INDEX "papersets_user_folder_idx" ON "papersets" USING btree ("user_id","folder_id");
