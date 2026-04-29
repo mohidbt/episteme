@@ -111,9 +111,9 @@ describe("Sidebar", () => {
     expect(byHref("/papers")?.textContent).toMatch(/papers/i);
     expect(byHref("/references")?.textContent).toMatch(/references/i);
     expect(byHref("/notes")?.textContent).toMatch(/notes/i);
-    const dataLink = byHref("/data");
-    expect(dataLink).toBeTruthy();
-    expect(dataLink?.textContent).toMatch(/data/i);
+    const papersetsLink = byHref("/papersets");
+    expect(papersetsLink).toBeTruthy();
+    expect(papersetsLink?.textContent).toMatch(/papersets/i);
   });
 
   it("renders Trash row at bottom of Drive with sidebar-trash testid", () => {

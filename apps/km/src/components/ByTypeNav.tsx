@@ -16,7 +16,7 @@ const LINKS = [
   { label: "Papers", href: "/papers", Icon: FileText, muted: false },
   { label: "References", href: "/references", Icon: BookMarked, muted: false },
   { label: "Notes", href: "/notes", Icon: NotebookPen, muted: false },
-  { label: "Data", href: "/data", Icon: Database, muted: true },
+  { label: "Papersets", href: "/papersets", Icon: Database, muted: false },
 ] as const;
 
 export function ByTypeNav() {
