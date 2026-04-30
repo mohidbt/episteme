@@ -2,15 +2,6 @@
 // Used by the settings SkillToggles and by the inline AI rephrase skill picker.
 // Each skill carries an instruction string used as a rephrase/writing prompt.
 
-/**
- * Skill category. Controls where the skill surfaces in UI:
- * - "writing": eligible for the inline rephrase / writing skill picker.
- * - "research": research-flavored skills (paper search, triage, deep read).
- *
- * The rephrase popover only lists `writing` skills (#70). When personal
- * skills land (G-R3-03) they will declare their own category via SKILL.md
- * frontmatter and we'll filter the same way.
- */
 export type SkillCategory = "writing" | "research";
 
 export type Skill = {

@@ -3,6 +3,7 @@
 import { BubbleMenu, type TiptapEditor } from "@episteme/editor";
 import { useRef, useState, useCallback, useEffect } from "react";
 import { runSlashAi } from "@/app/(app)/n/[slug]/run-slash-ai";
+import type { SkillCategory } from "@/lib/skills";
 import {
   Bold, Italic, Code, Wand2, Loader2,
   ArrowDown, RefreshCw,
@@ -29,9 +30,7 @@ type SkillEntry = {
   title: string;
   description: string;
   instruction: string;
-  // Optional so older payloads still parse; filter falls back to inclusion if absent.
-  // TODO when personal skills land (G-R3-03), filter by SKILL.md frontmatter category.
-  category?: "writing" | "research" | string;
+  category?: SkillCategory;
 };
 
 // Built-in rephrase style presets. Clicking one submits the rephrase directly
