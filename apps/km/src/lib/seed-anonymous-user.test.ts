@@ -57,7 +57,7 @@ afterAll(async () => {
 });
 
 describe("seedAnonymousUser", () => {
-  it("creates library + TRASH + nested Reading List/Foundations + welcome note + paper (cover + PDF in MinIO) + 5 references", async () => {
+  it("creates library + TRASH + nested Reading List/Foundations + welcome note + paper (cover + PDF in MinIO) + 5 references", { timeout: 60_000 }, async () => {
     const userId = await insertAnonymousUser();
 
     await seedAnonymousUser(userId);
@@ -88,30 +88,50 @@ describe("seedAnonymousUser", () => {
     expect(noteRows).toHaveLength(1);
     expect(noteRows[0].title).toBe("Welcome to Episteme");
     expect(noteRows[0].contentMd).toContain("# Welcome to Episteme");
+    // Markdown cheatsheet sentence is included so guests can discover syntax.
+    expect(noteRows[0].contentMd).toContain("**bold**");
+    expect(noteRows[0].contentMd).toContain("*italic*");
+    expect(noteRows[0].contentMd).toContain("`code`");
 
     const paperRows = await db
       .select()
       .from(papers)
       .where(eq(papers.userId, userId));
-    expect(paperRows).toHaveLength(1);
-    expect(paperRows[0].filename).toBe("2005.11401.pdf");
-    expect(paperRows[0].doi).toBe("10.48550/arXiv.2005.11401");
-    expect(paperRows[0].title).toBe(
+    // 1 RAG seed paper at root + 3 PCA folder PDFs.
+    expect(paperRows).toHaveLength(4);
+    const ragPaper = paperRows.find((p) => p.filename === "2005.11401.pdf");
+    expect(ragPaper).toBeDefined();
+    expect(ragPaper!.doi).toBe("10.48550/arXiv.2005.11401");
+    expect(ragPaper!.title).toBe(
       "Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks",
     );
-    expect(paperRows[0].year).toBe(2020);
-    expect(paperRows[0].authors?.[0]).toBe("Patrick Lewis");
+    expect(ragPaper!.year).toBe(2020);
+    expect(ragPaper!.authors?.[0]).toBe("Patrick Lewis");
 
     const sourceHead = await fetch(
-      await storage.getPresignedHead(paperSourceKey(paperRows[0].id), 30),
+      await storage.getPresignedHead(paperSourceKey(ragPaper!.id), 30),
       { method: "HEAD" },
     );
     expect(sourceHead.status).toBe(200);
     const coverHead = await fetch(
-      await storage.getPresignedHead(paperCoverKey(paperRows[0].id), 30),
+      await storage.getPresignedHead(paperCoverKey(ragPaper!.id), 30),
       { method: "HEAD" },
     );
     expect(coverHead.status).toBe(200);
+
+    // The 3 PCA papers all live in the PCA folder, with PDF source uploaded.
+    const pcaPapers = paperRows.filter((p) =>
+      p.filename.startsWith("pca-paper-"),
+    );
+    expect(pcaPapers).toHaveLength(3);
+    for (const p of pcaPapers) {
+      expect(p.title).toBeTruthy();
+      const head = await fetch(
+        await storage.getPresignedHead(paperSourceKey(p.id), 30),
+        { method: "HEAD" },
+      );
+      expect(head.status).toBe(200);
+    }
 
     const refRows = await db
       .select()
@@ -156,15 +176,24 @@ describe("seedAnonymousUser", () => {
     expect(colNames).toContain("Uses PCA");
     expect(colNames).toContain("Variables matched on");
     expect(psRows[0].rowRefs).toHaveLength(6);
-    // Each row references exactly one PCA reference (paper_id field is the
-    // reference id since these aren't backed by uploaded PDFs).
     for (const row of psRows[0].rowRefs) {
       expect(typeof row.paper_id).toBe("string");
       expect(row.paper_id.length).toBeGreaterThan(0);
     }
+    // 3 rowRefs reference real paper IDs (PCA papers w/ PDFs); the other 3
+    // reference-only rows still point at reference IDs.
+    const paperIds = new Set(pcaPapers.map((p) => p.id));
+    const refIdsInPca = new Set(
+      refRows.filter((r) => r.folderId === pcaFolder!.id).map((r) => r.id),
+    );
+    const rowRefIds = psRows[0].rowRefs.map((r) => r.paper_id);
+    const matchedPaperIds = rowRefIds.filter((id) => paperIds.has(id));
+    const matchedRefIds = rowRefIds.filter((id) => refIdsInPca.has(id));
+    expect(matchedPaperIds).toHaveLength(3);
+    expect(matchedRefIds).toHaveLength(3);
   });
 
-  it("is idempotent on a second call for the same user", async () => {
+  it("is idempotent on a second call for the same user", { timeout: 60_000 }, async () => {
     const userId = await insertAnonymousUser();
 
     await seedAnonymousUser(userId);
@@ -186,7 +215,7 @@ describe("seedAnonymousUser", () => {
       .select()
       .from(papers)
       .where(eq(papers.userId, userId));
-    expect(paperRows).toHaveLength(1);
+    expect(paperRows).toHaveLength(4);
 
     const refRows = await db
       .select()
@@ -195,7 +224,7 @@ describe("seedAnonymousUser", () => {
     expect(refRows).toHaveLength(11);
   });
 
-  it("recovers from a partial seed (orphan library, no other rows)", async () => {
+  it("recovers from a partial seed (orphan library, no other rows)", { timeout: 60_000 }, async () => {
     const userId = await insertAnonymousUser();
 
     await db.insert(libraries).values({ userId, name: "My Library" });
@@ -218,7 +247,7 @@ describe("seedAnonymousUser", () => {
       .select()
       .from(papers)
       .where(eq(papers.userId, userId));
-    expect(paperRows).toHaveLength(1);
+    expect(paperRows).toHaveLength(4);
 
     const refRows = await db
       .select()

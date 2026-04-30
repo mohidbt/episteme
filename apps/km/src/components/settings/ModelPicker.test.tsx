@@ -10,6 +10,14 @@ import {
 import { ModelPicker } from "./ModelPicker";
 import { _resetCatalogCacheForTests } from "@/lib/openrouter-catalog";
 
+let mockSessionUser: { isAnonymous?: boolean } | null = {
+  isAnonymous: false,
+};
+
+vi.mock("@episteme/auth/client", () => ({
+  useSession: () => ({ data: mockSessionUser ? { user: mockSessionUser } : null }),
+}));
+
 // Three models with mixed metadata:
 // - "old" has earliest `created` timestamp (release date)
 // - "new" has latest `created` timestamp
@@ -23,6 +31,7 @@ const MOCK_MODELS = [
 ];
 
 beforeEach(() => {
+  mockSessionUser = { isAnonymous: false };
   _resetCatalogCacheForTests();
   globalThis.fetch = vi.fn(async () => {
     return new Response(
@@ -87,6 +96,43 @@ describe("ModelPicker", () => {
       expect(items[3].textContent).toMatch(/Alpha Model/);
       expect(items[4].textContent).toMatch(/Zeta Model/);
     });
+  });
+
+  it("shows 'Sign up to access all models.' empty copy when anonymous and zero matches after typeahead", async () => {
+    mockSessionUser = { isAnonymous: true };
+
+    render(<ModelPicker value="vendor/old-model" onChange={vi.fn()} />);
+    await waitFor(() => expect(globalThis.fetch).toHaveBeenCalled());
+    await openPicker();
+    const input = await screen.findByTestId("model-picker-search");
+    fireEvent.change(input, { target: { value: "zzzzznoresult" } });
+
+    await waitFor(() => {
+      expect(
+        screen.queryByText("Sign up to access all models."),
+      ).not.toBeNull();
+    });
+    expect(screen.queryByText("No models match.")).toBeNull();
+  });
+
+  it("shows 'No models match.' for non-anonymous users when zero matches after typeahead", async () => {
+    mockSessionUser = { isAnonymous: false };
+
+    render(<ModelPicker value="vendor/old-model" onChange={vi.fn()} />);
+    await waitFor(() => expect(globalThis.fetch).toHaveBeenCalled());
+    await openPicker();
+    const input = await screen.findByTestId("model-picker-search");
+    fireEvent.change(input, { target: { value: "zzzzznoresult" } });
+
+    await waitFor(() => {
+      expect(screen.queryAllByTestId("model-picker-item")).toHaveLength(0);
+    });
+    await waitFor(() => {
+      expect(screen.queryByText("No models match.")).not.toBeNull();
+    });
+    expect(
+      screen.queryByText("Sign up to access all models."),
+    ).toBeNull();
   });
 
   it("typeahead filters list as the user types", async () => {

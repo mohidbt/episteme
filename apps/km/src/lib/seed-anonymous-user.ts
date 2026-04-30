@@ -64,6 +64,59 @@ const SEED_PCA_REFERENCES = [
   "pca-turk-pentland1991.csl.json",
 ];
 
+// PCA-folder demo PDFs. NOTE: these test PDFs are propensity-score-matching
+// papers used as stand-in content for the demo — they are NOT the canonical
+// PCA references above. The seed pairs each with a plausible title/authors
+// extracted from the PDF, so the guest can experience "paper-with-PDF" rows
+// in a paperset alongside reference-only rows.
+const SEED_PCA_PAPERS: Array<{
+  filename: string;
+  title: string;
+  authors: string[];
+  year: number;
+  doi: string | null;
+}> = [
+  {
+    filename: "pca-paper-1.pdf",
+    title:
+      "Using Propensity-Score Matched Cohorts to Evaluate Career Outcomes for Medical Students Completing the Underserved Pathway",
+    authors: [
+      "Genya Shimkin",
+      "Kimberly Kardonsky",
+      "Alisse Cassell",
+      "Ayan Mohamed",
+      "Mansi Shah",
+      "Amanda Kost",
+      "Lynn Oliver",
+      "Sharon Dobie",
+      "Samira Farah",
+    ],
+    year: 2025,
+    doi: null,
+  },
+  {
+    filename: "pca-paper-2.pdf",
+    title:
+      "Propensity-score matching with GAN-generated observations from electronic health records: simulation study and application to the evaluation of prone positioning in COVID-19 patients under mechanical ventilation",
+    authors: [
+      "Bertrand Bouvarel",
+      "Benjamin Glemain",
+      "Fabrice Carrat",
+      "Nathanael Lapidus",
+    ],
+    year: 2025,
+    doi: null,
+  },
+  {
+    filename: "pca-paper-3.pdf",
+    title:
+      "Propensity score matching–difference-in-differences analysis of the casual effect of opening intermediate high-speed railway stations on employment status in surrounding municipalities",
+    authors: ["Jikang Fan", "Shintaro Terabe", "Hideki Yaginuma"],
+    year: 2025,
+    doi: null,
+  },
+];
+
 // DUMMY DATA — fabricated for the guest-mode demo. NOT real research findings
 // for any of the cited papers. Kept in lockstep order with SEED_PCA_REFERENCES.
 const SEED_PCA_PAPERSET_FILENAME = "pca-survey.csv";
@@ -302,7 +355,59 @@ export async function seedAnonymousUser(userId: string): Promise<void> {
     });
   }
 
-  const rowRefs = pcaInsertedRefs.map((r) => ({ paper_id: r.id }));
+  // Insert PCA-folder PDFs as actual paper rows. The first 3 paperset rows
+  // will reference these paper IDs (paper-backed rows); the remaining 3 stay
+  // as reference-only rows so the demo shows both shapes side-by-side.
+  const pcaInsertedPapers: Array<{ id: string; title: string }> = [];
+  for (const meta of SEED_PCA_PAPERS) {
+    const pdfFsPath = path.join(process.cwd(), SEED_DIR, meta.filename);
+    const buf = await fs.readFile(pdfFsPath);
+    const [inserted] = await db
+      .insert(papers)
+      .values({
+        libraryId: lib.id,
+        userId,
+        folderPath: PCA_FOLDER,
+        folderId: pcaFolder.id,
+        filename: meta.filename,
+        title: meta.title,
+        authors: meta.authors,
+        year: meta.year,
+        doi: meta.doi,
+      })
+      .returning();
+    await storage.uploadObject(
+      paperSourceKey(inserted.id),
+      buf,
+      "application/pdf",
+    );
+    try {
+      const cover = await extractCover(new Uint8Array(buf));
+      await storage.uploadObject(paperCoverKey(inserted.id), cover, "image/png");
+    } catch (err) {
+      console.warn(
+        `seed: cover extraction failed for PCA paper ${inserted.id}`,
+        err,
+      );
+    }
+    pcaInsertedPapers.push({ id: inserted.id, title: meta.title });
+  }
+
+  // First 3 rowRefs → real paper IDs (paper-backed rows). Remaining 3 →
+  // reference IDs (reference-only rows).
+  const rowRefs = [
+    ...pcaInsertedPapers.map((p) => ({ paper_id: p.id })),
+    ...pcaInsertedRefs.slice(3).map((r) => ({ paper_id: r.id })),
+  ];
+  // The CSV body should reflect the paper title for paper-backed rows and the
+  // citation-key + ref-title for reference-only rows.
+  const rowLabels = [
+    ...pcaInsertedPapers.map((p) => ({
+      citationKey: "paper",
+      title: p.title,
+    })),
+    ...pcaInsertedRefs.slice(3),
+  ];
   await db.insert(papersets).values({
     libraryId: lib.id,
     userId,
@@ -315,6 +420,6 @@ export async function seedAnonymousUser(userId: string): Promise<void> {
     rowRefs,
     cellGrounding: {},
     runningCells: [],
-    content: dummyPapersetCsv(pcaInsertedRefs),
+    content: dummyPapersetCsv(rowLabels),
   });
 }

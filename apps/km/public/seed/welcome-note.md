@@ -15,3 +15,7 @@ You're poking around as a guest. Everything here is real — your edits save, yo
 Two pillars: **tool consolidation** (no more Obsidian ↔ Scholar ↔ Zotero ↔ ChatGPT shuffle) and **agentic workflows** (Deep Agents with first-class access to every tool).
 
 Edit this note. Delete it. Make it yours.
+
+## Markdown reminder
+
+Format with **bold**, *italic*, `code`, [links](https://example.com), # headings, - bullets, > quotes.

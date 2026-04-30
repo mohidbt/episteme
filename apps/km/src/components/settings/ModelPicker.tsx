@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/command";
 import { Button } from "@/components/ui/button";
 import { fetchModelCatalog } from "@/lib/openrouter-catalog";
+import { useSession } from "@episteme/auth/client";
 import { cn } from "@/lib/utils";
 
 export type CatalogModel = {
@@ -62,6 +63,10 @@ export function ModelPicker({
   const [models, setModels] = React.useState<CatalogModel[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [open, setOpen] = React.useState(false);
+  const session = useSession();
+  const isAnonymous =
+    (session.data?.user as { isAnonymous?: boolean } | undefined)
+      ?.isAnonymous ?? false;
 
   React.useEffect(() => {
     let cancelled = false;
@@ -123,7 +128,23 @@ export function ModelPicker({
             data-testid="model-picker-search"
           />
           <CommandList>
-            <CommandEmpty>No models match.</CommandEmpty>
+            <CommandEmpty>
+              {isAnonymous ? (
+                <button
+                  type="button"
+                  className="text-foreground underline-offset-2 hover:underline"
+                  onClick={() => {
+                    if (typeof window !== "undefined") {
+                      window.location.href = "/sign-in";
+                    }
+                  }}
+                >
+                  Sign up to access all models.
+                </button>
+              ) : (
+                "No models match."
+              )}
+            </CommandEmpty>
             <CommandGroup>
               {sorted.map((m) => {
                 const label = m.name ?? m.id;
