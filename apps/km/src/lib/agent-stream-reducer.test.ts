@@ -72,6 +72,26 @@ describe("agentStreamReducer — text events", () => {
     expect((s.cards[1] as TextCard).id).toBe("b");
     expect((s.cards[1] as TextCard).text).toBe("second");
   });
+
+  // #64 — some models (e.g. google/gemma-4-26b-a4b-it) occasionally leak the
+  // literal token "thought" as the first word of the assistant reply.
+  it("strips a leading 'thought' word from the assistant text card", () => {
+    const s = fold([
+      { type: "text", id: "r1", delta: "Thought: " },
+      { type: "text", id: "r1", delta: "PCA reduces dimensions." },
+    ]);
+    expect((s.cards[0] as TextCard).text).toBe("PCA reduces dimensions.");
+  });
+
+  it("strips a leading 'thought ' even when arriving in one delta", () => {
+    const s = fold([{ type: "text", id: "r1", delta: "thought hello world" }]);
+    expect((s.cards[0] as TextCard).text).toBe("hello world");
+  });
+
+  it("leaves text untouched when no leading 'thought' prefix", () => {
+    const s = fold([{ type: "text", id: "r1", delta: "Thoughtful design." }]);
+    expect((s.cards[0] as TextCard).text).toBe("Thoughtful design.");
+  });
 });
 
 describe("agentStreamReducer — thinking events", () => {

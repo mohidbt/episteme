@@ -22,6 +22,12 @@
 
 import type { AgentEvent, Citation } from "./agent-events";
 
+// #64 — some models (e.g. google/gemma-4-26b-a4b-it) leak a literal "thought"
+// token as the first word of an assistant reply. Strip it once at the start.
+// Idempotent: regex only matches the leading prefix, so re-applying is a no-op.
+const stripLeadingThought = (text: string): string =>
+  text.replace(/^\s*thought\b[\s:,.\-]*/i, "");
+
 export type TodoItem = {
   id: string;
   content: string;
@@ -204,7 +210,7 @@ export function agentStreamReducer(
           kind: "text",
           id: event.id,
           role: "assistant",
-          text: prev.text + event.delta,
+          text: stripLeadingThought(prev.text + event.delta),
         };
         const out = state.cards.slice();
         out[idx] = merged;
@@ -214,7 +220,7 @@ export function agentStreamReducer(
         kind: "text",
         id: event.id,
         role: "assistant",
-        text: event.delta,
+        text: stripLeadingThought(event.delta),
       };
       return { ...state, cards: [...state.cards, card] };
     }
