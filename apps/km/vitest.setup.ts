@@ -1,3 +1,23 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// External service dependencies for the km test suite
+// ─────────────────────────────────────────────────────────────────────────────
+// Many tests in this suite (anything using `createTestUser` / `deleteTestUser`
+// from `src/app/api/_test-utils.ts`, or hitting drizzle directly) require live
+// services. There is no global mock — `beforeAll` hooks talk to real Postgres
+// via better-auth + drizzle.
+//
+// Required services BEFORE running `pnpm --filter km test`:
+//   • Postgres on :5433  (DATABASE_URL=postgresql://episteme:episteme@localhost:5433/episteme)
+//   • MinIO    on :9000  (S3_ENDPOINT=http://localhost:9000, bucket episteme-dev)
+//
+// Bring them up via the repo `docker-compose.yml` at repo root.
+// Symptom when missing: ~65 files fail with `ECONNREFUSED 127.0.0.1:5433`
+// (visible in output) or — for tests using long timeouts — `Hook timed out
+// in 10000ms` in `beforeAll`. The ECONNREFUSED is the real signal; treat
+// timeout-only failures as the same root cause.
+// Default env (DATABASE_URL, S3_ENDPOINT, etc.) is wired in `vitest.config.ts`.
+// ─────────────────────────────────────────────────────────────────────────────
+
 // jsdom in some configurations exposes a non-functional `window.localStorage`.
 // Replace with a minimal in-memory polyfill so hooks/components that persist
 // state can run in tests.
