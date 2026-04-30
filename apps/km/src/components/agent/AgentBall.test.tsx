@@ -304,4 +304,54 @@ describe("AgentBall", () => {
       expect(panel.className).not.toContain("inset-0");
     });
   });
+
+  describe("RG3 #56 — drag handle does not swallow header button pointer events", () => {
+    it("collapse/fullscreen/close buttons remain clickable when pointerdown on a button (drag must not capture)", async () => {
+      renderBall();
+      fireEvent.click(screen.getByTestId("agent-ball"));
+      const panel = await waitFor(() => screen.getByTestId("agent-panel"));
+
+      const collapseBtn = screen.getByLabelText(/collapse agent/i);
+      const fullscreenBtn = screen.getByLabelText(/fullscreen agent/i);
+      const closeBtn = screen.getByLabelText(/close agent/i);
+
+      // Simulate the real browser sequence: pointerdown bubbles from button to
+      // header. If the drag handler captures the pointer on the header, the
+      // subsequent click never reaches the button. We fire pointerdown then
+      // click on the button; the click handler MUST run.
+      fireEvent.pointerDown(collapseBtn, { clientX: 10, pointerId: 1 });
+      fireEvent.pointerUp(collapseBtn, { clientX: 10, pointerId: 1 });
+      fireEvent.click(collapseBtn);
+      expect(panel.getAttribute("data-collapsed")).toBe("true");
+
+      fireEvent.pointerDown(fullscreenBtn, { clientX: 10, pointerId: 1 });
+      fireEvent.pointerUp(fullscreenBtn, { clientX: 10, pointerId: 1 });
+      fireEvent.click(fullscreenBtn);
+      expect(panel.className).toContain("inset-0");
+
+      fireEvent.pointerDown(closeBtn, { clientX: 10, pointerId: 1 });
+      fireEvent.pointerUp(closeBtn, { clientX: 10, pointerId: 1 });
+      fireEvent.click(closeBtn);
+      await waitFor(() =>
+        expect(screen.queryByTestId("agent-panel")).toBeNull(),
+      );
+    });
+
+    it("does not persist a drag offset when pointerdown originated on a header button", async () => {
+      window.localStorage.clear();
+      renderBall();
+      fireEvent.click(screen.getByTestId("agent-ball"));
+      const panel = await waitFor(() => screen.getByTestId("agent-panel"));
+      const collapseBtn = screen.getByLabelText(/collapse agent/i);
+
+      // pointerdown on button, then pointermove (would normally drag): no
+      // x offset should land on the panel because drag must not start.
+      fireEvent.pointerDown(collapseBtn, { clientX: 100, pointerId: 1 });
+      fireEvent.pointerMove(collapseBtn, { clientX: 400, pointerId: 1 });
+      fireEvent.pointerUp(collapseBtn, { clientX: 400, pointerId: 1 });
+
+      expect(panel.style.left).toBe("");
+      expect(window.localStorage.getItem("agent-convo-x")).toBeNull();
+    });
+  });
 });

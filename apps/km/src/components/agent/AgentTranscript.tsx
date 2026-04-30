@@ -81,6 +81,7 @@ import {
   ListChecksIcon,
   ChevronDownIcon,
   AlertTriangleIcon,
+  PencilIcon,
 } from "lucide-react";
 import { FileDiffCard } from "./FileDiffCard";
 import { SkillLoadCard } from "./SkillLoadCard";
@@ -589,10 +590,15 @@ function TextCardView({
   }
 
   return (
-    <div data-testid="card-text" data-role={card.role} className="group relative">
+    <div data-testid="card-text" data-role={card.role} className="group flex flex-col">
       <Message from={card.role}>
         <MessageContent>
-          <MessageResponse>{card.text}</MessageResponse>
+          {/* RG3 #58 — assistant prose paragraphs use leading-snug (1.375); user bubble inherits. */}
+          <MessageResponse
+            className={card.role === "assistant" ? "[&_p]:leading-snug" : undefined}
+          >
+            {card.text}
+          </MessageResponse>
         </MessageContent>
       </Message>
       {isUser ? (
@@ -603,9 +609,9 @@ function TextCardView({
             setDraft(card.text);
             setEditing(true);
           }}
-          className="absolute right-1 top-1 rounded p-1 text-xs opacity-0 transition-opacity hover:bg-muted group-hover:opacity-100"
+          className="mt-1 self-end rounded p-1 opacity-0 transition-opacity hover:bg-muted group-hover:opacity-100"
         >
-          Edit
+          <PencilIcon className="h-3.5 w-3.5" />
         </button>
       ) : null}
     </div>

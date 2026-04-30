@@ -419,6 +419,69 @@ describe("AgentTranscript", () => {
     expect(body.message).toBe("first edited");
   });
 
+  it("RG3 #57 — edit pencil renders below the user bubble (sibling, not absolute overlay) with hover-reveal classes and Pencil icon", () => {
+    render(
+      <AgentTranscript
+        threadId="t-pencil"
+        initialMessages={[{ id: "u-1", role: "user", text: "hello world" }]}
+      />,
+    );
+    const editBtn = screen.getByLabelText(/edit message/i);
+    // Icon-only: no visible text label like "Edit"
+    expect(editBtn.textContent?.trim()).toBe("");
+    // Lucide Pencil icon present
+    const icon = editBtn.querySelector("svg");
+    expect(icon).toBeTruthy();
+    expect(icon!.classList.contains("lucide-pencil")).toBe(true);
+    // Hover-reveal classes
+    const cls = editBtn.className;
+    expect(cls).toContain("opacity-0");
+    expect(cls).toContain("group-hover:opacity-100");
+    expect(cls).toContain("transition-opacity");
+    // Not an absolute overlay (would cover the bubble text)
+    expect(cls).not.toContain("absolute");
+    // Sibling of the Message bubble: previousElementSibling is the bubble.
+    const card = editBtn.closest('[data-testid="card-text"]') as HTMLElement;
+    expect(card).toBeTruthy();
+    expect(editBtn.previousElementSibling).not.toBeNull();
+    // Bubble text "hello world" lives in a sibling node, not inside the button.
+    expect(editBtn.textContent).not.toContain("hello world");
+  });
+
+  it("RG3 #58 — assistant message uses tightened line-height; user bubble unchanged", () => {
+    render(
+      <AgentTranscript
+        threadId="t-leading"
+        initialMessages={[
+          { id: "u-1", role: "user", text: "user msg" },
+          { id: "a-1", role: "assistant", text: "assistant msg" },
+        ]}
+      />,
+    );
+    const cards = screen.getAllByTestId("card-text");
+    const userCard = cards.find((c) => c.getAttribute("data-role") === "user")!;
+    const assistantCard = cards.find(
+      (c) => c.getAttribute("data-role") === "assistant",
+    )!;
+    // The MessageResponse (Streamdown root) sits inside the assistant card
+    // and must carry an explicit tighter leading class for prose paragraphs.
+    const assistantResponse = assistantCard.querySelector(
+      "[data-streamdown='root'], .size-full",
+    ) as HTMLElement | null;
+    expect(assistantResponse).toBeTruthy();
+    const aCls = assistantResponse!.className;
+    // Tightened — leading-snug (1.375) on assistant prose paragraphs
+    expect(/\bleading-snug\b/.test(aCls) || /\[&_p\]:leading-snug/.test(aCls)).toBe(true);
+
+    // User bubble is NOT tightened with the assistant-only class (sanity:
+    // assistant-only override doesn't leak into user MessageResponse).
+    const userResponse = userCard.querySelector(
+      "[data-streamdown='root'], .size-full",
+    ) as HTMLElement | null;
+    expect(userResponse).toBeTruthy();
+    expect(/\[&_p\]:leading-snug/.test(userResponse!.className)).toBe(false);
+  });
+
   it("clicking a Suggestion chip triggers a new send", async () => {
     const events: AgentEvent[] = [
       { type: "suggestion", items: ["Highlight more", "Open note"] },

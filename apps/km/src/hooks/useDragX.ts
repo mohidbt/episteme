@@ -46,6 +46,13 @@ export function useDragX({ storageKey, elementWidth }: UseDragXOptions) {
   );
 
   const onPointerDown = useCallback((e: React.PointerEvent<HTMLElement>) => {
+    // RG3 #56 — bail when pointerdown originates on an interactive descendant
+    // (header buttons, links, inputs). Otherwise the drag handler captures
+    // the pointer and swallows the subsequent click on the button.
+    const target = e.target as Element | null;
+    if (target && target !== e.currentTarget && target.closest?.("button,a,input,textarea,select,[role='button']")) {
+      return;
+    }
     draggingRef.current = true;
     const rect = e.currentTarget.getBoundingClientRect();
     offsetRef.current = e.clientX - rect.left;
