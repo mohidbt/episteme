@@ -1,0 +1,58 @@
+import { signRequest } from "@/lib/agents/sign-request";
+
+export interface PersistedMessage {
+  id: string;
+  role: "user" | "assistant";
+  text: string;
+}
+
+/**
+ * Fetch the persisted message list for a thread directly from the FastAPI
+ * agents service, bypassing the local Next.js `/api/agents/km/state/[thread]`
+ * route handler.
+ *
+ * Why bypass the local route?
+ *   - The previous implementation did `fetch(${proto}://${host}/api/agents/...)`
+ *     from the Server Component, which forced the request to round-trip over
+ *     loopback through the Next.js dev/prod server back into another route
+ *     handler that itself called FastAPI. That added one full HTTP hop, an
+ *     extra HMAC sign step, cookie revalidation, and `cache: "no-store"`
+ *     header processing for what should be an in-process call.
+ *
+ * This helper signs the request once and calls the FastAPI sidecar directly.
+ *
+ * NOTE on caching: we currently keep this uncached (per-request) because
+ * thread state mutates on every agent turn and there is no `revalidateTag`
+ * plumbing wired up for thread writes yet. Adding tag-based invalidation
+ * is a follow-up — see issue #65.
+ */
+export async function getThreadMessages(
+  userId: string,
+  threadId: string,
+): Promise<PersistedMessage[]> {
+  const agentsUrl = process.env.AGENTS_URL;
+  if (!agentsUrl) return [];
+
+  const path = `/agents/km/state/${threadId}`;
+  const { headers } = signRequest({
+    method: "GET",
+    path,
+    body: "",
+    userId,
+    // llmKey not needed for state reads — kept empty for HMAC consistency.
+    llmKey: "",
+  });
+
+  try {
+    const res = await fetch(`${agentsUrl}${path}`, {
+      method: "GET",
+      headers: { ...headers } as Record<string, string>,
+      cache: "no-store",
+    });
+    if (!res.ok) return [];
+    const data = (await res.json()) as { messages?: PersistedMessage[] };
+    return Array.isArray(data.messages) ? data.messages : [];
+  } catch {
+    return [];
+  }
+}
