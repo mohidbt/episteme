@@ -3,12 +3,8 @@
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import {
-  type FolderRow,
-  breadcrumbFromChain,
-  resolveChain,
-} from "@/lib/folders";
-import { MoveToDialog } from "./MoveToDialog";
+import { type FolderRow } from "@/lib/folders";
+import { FolderDestinationPicker } from "./FolderDestinationPicker";
 
 export function ImportControls({
   libraryId,
@@ -21,15 +17,7 @@ export function ImportControls({
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [targetFolderId, setTargetFolderId] = useState<string | null>(null);
-  const [pickerOpen, setPickerOpen] = useState(false);
   const router = useRouter();
-
-  function folderLabel(): string {
-    if (!targetFolderId) return "Library root";
-    const chain = resolveChain(folders, targetFolderId);
-    const crumb = breadcrumbFromChain(chain);
-    return crumb || "Library root";
-  }
 
   async function upload() {
     if (!file || uploading) return;
@@ -65,7 +53,7 @@ export function ImportControls({
   }
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col items-end gap-2">
       <div className="flex items-center gap-2 flex-wrap justify-end">
         <input
           ref={inputRef}
@@ -95,29 +83,15 @@ export function ImportControls({
           {uploading ? "Uploading…" : "Upload"}
         </button>
       </div>
-      <div className="flex justify-end">
-        <button
-          type="button"
-          aria-label={`Import into: ${folderLabel()} (change…)`}
-          onClick={() => setPickerOpen(true)}
-          className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-        >
-          Import into: <span className="font-medium">{folderLabel()}</span>{" "}
-          (change…)
-        </button>
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-muted-foreground">Import into</span>
+        <FolderDestinationPicker
+          folders={folders}
+          value={targetFolderId}
+          onChange={setTargetFolderId}
+          triggerTestId="import-folder-picker"
+        />
       </div>
-      <MoveToDialog
-        libraryId={libraryId}
-        folders={folders}
-        currentFolderId={null}
-        open={pickerOpen}
-        onOpenChange={setPickerOpen}
-        onMove={async (id) => {
-          setTargetFolderId(id);
-        }}
-        title="Import into folder"
-        description="Pick a destination folder for imported items."
-      />
     </div>
   );
 }

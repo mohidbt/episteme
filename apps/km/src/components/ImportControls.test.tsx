@@ -18,6 +18,41 @@ vi.mock("sonner", () => ({
   toast: { error: vi.fn(), success: vi.fn() },
 }));
 
+// Replace FolderDestinationPicker with a stub that exposes buttons for each
+// folder so we can drive `onChange` deterministically without dealing with the
+// base-ui menu portal in jsdom. The real picker has its own contract; the
+// integration we care about here is "ImportControls wires onChange into the
+// import payload".
+vi.mock("./FolderDestinationPicker", () => ({
+  FolderDestinationPicker: ({
+    folders,
+    value,
+    onChange,
+    triggerTestId,
+  }: {
+    folders: FolderRow[];
+    value: string | null;
+    onChange: (id: string | null) => void;
+    triggerTestId?: string;
+  }) => (
+    <div data-testid={triggerTestId ?? "folder-destination-picker"}>
+      <span data-testid="picker-value">{value ?? "__root__"}</span>
+      <button type="button" onClick={() => onChange(null)}>
+        select-root
+      </button>
+      {folders.map((f) => (
+        <button
+          key={f.id}
+          type="button"
+          onClick={() => onChange(f.id)}
+        >
+          select-{f.id}
+        </button>
+      ))}
+    </div>
+  ),
+}));
+
 const FOLDERS: FolderRow[] = [
   { id: "folder-aaa", parentId: null, name: "Research", isTrash: false },
   { id: "folder-bbb", parentId: "folder-aaa", name: "2024", isTrash: false },
@@ -67,41 +102,21 @@ function selectFile(input: HTMLInputElement, file: File) {
   fireEvent.change(input, { target: { files: [file] } });
 }
 
-describe("ImportControls folderId", () => {
-  it("renders folder picker button defaulting to library root", async () => {
+describe("ImportControls folder picker", () => {
+  it("renders the FolderDestinationPicker with library root selected by default", () => {
     render(<ImportControls libraryId={1} folders={FOLDERS} />);
-    const btn = screen.getByRole("button", { name: /import into/i });
-    expect(btn).toBeTruthy();
-    expect(btn.textContent).toMatch(/library root/i);
+    expect(screen.getByTestId("import-folder-picker")).toBeTruthy();
+    expect(screen.getByTestId("picker-value").textContent).toBe("__root__");
   });
 
-  it("clicking folder picker opens MoveToDialog", async () => {
-    render(<ImportControls libraryId={1} folders={FOLDERS} />);
-    fireEvent.click(screen.getByRole("button", { name: /import into/i }));
-    await waitFor(() =>
-      expect(screen.getByRole("button", { name: /move/i })).toBeTruthy(),
-    );
-  });
-
-  it("selecting a folder from dialog updates button label and sends folderId on upload", async () => {
+  it("selecting a folder updates the picker value and sends folderId on upload", async () => {
     mockFetchImportOk();
     render(<ImportControls libraryId={1} folders={FOLDERS} />);
 
-    // Open folder picker
-    fireEvent.click(screen.getByRole("button", { name: /import into/i }));
-    await waitFor(() => screen.getByTestId("move-item-folder-aaa"));
+    fireEvent.click(screen.getByText("select-folder-aaa"));
 
-    // Select Research folder
-    fireEvent.click(screen.getByTestId("move-item-folder-aaa"));
-    fireEvent.click(screen.getByTestId("move-confirm"));
+    expect(screen.getByTestId("picker-value").textContent).toBe("folder-aaa");
 
-    // Dialog should close, button label updated
-    await waitFor(() => {
-      const btn = screen.getByRole("button", { name: /import into/i });
-      expect(btn.textContent).toMatch(/research/i);
-    });
-
-    // Choose a file and upload
     const fileInput = document.querySelector("input[type=file]") as HTMLInputElement;
     selectFile(fileInput, new File(["# hi"], "notes.md", { type: "text/markdown" }));
     fireEvent.click(screen.getByRole("button", { name: /^upload$/i }));
@@ -115,7 +130,7 @@ describe("ImportControls folderId", () => {
     expect(body.get("folderId")).toBe("folder-aaa");
   });
 
-  it("no folderId field when library root is selected (default)", async () => {
+  it("does not send folderId when library root is selected (default)", async () => {
     mockFetchImportOk();
     render(<ImportControls libraryId={1} folders={FOLDERS} />);
 
@@ -129,7 +144,6 @@ describe("ImportControls folderId", () => {
     const call = fetchMock.mock.calls[0];
     expect(call).toBeDefined();
     const body = call![1]?.body as FormData;
-    // folderId should be absent when target is library root
     expect(body.get("folderId")).toBeNull();
   });
 });
