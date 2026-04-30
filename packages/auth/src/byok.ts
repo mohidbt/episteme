@@ -16,6 +16,8 @@ export async function getDecryptedApiKey(userId: string): Promise<string> {
     );
 
   if (!row) {
+    const shared = process.env.EPISTEME_SHARED_LLM_KEY;
+    if (shared) return shared;
     throw new Error("NO_LLM_KEY");
   }
 
