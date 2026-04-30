@@ -24,6 +24,19 @@ describe("InPapersetsBadge", () => {
     expect(btn).toBeTruthy();
   });
 
+  it("renders trigger with shadcn Button outline styling", () => {
+    render(
+      <InPapersetsBadge
+        count={1}
+        papersets={[{ id: "a", filename: "x.csv" }]}
+      />,
+    );
+    const btn = screen.getByRole("button", { name: /in 1 paperset(?!s)/i });
+    // outline variant uses border-border token; size=sm gives text-[0.8rem]
+    expect(btn.className).toMatch(/border-border/);
+    expect(btn.getAttribute("data-testid")).toBe("in-papersets-badge");
+  });
+
   it("renders chip 'in 2 papersets' and opens popover with linked filenames", async () => {
     render(
       <InPapersetsBadge

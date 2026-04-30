@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { Sheet } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 interface PapersetItem {
@@ -12,23 +13,32 @@ interface PapersetItem {
 export function InPapersetsBadge({
   count,
   papersets,
+  className,
 }: {
   count: number;
   papersets: PapersetItem[];
+  className?: string;
 }) {
   if (count === 0) return null;
   const label = `in ${count} ${count === 1 ? "paperset" : "papersets"}`;
   return (
     <Popover>
       <PopoverTrigger
-        type="button"
-        aria-label={label}
-        className="mb-2 inline-flex items-center gap-1 rounded-full border border-border/60 bg-muted/50 px-2 py-0.5 text-xs text-muted-foreground hover:bg-muted"
-      >
-        <Sheet className="h-3 w-3" aria-hidden />
-        <span>{label}</span>
-      </PopoverTrigger>
-      <PopoverContent align="start" className="w-64 p-2">
+        render={
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            aria-label={label}
+            data-testid="in-papersets-badge"
+            className={className}
+          >
+            <Sheet aria-hidden />
+            <span>{label}</span>
+          </Button>
+        }
+      />
+      <PopoverContent align="end" className="w-64 p-2">
         <p className="px-2 pb-1 text-xs font-medium text-muted-foreground">
           Papersets containing this paper
         </p>

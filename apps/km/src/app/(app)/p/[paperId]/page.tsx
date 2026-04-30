@@ -88,16 +88,20 @@ export default async function PaperPage({
             {firstRefYear != null && <span>· {firstRefYear}</span>}
           </Link>
         )}
-        <InPapersetsBadge count={papersetCount} papersets={papersetList} />
         <h1 className="font-display text-2xl leading-tight">{displayTitle}</h1>
       </div>
       <div className="mt-4 grid flex-1 min-h-0 grid-cols-1 border-t border-border/60 lg:grid-cols-[minmax(0,1fr)_420px]">
-        <div className="min-h-[60vh] lg:min-h-0">
+        <div className="relative min-h-[60vh] lg:min-h-0">
           <iframe
             src={`/api/papers/${paper.id}/file`}
             title={displayTitle}
             className="h-full w-full border-0"
           />
+          <div className="pointer-events-none absolute top-3 right-3 z-10">
+            <div className="pointer-events-auto">
+              <InPapersetsBadge count={papersetCount} papersets={papersetList} />
+            </div>
+          </div>
         </div>
         <aside className="flex flex-col gap-8 overflow-y-auto border-t border-border/60 p-6 lg:border-t-0 lg:border-l">
           <PaperMetadataPanel paper={paper} />
