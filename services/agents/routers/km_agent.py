@@ -17,7 +17,7 @@ import logging
 
 import openai
 from fastapi import APIRouter, HTTPException, Query, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from langgraph.types import Command
 
 from deps.auth import InternalAuthDep
@@ -512,6 +512,23 @@ async def config_post(req: Request, auth: InternalAuthDep):
     body = await req.json()
     save_user_config(auth["user_id"], body)
     return {"ok": True}
+
+
+@router.post("/extract")
+async def extract_stub(req: Request, auth: InternalAuthDep) -> JSONResponse:
+    """501 stub for data-extract; real handler ships in 1.4.x T6.
+
+    KM-side enrich route already special-cases upstream 501 with a graceful
+    SSE error event. This stub closes the 404 gap users see today.
+    """
+    _reject_guest(auth["user_id"])
+    return JSONResponse(
+        status_code=501,
+        content={
+            "code": "not_implemented",
+            "message": "data-extract skill ships in Phase 1.4.x",
+        },
+    )
 
 
 @router.get("/debug/loaded_skills")
