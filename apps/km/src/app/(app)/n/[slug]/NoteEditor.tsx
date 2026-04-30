@@ -20,6 +20,7 @@ import { COLLAB_ENABLED, COLLAB_URL } from "@/lib/flags";
 import { createRoot, type Root } from "react-dom/client";
 import { WikiLinkTypeahead, type WikiLinkTypeaheadRef } from "@/components/WikiLinkTypeahead";
 import { SlashCommandTypeahead, type SlashCommandTypeaheadRef } from "@/components/SlashCommandTypeahead";
+import { computeSlashMenuPlacement } from "@/lib/popover-placement";
 import { AiBubbleMenu } from "@/components/AiBubbleMenu";
 import { TableBubbleMenu } from "@/components/TableBubbleMenu";
 
@@ -380,8 +381,19 @@ export function NoteEditor({
             return;
           }
           host.style.display = "block";
-          host.style.top = `${rect.bottom + window.scrollY + 4}px`;
-          host.style.left = `${rect.left + window.scrollX}px`;
+          // Measure actual menu height so flip-up math reflects the real popover.
+          // Fall back to a sensible estimate before first paint.
+          const measured = host.getBoundingClientRect().height;
+          const menuHeight = measured > 0 ? measured : 320;
+          const { top, left } = computeSlashMenuPlacement({
+            caret: { top: rect.top, bottom: rect.bottom, left: rect.left },
+            menuHeight,
+            viewportHeight: window.innerHeight,
+            scrollY: window.scrollY,
+            scrollX: window.scrollX,
+          });
+          host.style.top = `${top}px`;
+          host.style.left = `${left}px`;
         };
 
         return {
@@ -486,8 +498,19 @@ export function NoteEditor({
             return;
           }
           host.style.display = "block";
-          host.style.top = `${rect.bottom + window.scrollY + 4}px`;
-          host.style.left = `${rect.left + window.scrollX}px`;
+          // Measure actual menu height so flip-up math reflects the real popover.
+          // Fall back to a sensible estimate before first paint.
+          const measured = host.getBoundingClientRect().height;
+          const menuHeight = measured > 0 ? measured : 320;
+          const { top, left } = computeSlashMenuPlacement({
+            caret: { top: rect.top, bottom: rect.bottom, left: rect.left },
+            menuHeight,
+            viewportHeight: window.innerHeight,
+            scrollY: window.scrollY,
+            scrollX: window.scrollX,
+          });
+          host.style.top = `${top}px`;
+          host.style.left = `${left}px`;
         };
 
         const onStart = (props: any) => {
