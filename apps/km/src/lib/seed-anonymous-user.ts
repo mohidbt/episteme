@@ -107,7 +107,7 @@ const SEED_PCA_PAPERSET_ROWS = [
 ] as const;
 
 function dummyPapersetCsv(
-  rowRefs: Array<{ paper_id: string; citationKey: string; title: string }>,
+  rowRefs: Array<{ citationKey: string; title: string }>,
 ): string {
   const header = ["Reference", ...SEED_PCA_PAPERSET_COLUMNS.map((c) => c.name)];
   const lines = [header.map(csvEscape).join(",")];
