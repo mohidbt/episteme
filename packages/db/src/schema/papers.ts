@@ -21,6 +21,11 @@ export const papers = pgTable(
     venue: text("venue"),
     addedAt: timestamp("added_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull().$onUpdate(() => new Date()),
+    chandraStatus: text("chandra_status")
+      .$type<"pending" | "running" | "done" | "failed">()
+      .notNull()
+      .default("pending"),
+    chandraCompletedAt: timestamp("chandra_completed_at", { withTimezone: true }),
   },
   (t) => [
     index("papers_library_idx").on(t.libraryId),
