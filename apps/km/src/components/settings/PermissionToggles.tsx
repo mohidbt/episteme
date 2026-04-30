@@ -19,9 +19,9 @@ const PERMISSIONS: Array<{
 }> = [
   {
     name: "web_search",
-    title: "Web search (Tavily)",
+    title: "Web search",
     description:
-      "Allow the agent to fall back to Tavily web search when internal library and specialized paper-search tools fail. Backup only — disabled by default.",
+      "Allow the agent to fall back to web search when internal library and specialized paper-search tools fail. Backup only — disabled by default.",
   },
 ];
 

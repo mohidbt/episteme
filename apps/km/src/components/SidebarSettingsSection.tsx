@@ -15,7 +15,7 @@ import {
 const LINKS = [
   { label: "Data", href: "/settings/data", Icon: DataIcon },
   { label: "Appearance", href: "/settings/appearance", Icon: Palette },
-  { label: "Permissions & MCP", href: "/settings/agents", Icon: ShieldCheck },
+  { label: "Agent Settings", href: "/settings/agents", Icon: ShieldCheck },
 ] as const;
 
 export function SidebarSettingsSection() {

@@ -30,7 +30,7 @@ export type CatalogModel = {
 
 /**
  * Sort:
- *  - models with `created` ascending (oldest first)
+ *  - models with `created` descending (newest first)
  *  - models without `created` after, alphabetical by display name
  */
 export function sortByReleaseDate(models: CatalogModel[]): CatalogModel[] {
@@ -43,7 +43,7 @@ export function sortByReleaseDate(models: CatalogModel[]): CatalogModel[] {
       undated.push(m);
     }
   }
-  dated.sort((a, b) => (a.created ?? 0) - (b.created ?? 0));
+  dated.sort((a, b) => (b.created ?? 0) - (a.created ?? 0));
   undated.sort((a, b) =>
     (a.name ?? a.id).localeCompare(b.name ?? b.id, undefined, {
       sensitivity: "base",

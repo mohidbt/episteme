@@ -61,7 +61,7 @@ describe("ModelPicker", () => {
     });
   });
 
-  it("orders dated models ascending by release date (oldest first)", async () => {
+  it("orders dated models descending by release date (newest first)", async () => {
     render(<ModelPicker value="vendor/old-model" onChange={vi.fn()} />);
     await waitFor(() => expect(globalThis.fetch).toHaveBeenCalled());
     await openPicker();
@@ -69,10 +69,10 @@ describe("ModelPicker", () => {
     await waitFor(() => {
       const items = screen.getAllByTestId("model-picker-item");
       expect(items.length).toBe(MOCK_MODELS.length);
-      // Old (1.5e9) < Middle (1.6e9) < New (1.7e9), then undated alphabetically
-      expect(items[0].textContent).toMatch(/Old Model/);
+      // New (1.7e9) > Middle (1.6e9) > Old (1.5e9), then undated alphabetically
+      expect(items[0].textContent).toMatch(/New Model/);
       expect(items[1].textContent).toMatch(/Middle Model/);
-      expect(items[2].textContent).toMatch(/New Model/);
+      expect(items[2].textContent).toMatch(/Old Model/);
     });
   });
 

@@ -149,6 +149,8 @@ export function AgentBall(_props: AgentBallProps) {
     const positionClass = positioned
       ? "fixed bottom-4 z-50"
       : "fixed bottom-4 left-1/2 -translate-x-1/2 z-50";
+    // RG1 #59 — Matrix renders standalone (no circular wrapper). Subtle
+    // drop-shadow keeps it visible on light/dark surfaces.
     return (
       <button
         type="button"
@@ -158,7 +160,7 @@ export function AgentBall(_props: AgentBallProps) {
         data-preset={preset}
         style={positioned ? { left: `${ballDrag.x}px` } : undefined}
         {...ballDrag.pointerHandlers}
-        className={`${positionClass} flex h-14 w-14 items-center justify-center rounded-full border border-border/60 bg-background/80 backdrop-blur-md text-foreground shadow-lg hover:opacity-90 transition-opacity touch-none select-none`}
+        className={`${positionClass} inline-flex items-center justify-center text-foreground drop-shadow-md hover:opacity-90 transition-opacity touch-none select-none`}
       >
         <MatrixBadge preset={preset} />
       </button>
@@ -175,7 +177,7 @@ export function AgentBall(_props: AgentBallProps) {
   return (
     <div
       role="dialog"
-      aria-label="Co-Scientist"
+      aria-label="Agent"
       data-testid="agent-panel"
       data-preset={preset}
       data-collapsed={collapsed ? "true" : "false"}
@@ -190,7 +192,7 @@ export function AgentBall(_props: AgentBallProps) {
           <span className="inline-flex items-center justify-center">
             <MatrixBadge preset={preset} size={2} gap={1} />
           </span>
-          Co-Scientist
+          Agent
         </div>
         <div className="flex items-center gap-1">
           <button

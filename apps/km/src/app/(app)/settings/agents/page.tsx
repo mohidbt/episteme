@@ -49,7 +49,7 @@ export default async function AgentsSettingsPage() {
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-10">
-      <h1 className="font-display text-2xl mb-1">Permissions &amp; MCP</h1>
+      <h1 className="font-display text-2xl mb-1">Agent Settings</h1>
       <p className="text-sm text-muted-foreground mb-8">
         Control which skills, tools, and models your agents can use.
       </p>

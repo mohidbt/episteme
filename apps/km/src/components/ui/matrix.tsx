@@ -34,6 +34,10 @@ interface MatrixProps extends React.HTMLAttributes<HTMLDivElement> {
   levels?: number[]
 }
 
+// RG1 #60 — global animation speed multiplier. >1 slows playback; 1/0.75 ≈ 1.333
+// renders all matrix animations at 75% visual speed (frame interval × 1.333).
+const MATRIX_FRAME_INTERVAL_MULTIPLIER = 1 / 0.75
+
 function clamp(value: number): number {
   return Math.max(0, Math.min(1, value))
 }
@@ -70,7 +74,7 @@ function useAnimation(
       return
     }
 
-    const frameInterval = 1000 / options.fps
+    const frameInterval = (1000 / options.fps) * MATRIX_FRAME_INTERVAL_MULTIPLIER
 
     const animate = (currentTime: number) => {
       if (lastTimeRef.current === 0) {

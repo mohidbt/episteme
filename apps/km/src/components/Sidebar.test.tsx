@@ -97,12 +97,23 @@ afterEach(() => {
 });
 
 describe("Sidebar", () => {
-  it("renders 4 top-level group labels: Drive, Collections, Co-Scientist, Settings", () => {
+  it("renders 4 top-level group labels: Drive, Collections, Agent, Settings", () => {
     renderShell(baseTree());
     expect(screen.getByText("Drive")).toBeTruthy();
     expect(screen.getByText("Collections")).toBeTruthy();
-    expect(screen.getByText("Co-Scientist")).toBeTruthy();
+    expect(screen.getByText("Agent")).toBeTruthy();
     expect(screen.getByText("Settings")).toBeTruthy();
+    expect(screen.queryByText(/co-scientist/i)).toBeNull();
+  });
+
+  it("renames the agent settings link to 'Agent Settings'", () => {
+    const { container } = renderShell(baseTree());
+    const link = container.querySelector(
+      'a[href="/settings/agents"]',
+    ) as HTMLAnchorElement | null;
+    expect(link?.textContent).toMatch(/agent settings/i);
+    expect(link?.textContent).not.toMatch(/permissions/i);
+    expect(link?.textContent).not.toMatch(/mcp/i);
   });
 
   it("Collections exposes 4 links with correct hrefs", () => {

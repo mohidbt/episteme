@@ -101,6 +101,16 @@ describe("AgentBall", () => {
     expect(cls).not.toMatch(/\bright-4\b/);
   });
 
+  it("RG1 #59 — renders Matrix standalone (no circular wrapper) with drop-shadow", () => {
+    renderBall();
+    const ball = screen.getByTestId("agent-ball");
+    const cls = ball.className;
+    expect(cls).not.toContain("rounded-full");
+    expect(cls).not.toMatch(/\bbg-background\b/);
+    expect(cls).not.toMatch(/\bbackdrop-blur/);
+    expect(cls).toContain("drop-shadow-md");
+  });
+
   it("switches to the active preset when the panel is open", async () => {
     renderBall();
     fireEvent.click(screen.getByTestId("agent-ball"));

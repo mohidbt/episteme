@@ -198,4 +198,14 @@
   .tile-enter {
     animation: tile-enter 180ms ease-out both;
   }
+
+  /* RG1 #67 — Chrome-default-style light blue text selection. */
+  ::selection {
+    background-color: rgba(174, 213, 255, 0.99);
+    color: inherit;
+  }
+  ::-moz-selection {
+    background-color: rgba(174, 213, 255, 0.99);
+    color: inherit;
+  }
 }
