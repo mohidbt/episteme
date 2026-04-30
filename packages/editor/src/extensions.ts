@@ -8,10 +8,23 @@ import { createExtensions as baseExtensions, WikiLink, TagMark, Y_PROSEMIRROR_FI
 import { BibliographyHeading } from "./slash/BibliographyHeading";
 import { CodeBlockNodeView } from "./CodeBlockNodeView";
 import { MdPaste } from "./MdPaste";
+import { TaskListShortcut } from "./task-list-shortcut";
 import Collaboration from "@tiptap/extension-collaboration";
 import CollaborationCursor from "@tiptap/extension-collaboration-cursor";
+import GlobalDragHandle from "tiptap-extension-global-drag-handle";
+import FileHandler from "@tiptap/extension-file-handler";
+import { CollapsibleHeading } from "./collapsible-heading";
 import type * as Y from "yjs";
 import type { HocuspocusProvider } from "@hocuspocus/provider";
+
+export interface FileUploadOptions {
+  /** Mime types accepted; defaults to common image types. */
+  allowedMimeTypes?: string[];
+  /** Called when the user drops files into the editor. */
+  onDrop?: (editor: import("@tiptap/core").Editor, files: File[], pos: number) => void;
+  /** Called when the user pastes files into the editor. */
+  onPaste?: (editor: import("@tiptap/core").Editor, files: File[]) => void;
+}
 
 /**
  * Derive a stable vibrant hex color from a username string.
@@ -129,6 +142,7 @@ export function editorExtensions(opts?: {
   wikiLinkSuggestion?: WikiLinkSuggestion;
   slashCommandSuggestion?: SlashCommandSuggestion;
   collab?: CollabOptions;
+  fileUpload?: FileUploadOptions;
 }) {
   const wikiLink = opts?.wikiLinkSuggestion
     ? WikiLink.extend({
@@ -204,5 +218,30 @@ export function editorExtensions(opts?: {
         ]
       : []),
     MdPaste,
+    TaskListShortcut,
+    CollapsibleHeading,
+    GlobalDragHandle.configure({
+      // Default settings; consumers can override via styles.css `.drag-handle`.
+      dragHandleWidth: 20,
+    }),
+    ...(opts?.fileUpload
+      ? [
+          FileHandler.configure({
+            allowedMimeTypes:
+              opts.fileUpload.allowedMimeTypes ?? [
+                "image/png",
+                "image/jpeg",
+                "image/gif",
+                "image/webp",
+              ],
+            onDrop: (editor, files, pos) => {
+              opts.fileUpload?.onDrop?.(editor, files, pos);
+            },
+            onPaste: (editor, files) => {
+              opts.fileUpload?.onPaste?.(editor, files);
+            },
+          }),
+        ]
+      : []),
   ];
 }

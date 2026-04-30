@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, cleanup, within, fireEvent } from "@testing-library/react";
+import { render, screen, cleanup, within, fireEvent, act } from "@testing-library/react";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { SidebarShell } from "./SidebarShell";
 import type { TreeResponse } from "@/lib/tree-server";
@@ -97,11 +97,11 @@ afterEach(() => {
 });
 
 describe("Sidebar", () => {
-  it("renders 4 top-level group labels: Drive, Collections, Agent, Settings", () => {
+  it("renders 4 top-level group labels: Drive, Collections, Co-Scientist, Settings", () => {
     renderShell(baseTree());
     expect(screen.getByText("Drive")).toBeTruthy();
     expect(screen.getByText("Collections")).toBeTruthy();
-    expect(screen.getByText("Agent")).toBeTruthy();
+    expect(screen.getByText("Co-Scientist")).toBeTruthy();
     expect(screen.getByText("Settings")).toBeTruthy();
   });
 
@@ -159,5 +159,64 @@ describe("Sidebar", () => {
   it("does not render 'Sign up to save' CTA when isAnonymous=false", () => {
     renderShell(baseTree(), false);
     expect(screen.queryByTestId("sidebar-anon-signup-cta")).toBeNull();
+  });
+
+  describe("collapsible behavior", () => {
+    function getRail() {
+      return document.querySelector(
+        "[data-testid='sidebar-rail-root']",
+      ) as HTMLElement | null;
+    }
+
+    it("renders expanded by default (no collapsed state stored)", () => {
+      renderShell(baseTree());
+      const rail = getRail();
+      expect(rail).toBeTruthy();
+      expect(rail?.getAttribute("data-collapsed")).toBe("false");
+    });
+
+    it("collapse button click toggles to collapsed state", () => {
+      renderShell(baseTree());
+      const toggle = screen.getByTestId("sidebar-collapse-toggle");
+      fireEvent.click(toggle);
+      expect(getRail()?.getAttribute("data-collapsed")).toBe("true");
+    });
+
+    it("hover on collapsed rail expands (peek)", () => {
+      renderShell(baseTree());
+      fireEvent.click(screen.getByTestId("sidebar-collapse-toggle"));
+      const rail = getRail()!;
+      expect(rail.getAttribute("data-collapsed")).toBe("true");
+      expect(rail.getAttribute("data-peeking")).toBe("false");
+      fireEvent.mouseEnter(rail);
+      expect(rail.getAttribute("data-peeking")).toBe("true");
+    });
+
+    it("mouseleave reverts peek to collapsed", () => {
+      vi.useFakeTimers();
+      try {
+        renderShell(baseTree());
+        fireEvent.click(screen.getByTestId("sidebar-collapse-toggle"));
+        const rail = getRail()!;
+        fireEvent.mouseEnter(rail);
+        expect(rail.getAttribute("data-peeking")).toBe("true");
+        fireEvent.mouseLeave(rail);
+        act(() => {
+          vi.advanceTimersByTime(500);
+        });
+        expect(rail.getAttribute("data-peeking")).toBe("false");
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("persists collapsed state across remount via localStorage", () => {
+      const { unmount } = renderShell(baseTree());
+      fireEvent.click(screen.getByTestId("sidebar-collapse-toggle"));
+      expect(window.localStorage.getItem("sidebar-collapsed")).toBe("true");
+      unmount();
+      renderShell(baseTree());
+      expect(getRail()?.getAttribute("data-collapsed")).toBe("true");
+    });
   });
 });

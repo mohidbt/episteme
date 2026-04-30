@@ -432,7 +432,7 @@ export function UnifiedDropzone({
         <p className="font-display text-sm">
           {isDragActive ? "Drop files here" : "Drop files or click to upload"}
         </p>
-        <p className="mt-1 text-[11px] tracking-[0.14em] uppercase text-muted-foreground">
+        <p className="mt-1 text-[11px] text-muted-foreground">
           PDF · MD · BibTeX · Images · up to 50 MB
         </p>
       </div>
@@ -450,7 +450,7 @@ export function UnifiedDropzone({
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <p className="min-w-0 flex-1 truncate text-sm">{it.file.name}</p>
-                    <span className="shrink-0 text-[11px] tracking-[0.14em] uppercase text-muted-foreground">
+                    <span className="shrink-0 text-[11px] text-muted-foreground">
                       {typeLabel[it.fileType]} · {it.status}
                     </span>
                   </div>
@@ -514,7 +514,7 @@ export function UnifiedDropzone({
             <button
               type="button"
               onClick={clearFinished}
-              className="text-[11px] tracking-[0.14em] uppercase text-muted-foreground hover:text-foreground"
+              className="text-[11px] text-muted-foreground hover:text-foreground"
             >
               Clear finished
             </button>

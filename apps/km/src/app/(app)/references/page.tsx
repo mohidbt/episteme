@@ -5,7 +5,7 @@ import { getDefaultLibrary } from "@/lib/default-library";
 import { listAllReferences } from "@/lib/references-server";
 import { listAllFolders } from "@/lib/folders-server";
 import { resolveChain } from "@/lib/folders";
-import { ReferenceTable } from "@/components/ReferenceTable";
+import { ReferencesView } from "@/components/ReferencesView";
 import { ReferenceDoiInput } from "@/components/ReferenceDoiInput";
 import { ReferenceImportButton } from "@/components/ReferenceImportButton";
 import { FolderFilterDropdown } from "@/components/FolderFilterDropdown";
@@ -102,7 +102,7 @@ export default async function ReferencesPage({
           </div>
         </div>
       ) : (
-        <ReferenceTable rows={rows} folders={allFolders} />
+        <ReferencesView rows={rows} folders={allFolders} />
       )}
     </div>
   );

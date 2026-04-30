@@ -11,7 +11,7 @@
  * responsible for fetching the inputs and passing them in.
  */
 
-export const DEFAULT_MODEL = "google/gemma-4-31b-it:free";
+export const DEFAULT_MODEL = "google/gemma-4-26b-a4b-it";
 
 export interface ModelCascadeInput {
   /** From `agent_configs.model_preference` (NOT NULL in schema). */

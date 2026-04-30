@@ -1,6 +1,6 @@
 "use client";
 
-import { Sparkles } from "lucide-react";
+import { Wand2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAgentBall } from "@/components/agent/agent-ball-context";
 
@@ -24,7 +24,7 @@ export function ReferenceAgenticSearchButton({ referenceId, citationKey }: Props
         )
       }
     >
-      <Sparkles className="h-4 w-4" aria-hidden />
+      <Wand2 className="h-4 w-4" aria-hidden />
       🪄 Agentic PDF Search
     </Button>
   );

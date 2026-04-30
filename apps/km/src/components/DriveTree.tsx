@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ChevronRight, Database, Folder as FolderIcon, FolderTree, Trash2 } from "lucide-react";
+import { ChevronRight, Folder as FolderIcon, FolderTree, Trash2 } from "lucide-react";
 import {
   DndContext,
   DragOverlay,
@@ -483,7 +483,6 @@ function DriveLeafRow({ item }: { item: TreeItem }) {
         isActive={pathname === href}
         className={`data-[active=true]:bg-transparent data-[active=true]:border-l-2 data-[active=true]:border-foreground data-[active=true]:font-medium data-[active=true]:rounded-l-none data-[active=true]:pl-[calc(0.5rem-2px)]${hasTitle ? "" : " text-muted-foreground italic"}${isDragging ? " opacity-50" : ""}`}
       >
-        {item.kind === "paperset" ? <Database aria-hidden /> : null}
         <span>{itemLabel(item)}</span>
       </SidebarMenuButton>
     </SidebarMenuItem>
@@ -524,7 +523,6 @@ function DriveSubLeaf({ item }: { item: TreeItem }) {
       isActive={pathname === href}
       className={`data-[active=true]:bg-transparent data-[active=true]:border-l-2 data-[active=true]:border-foreground data-[active=true]:font-medium data-[active=true]:rounded-l-none data-[active=true]:pl-[calc(0.5rem-2px)]${hasTitle ? "" : " text-muted-foreground italic"}${isDragging ? " opacity-50" : ""}`}
     >
-      {item.kind === "paperset" ? <Database aria-hidden /> : null}
       <span>{itemLabel(item)}</span>
     </SidebarMenuSubButton>
   );

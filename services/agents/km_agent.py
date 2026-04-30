@@ -183,7 +183,35 @@ _CORE_TOOL_NAMES: frozenset[str] = frozenset({
     "list_pdfs", "search_pdfs",
     # paper search (agentic — fetch is HITL-protected via skill require_approval)
     "agentic_search_papers", "agentic_fetch_papers",
+    # NOTE: web_search (Tavily) is intentionally NOT core — it is a fallback
+    # tool gated by per-user permission (`permissions.web_search`) and only
+    # bound to the agent when the user has opted in. See
+    # `_filter_tools_for_permissions`.
 })
+
+
+# Tools whose presence is gated by an explicit user permission flag.
+# Mapping: permission key (in agent_configs.settings_json.permissions) → tool name.
+_PERMISSION_GATED_TOOLS: dict[str, str] = {
+    "web_search": "web_search",
+}
+
+
+def _filter_tools_for_permissions(
+    tools: list[BaseTool],
+    permissions: dict | None,
+) -> list[BaseTool]:
+    """Drop permission-gated tools whose flag is not explicitly True.
+
+    Default-off semantics: missing key, None, False → tool excluded.
+    """
+    permissions = permissions or {}
+    blocked: set[str] = {
+        tool_name
+        for perm_key, tool_name in _PERMISSION_GATED_TOOLS.items()
+        if not permissions.get(perm_key)
+    }
+    return [t for t in tools if t.name not in blocked]
 
 
 def _filter_tools_for_skills(
@@ -262,6 +290,7 @@ async def build_km_agent(
     approval_rules: dict,
     store,
     saver,
+    permissions: dict | None = None,
 ) -> CompiledStateGraph:
     """Build a compiled KM Deep Agent for the given user/thread.
 
@@ -293,6 +322,7 @@ async def build_km_agent(
         if enabled_skills else []
     )
     tools = _filter_tools_for_skills(list(ALL_TOOLS), loaded_skills=loaded)
+    tools = _filter_tools_for_permissions(tools, permissions=permissions)
     subagents = _select_subagents(loaded, available_tools=tools)
 
     # Advertise enabled skills in the system prompt (name + description only).

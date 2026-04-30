@@ -133,7 +133,18 @@ export type UserMessageAction = {
  */
 export type ResumeAction = { type: "__resume" };
 
-export type ReducerAction = AgentEvent | UserMessageAction | ResumeAction;
+/**
+ * Fork action (Task #45): truncate the transcript to drop the user TextCard
+ * with `id === messageId` and every card after it. The caller then
+ * dispatches `__user_message` with the edited prompt and re-invokes.
+ */
+export type ForkAtAction = { type: "__fork_at"; messageId: string };
+
+export type ReducerAction =
+  | AgentEvent
+  | UserMessageAction
+  | ResumeAction
+  | ForkAtAction;
 
 export function agentStreamReducer(
   state: AgentTranscriptState,
@@ -156,6 +167,23 @@ export function agentStreamReducer(
 
   if (event.type === "__resume") {
     return { ...state, terminated: false };
+  }
+
+  if (event.type === "__fork_at") {
+    const idx = state.cards.findIndex(
+      (c) => c.kind === "text" && c.role === "user" && c.id === event.messageId,
+    );
+    if (idx < 0) return state;
+    return {
+      ...state,
+      cards: state.cards.slice(0, idx),
+      // pendingInterrupts/todos may belong to truncated turns; clear them.
+      pendingInterrupts: [],
+      todos: [],
+      sourcesByMessage: {},
+      terminated: false,
+      recursionStep: undefined,
+    };
   }
 
   if (state.terminated) {

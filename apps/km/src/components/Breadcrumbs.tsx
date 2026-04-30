@@ -28,7 +28,7 @@ export function Breadcrumbs({ libraryName, section, folderPath, title }: Breadcr
   return (
     <nav
       aria-label="Breadcrumb"
-      className="mb-4 flex flex-wrap items-center gap-1 text-[11px] font-medium tracking-[0.14em] uppercase text-muted-foreground"
+      className="mb-4 flex flex-wrap items-center gap-1 text-[11px] font-medium text-muted-foreground"
     >
       <Link href="/" className="hover:text-foreground">
         {libraryName}

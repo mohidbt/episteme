@@ -91,20 +91,41 @@
 .episteme-prose pre code .hljs-strong { font-weight: 600; }
 .episteme-prose blockquote { border-left: 3px solid #d1d5db; padding-left: 12px; color: #4b5563; }
 .episteme-prose ul, .episteme-prose ol { padding-left: 1.5em; }
+/* Tailwind v4 preflight resets `list-style` to none on ul/ol; restore the
+   bullet/number markers so editor lists render visibly (Task #21). */
+.episteme-prose ul { list-style: disc outside; }
+.episteme-prose ol { list-style: decimal outside; }
 .episteme-prose [data-type="taskList"] { list-style: none; padding-left: 0; }
+.episteme-prose [data-type="taskList"] ul,
+.episteme-prose [data-type="taskList"] ol { list-style: none; }
 .episteme-prose [data-type="taskItem"] { display: flex; gap: 0.5em; align-items: start; }
 
 /* Wiki-link pill — static chrome from the resolved attr. */
 .episteme-prose .wiki-link {
-  display: inline;
+  display: inline-block;
   padding: 0 4px;
   border-radius: 3px;
   background: var(--muted);
   font-size: 0.95em;
+  cursor: pointer;
+  transition: transform 120ms ease, background-color 120ms ease;
+  transform-origin: center;
+}
+.episteme-prose .wiki-link:hover {
+  background: var(--accent);
+  color: var(--accent-foreground);
+  transform: scale(1.05);
+}
+.episteme-prose .wiki-link:active {
+  transform: scale(0.97);
 }
 .episteme-prose .wiki-link[data-resolved="false"] {
   background: transparent;
   border: 1px dashed oklch(0.58 0.18 27);
+  color: oklch(0.52 0.18 27);
+}
+.episteme-prose .wiki-link[data-resolved="false"]:hover {
+  background: oklch(0.58 0.18 27 / 0.08);
   color: oklch(0.52 0.18 27);
 }
 

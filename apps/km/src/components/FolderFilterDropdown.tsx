@@ -37,11 +37,11 @@ export function FolderFilterDropdown({
     ? folders.find((f) => f.id === activeFolderId)
     : null;
 
-  const label = activeFolder ? activeFolder.name : "Filter by folder";
+  const label = activeFolder ? activeFolder.name : "Folder";
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger className="inline-flex items-center gap-1 rounded-md border border-input bg-background px-3 py-1.5 text-sm font-medium shadow-sm hover:bg-accent hover:text-accent-foreground">
+      <DropdownMenuTrigger className="inline-flex items-center gap-1 rounded-md border border-input bg-background px-3 py-1.5 text-sm font-medium hover:bg-accent hover:text-accent-foreground">
         {label}
         <ChevronDown className="size-3.5 opacity-70" />
       </DropdownMenuTrigger>

@@ -106,7 +106,8 @@ export async function listFolderContents(
   ]);
 
   return {
-    folders: foldersRows,
+    // Hide the agent-managed `.episteme` tree from drive listings (+44).
+    folders: foldersRows.filter((f) => f.name !== ".episteme"),
     papers: papersRows.map((p) => ({ kind: "paper", ...p })),
     references: refsRows.map((r) => ({
       kind: "reference" as const,

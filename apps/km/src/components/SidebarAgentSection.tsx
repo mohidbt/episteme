@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Bot, Brain, Settings, Sparkles } from "lucide-react";
+import { Bot, MessagesSquare } from "lucide-react";
 import {
   SidebarGroup,
   SidebarGroupContent,
@@ -13,9 +13,7 @@ import {
 } from "@/components/ui/sidebar";
 
 const AGENT_ROWS = [
-  { label: "skills.md", href: "/agent/skills", Icon: Sparkles },
-  { label: "memory.md", href: "/agent/memory", Icon: Brain },
-  { label: "settings.json", href: "/agent/settings", Icon: Settings },
+  { label: "Agents", href: "/agents", Icon: MessagesSquare },
 ] as const;
 
 export function SidebarAgentSection() {
@@ -24,7 +22,7 @@ export function SidebarAgentSection() {
     <SidebarGroup>
       <SidebarGroupLabel className="h-auto gap-2 bg-background border border-border/60 rounded-md px-2 py-1.5 text-[13px] font-semibold text-foreground [&>svg]:size-3 [&>svg]:text-foreground">
         <Bot data-icon="inline-start" aria-hidden className="size-3 text-foreground" />
-        Agent
+        Co-Scientist
       </SidebarGroupLabel>
       <SidebarGroupContent>
         <SidebarMenu>

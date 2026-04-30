@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   isDescendantOf,
+  isHiddenFolder,
   resolveChain,
   breadcrumbFromChain,
   normalizeFolderName,
@@ -42,6 +43,26 @@ describe("resolveChain", () => {
 describe("breadcrumbFromChain", () => {
   it("joins names with /", () => {
     expect(breadcrumbFromChain([A, B, C])).toBe("A / B / C");
+  });
+});
+
+describe("isHiddenFolder", () => {
+  const E = mk("E", null, ".episteme");
+  const M = mk("M", "E", "memories");
+  const N = mk("N", "M", "research");
+  const tree = [A, B, C, E, M, N];
+
+  it("returns true for the .episteme folder itself", () => {
+    expect(isHiddenFolder(tree, "E")).toBe(true);
+  });
+  it("returns true for a descendant of .episteme", () => {
+    expect(isHiddenFolder(tree, "N")).toBe(true);
+  });
+  it("returns false for unrelated folder", () => {
+    expect(isHiddenFolder(tree, "C")).toBe(false);
+  });
+  it("returns false for null", () => {
+    expect(isHiddenFolder(tree, null)).toBe(false);
   });
 });
 

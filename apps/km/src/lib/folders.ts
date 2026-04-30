@@ -44,6 +44,21 @@ export function normalizeFolderName(raw: string): string {
   return raw.trim();
 }
 
+/**
+ * Returns true when the folder named `.episteme` (or any of its descendants)
+ * should be hidden from drive/listing surfaces. The `.episteme/` tree is an
+ * agent-managed area (memories, skills) that the user never edits via the
+ * drive UI.
+ */
+export function isHiddenFolder(
+  all: FolderRow[],
+  folderId: string | null,
+): boolean {
+  if (!folderId) return false;
+  const chain = resolveChain(all, folderId);
+  return chain.some((f) => f.name === ".episteme");
+}
+
 export function validateFolderName(raw: string): string | null {
   const n = normalizeFolderName(raw);
   if (n.length === 0) return "Name is required";

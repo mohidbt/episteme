@@ -10,17 +10,23 @@ import {
 import { ModelPicker } from "./ModelPicker";
 import { _resetCatalogCacheForTests } from "@/lib/openrouter-catalog";
 
+// Three models with mixed metadata:
+// - "old" has earliest `created` timestamp (release date)
+// - "new" has latest `created` timestamp
+// - "undated-z" / "undated-a" have no `created` field (alphabetical at end)
+const MOCK_MODELS = [
+  { id: "vendor/new-model", name: "New Model", created: 1_700_000_000 },
+  { id: "vendor/old-model", name: "Old Model", created: 1_500_000_000 },
+  { id: "vendor/zeta-model", name: "Zeta Model" },
+  { id: "vendor/alpha-model", name: "Alpha Model" },
+  { id: "vendor/middle-model", name: "Middle Model", created: 1_600_000_000 },
+];
+
 beforeEach(() => {
   _resetCatalogCacheForTests();
   globalThis.fetch = vi.fn(async () => {
     return new Response(
-      JSON.stringify({
-        models: [
-          { id: "google/gemma-4-31b-it:free", name: "Gemma 4 Free" },
-          { id: "anthropic/claude-opus-4-7", name: "Claude Opus 4.7" },
-        ],
-        fetched_at: null,
-      }),
+      JSON.stringify({ models: MOCK_MODELS, fetched_at: null }),
       { status: 200, headers: { "Content-Type": "application/json" } },
     );
   }) as unknown as typeof fetch;
@@ -32,49 +38,70 @@ afterEach(() => {
   _resetCatalogCacheForTests();
 });
 
+async function openPicker() {
+  const trigger = await screen.findByTestId("model-picker-trigger");
+  fireEvent.click(trigger);
+}
+
 describe("ModelPicker", () => {
   it("fetches and renders model options", async () => {
-    const onChange = vi.fn();
-    render(
-      <ModelPicker value="google/gemma-4-31b-it:free" onChange={onChange} />,
-    );
-
+    render(<ModelPicker value="vendor/old-model" onChange={vi.fn()} />);
     await waitFor(() => {
       expect(globalThis.fetch).toHaveBeenCalledWith(
         "/api/openrouter/catalog",
         expect.objectContaining({ method: "GET" }),
       );
     });
-
-    const trigger = screen.getByTestId("model-picker-trigger");
-    fireEvent.click(trigger);
-
+    await openPicker();
     await waitFor(() => {
-      expect(screen.getByText(/Gemma 4 Free/i)).toBeTruthy();
-      expect(screen.getByText(/Claude Opus 4\.7/i)).toBeTruthy();
+      const items = screen.getAllByTestId("model-picker-item");
+      const labels = items.map((i) => i.textContent ?? "");
+      expect(labels.some((l) => /Old Model/.test(l))).toBe(true);
+      expect(labels.some((l) => /New Model/.test(l))).toBe(true);
     });
   });
 
-  it("renders options grouped by Free vs Paid", async () => {
-    const onChange = vi.fn();
-    render(
-      <ModelPicker value="google/gemma-4-31b-it:free" onChange={onChange} />,
-    );
+  it("orders dated models ascending by release date (oldest first)", async () => {
+    render(<ModelPicker value="vendor/old-model" onChange={vi.fn()} />);
+    await waitFor(() => expect(globalThis.fetch).toHaveBeenCalled());
+    await openPicker();
 
     await waitFor(() => {
-      expect(globalThis.fetch).toHaveBeenCalled();
+      const items = screen.getAllByTestId("model-picker-item");
+      expect(items.length).toBe(MOCK_MODELS.length);
+      // Old (1.5e9) < Middle (1.6e9) < New (1.7e9), then undated alphabetically
+      expect(items[0].textContent).toMatch(/Old Model/);
+      expect(items[1].textContent).toMatch(/Middle Model/);
+      expect(items[2].textContent).toMatch(/New Model/);
     });
+  });
 
-    const trigger = screen.getByTestId("model-picker-trigger");
-    fireEvent.click(trigger);
+  it("places undated models after dated, in alphabetical order", async () => {
+    render(<ModelPicker value="vendor/old-model" onChange={vi.fn()} />);
+    await waitFor(() => expect(globalThis.fetch).toHaveBeenCalled());
+    await openPicker();
 
     await waitFor(() => {
-      expect(screen.getByText("Free")).toBeTruthy();
-      expect(screen.getByText("Paid")).toBeTruthy();
-      expect(screen.getByRole("option", { name: /Gemma 4 Free/i })).toBeTruthy();
-      expect(
-        screen.getByRole("option", { name: /Claude Opus 4\.7/i }),
-      ).toBeTruthy();
+      const items = screen.getAllByTestId("model-picker-item");
+      // Last two are undated → Alpha before Zeta
+      expect(items[3].textContent).toMatch(/Alpha Model/);
+      expect(items[4].textContent).toMatch(/Zeta Model/);
+    });
+  });
+
+  it("typeahead filters list as the user types", async () => {
+    render(<ModelPicker value="vendor/old-model" onChange={vi.fn()} />);
+    await waitFor(() => expect(globalThis.fetch).toHaveBeenCalled());
+    await openPicker();
+
+    const input = await screen.findByTestId("model-picker-search");
+    // Type 4+ chars matching only "Zeta Model"
+    fireEvent.change(input, { target: { value: "Zeta" } });
+
+    await waitFor(() => {
+      const items = screen.getAllByTestId("model-picker-item");
+      expect(items.length).toBe(1);
+      expect(items[0].textContent).toMatch(/Zeta Model/);
     });
   });
 });

@@ -75,12 +75,20 @@ export interface UpsertThreadOnInvokeInput {
   threadId: string;
   skill?: string | null;
   modelOverride?: string | null;
+  /**
+   * Task #41 — when this is the first message on a brand-new thread, derive
+   * a human-readable title from it so the /agents list doesn't fall back to
+   * "Conversation #abcd1234". Only set on INSERT; existing rows keep their
+   * title untouched.
+   */
+  initialTitle?: string | null;
 }
 
 /**
  * Single-roundtrip UPSERT for the invoke lifecycle.
  *
- * - INSERT (new row): set status=running, lastMessageAt=now, skill, modelOverride.
+ * - INSERT (new row): set status=running, lastMessageAt=now, skill, modelOverride,
+ *   and `title = initialTitle` when supplied.
  * - ON CONFLICT (user_id, thread_id): only bump status=running, lastMessageAt=now,
  *   updatedAt=now. Preserve title/skill/modelOverride/createdAt on existing rows.
  */
@@ -95,6 +103,7 @@ export async function upsertThreadOnInvoke(
       threadId: input.threadId,
       skill: input.skill ?? null,
       modelOverride: input.modelOverride ?? null,
+      title: input.initialTitle ?? null,
       status: "running",
       lastMessageAt: now,
     })

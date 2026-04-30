@@ -203,7 +203,7 @@ function Section({
   if (entries.length === 0) return null;
   return (
     <div className="mb-1 last:mb-0">
-      <div className="px-2 pt-1 pb-0.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+      <div className="px-2 pt-1 pb-0.5 text-[10px] font-medium text-muted-foreground">
         {label}
       </div>
       {entries.map(({ it, i }) => {

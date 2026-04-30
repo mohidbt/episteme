@@ -10,7 +10,6 @@ import {
   type TiptapEditor,
   type CitationMeta,
   insertCitation,
-  insertPdfEmbed,
   insertWikiLink,
   invokeAgent,
   hydrateCitations,
@@ -32,6 +31,7 @@ export function NoteEditor({
   userName,
   initialCollabToken,
   editorRef: externalEditorRef,
+  transformMd,
 }: {
   id: string;
   initialMd: string;
@@ -41,6 +41,12 @@ export function NoteEditor({
   /** SSR-minted collab JWT. When provided, skips the client-side /api/collab/token fetch. */
   initialCollabToken?: string | null;
   editorRef?: RefObject<TiptapEditor | null>;
+  /**
+   * Optional transform applied to the editor's body markdown before it is
+   * persisted. Used to re-attach frontmatter rows that live outside the
+   * editor (see {@link NoteFrontmatter}).
+   */
+  transformMd?: (body: string) => string;
 }) {
   const router = useRouter();
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -164,17 +170,18 @@ export function NoteEditor({
       clearTimeout(timer.current);
       timer.current = null;
     }
+    const finalMd = transformMd ? transformMd(md) : md;
     return fetch(`/api/notes/${id}/content`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ contentMd: md }),
+      body: JSON.stringify({ contentMd: finalMd }),
       keepalive: true,
     })
       .then(() => undefined)
       .catch((err) => {
         console.warn("[autosave] failed", err);
       });
-  }, [id, collabState]);
+  }, [id, collabState, transformMd]);
 
   const onChangeMd = useCallback(
     (md: string) => {
@@ -440,7 +447,6 @@ export function NoteEditor({
         const p = props as {
           title: string;
           citation?: { citekey: string; title: string; authors: string[]; year: string | null };
-          pdfEmbed?: { pdfId: string; title: string; page: number | null };
           wikiLink?: { title: string; targetKind: "note" | "reference" | "paper"; targetId: string | null };
           agent?: { skill: string };
         };
@@ -449,8 +455,6 @@ export function NoteEditor({
           setAiTriggerCount((c) => c + 1);
         } else if (p.title === "Cite" && p.citation) {
           insertCitation(editor, p.citation);
-        } else if (p.title === "PDF" && p.pdfEmbed) {
-          insertPdfEmbed(editor, p.pdfEmbed);
         } else if (p.title === "Link" && p.wikiLink) {
           insertWikiLink(editor, p.wikiLink);
         } else if (p.title === "Agent" && p.agent) {

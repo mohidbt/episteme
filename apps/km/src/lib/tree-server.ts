@@ -2,6 +2,7 @@ import { cache } from "react";
 import { and, asc, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { folders, libraries, notes, papers, papersets, references_ } from "@episteme/db/schema";
+import { isHiddenFolder } from "@/lib/folders";
 
 const AGENT_ITEMS = [
   { kind: "skills", label: "skills.md" },
@@ -116,6 +117,13 @@ export const getTreeForUser = cache(
         .orderBy(asc(papersets.createdAt)),
     ]);
 
+    // Hide the agent-managed `.episteme/**` tree from drive listings (+44).
+    const visibleFolders = folderRows.filter(
+      (f) => !isHiddenFolder(folderRows, f.id),
+    );
+    const isVisibleFolderId = (fid: string | null) =>
+      !fid || !isHiddenFolder(folderRows, fid);
+
     const refsRows: ReferenceItem[] = refsRowsRaw.map((r) => {
       const csl = r.cslJson as { title?: string } | null;
       const title: string = csl?.title ?? r.citationKey;
@@ -129,15 +137,17 @@ export const getTreeForUser = cache(
 
     return {
       library: { id: lib.id, name: lib.name },
-      folders: folderRows,
-      papers: papersRows,
-      references: refsRows,
-      notes: notesRows,
-      papersets: papersetsRows.map((p) => ({
-        id: p.id,
-        title: p.filename,
-        folderId: p.folderId,
-      })),
+      folders: visibleFolders,
+      papers: papersRows.filter((p) => isVisibleFolderId(p.folderId)),
+      references: refsRows.filter((r) => isVisibleFolderId(r.folderId)),
+      notes: notesRows.filter((n) => isVisibleFolderId(n.folderId)),
+      papersets: papersetsRows
+        .filter((p) => isVisibleFolderId(p.folderId))
+        .map((p) => ({
+          id: p.id,
+          title: p.filename,
+          folderId: p.folderId,
+        })),
       agent: AGENT_ITEMS,
     };
   },

@@ -25,6 +25,7 @@ import {
 } from "@/lib/agent-stream-reducer";
 import type { AgentEvent, Citation } from "@/lib/agent-events";
 import type { PageContext } from "@/lib/page-context";
+import { useAgentBallOptional } from "./agent-ball-context";
 
 import {
   Conversation,
@@ -75,6 +76,7 @@ import {
   AlertTitle,
   AlertDescription,
 } from "@/components/ui/alert";
+import { Textarea } from "@/components/ui/textarea";
 import {
   ListChecksIcon,
   ChevronDownIcon,
@@ -92,6 +94,12 @@ export interface AgentTranscriptProps {
   initialPrompt?: string | null;
   /** If provided, auto-enable this skill for the first invoke. */
   initialSkill?: string | null;
+  /**
+   * Task #41 — persisted message-history seed used to hydrate the transcript
+   * on mount when reopening an existing thread, so the user doesn't see an
+   * empty placeholder. Live streams continue to merge in via the SSE reducer.
+   */
+  initialMessages?: Array<{ id: string; role: "user" | "assistant"; text: string }>;
 }
 
 /**
@@ -146,13 +154,28 @@ export function AgentTranscript({
   onSendMessage,
   initialPrompt,
   initialSkill,
+  initialMessages,
 }: AgentTranscriptProps) {
   const [state, dispatch] = useReducer(
     agentStreamReducer,
     initialAgentTranscriptState,
+    (base) => {
+      if (!initialMessages || initialMessages.length === 0) return base;
+      const cards: TranscriptCard[] = initialMessages.map((m) => ({
+        kind: "text",
+        id: m.id,
+        role: m.role,
+        text: m.text,
+      }));
+      return { ...base, cards };
+    },
   );
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
+  const agentBall = useAgentBallOptional();
+  useEffect(() => {
+    agentBall?.setWorking(streaming);
+  }, [streaming, agentBall]);
   const abortRef = useRef<AbortController | null>(null);
   const initialPromptSent = useRef(false);
   const defaultSendRef = useRef<((text: string) => Promise<void>) | null>(null);
@@ -250,6 +273,25 @@ export function AgentTranscript({
     [input, onSendMessage, defaultSend],
   );
 
+  // Task #45: fork conversation at a prior user message. Truncates the
+  // transcript to drop the original message and everything after it, then
+  // re-invokes with the edited prompt. Server-side: deep-agents checkpointer
+  // doesn't support targeted message-history truncation cheaply, so the
+  // minimum-viable approach is to forward to /api/agents/km/invoke (same
+  // thread) — the agent continues from the new user turn. Operators who need
+  // exact server-side truncation can later swap this for a dedicated
+  // /api/agents/km/fork endpoint with the same payload shape.
+  const handleForkSubmit = useCallback(
+    (messageId: string, editedText: string) => {
+      const text = editedText.trim();
+      if (!text) return;
+      dispatch({ type: "__fork_at", messageId });
+      if (onSendMessage) onSendMessage(text);
+      else void defaultSend(text);
+    },
+    [onSendMessage, defaultSend],
+  );
+
   const sendDecision = useCallback(
     async (cardId: string, type: "approve" | "reject"): Promise<boolean> => {
       abortRef.current?.abort();
@@ -320,7 +362,7 @@ export function AgentTranscript({
       data-testid="agent-transcript"
     >
       <Conversation className="flex-1 min-h-0">
-        <ConversationContent className="text-sm">
+        <ConversationContent className="gap-3 text-sm leading-snug [&_p]:my-1">
           {state.cards.length === 0 ? (
             <div className="text-muted-foreground text-xs">
               No messages yet. Ask the agent something.
@@ -334,6 +376,7 @@ export function AgentTranscript({
                 onSuggestionClick={handleSuggestionClick}
                 threadId={threadId}
                 onDecision={sendDecision}
+                onForkSubmit={handleForkSubmit}
               />
             ))
           )}
@@ -415,9 +458,9 @@ export function AgentTranscript({
         </ConversationContent>
         <ConversationScrollButton />
       </Conversation>
-      <div className="border-t p-2 flex gap-2">
-        <textarea
-          className="flex-1 resize-none rounded-md border bg-background px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-ring min-h-[36px] max-h-[120px]"
+      <div className="border-t p-2 flex items-center gap-2">
+        <Textarea
+          className="min-h-9 max-h-48 resize-none py-1.5 text-sm"
           placeholder="Message agent…"
           value={input}
           onChange={(e) => setInput(e.target.value)}
@@ -434,7 +477,7 @@ export function AgentTranscript({
           type="button"
           onClick={() => handleSend()}
           disabled={!input.trim() || streaming}
-          className="rounded-md bg-primary px-3 py-1 text-sm text-primary-foreground disabled:opacity-50"
+          className="rounded-md bg-primary px-3 py-1.5 text-sm text-primary-foreground disabled:opacity-50"
         >
           Send
         </button>
@@ -449,6 +492,7 @@ interface CardViewProps {
   onSuggestionClick: (suggestion: string) => void;
   threadId: string;
   onDecision: (cardId: string, type: "approve" | "reject") => Promise<boolean>;
+  onForkSubmit: (messageId: string, editedText: string) => void;
 }
 
 function CardView({
@@ -457,10 +501,11 @@ function CardView({
   onSuggestionClick,
   threadId,
   onDecision,
+  onForkSubmit,
 }: CardViewProps) {
   switch (card.kind) {
     case "text":
-      return <TextCardView card={card} />;
+      return <TextCardView card={card} onForkSubmit={onForkSubmit} />;
     case "thinking":
       return <ThinkingCardView card={card} streaming={streaming} />;
     case "tool":
@@ -483,14 +528,86 @@ function CardView({
   }
 }
 
-function TextCardView({ card }: { card: TextCardData }) {
+function TextCardView({
+  card,
+  onForkSubmit,
+}: {
+  card: TextCardData;
+  onForkSubmit: (messageId: string, editedText: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(card.text);
+  const isUser = card.role === "user";
+
+  if (editing && isUser) {
+    return (
+      <div data-testid="card-text" data-role={card.role} className="group relative">
+        <div className="flex flex-col gap-2 rounded-md border bg-muted/30 p-2">
+          <Textarea
+            aria-label="Edit user message"
+            className="min-h-9 max-h-48 resize-none py-1.5 text-sm"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                onForkSubmit(card.id, draft);
+                setEditing(false);
+              } else if (e.key === "Escape") {
+                setDraft(card.text);
+                setEditing(false);
+              }
+            }}
+            rows={1}
+          />
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setDraft(card.text);
+                setEditing(false);
+              }}
+              className="rounded px-2 py-1 text-xs hover:bg-muted"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                onForkSubmit(card.id, draft);
+                setEditing(false);
+              }}
+              aria-label="Submit edit"
+              className="rounded bg-primary px-2 py-1 text-xs text-primary-foreground"
+            >
+              Submit edit
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div data-testid="card-text" data-role={card.role}>
+    <div data-testid="card-text" data-role={card.role} className="group relative">
       <Message from={card.role}>
         <MessageContent>
           <MessageResponse>{card.text}</MessageResponse>
         </MessageContent>
       </Message>
+      {isUser ? (
+        <button
+          type="button"
+          aria-label="Edit message"
+          onClick={() => {
+            setDraft(card.text);
+            setEditing(true);
+          }}
+          className="absolute right-1 top-1 rounded p-1 text-xs opacity-0 transition-opacity hover:bg-muted group-hover:opacity-100"
+        >
+          Edit
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -512,10 +629,55 @@ function ThinkingCardView({
   );
 }
 
+// Memory-op detection: deep-agents FilesystemMiddleware exposes ls/read_file/
+// write_file/edit_file/glob/grep. Memory writes/reads are routed via
+// CompositeBackend on paths under `/memories/` (see services/agents/store.py
+// and backends/memories_backend.py). Surface a small "Recalling/Saving memory"
+// pill instead of the full tool box for these.
+const MEMORY_READ_TOOLS = new Set(["read_file", "ls", "glob", "grep"]);
+const MEMORY_WRITE_TOOLS = new Set(["write_file", "edit_file"]);
+
+function memoryOpKind(card: ToolCardData): "read" | "write" | null {
+  const path =
+    typeof card.args?.file_path === "string"
+      ? (card.args.file_path as string)
+      : typeof card.args?.path === "string"
+        ? (card.args.path as string)
+        : "";
+  if (!path.startsWith("/memories/") && path !== "/memories" && path !== "/memories/")
+    return null;
+  if (MEMORY_WRITE_TOOLS.has(card.name)) return "write";
+  if (MEMORY_READ_TOOLS.has(card.name)) return "read";
+  return null;
+}
+
 function ToolCardView({ card }: { card: ToolCardData }) {
+  const memKind = memoryOpKind(card);
+  if (memKind) {
+    const inProgress = card.state === "input-available";
+    const label =
+      memKind === "write"
+        ? inProgress
+          ? "Saving memory…"
+          : "Saved memory"
+        : inProgress
+          ? "Recalling memory…"
+          : "Recalled memory";
+    return (
+      <div data-testid="card-tool" data-memory-op={memKind}>
+        <Task defaultOpen={false}>
+          <TaskTrigger title={label} />
+          <TaskContent>
+            <ToolInput input={card.args} />
+            <ToolOutput output={card.output} errorText={card.errorText} />
+          </TaskContent>
+        </Task>
+      </div>
+    );
+  }
   return (
     <div data-testid="card-tool">
-      <Tool defaultOpen>
+      <Tool defaultOpen={false}>
         <ToolHeader
           type={`tool-${card.name}` as `tool-${string}`}
           state={card.state}

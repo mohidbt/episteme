@@ -5,7 +5,7 @@ import { getDefaultLibrary } from "@/lib/default-library";
 import { listAllPapers } from "@/lib/papers-server";
 import { listAllFolders } from "@/lib/folders-server";
 import { resolveChain } from "@/lib/folders";
-import { PaperGrid } from "@/components/PaperGrid";
+import { PapersView } from "@/components/PapersView";
 import { UnifiedDropzone } from "@/components/UnifiedDropzone";
 import { FolderFilterDropdown } from "@/components/FolderFilterDropdown";
 
@@ -91,7 +91,7 @@ export default async function PapersPage({
           </div>
         </div>
       ) : (
-        <PaperGrid papers={rows} folders={allFolders} />
+        <PapersView papers={rows} folders={allFolders} />
       )}
     </div>
   );

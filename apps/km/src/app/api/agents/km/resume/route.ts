@@ -23,17 +23,23 @@ export async function POST(req: Request) {
   // resume turns also use the real model and SkillsMiddleware stays wired.
   let modelPreference: string | null = null;
   let enabledSkills: string[] | null = null;
+  let permissions: Record<string, boolean> | null = null;
   try {
     const rows = await db
       .select({
         modelPreference: agentConfigs.modelPreference,
         enabledSkills: agentConfigs.enabledSkills,
+        settingsJson: agentConfigs.settingsJson,
       })
       .from(agentConfigs)
       .where(eq(agentConfigs.userId, session.userId))
       .limit(1);
     modelPreference = rows[0]?.modelPreference ?? null;
     enabledSkills = rows[0]?.enabledSkills ?? null;
+    const settings = (rows[0]?.settingsJson ?? {}) as {
+      permissions?: Record<string, boolean>;
+    };
+    permissions = settings.permissions ?? null;
   } catch (err) {
     console.warn("[resume] agentConfigs lookup failed", err);
   }
@@ -42,6 +48,7 @@ export async function POST(req: Request) {
     ...JSON.parse(bodyText),
     ...(modelPreference ? { model_preference: modelPreference } : {}),
     ...(Array.isArray(enabledSkills) ? { enabled_skills: enabledSkills } : {}),
+    ...(permissions ? { permissions } : {}),
   });
 
   const path = "/agents/km/resume";

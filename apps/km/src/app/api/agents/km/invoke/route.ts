@@ -11,6 +11,7 @@ import {
   upsertThreadOnInvoke,
   type AgentThreadStatus,
 } from "@/lib/threads";
+import { deriveThreadTitle } from "@/lib/thread-title";
 
 const InvokeBody = z.object({
   thread_id: z.string().min(1),
@@ -48,6 +49,10 @@ export async function POST(req: Request) {
       threadId,
       skill: body.skill ?? null,
       modelOverride: body.model_override ?? null,
+      // Task #41: derive a title from the first user message. INSERT only —
+      // upsertThreadOnInvoke leaves the title untouched on conflict, so this
+      // is a no-op on existing threads.
+      initialTitle: body.message ? deriveThreadTitle(body.message) : null,
     });
   } catch {
     return Response.json({ error: "db_error" }, { status: 500 });
@@ -59,17 +64,23 @@ export async function POST(req: Request) {
   // free model with no skills wired.
   let modelPreference: string | null = null;
   let enabledSkills: string[] | null = null;
+  let permissions: Record<string, boolean> | null = null;
   try {
     const rows = await db
       .select({
         modelPreference: agentConfigs.modelPreference,
         enabledSkills: agentConfigs.enabledSkills,
+        settingsJson: agentConfigs.settingsJson,
       })
       .from(agentConfigs)
       .where(eq(agentConfigs.userId, userId))
       .limit(1);
     modelPreference = rows[0]?.modelPreference ?? null;
     enabledSkills = rows[0]?.enabledSkills ?? null;
+    const settings = (rows[0]?.settingsJson ?? {}) as {
+      permissions?: Record<string, boolean>;
+    };
+    permissions = settings.permissions ?? null;
   } catch (err) {
     console.warn("[invoke] agentConfigs lookup failed", err);
   }
@@ -90,6 +101,7 @@ export async function POST(req: Request) {
     ...JSON.parse(bodyText),
     ...(modelPreference ? { model_preference: modelPreference } : {}),
     ...(Array.isArray(mergedSkills) ? { enabled_skills: mergedSkills } : {}),
+    ...(permissions ? { permissions } : {}),
   });
 
   const path = "/agents/km/invoke";

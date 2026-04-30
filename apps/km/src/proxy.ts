@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { decideHostRewrite } from "@/lib/proxy-host";
 
-const PUBLISH_DOMAIN = process.env.EPISTEME_PUBLISH_DOMAIN ?? "epistaime.com";
+const PUBLISH_DOMAIN = process.env.EPISTEME_PUBLISH_DOMAIN ?? "tryepisteme.com";
 
 export function proxy(request: NextRequest) {
   const host = request.headers.get("host") ?? "";

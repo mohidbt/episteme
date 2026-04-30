@@ -43,11 +43,6 @@ export function BacklinksPanel({ noteId }: { noteId: string }) {
               className="block rounded-md border px-3 py-2 hover:bg-accent transition-colors"
             >
               <div className="text-sm font-medium">{s.title}</div>
-              {s.snippet && (
-                <div className="mt-0.5 text-xs text-muted-foreground line-clamp-2">
-                  {s.snippet}
-                </div>
-              )}
             </Link>
           </li>
         ))}

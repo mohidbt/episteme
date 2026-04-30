@@ -249,6 +249,7 @@ async def test_fetch_download_failure():
 def _s2_to_paper_result(s2_data: dict, confidence: str = "medium"):
     """Convert S2 API response dict to PaperResult-like object for mocking."""
     from tools.search_backends.base import PaperResult
+    from tools.search_backends.semantic_scholar import _resolve_pdf_url
 
     ext_ids = s2_data.get("externalIds", {})
     oa_pdf = s2_data.get("openAccessPdf")
@@ -260,7 +261,7 @@ def _s2_to_paper_result(s2_data: dict, confidence: str = "medium"):
         year=str(s2_data["year"]) if s2_data.get("year") is not None else None,
         venue=s2_data.get("venue"),
         doi=ext_ids.get("DOI"),
-        open_access_pdf_url=oa_pdf.get("url") if oa_pdf else None,
+        open_access_pdf_url=_resolve_pdf_url(oa_pdf, ext_ids),
         citation_count=s2_data.get("citationCount"),
         abstract_snippet=abstract[:200] if abstract else None,
         match_confidence=confidence,

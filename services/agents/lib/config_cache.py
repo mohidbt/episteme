@@ -18,11 +18,15 @@ GUEST_USER_ID = "guest"
 _DEFAULTS = {
     "enabledSkills": [],
     "attachedMcps": [],
-    "modelPreference": "google/gemma-4-31b-it:free",
+    "modelPreference": "google/gemma-4-26b-a4b-it",
     "approvalRules": {
         "publish": "require",
         "external_send": "require",
         "write_note": "auto",
+    },
+    # Per-tool opt-in flags. Default off; user must explicitly enable.
+    "permissions": {
+        "web_search": False,
     },
 }
 
@@ -32,6 +36,7 @@ _GUEST_CONFIG = {
     "attachedMcps": [],
     "modelPreference": _DEFAULTS["modelPreference"],
     "approvalRules": {},
+    "permissions": {},
 }
 
 

@@ -7,7 +7,6 @@ import {
   ToggleGroupItem,
 } from "@/components/ui/toggle-group";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
@@ -95,7 +94,6 @@ export function FileBrowserToolbar({
 
         {isTrashView ? (
           <>
-            <Badge variant="secondary">In Trash</Badge>
             <Button
               variant="destructive"
               size="sm"

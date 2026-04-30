@@ -219,6 +219,22 @@ describe("FileBrowser", () => {
       screen.getByText(/Drop files here, or click/i),
     ).toBeTruthy();
   });
+
+  it("renders trash-specific empty state copy when isTrashView", () => {
+    render(
+      <FileBrowser
+        libraryId={1}
+        libraryName="Default"
+        folderId="trash"
+        folderChain={[{ id: "trash", name: "Trash" }]}
+        contents={{ folders: [], papers: [], references: [], notes: [], assets: [], papersets: [] }}
+        folders={[]}
+        isTrashView={true}
+      />,
+    );
+    expect(screen.getByText(/Trash is empty/i)).toBeTruthy();
+    expect(screen.queryByText(/Drop files here/i)).toBeNull();
+  });
 });
 
 describe("FileBrowser selection", () => {
@@ -258,15 +274,18 @@ describe("FileBrowser selection", () => {
     expect(screen.getByTestId("fb-item-n1").getAttribute("data-selected")).toBe("true");
   });
 
-  it("cmd-click toggles membership (adds then removes)", () => {
+  it("cmd-click on a folder (no href) toggles membership (adds then removes)", () => {
+    // Task #16: cmd-click on a leaf with an href delegates to the browser
+    // (opens new tab). Multi-select via cmd-click is preserved only for items
+    // without an href (folders).
     renderFb();
-    fireEvent.click(screen.getByTestId("fb-item-f1"));
-    fireEvent.click(screen.getByTestId("fb-item-p1"), { metaKey: true });
-    expect(screen.getByTestId("fb-item-f1").getAttribute("data-selected")).toBe("true");
+    fireEvent.click(screen.getByTestId("fb-item-p1"));
+    fireEvent.click(screen.getByTestId("fb-item-f1"), { metaKey: true });
     expect(screen.getByTestId("fb-item-p1").getAttribute("data-selected")).toBe("true");
-    fireEvent.click(screen.getByTestId("fb-item-p1"), { metaKey: true });
-    expect(screen.getByTestId("fb-item-p1").getAttribute("data-selected")).not.toBe("true");
     expect(screen.getByTestId("fb-item-f1").getAttribute("data-selected")).toBe("true");
+    fireEvent.click(screen.getByTestId("fb-item-f1"), { metaKey: true });
+    expect(screen.getByTestId("fb-item-f1").getAttribute("data-selected")).not.toBe("true");
+    expect(screen.getByTestId("fb-item-p1").getAttribute("data-selected")).toBe("true");
   });
 
   it("clicking the empty grid area clears selection", () => {
@@ -323,8 +342,10 @@ describe("FileBrowser keyboard", () => {
 
   it("Del key with selection POSTs /api/folders/trash for each selected", async () => {
     renderFb();
+    // Use shift-click to multi-select across leaves (cmd-click on a leaf
+    // with href now delegates to the browser per Task #16).
     fireEvent.click(screen.getByTestId("fb-item-p1"));
-    fireEvent.click(screen.getByTestId("fb-item-n1"), { metaKey: true });
+    fireEvent.click(screen.getByTestId("fb-item-n1"), { shiftKey: true });
     const root = screen.getByTestId("fb-root");
     fireEvent.keyDown(root, { key: "Delete" });
     // Wait one microtask flush for the async fetch promises to fire
@@ -455,7 +476,7 @@ describe("FileBrowser resolveDrop", () => {
 
 // ── Toolbar trash-view tests (T20) ──────────────────────────────────────────
 describe("FileBrowserToolbar isTrashView (T20)", () => {
-  it("isTrashView=true shows 'Empty trash' button and 'In Trash' badge, hides New menu in toolbar", () => {
+  it("isTrashView=true shows 'Empty trash' button and hides New menu in toolbar (no 'In Trash' pill)", () => {
     render(
       <FileBrowser
         libraryId={1}
@@ -469,7 +490,8 @@ describe("FileBrowserToolbar isTrashView (T20)", () => {
       />,
     );
     expect(screen.getByRole("button", { name: /empty trash/i })).toBeTruthy();
-    expect(screen.getByText(/in trash/i)).toBeTruthy();
+    // "In Trash" pill removed (Fix #24)
+    expect(screen.queryByText(/^in trash$/i)).toBeNull();
     // The toolbar "New" button (aria-label="New") should not exist
     expect(screen.queryByRole("button", { name: "New" })).toBeNull();
   });
@@ -539,6 +561,59 @@ describe("FileBrowser context menu (T19)", () => {
     await waitFor(() => {
       expect(screen.getByText("Move to folder")).toBeTruthy();
     });
+  });
+
+  it("rename of a note reflects in DOM optimistically (Task #20)", async () => {
+    render(
+      <FileBrowser
+        libraryId={1}
+        libraryName="Default"
+        folderId={null}
+        folderChain={[]}
+        contents={baseContents}
+        folders={baseFolders}
+      />,
+    );
+    // Sanity: original title rendered.
+    expect(screen.getByText("My note")).toBeTruthy();
+
+    const noteEl = screen.getByTestId("fb-item-n1");
+    await act(async () => {
+      fireEvent.contextMenu(noteEl);
+    });
+    await waitFor(() =>
+      expect(screen.getByRole("menuitem", { name: "Rename" })).toBeTruthy(),
+    );
+    await act(async () => {
+      fireEvent.click(screen.getByRole("menuitem", { name: "Rename" }));
+    });
+    const input = await screen.findByTestId("rename-input");
+    fireEvent.change(input, { target: { value: "Renamed note" } });
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("rename-save"));
+    });
+
+    // First wait for the PATCH to be issued.
+    await waitFor(() => {
+      const calls = (global.fetch as unknown as { mock: { calls: unknown[][] } }).mock.calls;
+      expect(calls.find((c) => String(c[0]) === "/api/notes/n1")).toBeTruthy();
+    });
+    // Allow the post-fetch state update (optimistic title override) to flush.
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    // The new title appears in the DOM without a `contents` prop change —
+    // simulating what the user sees before the Server Component refetch
+    // round-trips.
+    // The new title appears in the DOM without a `contents` prop change —
+    // simulating what the user sees before the Server Component refetch
+    // round-trips.
+    await waitFor(
+      () => {
+        expect(screen.getByText("Renamed note")).toBeTruthy();
+      },
+      { timeout: 2000 },
+    );
   });
 
   it("rename of a paperset PATCHes /api/papersets/:id with { filename }", async () => {

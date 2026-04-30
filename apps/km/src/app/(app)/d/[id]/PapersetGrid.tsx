@@ -139,7 +139,7 @@ export function PapersetGrid({
         >
           <thead className="sticky top-0 z-10 bg-background">
             <tr>
-              <th className="w-[280px] border-b border-r border-border/60 bg-muted/40 px-3 py-2 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              <th className="w-[280px] border-b border-r border-border/60 bg-muted/40 px-3 py-2 text-left text-xs font-medium text-muted-foreground">
                 Paper
               </th>
               {columns.map((col) => (

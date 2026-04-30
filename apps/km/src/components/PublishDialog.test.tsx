@@ -112,7 +112,7 @@ describe("PublishDialog", () => {
     openDialog();
     await waitFor(() => {
       expect(screen.getByTestId("url-preview").textContent).toContain(
-        "alice.epistaime.com/hello",
+        "alice.tryepisteme.com/hello",
       );
     });
   });
@@ -189,7 +189,7 @@ describe("PublishDialog", () => {
     const copyBtn = await waitFor(() => screen.getByTestId("copy-url"));
     fireEvent.click(copyBtn);
     await waitFor(() => {
-      expect(writeText).toHaveBeenCalledWith("https://alice.epistaime.com/hello");
+      expect(writeText).toHaveBeenCalledWith("https://alice.tryepisteme.com/hello");
     });
   });
 

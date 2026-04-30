@@ -483,3 +483,47 @@ async def test_make_public_no_slug():
     body = mock_post.call_args.args[1]
     # public_slug should be absent or None when not provided
     assert body.get("public_slug") is None or "public_slug" not in body
+
+
+# ---------------------------------------------------------------------------
+# .episteme folder hiding (+44)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_list_pdfs_hides_episteme_folder_items():
+    """list_pdfs must drop rows whose folderPath sits under `.episteme/**`."""
+    from tools.pdfs import list_pdfs  # noqa: PLC0415
+
+    rows = [
+        {"id": "p1", "title": "A", "folderPath": "Research"},
+        {"id": "p2", "title": "B", "folderPath": ".episteme/agents/memories"},
+        {"id": "p3", "title": "C", "folderPath": ".episteme"},
+        {"id": "p4", "title": "D", "folderPath": ""},
+    ]
+    with patch("tools.pdfs.km_get", new_callable=AsyncMock) as mock_get:
+        mock_get.return_value = rows
+        out = await list_pdfs.ainvoke({"libraryId": 1}, config=CFG)
+
+    assert isinstance(out, list)
+    ids = [r["id"] for r in out]
+    assert ids == ["p1", "p4"]
+
+
+@pytest.mark.asyncio
+async def test_list_references_hides_episteme_folder_items():
+    """list_references must drop rows whose folderPath sits under `.episteme/**`."""
+    from tools.library import list_references  # noqa: PLC0415
+
+    rows = [
+        {"id": "r1", "citationKey": "Doe2024", "folderPath": "Refs"},
+        {"id": "r2", "citationKey": "X", "folderPath": ".episteme/something"},
+        {"id": "r3", "citationKey": "Y", "folderPath": ".episteme"},
+    ]
+    with patch("tools.library.km_get", new_callable=AsyncMock) as mock_get:
+        mock_get.return_value = rows
+        out = await list_references.ainvoke({"libraryId": 2}, config=CFG)
+
+    assert isinstance(out, list)
+    ids = [r["id"] for r in out]
+    assert ids == ["r1"]

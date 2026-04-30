@@ -2,7 +2,6 @@
 
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { CitationTypeahead, type CitationTypeaheadRef, type CitationPick } from "./CitationTypeahead";
-import { PdfTypeahead, type PdfTypeaheadRef, type PdfPick } from "./PdfTypeahead";
 import { WikiLinkTypeahead, type WikiLinkTypeaheadRef, type WikiLinkPick } from "./WikiLinkTypeahead";
 import { AgentTypeahead, type AgentTypeaheadRef, type AgentPick } from "./AgentTypeahead";
 
@@ -13,7 +12,6 @@ export interface SlashCommandTypeaheadRef {
 export interface SlashCommandPick {
   title: string;
   citation?: CitationPick;
-  pdfEmbed?: PdfPick;
   wikiLink?: WikiLinkPick;
   agent?: AgentPick;
 }
@@ -42,12 +40,6 @@ const COMMANDS: SlashCommandItem[] = [
     description: "Insert a citation from your library",
     keywords: ["cite", "citation", "reference", "paper", "bib"],
     icon: "📚",
-  },
-  {
-    title: "PDF",
-    description: "Embed a PDF from your library",
-    keywords: ["pdf", "embed", "paper", "reader", "document"],
-    icon: "📄",
   },
   {
     title: "Link",
@@ -80,17 +72,16 @@ export const SlashCommandTypeahead = forwardRef<
   SlashCommandTypeaheadProps
 >(function SlashCommandTypeahead({ query, onSelect }, ref) {
   const [selected, setSelected] = useState(0);
-  // Mode: "commands" | "cite" | "pdf" | "link" | "agent"
-  const [mode, setMode] = useState<"commands" | "cite" | "pdf" | "link" | "agent">("commands");
+  // Mode: "commands" | "cite" | "link" | "agent"
+  const [mode, setMode] = useState<"commands" | "cite" | "link" | "agent">("commands");
   // Query within sub-command mode — typed after selecting the sub-command
   const [citeQuery, setCiteQuery] = useState("");
   const citationRef = useRef<CitationTypeaheadRef | null>(null);
-  const pdfRef = useRef<PdfTypeaheadRef | null>(null);
   const wikiLinkRef = useRef<WikiLinkTypeaheadRef | null>(null);
   const agentRef = useRef<AgentTypeaheadRef | null>(null);
 
   const filtered = useMemo(() => {
-    if (mode === "cite" || mode === "pdf" || mode === "link" || mode === "agent") return [];
+    if (mode === "cite" || mode === "link" || mode === "agent") return [];
     const q = query.toLowerCase().trim();
     if (!q) return COMMANDS;
     return COMMANDS.filter((cmd) => {
@@ -126,24 +117,6 @@ export const SlashCommandTypeahead = forwardRef<
           }
           // Delegate navigation/enter to CitationTypeahead
           return citationRef.current?.onKeyDown({ event }) ?? false;
-        }
-
-        if (mode === "pdf") {
-          // Backspace when citeQuery empty → go back to command list
-          if (event.key === "Backspace" && citeQuery === "") {
-            setMode("commands");
-            setCiteQuery("");
-            return true;
-          }
-          if (event.key.length === 1 && !event.ctrlKey && !event.metaKey) {
-            setCiteQuery((q) => q + event.key);
-            return true;
-          }
-          if (event.key === "Backspace") {
-            setCiteQuery((q) => q.slice(0, -1));
-            return true;
-          }
-          return pdfRef.current?.onKeyDown({ event }) ?? false;
         }
 
         if (mode === "link") {
@@ -198,11 +171,6 @@ export const SlashCommandTypeahead = forwardRef<
               setCiteQuery("");
               return true;
             }
-            if (cmd.title === "PDF") {
-              setMode("pdf");
-              setCiteQuery("");
-              return true;
-            }
             if (cmd.title === "Link") {
               setMode("link");
               setCiteQuery("");
@@ -233,18 +201,6 @@ export const SlashCommandTypeahead = forwardRef<
         query={citeQuery}
         onSelect={(citation: CitationPick) => {
           onSelect({ title: "Cite", citation });
-        }}
-      />
-    );
-  }
-
-  if (mode === "pdf") {
-    return (
-      <PdfTypeahead
-        ref={pdfRef}
-        query={citeQuery}
-        onSelect={(pdfEmbed: PdfPick) => {
-          onSelect({ title: "PDF", pdfEmbed });
         }}
       />
     );
@@ -292,11 +248,6 @@ export const SlashCommandTypeahead = forwardRef<
             e.preventDefault();
             if (cmd.title === "Cite") {
               setMode("cite");
-              setCiteQuery("");
-              return;
-            }
-            if (cmd.title === "PDF") {
-              setMode("pdf");
               setCiteQuery("");
               return;
             }

@@ -3,6 +3,15 @@ export { proseMirrorToMd } from "./prosemirror-to-md";
 export { unescapeLegacyMd } from "./unescape-legacy-md";
 export { createExtensions } from "./extensions";
 export { extractLinks, extractTags } from "./wiki-link-regex";
+export {
+  buildMarkdownWithFrontmatter,
+  inferType,
+  parseFrontmatter,
+  parseFrontmatterRows,
+  serializeFrontmatterRows,
+  splitFrontmatter,
+} from "./frontmatter";
+export type { FrontmatterRow, FrontmatterValue } from "./frontmatter";
 export { WikiLink } from "./tiptap/WikiLink";
 export { TagMark } from "./tiptap/TagMark";
 export { Citation } from "./tiptap/Citation";

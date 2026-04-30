@@ -187,7 +187,7 @@ export function PaperUploadDropzone({
         <p className="font-display text-sm">
           {isDragActive ? "Drop PDFs here" : "Drop PDFs or click to upload"}
         </p>
-        <p className="mt-1 text-[11px] tracking-[0.14em] uppercase text-muted-foreground">
+        <p className="mt-1 text-[11px] text-muted-foreground">
           PDF only · up to 50 MB · {folderPath || "library root"}
         </p>
       </div>
@@ -207,7 +207,7 @@ export function PaperUploadDropzone({
             <button
               type="button"
               onClick={clearFinished}
-              className="text-[11px] tracking-[0.14em] uppercase text-muted-foreground hover:text-foreground"
+              className="text-[11px] text-muted-foreground hover:text-foreground"
             >
               Clear finished
             </button>
@@ -243,7 +243,7 @@ function UploadRow({ item, onOpen }: { item: UploadItem; onOpen: () => void }) {
     <div className="min-w-0 flex-1">
       <div className="flex items-center gap-2">
         <p className="min-w-0 flex-1 truncate text-sm">{item.file.name}</p>
-        <span className="shrink-0 text-[11px] tracking-[0.14em] uppercase text-muted-foreground">
+        <span className="shrink-0 text-[11px] text-muted-foreground">
           {statusLabel(item.status)}
         </span>
       </div>

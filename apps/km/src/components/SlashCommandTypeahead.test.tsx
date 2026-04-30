@@ -50,7 +50,15 @@ describe("SlashCommandTypeahead — selection reset", () => {
     render(<SlashCommandTypeahead query="" onSelect={onSelect} ref={null} />);
     expect(screen.getByText("AI")).toBeTruthy();
     expect(screen.getByText("Cite")).toBeTruthy();
-    expect(screen.getByText("PDF")).toBeTruthy();
+    // /pdf slash command was removed (Task #23) — no PDF entry should render
+    expect(screen.queryByText("PDF")).toBeNull();
+  });
+
+  it("does NOT include a PDF entry even when query is 'pdf'", () => {
+    const onSelect = vi.fn();
+    render(<SlashCommandTypeahead query="pdf" onSelect={onSelect} ref={null} />);
+    // /pdf is removed; no command should match the keyword "pdf"
+    expect(screen.queryByText("PDF")).toBeNull();
   });
 
   it("filters commands by query", async () => {
@@ -77,92 +85,6 @@ describe("SlashCommandTypeahead — selection reset", () => {
       fireEvent.mouseDown(tableBtn!);
     });
     expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ title: "Table" }));
-  });
-});
-
-describe("SlashCommandTypeahead — pdf mode", () => {
-  it("shows PDF command in the command list", () => {
-    const onSelect = vi.fn();
-    render(<SlashCommandTypeahead query="" onSelect={onSelect} ref={null} />);
-    expect(screen.getByText("PDF")).toBeTruthy();
-  });
-
-  it("filters to PDF when query is 'pdf'", () => {
-    const onSelect = vi.fn();
-    render(<SlashCommandTypeahead query="pdf" onSelect={onSelect} ref={null} />);
-    expect(screen.getByText("PDF")).toBeTruthy();
-    expect(screen.queryByText("AI")).toBeNull();
-    expect(screen.queryByText("Cite")).toBeNull();
-  });
-
-  it("clicking PDF command switches to pdf typeahead mode", async () => {
-    const onSelect = vi.fn();
-    render(<SlashCommandTypeahead query="pdf" onSelect={onSelect} ref={null} />);
-    const pdfBtn = screen.getByText("PDF").closest("button");
-    expect(pdfBtn).toBeTruthy();
-    await act(async () => {
-      fireEvent.mouseDown(pdfBtn!);
-    });
-    // After clicking, the pdf typeahead should be shown (placeholder text for empty query)
-    expect(screen.queryByText("PDF")).toBeNull();
-  });
-
-  it("PDF selection calls onSelect with title='PDF' and pdfEmbed payload", async () => {
-    vi.useFakeTimers();
-    const mockFetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        results: [
-          {
-            id: "uuid-1",
-            title: "Transformers Survey",
-            filename: "transformers.pdf",
-            year: 2023,
-            doi: null,
-          },
-        ],
-      }),
-    });
-    vi.stubGlobal("fetch", mockFetch);
-
-    const onSelect = vi.fn();
-    const ref: { current: { onKeyDown: (p: { event: KeyboardEvent }) => boolean } | null } = {
-      current: null,
-    };
-    render(
-      <SlashCommandTypeahead
-        query="pdf"
-        onSelect={onSelect}
-        ref={(r) => { ref.current = r; }}
-      />,
-    );
-
-    // Click PDF to switch mode
-    const pdfBtn = screen.getByText("PDF").closest("button");
-    await act(async () => {
-      fireEvent.mouseDown(pdfBtn!);
-    });
-
-    // Type a query character to trigger search
-    await act(async () => {
-      ref.current?.onKeyDown({ event: new KeyboardEvent("keydown", { key: "t", bubbles: true }) });
-    });
-
-    // Advance timer to trigger fetch debounce
-    await act(async () => {
-      vi.advanceTimersByTime(300);
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    // Now press Enter to pick the first result
-    await act(async () => {
-      ref.current?.onKeyDown({ event: new KeyboardEvent("keydown", { key: "Enter", bubbles: true }) });
-    });
-
-    expect(onSelect).toHaveBeenCalledWith(
-      expect.objectContaining({ title: "PDF" }),
-    );
   });
 });
 

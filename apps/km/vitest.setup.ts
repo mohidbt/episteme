@@ -1,3 +1,37 @@
+// jsdom in some configurations exposes a non-functional `window.localStorage`.
+// Replace with a minimal in-memory polyfill so hooks/components that persist
+// state can run in tests.
+if (typeof globalThis.window !== "undefined") {
+  const w = globalThis.window as unknown as { localStorage?: Storage };
+  const needs =
+    !w.localStorage ||
+    typeof (w.localStorage as Storage).getItem !== "function";
+  if (needs) {
+    const store = new Map<string, string>();
+    const ls: Storage = {
+      get length() {
+        return store.size;
+      },
+      clear() {
+        store.clear();
+      },
+      getItem(k: string) {
+        return store.has(k) ? (store.get(k) as string) : null;
+      },
+      key(i: number) {
+        return Array.from(store.keys())[i] ?? null;
+      },
+      removeItem(k: string) {
+        store.delete(k);
+      },
+      setItem(k: string, v: string) {
+        store.set(k, String(v));
+      },
+    };
+    Object.defineProperty(w, "localStorage", { value: ls, configurable: true });
+  }
+}
+
 // jsdom doesn't ship ResizeObserver; AI Elements' Conversation uses
 // `use-stick-to-bottom` which requires it. Polyfill once globally for tests.
 if (typeof globalThis.ResizeObserver === "undefined") {
@@ -6,6 +40,17 @@ if (typeof globalThis.ResizeObserver === "undefined") {
     unobserve() {}
     disconnect() {}
   } as unknown as typeof ResizeObserver;
+}
+
+// jsdom doesn't implement Element.scrollIntoView; cmdk (used by Command/Combobox)
+// calls it on mount/select. Stub as no-op.
+if (
+  typeof Element !== "undefined" &&
+  typeof (Element.prototype as unknown as { scrollIntoView?: () => void })
+    .scrollIntoView !== "function"
+) {
+  (Element.prototype as unknown as { scrollIntoView: () => void }).scrollIntoView =
+    () => {};
 }
 
 // `@base-ui` ScrollArea schedules an Element.getAnimations() poll that

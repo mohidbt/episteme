@@ -308,11 +308,24 @@ export function FileBrowser({
   // ── Rename dialog ─────────────────────────────────────────────────────────
   const [renameTarget, setRenameTarget] = useState<FileBrowserItemData | null>(null);
   const [renameDraft, setRenameDraft] = useState("");
+  // Task #20: optimistic title overrides so a successful rename reflects in
+  // the UI without waiting for `router.refresh()` to round-trip the Server
+  // Component data. Keyed by `${kind}:${id}` since ids may collide across
+  // kinds.
+  const [titleOverrides, setTitleOverrides] = useState<Record<string, string>>({});
 
   // ── MoveToDialog ──────────────────────────────────────────────────────────
   const [moveTarget, setMoveTarget] = useState<FileBrowserItemData | null>(null);
 
-  const items = useMemo(() => flatten(contents), [contents]);
+  const items = useMemo(() => {
+    const base = flatten(contents);
+    if (Object.keys(titleOverrides).length === 0) return base;
+    return base.map((it) => {
+      const k = `${it.kind}:${it.id}`;
+      const override = titleOverrides[k];
+      return override !== undefined ? { ...it, title: override } : it;
+    });
+  }, [contents, titleOverrides]);
 
   // ── List-view sort ───────────────────────────────────────────────────────
   const [sortKey, setSortKey] = useState<"title" | "kind" | "updatedAt">("title");
@@ -429,6 +442,10 @@ export function FileBrowser({
         body: JSON.stringify(body),
       });
       if (!res.ok) throw new Error(`status ${res.status}`);
+      // Task #20: apply optimistic local override so the new name shows
+      // immediately, even if the upstream Server Component refresh is
+      // delayed/cached.
+      setTitleOverrides((prev) => ({ ...prev, [`${kind}:${id}`]: name }));
       setRenameTarget(null);
       router.refresh();
     } catch {
@@ -1024,15 +1041,21 @@ export function FileBrowser({
           <>
             {toolbar}
             <div className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center text-sm text-muted-foreground">
-              <p>
-                Drop files here, or click <strong className="text-foreground">New</strong>.
-              </p>
-              <NewItemTrigger
-                libraryId={libraryId}
-                folderId={folderId}
-                variant="toolbar"
-                onMutate={onMutate}
-              />
+              {isTrashView ? (
+                <p>Trash is empty.</p>
+              ) : (
+                <>
+                  <p>
+                    Drop files here, or click <strong className="text-foreground">New</strong>.
+                  </p>
+                  <NewItemTrigger
+                    libraryId={libraryId}
+                    folderId={folderId}
+                    variant="toolbar"
+                    onMutate={onMutate}
+                  />
+                </>
+              )}
             </div>
           </>
         ) : mounted ? (

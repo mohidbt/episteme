@@ -88,7 +88,7 @@ const defaultConfig = {
   userId: "u1",
   enabledSkills: [],
   attachedMcps: [],
-  modelPreference: "google/gemma-4-31b-it:free",
+  modelPreference: "google/gemma-4-26b-a4b-it",
   approvalRules: {},
   skillsMd: "",
   memoryMd: "",
@@ -108,7 +108,7 @@ describe("GET /api/agents/km/config", () => {
     const r = await GET(req("/api/agents/km/config", { method: "GET", cookie: "session=x" }));
     expect(r.status).toBe(200);
     const body = await r.json() as Record<string, unknown>;
-    expect(body.modelPreference).toBe("google/gemma-4-31b-it:free");
+    expect(body.modelPreference).toBe("google/gemma-4-26b-a4b-it");
     expect(body.enabledSkills).toEqual([]);
   });
 
@@ -119,7 +119,7 @@ describe("GET /api/agents/km/config", () => {
     expect(r.status).toBe(200);
     expect(vi.mocked(db.insert)).toHaveBeenCalled();
     const body = await r.json() as Record<string, unknown>;
-    expect(body.modelPreference).toBe("google/gemma-4-31b-it:free");
+    expect(body.modelPreference).toBe("google/gemma-4-26b-a4b-it");
   });
 });
 

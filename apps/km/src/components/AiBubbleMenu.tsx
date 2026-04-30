@@ -4,12 +4,43 @@ import { BubbleMenu, type TiptapEditor } from "@episteme/editor";
 import { useRef, useState, useCallback, useEffect } from "react";
 import { runSlashAi } from "@/app/(app)/n/[slug]/run-slash-ai";
 import {
-  Bold, Italic, Code, Sparkles, Loader2,
-  ArrowDown, RefreshCw,
+  Bold, Italic, Code, Wand2, Loader2,
+  ArrowDown, RefreshCw, Sparkles,
 } from "lucide-react";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 
 type Mode = "format" | "rephrase-prompt" | "rephrase-streaming" | "rephrase-done";
 type Source = "bubble" | "portal";
+
+type SkillEntry = {
+  name: string;
+  title: string;
+  description: string;
+  instruction: string;
+};
+
+// Built-in rephrase style presets. Clicking one submits the rephrase directly
+// with the preset instruction as the prompt — no extra typing.
+const REPHRASE_PRESETS: ReadonlyArray<{ label: string; instruction: string }> = [
+  { label: "Formal", instruction: "Rewrite in a formal, professional register." },
+  { label: "Casual", instruction: "Rewrite in a casual, conversational tone." },
+  { label: "Shorter", instruction: "Rewrite shorter and tighter while keeping the meaning." },
+  { label: "Expand", instruction: "Expand with more detail and supporting context." },
+  { label: "Academic", instruction: "Rewrite in an academic register suitable for a research paper." },
+  { label: "Simplify", instruction: "Simplify so a non-expert reader can follow it." },
+];
 
 interface Turn {
   prompt: string;
@@ -23,6 +54,7 @@ function RephrasePanel({
   aiOutput,
   turns,
   submitPrompt,
+  submitWithPrompt,
   handleReplace,
   handleAppend,
   handleRefine,
@@ -36,6 +68,7 @@ function RephrasePanel({
   aiOutput: string;
   turns: Turn[];
   submitPrompt: () => void;
+  submitWithPrompt: (prompt: string) => void;
   handleReplace?: () => void;
   handleAppend: () => void;
   handleRefine: () => void;
@@ -43,6 +76,28 @@ function RephrasePanel({
   source: Source;
   maxWidth?: string;
 }) {
+  const [skillsOpen, setSkillsOpen] = useState(false);
+  const [skills, setSkills] = useState<SkillEntry[] | null>(null);
+  const [skillsError, setSkillsError] = useState<string | null>(null);
+
+  // Lazy-load skills the first time the picker opens.
+  useEffect(() => {
+    if (!skillsOpen || skills !== null) return;
+    let cancelled = false;
+    void fetch("/api/agents/skills")
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`http ${r.status}`))))
+      .then((data: { skills: SkillEntry[] }) => {
+        if (!cancelled) setSkills(data.skills ?? []);
+      })
+      .catch((err: Error) => {
+        if (!cancelled) {
+          setSkills([]);
+          setSkillsError(err.message);
+        }
+      });
+    return () => { cancelled = true; };
+  }, [skillsOpen, skills]);
+
   const isPortal = source === "portal";
   const placeholder = turns.length > 0
     ? isPortal ? "Refine the generated text…" : "Refine the rephrased text…"
@@ -85,6 +140,64 @@ function RephrasePanel({
               Send
             </button>
           )}
+        </div>
+      )}
+      {mode === "rephrase-prompt" && !isPortal && (
+        <div className="flex flex-wrap items-center gap-1">
+          {REPHRASE_PRESETS.map((p) => (
+            <button
+              key={p.label}
+              type="button"
+              onClick={() => submitWithPrompt(p.instruction)}
+              className="rounded border border-border px-2 py-0.5 text-xs hover:bg-accent"
+            >
+              {p.label}
+            </button>
+          ))}
+          <Popover open={skillsOpen} onOpenChange={setSkillsOpen}>
+            <PopoverTrigger
+              render={
+                <button
+                  type="button"
+                  className="flex items-center gap-1 rounded border border-border px-2 py-0.5 text-xs hover:bg-accent"
+                  aria-label="Personal skill"
+                >
+                  <Sparkles className="h-3 w-3" />
+                  Personal skill
+                </button>
+              }
+            />
+            <PopoverContent align="start" className="w-64 p-0">
+              <Command>
+                <CommandInput placeholder="Search skills..." />
+                <CommandList>
+                  <CommandEmpty>
+                    {skills === null
+                      ? "Loading..."
+                      : skillsError
+                        ? `Failed to load: ${skillsError}`
+                        : "No skills."}
+                  </CommandEmpty>
+                  {skills && skills.length > 0 && (
+                    <CommandGroup>
+                      {skills.map((s) => (
+                        <CommandItem
+                          key={s.name}
+                          value={`${s.title} ${s.name}`}
+                          onSelect={() => {
+                            setSkillsOpen(false);
+                            submitWithPrompt(s.instruction);
+                          }}
+                        >
+                          <span className="truncate">{s.title}</span>
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  )}
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
         </div>
       )}
       {aiOutput && (
@@ -221,8 +334,8 @@ export function AiBubbleMenu({
     setMode("rephrase-prompt");
   }, [editor]);
 
-  const submitPrompt = useCallback(() => {
-    const text = prompt.trim();
+  const submitWithPromptText = useCallback((promptText: string) => {
+    const text = promptText.trim();
     if (!text) return;
     abortRef.current?.abort();
     const controller = new AbortController();
@@ -256,7 +369,11 @@ export function AiBubbleMenu({
       setMode("rephrase-done");
       if (abortRef.current === controller) abortRef.current = null;
     });
-  }, [prompt, selectedText, turns, source]);
+  }, [selectedText, turns, source]);
+
+  const submitPrompt = useCallback(() => {
+    submitWithPromptText(prompt);
+  }, [prompt, submitWithPromptText]);
 
   const handleReplace = useCallback(() => {
     const { from, to } = selRef.current;
@@ -365,6 +482,7 @@ export function AiBubbleMenu({
             aiOutput={aiOutput}
             turns={turns}
             submitPrompt={submitPrompt}
+            submitWithPrompt={submitWithPromptText}
             handleReplace={handleReplace}
             handleAppend={handleAppend}
             handleRefine={handleRefine}
@@ -389,7 +507,7 @@ export function AiBubbleMenu({
             </div>
             <button onClick={enterRephrase}
               className="flex items-center gap-1 rounded-r-lg px-2 py-1.5 text-sm hover:bg-accent">
-              <Sparkles className="h-4 w-4" />
+              <Wand2 className="h-4 w-4" />
               <span className="text-xs">AI Rephrase</span>
             </button>
           </>
@@ -413,6 +531,7 @@ export function AiBubbleMenu({
             aiOutput={aiOutput}
             turns={turns}
             submitPrompt={submitPrompt}
+            submitWithPrompt={submitWithPromptText}
             handleAppend={handleAppend}
             handleRefine={handleRefine}
             resetToFormat={resetToFormat}

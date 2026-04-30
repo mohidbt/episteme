@@ -300,7 +300,15 @@ function FileBrowserItemImpl({
   };
 
   const handleClick = (ev: ReactMouseEvent<HTMLElement>) => {
-    // Shift/meta click: multi-select only (suppress navigation).
+    // Cmd/Ctrl click on a leaf with an href: let the browser open the link in
+    // a new tab natively. Don't preventDefault, don't multi-select, don't
+    // navigate via the router.
+    if ((ev.metaKey || ev.ctrlKey) && item.href != null) {
+      ev.stopPropagation();
+      return;
+    }
+    // Shift click (and meta click on rows without an href, e.g. folders):
+    // multi-select only — suppress navigation.
     if (ev.shiftKey || ev.metaKey || ev.ctrlKey) {
       if (item.href != null) ev.preventDefault();
       ev.stopPropagation();
@@ -352,7 +360,13 @@ function FileBrowserItemImpl({
             <Link
               href={item.href}
               className="hover:underline"
-              onClick={(e) => e.preventDefault()}
+              onClick={(e) => {
+                // Allow native cmd/ctrl-click to open in a new tab. For plain
+                // clicks, suppress default — the row's onClick handles open
+                // (and selection).
+                if (e.metaKey || e.ctrlKey) return;
+                e.preventDefault();
+              }}
               tabIndex={-1}
             >
               {item.title}
@@ -446,6 +460,8 @@ export const FileBrowserItem = memo(
   FileBrowserItemImpl,
   (a, b) =>
     a.item.id === b.item.id &&
+    a.item.title === b.item.title &&
+    a.item.updatedAt === b.item.updatedAt &&
     a.view === b.view &&
     a.index === b.index &&
     a.selected === b.selected &&

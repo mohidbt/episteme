@@ -359,7 +359,7 @@ async function main(): Promise<void> {
       const body = JSON.stringify({
         enabledSkills: [FIXTURE_SKILL_NAME],
         attachedMcps: [],
-        modelPreference: "google/gemma-4-31b-it:free",
+        modelPreference: "google/gemma-4-26b-a4b-it",
         approvalRules: { publish: "require", external_send: "require", write_note: "auto" },
       });
       const path = "/agents/km/config";

@@ -125,7 +125,7 @@ export function PaperMetadataPanel({ paper, onSaved }: PaperMetadataPanelProps) 
 
   return (
     <form onSubmit={submit} className="flex flex-col gap-4">
-      <p className="text-[11px] tracking-[0.14em] uppercase text-muted-foreground">
+      <p className="text-[11px] text-muted-foreground">
         Metadata
       </p>
 

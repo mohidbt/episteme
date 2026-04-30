@@ -282,6 +282,9 @@ async def invoke(req: Request, auth: InternalAuthDep):
     enabled = body.get("enabled_skills")
     if not isinstance(enabled, list):
         enabled = cfg.get("enabledSkills", [])
+    permissions = body.get("permissions")
+    if not isinstance(permissions, dict):
+        permissions = cfg.get("permissions", {})
     agent = await build_km_agent(
         user_id=user_id,
         thread_id=body["thread_id"],
@@ -290,6 +293,7 @@ async def invoke(req: Request, auth: InternalAuthDep):
         approval_rules=cfg.get("approvalRules", {}),
         store=get_store(),
         saver=get_saver(),
+        permissions=permissions,
     )
 
     async def gen():
@@ -361,6 +365,9 @@ async def resume(req: Request, auth: InternalAuthDep):
     enabled = body.get("enabled_skills")
     if not isinstance(enabled, list):
         enabled = cfg.get("enabledSkills", [])
+    permissions = body.get("permissions")
+    if not isinstance(permissions, dict):
+        permissions = cfg.get("permissions", {})
     agent = await build_km_agent(
         user_id=user_id,
         thread_id=body["thread_id"],
@@ -369,6 +376,7 @@ async def resume(req: Request, auth: InternalAuthDep):
         approval_rules=cfg.get("approvalRules", {}),
         store=get_store(),
         saver=get_saver(),
+        permissions=permissions,
     )
 
     # langchain HumanInTheLoopMiddleware reads the resume payload as
@@ -449,6 +457,35 @@ async def resume(req: Request, auth: InternalAuthDep):
     )
 
 
+def _serialize_message(msg) -> dict | None:
+    """Serialize a LangChain BaseMessage into a minimal {role, text} dict.
+
+    Returns None for tool messages and other non-displayable types — the UI
+    transcript only seeds user/assistant text cards on hydration. Live
+    streams continue to drive the richer card set via SSE.
+    """
+    msg_type = getattr(msg, "type", None)
+    role: str | None
+    if msg_type == "human":
+        role = "user"
+    elif msg_type == "ai":
+        role = "assistant"
+    else:
+        return None
+    raw = getattr(msg, "content", "")
+    if isinstance(raw, list):
+        # LangChain content blocks — concat any text parts.
+        text = "".join(
+            part.get("text", "") for part in raw if isinstance(part, dict)
+        )
+    else:
+        text = str(raw or "")
+    if not text.strip():
+        return None
+    msg_id = getattr(msg, "id", None) or f"{role}-{id(msg)}"
+    return {"id": str(msg_id), "role": role, "text": text}
+
+
 @router.get("/state/{thread_id}")
 async def state(thread_id: str, auth: InternalAuthDep):
     _reject_guest(auth["user_id"])
@@ -456,11 +493,17 @@ async def state(thread_id: str, auth: InternalAuthDep):
     config = {"configurable": {"thread_id": thread_id}}
     tuple_ = await saver.aget_tuple(config)
     if tuple_ is None:
-        return {"todos": [], "pending_interrupts": []}
+        return {"todos": [], "pending_interrupts": [], "messages": []}
     channel_values = tuple_.checkpoint.get("channel_values", {})
     todos = channel_values.get("todos", [])
+    raw_messages = channel_values.get("messages", []) or []
+    messages = [m for m in (_serialize_message(m) for m in raw_messages) if m]
     # pending_interrupts detail deferred to 1.3b
-    return {"todos": todos, "pending_interrupts": []}
+    return {
+        "todos": todos,
+        "pending_interrupts": [],
+        "messages": messages,
+    }
 
 
 @router.post("/config")

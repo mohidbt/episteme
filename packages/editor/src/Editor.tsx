@@ -7,6 +7,7 @@ import {
   type WikiLinkSuggestion,
   type SlashCommandSuggestion,
   type CollabOptions,
+  type FileUploadOptions,
 } from "./extensions";
 import { hydrateWikiLinkResolutions, type ResolvedLinksMap } from "./hydrate-wiki-links";
 import "./styles.css";
@@ -22,6 +23,7 @@ export interface EditorProps {
   onReady?: (editor: TiptapEditor) => void;
   children?: ReactNode;
   collab?: CollabOptions;
+  fileUpload?: FileUploadOptions;
 }
 
 export function Editor({
@@ -35,6 +37,7 @@ export function Editor({
   onReady,
   children,
   collab,
+  fileUpload,
 }: EditorProps) {
   // Editor lifecycle is owned by the parent via `key` (e.g. key={noteId} on
   // NoteEditor remounts everything on navigation). Within a single mount we
@@ -47,6 +50,7 @@ export function Editor({
       wikiLinkSuggestion,
       slashCommandSuggestion,
       collab,
+      fileUpload,
     }),
     // When collab is active, Collaboration hydrates from the Y.Doc — do not
     // seed content here or it will race the provider's initial state.

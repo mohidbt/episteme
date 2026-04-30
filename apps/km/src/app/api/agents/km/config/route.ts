@@ -11,6 +11,9 @@ const PatchBody = z
     attachedMcps: z.unknown().optional(),
     modelPreference: z.string().optional(),
     approvalRules: z.unknown().optional(),
+    // Per-tool opt-in flags (e.g. { web_search: true }). Stored inside
+    // settingsJson.permissions so no schema migration is needed.
+    permissions: z.record(z.string(), z.boolean()).optional(),
   })
   .strict();
 
@@ -65,6 +68,18 @@ export async function PATCH(req: Request) {
   if (patch.modelPreference !== undefined) setFields.modelPreference = patch.modelPreference;
   if (patch.approvalRules !== undefined) setFields.approvalRules = patch.approvalRules;
 
+  // Permissions live inside settingsJson.permissions — merge over existing
+  // settingsJson rather than overwriting it.
+  if (patch.permissions !== undefined) {
+    const existingRows = await db
+      .select({ settingsJson: agentConfigs.settingsJson })
+      .from(agentConfigs)
+      .where(eq(agentConfigs.userId, session.userId))
+      .limit(1);
+    const existing = (existingRows[0]?.settingsJson ?? {}) as Record<string, unknown>;
+    setFields.settingsJson = { ...existing, permissions: patch.permissions };
+  }
+
   const updated = await db
     .update(agentConfigs)
     .set(setFields)
@@ -99,10 +114,12 @@ export async function PATCH(req: Request) {
 }
 
 function toResponse(row: typeof agentConfigs.$inferSelect) {
+  const settingsJson = (row.settingsJson ?? {}) as { permissions?: Record<string, boolean> };
   return {
     enabledSkills: row.enabledSkills,
     attachedMcps: row.attachedMcps,
     modelPreference: row.modelPreference,
     approvalRules: row.approvalRules,
+    permissions: settingsJson.permissions ?? { web_search: false },
   };
 }

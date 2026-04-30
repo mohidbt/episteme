@@ -169,7 +169,7 @@ export function ThreadList({ initialThreads }: ThreadListProps) {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
-        <h1 className="font-display text-3xl leading-none tracking-tight">Agents</h1>
+        <h1 className="font-display text-3xl leading-none tracking-tight">Co-Scientist</h1>
         <NewConversationButton />
       </div>
       <ul className="divide-y rounded-md border" data-testid="thread-list">

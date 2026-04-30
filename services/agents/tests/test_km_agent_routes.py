@@ -298,7 +298,7 @@ def test_invoke_free_model_rate_limit_uses_friendly_message():
     # Force the cached config for user_1 to a free model.
     config_cache._CACHE["user_1"] = {
         **config_cache._DEFAULTS,
-        "modelPreference": "google/gemma-4-31b-it:free",
+        "modelPreference": "google/gemma-4-26b-a4b-it",
     }
 
     response = httpx.Response(
@@ -396,7 +396,7 @@ def test_invoke_uses_model_preference_from_body_over_cache():
 
     config_cache._CACHE["user_1"] = {
         **config_cache._DEFAULTS,
-        "modelPreference": "google/gemma-4-31b-it:free",
+        "modelPreference": "google/gemma-4-26b-a4b-it",
     }
 
     captured: dict = {}
@@ -605,7 +605,7 @@ def test_state_returns_empty_when_no_checkpoint():
 
     assert r.status_code == 200
     data = r.json()
-    assert data == {"todos": [], "pending_interrupts": []}
+    assert data == {"todos": [], "pending_interrupts": [], "messages": []}
 
 
 def test_state_returns_todos_from_checkpoint():
@@ -631,6 +631,38 @@ def test_state_returns_todos_from_checkpoint():
     assert "pending_interrupts" in data
     assert data["todos"] == ["task A", "task B"]
     assert data["pending_interrupts"] == []
+
+
+def test_state_returns_serialized_messages_from_checkpoint():
+    """Task #41: /state should also surface persisted user/assistant messages
+    so the UI can rehydrate the transcript on thread reopen.
+    """
+    from unittest.mock import AsyncMock  # noqa: PLC0415
+    from langchain_core.messages import AIMessage, HumanMessage, ToolMessage  # noqa: PLC0415
+
+    path = "/agents/km/state/thread-msg"
+    msgs = [
+        HumanMessage(content="hello agent", id="u-1"),
+        AIMessage(content="hi there", id="a-1"),
+        # Tool messages should be filtered out — UI seed only renders text cards.
+        ToolMessage(content="tool result", tool_call_id="t-1"),
+        # Empty assistant content should be filtered.
+        AIMessage(content="", id="a-2"),
+    ]
+    mock_tuple = MagicMock()
+    mock_tuple.checkpoint = {"channel_values": {"todos": [], "messages": msgs}}
+    mock_saver = MagicMock()
+    mock_saver.aget_tuple = AsyncMock(return_value=mock_tuple)
+
+    with patch("routers.km_agent.get_saver", return_value=mock_saver):
+        r = client.get(path, headers=_signed_headers("GET", path, b""))
+
+    assert r.status_code == 200
+    data = r.json()
+    assert data["messages"] == [
+        {"id": "u-1", "role": "user", "text": "hello agent"},
+        {"id": "a-1", "role": "assistant", "text": "hi there"},
+    ]
 
 
 # ---------------------------------------------------------------------------

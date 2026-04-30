@@ -7,6 +7,19 @@ import {
   fireEvent,
   waitFor,
 } from "@testing-library/react";
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({
+    refresh: vi.fn(),
+    push: vi.fn(),
+    replace: vi.fn(),
+    back: vi.fn(),
+    forward: vi.fn(),
+    prefetch: vi.fn(),
+  }),
+  usePathname: () => "/",
+}));
+
 import { AgentTranscript } from "./AgentTranscript";
 import type { AgentEvent } from "@/lib/agent-events";
 import deepReadFixture from "../../../e2e/fixtures/agent-stream-deep-read.json";
@@ -48,6 +61,21 @@ describe("AgentTranscript", () => {
     render(<AgentTranscript threadId="t1" />);
     expect(screen.getByTestId("agent-transcript")).toBeTruthy();
     expect(screen.getByText(/no messages yet/i)).toBeTruthy();
+  });
+
+  it("seeds the transcript from initialMessages on mount (Task #41)", () => {
+    render(
+      <AgentTranscript
+        threadId="t1"
+        initialMessages={[
+          { id: "u-1", role: "user", text: "hello agent" },
+          { id: "a-1", role: "assistant", text: "hi there" },
+        ]}
+      />,
+    );
+    expect(screen.queryByText(/no messages yet/i)).toBeNull();
+    expect(screen.getByText("hello agent")).toBeTruthy();
+    expect(screen.getByText("hi there")).toBeTruthy();
   });
 
   it("invokes onSendMessage override when provided (no fetch)", () => {
@@ -181,6 +209,214 @@ describe("AgentTranscript", () => {
         decisions: [{ tool_call_id: "tc-int-1", type: "approve" }],
       });
     });
+  });
+
+  it("forwards pageContext in the invoke body so the agent grounds to the open note (Task #27)", async () => {
+    const fetchMock = fetch as unknown as ReturnType<typeof vi.fn>;
+    fetchMock.mockResolvedValueOnce(
+      streamResponse([{ type: "done", thread_id: "t-pc" }]),
+    );
+
+    render(
+      <AgentTranscript
+        threadId="t-pc"
+        pageContext={{ noteId: "my-current-note" }}
+      />,
+    );
+    const ta = screen.getByLabelText("Message agent") as HTMLTextAreaElement;
+    fireEvent.change(ta, { target: { value: "summarise this" } });
+    fireEvent.click(screen.getByRole("button", { name: /send/i }));
+
+    await waitFor(() => {
+      const calls = fetchMock.mock.calls;
+      const invoke = calls.find(
+        (c) => typeof c[0] === "string" && c[0].includes("/api/agents/km/invoke"),
+      );
+      expect(invoke).toBeTruthy();
+      const body = JSON.parse((invoke![1] as RequestInit).body as string);
+      expect(body.page_context).toEqual({ noteId: "my-current-note" });
+      expect(body.thread_id).toBe("t-pc");
+      expect(body.message).toBe("summarise this");
+    });
+  });
+
+  it("renders memory pill (Recalling/Saving memory) for /memories/ tool ops, hides raw payload by default (G15 #40)", async () => {
+    const events: AgentEvent[] = [
+      {
+        type: "tool_call",
+        id: "mem-r",
+        name: "read_file",
+        args: { file_path: "/memories/preferences.md" },
+        state: "input-available",
+      },
+      {
+        type: "tool_result",
+        id: "mem-r",
+        output: "user prefers dark mode SECRET_PAYLOAD_X",
+        state: "output-available",
+      },
+      {
+        type: "tool_call",
+        id: "mem-w",
+        name: "write_file",
+        args: {
+          file_path: "/memories/notes.md",
+          content: "TOPSECRET_MEMORY_CONTENTS",
+        },
+        state: "input-available",
+      },
+      { type: "done", thread_id: "t-mem" },
+    ];
+    (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+      streamResponse(events),
+    );
+
+    render(<AgentTranscript threadId="t-mem" />);
+    const ta = screen.getByLabelText("Message agent") as HTMLTextAreaElement;
+    fireEvent.change(ta, { target: { value: "go" } });
+    fireEvent.click(screen.getByRole("button", { name: /send/i }));
+
+    await waitFor(() => {
+      // After result, read tool moves to output-available -> "Recalled memory"
+      expect(screen.getByText(/recalled memory/i)).toBeTruthy();
+      expect(screen.getByText(/saving memory/i)).toBeTruthy();
+    });
+
+    // Raw payload (memory contents) NOT in DOM by default — Task is collapsed.
+    expect(screen.queryByText(/TOPSECRET_MEMORY_CONTENTS/)).toBeNull();
+    expect(screen.queryByText(/SECRET_PAYLOAD_X/)).toBeNull();
+
+    // Both memory cards exist with data-memory-op attribute
+    const memCards = screen
+      .getAllByTestId("card-tool")
+      .filter((el) => el.getAttribute("data-memory-op"));
+    expect(memCards.length).toBe(2);
+  });
+
+  it("Task #10: input row centers textarea with items-center and equal padding (G9)", () => {
+    render(<AgentTranscript threadId="t-align" />);
+    const ta = screen.getByLabelText("Message agent") as HTMLTextAreaElement;
+    const row = ta.parentElement!;
+    expect(row.className).toContain("flex");
+    expect(row.className).toContain("items-center");
+    // equal L/R padding via single p-* token (e.g. p-2) — not split px-/py-
+    expect(/\bp-2\b/.test(row.className)).toBe(true);
+  });
+
+  it("Task #33: successful tool card has no Check icon and Tool collapsed by default (G9)", async () => {
+    const events: AgentEvent[] = [
+      {
+        type: "tool_call",
+        id: "tc1",
+        name: "search",
+        args: { q: "x" },
+        state: "input-available",
+      },
+      {
+        type: "tool_result",
+        id: "tc1",
+        output: { ok: true },
+        state: "output-available",
+      },
+      { type: "done", thread_id: "t-tool" },
+    ];
+    (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+      streamResponse(events),
+    );
+
+    render(<AgentTranscript threadId="t-tool" />);
+    const ta = screen.getByLabelText("Message agent") as HTMLTextAreaElement;
+    fireEvent.change(ta, { target: { value: "go" } });
+    fireEvent.click(screen.getByRole("button", { name: /send/i }));
+
+    const toolCard = await waitFor(() => screen.getByTestId("card-tool"));
+
+    // No green check icon (lucide adds class lucide-circle-check or similar).
+    const checks = toolCard.querySelectorAll(
+      '[class*="lucide-circle-check"], [class*="lucide-check"]',
+    );
+    expect(checks.length).toBe(0);
+
+    // Base UI Collapsible exposes `data-state` on the panel/root and uses
+    // `aria-expanded` on the trigger. By default the tool card must be
+    // collapsed: trigger reports aria-expanded="false".
+    const trigger = toolCard.querySelector('[data-slot="collapsible-trigger"]');
+    expect(trigger?.getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("Task #42: ConversationContent uses tightened gap (gap-3) for chat spacing (G9)", () => {
+    render(<AgentTranscript threadId="t-gap" />);
+    const log = screen.getByRole("log");
+    // ConversationContent is the inner stick-to-bottom content div
+    const content = log.querySelector('[class*="flex-col"]');
+    expect(content).toBeTruthy();
+    expect(content!.className).toContain("gap-3");
+    expect(content!.className).not.toContain("gap-8");
+  });
+
+  it("Task #43: prompt input is a field-sizing textarea capped at 8 rows (G9)", () => {
+    render(<AgentTranscript threadId="t-grow" />);
+    const ta = screen.getByLabelText("Message agent") as HTMLTextAreaElement;
+    // shadcn Textarea sets data-slot="textarea" and uses field-sizing-content
+    expect(ta.getAttribute("data-slot")).toBe("textarea");
+    expect(ta.className).toContain("field-sizing-content");
+    // Cap at ~8 rows. Using max-h-48 (12rem) as the cap token.
+    expect(/max-h-48/.test(ta.className)).toBe(true);
+  });
+
+  it("Task #45: editing a past user message truncates following messages and re-invokes (fork)", async () => {
+    const fetchMock = fetch as unknown as ReturnType<typeof vi.fn>;
+    // First send: produces user msg "first" + assistant "reply one"
+    fetchMock.mockResolvedValueOnce(
+      streamResponse([
+        { type: "text", id: "a1", delta: "reply one" },
+        { type: "done", thread_id: "t-fork" },
+      ] as AgentEvent[]),
+    );
+    // Second send: triggered by fork submit
+    fetchMock.mockResolvedValueOnce(
+      streamResponse([
+        { type: "text", id: "a2", delta: "edited reply" },
+        { type: "done", thread_id: "t-fork" },
+      ] as AgentEvent[]),
+    );
+
+    render(<AgentTranscript threadId="t-fork" />);
+    const ta = screen.getByLabelText("Message agent") as HTMLTextAreaElement;
+    fireEvent.change(ta, { target: { value: "first" } });
+    fireEvent.click(screen.getByRole("button", { name: /send/i }));
+
+    // wait for assistant reply rendered
+    await waitFor(() => {
+      const assistant = screen
+        .getAllByTestId("card-text")
+        .find((el) => el.getAttribute("data-role") === "assistant");
+      expect(assistant?.textContent).toContain("reply one");
+    });
+
+    // Click edit button on user msg
+    const editBtn = screen.getByLabelText(/edit message/i);
+    fireEvent.click(editBtn);
+    const editInput = screen.getByLabelText(/edit user message/i) as HTMLTextAreaElement;
+    fireEvent.change(editInput, { target: { value: "first edited" } });
+    fireEvent.click(screen.getByRole("button", { name: /submit edit/i }));
+
+    // After fork: only the new user message + new assistant reply visible
+    await waitFor(() => {
+      const userCards = screen
+        .getAllByTestId("card-text")
+        .filter((el) => el.getAttribute("data-role") === "user");
+      expect(userCards.length).toBe(1);
+      expect(userCards[0].textContent).toContain("first edited");
+    });
+    // old assistant reply gone
+    expect(screen.queryByText("reply one")).toBeNull();
+
+    // Last fetch call body should contain the edited prompt
+    const calls = fetchMock.mock.calls;
+    const last = calls[calls.length - 1];
+    const body = JSON.parse((last[1] as RequestInit).body as string);
+    expect(body.message).toBe("first edited");
   });
 
   it("clicking a Suggestion chip triggers a new send", async () => {

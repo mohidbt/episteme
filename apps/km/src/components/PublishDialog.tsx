@@ -16,7 +16,7 @@ import { isValidUsername } from "@/lib/username";
 // The public URL is cosmetic in the client; the functional host mapping is
 // done server-side via EPISTEME_PUBLISH_DOMAIN + the proxy. In dev the URL may
 // not resolve — the copy button still produces a canonical production URL.
-const PUBLISH_DOMAIN = "epistaime.com";
+const PUBLISH_DOMAIN = "tryepisteme.com";
 
 export function PublishDialog({
   noteId,

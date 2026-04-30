@@ -14,6 +14,7 @@ from langchain_core.tools import tool
 from lib.km_http import km_get, km_patch, km_post
 from tools._auth import user_id_from_config
 from tools.search_backends import PaperResult, SemanticScholarSearch
+from tools.search_backends.semantic_scholar import S2Error
 
 logger = logging.getLogger(__name__)
 
@@ -49,8 +50,12 @@ async def agentic_search_papers(
     match_confidence, title, authors, year, doi, citation_count,
     abstract_snippet, and open_access_pdf_url.
 
-    Present candidate #1 to the user; on rejection present #2, etc.
-    If open_access_pdf_url is null, tell the user no free PDF is available.
+    After presenting a candidate to the user and getting approval, call
+    agentic_fetch_papers to download the PDF and link it. Do NOT just tell
+    the user the PDF URL — you must call agentic_fetch_papers to actually
+    download and link it. If open_access_pdf_url is null, tell the user no
+    free PDF is available. If the tool returns an error field, the search
+    service is unavailable — tell the user, don't say "no paper found".
     """
     user_id = user_id_from_config(config)
     ref = await km_get(f"/api/references/{reference_id}", user_id=user_id)
@@ -78,7 +83,10 @@ async def agentic_search_papers(
 
     # DOI path: exact lookup
     if doi:
-        result = await backend.search_by_doi(doi)
+        try:
+            result = await backend.search_by_doi(doi)
+        except S2Error as exc:
+            return {"found": False, "error": f"Semantic Scholar API error (DOI lookup): {exc}"}
         if result:
             return {
                 "found": True,
@@ -104,7 +112,10 @@ async def agentic_search_papers(
 
     query = f"{title} {first_author}".strip()
     year_str = str(year) if year else None
-    results = await backend.search_by_query(query, year=year_str, limit=5)
+    try:
+        results = await backend.search_by_query(query, year=year_str, limit=5)
+    except S2Error as exc:
+        return {"found": False, "error": f"Semantic Scholar API error (search): {exc}"}
 
     # Boost existing s2 match to rank 1
     if existing_s2_id and results:
@@ -136,8 +147,9 @@ async def agentic_fetch_papers(
     *,
     config: RunnableConfig,
 ) -> object:
-    """Download a paper PDF and link it to the reference. Call this after the
-    user approves a candidate from agentic_search_papers.
+    """Download a paper PDF and link it to the reference. You MUST call this
+    after the user approves a candidate from agentic_search_papers — do NOT
+    just tell the user the URL, actually call this tool to download and link.
 
     Downloads PDF from paper_url (the open_access_pdf_url field), stores in S3,
     creates a papers row, and links the reference to the paper.

@@ -10,11 +10,11 @@ describe("agentConfigs.modelPreference column", () => {
     expect(colNames).toContain("model_preference");
   });
 
-  it("model_preference is PgText (not enum), not null, default 'google/gemma-4-31b-it:free'", () => {
+  it("model_preference is PgText (not enum), not null, default 'google/gemma-4-26b-a4b-it'", () => {
     const col = config.columns.find((c) => c.name === "model_preference");
     expect(col?.columnType).toBe("PgText");
     expect(col?.notNull).toBe(true);
     expect(col?.hasDefault).toBe(true);
-    expect(col?.default).toBe("google/gemma-4-31b-it:free");
+    expect(col?.default).toBe("google/gemma-4-26b-a4b-it");
   });
 });

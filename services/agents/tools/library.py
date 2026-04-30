@@ -16,6 +16,7 @@ from langchain_core.tools import tool
 
 from lib.km_http import km_get
 from tools._auth import user_id_from_config
+from tools._drive_filter import filter_hidden
 
 
 @tool
@@ -78,7 +79,7 @@ async def list_references(
         return path
 
     if libraryId is not None:
-        return await km_get(_qs(libraryId), user_id=user_id)
+        return filter_hidden(await km_get(_qs(libraryId), user_id=user_id))
 
     libs = await km_get("/api/libraries", user_id=user_id)
     if not isinstance(libs, list) or not libs:
@@ -88,7 +89,7 @@ async def list_references(
         rows = await km_get(_qs(lib["id"]), user_id=user_id)
         if isinstance(rows, list):
             out.extend(rows)
-    return out
+    return filter_hidden(out)
 
 
 @tool

@@ -27,16 +27,23 @@ export default async function AgentsSettingsPage() {
     row = inserted[0];
   }
 
+  const settingsJson = (row.settingsJson ?? {}) as { permissions?: Record<string, boolean> };
   const initial = {
     enabledSkills: row.enabledSkills ?? [],
     attachedMcps: (row.attachedMcps ?? []) as Array<{
       name: string;
       account?: string;
     }>,
-    modelPreference: row.modelPreference ?? "google/gemma-4-31b-it:free",
+    modelPreference: row.modelPreference ?? "google/gemma-4-26b-a4b-it",
     approvalRules: (row.approvalRules ?? {}) as Record<
       string,
       "auto" | "require" | "never"
+    >,
+    // Per-tool opt-in flags. Default off. Stored under settingsJson.permissions
+    // (existing jsonb column) so no migration is required.
+    permissions: (settingsJson.permissions ?? { web_search: false }) as Record<
+      string,
+      boolean
     >,
   };
 

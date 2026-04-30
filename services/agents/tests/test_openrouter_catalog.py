@@ -30,7 +30,7 @@ SAMPLE_RESPONSE = {
             "supported_parameters": ["tools", "tool_choice"],
         },
         {
-            "id": "google/gemma-4-31b-it:free",
+            "id": "google/gemma-4-26b-a4b-it",
             "name": "Gemma 4",
             "context_length": 8192,
             "pricing": {"prompt": "0", "completion": "0"},

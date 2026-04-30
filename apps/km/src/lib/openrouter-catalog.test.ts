@@ -7,7 +7,7 @@ import {
 const SAMPLE = {
   models: [
     { id: "openai/gpt-4o-mini", name: "GPT-4o mini" },
-    { id: "google/gemma-4-31b-it:free", name: "Gemma" },
+    { id: "google/gemma-4-26b-a4b-it", name: "Gemma" },
   ],
   fetched_at: "2026-04-26T10:00:00.000Z",
 };

@@ -100,7 +100,7 @@ export function ReferenceTable({ rows, folders }: ReferenceTableProps) {
     <div className="overflow-x-auto rounded-md border border-border/60">
       <table className="w-full border-collapse text-sm">
         <thead>
-          <tr className="border-b text-xs uppercase tracking-wider text-muted-foreground">
+          <tr className="border-b text-xs text-muted-foreground">
             <SortHeader
               label="Citation key"
               active={sortKey === "citationKey"}
@@ -195,7 +195,7 @@ function SortHeader({
       <button
         type="button"
         onClick={onClick}
-        className="inline-flex items-center gap-1 uppercase tracking-wider hover:text-foreground"
+        className="inline-flex items-center gap-1 hover:text-foreground"
       >
         {label}
         {active && (dir === "asc" ? <ChevronUp className="size-3" /> : <ChevronDown className="size-3" />)}

@@ -116,7 +116,7 @@ export function ColumnHeaderCell({
         render={
           <th
             onClick={onClickHeader}
-            className="group cursor-pointer border-b border-r border-border/60 bg-muted/40 px-3 py-2 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground hover:bg-muted/60"
+            className="group cursor-pointer border-b border-r border-border/60 bg-muted/40 px-3 py-2 text-left text-xs font-medium text-muted-foreground hover:bg-muted/60"
             data-testid={`col-header-${col.name}`}
           />
         }

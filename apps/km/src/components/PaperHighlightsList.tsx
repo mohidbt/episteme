@@ -58,7 +58,7 @@ export function PaperHighlightsList({ paperId }: PaperHighlightsListProps) {
 
   return (
     <section className="flex flex-col gap-3">
-      <p className="text-[11px] tracking-[0.14em] uppercase text-muted-foreground">
+      <p className="text-[11px] text-muted-foreground">
         Highlights
       </p>
       {error ? (

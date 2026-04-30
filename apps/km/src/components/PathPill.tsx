@@ -57,9 +57,10 @@ function SegmentLink({
       <Link
         ref={setNodeRef}
         href={seg.href}
+        data-slot="nav-pill-item"
         data-over={segmentDropTargets && isOver ? "true" : undefined}
         className={cn(
-          "rounded-md px-2 py-1 hover:bg-accent",
+          "rounded-sm px-2 py-1 hover:bg-accent hover:text-accent-foreground",
           isLast ? "text-foreground" : "text-foreground",
           "data-[over=true]:bg-primary/15 data-[over=true]:ring-1 data-[over=true]:ring-primary/60",
         )}
@@ -88,9 +89,15 @@ export function PathPill({
 }: Props) {
   return (
     <nav
+      data-slot="nav-pill"
       aria-label={ariaLabel}
       className={cn(
-        "inline-flex max-w-full items-center gap-0 overflow-hidden rounded-lg border border-border bg-background px-1 py-1 text-sm shadow-sm",
+        // Shared "pill" surface — same outer styling family as the list/tile
+        // view switcher (shadcn ToggleGroup): subtle border, rounded, inline,
+        // contains pressable segments. Visual flatness (no 3-D bevel /
+        // chevron-arrow separators) — siblings in the toolbar should feel
+        // like one component family.
+        "inline-flex max-w-full items-center gap-0 overflow-hidden rounded-md border border-input bg-transparent p-0.5 text-sm shadow-xs",
         className,
       )}
     >

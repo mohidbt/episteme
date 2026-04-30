@@ -7,6 +7,7 @@ import { AnonAutoSignIn } from "@/components/AnonAutoSignIn";
 import { AgentBall } from "@/components/agent/AgentBall";
 import { AgentBallProvider } from "@/components/agent/agent-ball-context";
 import { AutoRefreshOnFocus } from "@/components/AutoRefreshOnFocus";
+import { TabBar, TabBarProvider } from "@/components/TabBar";
 
 export default async function AppLayout({ children }: { children: ReactNode }) {
   const session = await getCurrentSession();
@@ -14,18 +15,23 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   const prefs = await getUserPreferences(session.userId);
   return (
     <AgentBallProvider>
-      <SidebarProvider className="h-dvh overflow-hidden py-2 pr-2">
-        <Sidebar userId={session.userId} isAnonymous={session.isAnonymous} />
-        <main
-          className="flex-1 min-w-0 h-full overflow-y-auto"
-          data-prose-font={prefs.font}
-          data-prose-ruled={prefs.ruledLines ? "true" : "false"}
-        >
-          {children}
-        </main>
-        <AgentBall userId={session.userId} />
-        <AutoRefreshOnFocus />
-      </SidebarProvider>
+      <TabBarProvider>
+        <SidebarProvider className="h-dvh overflow-hidden py-2 pr-2">
+          <Sidebar userId={session.userId} isAnonymous={session.isAnonymous} />
+          <div className="flex-1 min-w-0 h-full flex flex-col">
+            <TabBar />
+            <main
+              className="flex-1 min-w-0 overflow-y-auto"
+              data-prose-font={prefs.font}
+              data-prose-ruled={prefs.ruledLines ? "true" : "false"}
+            >
+              {children}
+            </main>
+          </div>
+          <AgentBall userId={session.userId} />
+          <AutoRefreshOnFocus />
+        </SidebarProvider>
+      </TabBarProvider>
     </AgentBallProvider>
   );
 }

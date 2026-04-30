@@ -8,6 +8,7 @@ import { SkillToggles } from "./SkillToggles";
 import { McpAttach } from "./McpAttach";
 import { ApprovalRules } from "./ApprovalRules";
 import { ModelPicker } from "./ModelPicker";
+import { PermissionToggles, type PermissionsMap } from "./PermissionToggles";
 
 export type AttachedMcp = { name: string; account?: string };
 export type ApprovalRule = "auto" | "require" | "never";
@@ -17,15 +18,20 @@ export type PermissionsFormState = {
   attachedMcps: AttachedMcp[];
   modelPreference: string;
   approvalRules: Record<string, ApprovalRule>;
+  permissions: PermissionsMap;
 };
 
 export function PermissionsForm({ initial }: { initial: PermissionsFormState }) {
   const [state, setState] = React.useState<PermissionsFormState>(initial);
   const [saving, setSaving] = React.useState(false);
+  // Task #34: track the last-saved baseline so dirty resets after a successful
+  // save. The `initial` prop stays fixed at the mount-time value, which would
+  // otherwise leave the Save button enabled forever after the first save.
+  const [baseline, setBaseline] = React.useState<PermissionsFormState>(initial);
 
   const dirty = React.useMemo(
-    () => JSON.stringify(state) !== JSON.stringify(initial),
-    [state, initial],
+    () => JSON.stringify(state) !== JSON.stringify(baseline),
+    [state, baseline],
   );
 
   async function handleSave() {
@@ -39,12 +45,16 @@ export function PermissionsForm({ initial }: { initial: PermissionsFormState }) 
           attachedMcps: state.attachedMcps,
           modelPreference: state.modelPreference,
           approvalRules: state.approvalRules,
+          permissions: state.permissions,
         }),
       });
       if (!res.ok) {
         const errBody = await res.json().catch(() => ({}));
         throw new Error(errBody.error ?? `HTTP ${res.status}`);
       }
+      // Snapshot the just-saved state as the new baseline so `dirty` flips
+      // back to false until the user makes another change.
+      setBaseline(state);
       toast.success("Settings saved");
     } catch (err) {
       const msg = err instanceof Error ? err.message : "unknown error";
@@ -74,6 +84,7 @@ export function PermissionsForm({ initial }: { initial: PermissionsFormState }) 
           <TabsTrigger value="skills">Skills</TabsTrigger>
           <TabsTrigger value="mcps">MCPs</TabsTrigger>
           <TabsTrigger value="rules">Rules</TabsTrigger>
+          <TabsTrigger value="permissions">Permissions</TabsTrigger>
         </TabsList>
         <TabsContent value="skills">
           <SkillToggles
@@ -96,6 +107,14 @@ export function PermissionsForm({ initial }: { initial: PermissionsFormState }) 
             approvalRules={state.approvalRules}
             onChange={(approvalRules) =>
               setState((s) => ({ ...s, approvalRules }))
+            }
+          />
+        </TabsContent>
+        <TabsContent value="permissions">
+          <PermissionToggles
+            permissions={state.permissions}
+            onChange={(permissions) =>
+              setState((s) => ({ ...s, permissions }))
             }
           />
         </TabsContent>

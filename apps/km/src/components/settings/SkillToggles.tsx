@@ -1,7 +1,9 @@
 "use client";
 
 import * as React from "react";
+import { toast } from "sonner";
 import { Switch } from "@/components/ui/switch";
+import { Button } from "@/components/ui/button";
 import {
   FieldGroup,
   Field,
@@ -10,29 +12,41 @@ import {
   FieldContent,
 } from "@/components/ui/field";
 import { Empty, EmptyTitle, EmptyDescription } from "@/components/ui/empty";
+import { SKILLS, type Skill } from "@/lib/skills";
 
-const SKILLS = [
-  {
-    name: "paper-search",
-    title: "Paper Search",
-    description: "Find and download paper PDFs for references using Semantic Scholar.",
-  },
-  {
-    name: "lit-triage",
-    title: "Literature Triage",
-    description: "Skim incoming references and decide what's worth a deeper read.",
-  },
-  {
-    name: "deep-read",
-    title: "Deep Read",
-    description: "Read papers thoroughly and extract structured findings.",
-  },
-  {
-    name: "synthesis",
-    title: "Synthesis",
-    description: "Compose synthesis notes that link claims across sources.",
-  },
-] as const;
+/**
+ * Build a SKILL.md body for a single skill. Mirrors the deep-agents skill
+ * format (frontmatter + description + instruction body) so an exported skill
+ * round-trips when re-imported.
+ */
+function buildSkillMarkdown(skill: Skill): string {
+  return [
+    "---",
+    `name: ${skill.name}`,
+    `title: ${skill.title}`,
+    "---",
+    "",
+    `# ${skill.title}`,
+    "",
+    skill.description,
+    "",
+    "## Instruction",
+    "",
+    skill.instruction,
+    "",
+  ].join("\n");
+}
+
+export async function exportSkillsZip(
+  skills: readonly Skill[],
+): Promise<Blob> {
+  const { default: JSZip } = await import("jszip");
+  const zip = new JSZip();
+  for (const skill of skills) {
+    zip.file(`${skill.name}/SKILL.md`, buildSkillMarkdown(skill));
+  }
+  return zip.generateAsync({ type: "blob" });
+}
 
 export function SkillToggles({
   enabledSkills,
@@ -41,6 +55,8 @@ export function SkillToggles({
   enabledSkills: string[];
   onChange: (next: string[]) => void;
 }) {
+  const [exporting, setExporting] = React.useState(false);
+
   function toggle(name: string, on: boolean) {
     const set = new Set(enabledSkills);
     if (on) set.add(name);
@@ -48,8 +64,40 @@ export function SkillToggles({
     onChange(Array.from(set));
   }
 
+  async function handleExport() {
+    setExporting(true);
+    try {
+      const blob = await exportSkillsZip(SKILLS);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "episteme-skills.zip";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "unknown error";
+      toast.error(`Export failed: ${msg}`);
+    } finally {
+      setExporting(false);
+    }
+  }
+
   return (
     <div className="flex flex-col gap-4">
+      <div className="flex justify-end">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={handleExport}
+          disabled={exporting}
+          data-testid="export-skills-button"
+        >
+          {exporting ? "Exporting..." : "Export skills"}
+        </Button>
+      </div>
       <FieldGroup>
         {SKILLS.map((skill) => {
           const checked = enabledSkills.includes(skill.name);
