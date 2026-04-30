@@ -212,7 +212,7 @@ describe("SlashCommandTypeahead — agent mode", () => {
   it("shows Agent command in the command list", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ enabled_skills: [] }),
+      json: async () => ({ enabledSkills: [] }),
     }));
     const onSelect = vi.fn();
     render(<SlashCommandTypeahead query="" onSelect={onSelect} ref={null} />);
@@ -222,7 +222,7 @@ describe("SlashCommandTypeahead — agent mode", () => {
   it("filters to Agent when query is 'agent'", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ enabled_skills: [] }),
+      json: async () => ({ enabledSkills: [] }),
     }));
     const onSelect = vi.fn();
     render(<SlashCommandTypeahead query="agent" onSelect={onSelect} ref={null} />);
@@ -253,10 +253,10 @@ describe("SlashCommandTypeahead — agent mode", () => {
     expect(screen.getByText(/No agents installed/i)).toBeTruthy();
   });
 
-  it("clicking Agent shows empty state when enabled_skills is empty", async () => {
+  it("clicking Agent shows empty state when enabledSkills is empty", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ enabled_skills: [] }),
+      json: async () => ({ enabledSkills: [] }),
     }));
 
     const onSelect = vi.fn();
@@ -274,10 +274,10 @@ describe("SlashCommandTypeahead — agent mode", () => {
     expect(screen.getByText(/No agents installed/i)).toBeTruthy();
   });
 
-  it("clicking Agent shows skill list when enabled_skills is non-empty", async () => {
+  it("clicking Agent shows skill list when enabledSkills is non-empty", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ enabled_skills: ["triage"] }),
+      json: async () => ({ enabledSkills: ["triage"] }),
     }));
 
     const onSelect = vi.fn();

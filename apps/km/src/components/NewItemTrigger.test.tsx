@@ -70,7 +70,7 @@ afterEach(() => {
 });
 
 describe("NewItemTrigger", () => {
-  it("opens menu with 4 items (Note, Reference, Upload paper, Folder)", async () => {
+  it("opens menu with 4 items (Note, Reference, Paperset, Folder)", async () => {
     renderTrigger();
     const trigger = screen.getByRole("button", { name: /new/i });
     fireEvent.click(trigger);
@@ -78,7 +78,8 @@ describe("NewItemTrigger", () => {
       expect(screen.getByText(/^note$/i)).toBeTruthy();
     });
     expect(screen.getByText(/^reference$/i)).toBeTruthy();
-    expect(screen.getByText(/upload paper/i)).toBeTruthy();
+    // "Upload paper" was replaced by "Paperset" when papersets were added.
+    expect(screen.getByText(/^paperset$/i)).toBeTruthy();
     expect(screen.getByText(/^folder$/i)).toBeTruthy();
   });
 

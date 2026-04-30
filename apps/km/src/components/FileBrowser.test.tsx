@@ -103,6 +103,14 @@ afterEach(() => {
   pushMock.mockReset();
   refreshMock.mockReset();
   toastErrorMock.mockReset();
+  // The component persists view mode (tile/list) to localStorage. Tests that
+  // toggle to list view would leak into later tests, breaking the assumed
+  // default order. Reset between tests.
+  try {
+    window.localStorage.clear();
+  } catch {
+    /* SSR / disabled storage */
+  }
 });
 
 describe("FileBrowser", () => {
