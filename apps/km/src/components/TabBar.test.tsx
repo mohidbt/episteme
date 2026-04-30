@@ -115,6 +115,40 @@ describe("useTabs hook", () => {
     expect(api!.tabs[1].href).toBe("/papers");
   });
 
+  it("first render returns SSR-safe defaults even when localStorage is populated, then hydrates from storage", async () => {
+    window.localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        tabs: [{ href: "/n/persisted", title: "Persisted" }],
+        activeHref: "/n/persisted",
+      }),
+    );
+    const { TabBarProvider, useTabs } = await import("./TabBar");
+    const renders: { tabs: { href: string }[]; activeHref: string | null }[] =
+      [];
+    function Probe() {
+      const api = useTabs();
+      // Capture every render's snapshot during render phase (before effects).
+      renders.push({
+        tabs: api.tabs.map((t) => ({ href: t.href })),
+        activeHref: api.activeHref,
+      });
+      return null;
+    }
+    render(
+      <TabBarProvider>
+        <Probe />
+      </TabBarProvider>,
+    );
+    // First render must equal what SSR would produce: empty default state.
+    expect(renders[0].tabs).toEqual([]);
+    expect(renders[0].activeHref).toBeNull();
+    // After effects flush, state hydrates from localStorage.
+    const last = renders[renders.length - 1];
+    expect(last.tabs.some((t) => t.href === "/n/persisted")).toBe(true);
+    expect(last.activeHref).toBe("/n/persisted");
+  });
+
   it("openTab on existing href does not duplicate, just activates", async () => {
     const { TabBarProvider, useTabs } = await import("./TabBar");
     let api: ReturnType<typeof useTabs> | null = null;

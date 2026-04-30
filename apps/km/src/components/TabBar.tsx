@@ -30,11 +30,13 @@ type TabsApi = TabsState & {
 
 const Ctx = createContext<TabsApi | null>(null);
 
-function loadInitial(): TabsState {
-  if (typeof window === "undefined") return { tabs: [], activeHref: null };
+const DEFAULT_STATE: TabsState = { tabs: [], activeHref: null };
+
+function loadFromStorage(): TabsState | null {
+  if (typeof window === "undefined") return null;
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { tabs: [], activeHref: null };
+    if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<TabsState>;
     const tabs = Array.isArray(parsed.tabs)
       ? parsed.tabs.filter(
@@ -46,19 +48,33 @@ function loadInitial(): TabsState {
       typeof parsed.activeHref === "string" ? parsed.activeHref : null;
     return { tabs, activeHref };
   } catch {
-    return { tabs: [], activeHref: null };
+    return null;
   }
 }
 
 export function TabBarProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  const [state, setState] = useState<TabsState>(() => loadInitial());
+  // Initialize with the same default the server renders to avoid SSR/client
+  // hydration mismatch. localStorage is read in a mount-only effect below.
+  const [state, setState] = useState<TabsState>(DEFAULT_STATE);
+  const persistedRef = useRef(false);
   const hydratedRef = useRef(false);
 
-  // Persist on change.
+  // Hydrate from localStorage after mount (client-only).
+  useEffect(() => {
+    const stored = loadFromStorage();
+    if (stored && (stored.tabs.length > 0 || stored.activeHref)) {
+      setState(stored);
+    }
+    persistedRef.current = true;
+  }, []);
+
+  // Persist on change — but only after the initial hydration pass, so we
+  // don't overwrite stored state with the default on first commit.
   useEffect(() => {
     if (typeof window === "undefined") return;
+    if (!persistedRef.current) return;
     try {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     } catch {
