@@ -5,7 +5,7 @@ import { useRef, useState, useCallback, useEffect } from "react";
 import { runSlashAi } from "@/app/(app)/n/[slug]/run-slash-ai";
 import {
   Bold, Italic, Code, Wand2, Loader2,
-  ArrowDown, RefreshCw, Sparkles,
+  ArrowDown, RefreshCw,
 } from "lucide-react";
 import {
   Popover,
@@ -29,6 +29,9 @@ type SkillEntry = {
   title: string;
   description: string;
   instruction: string;
+  // Optional so older payloads still parse; filter falls back to inclusion if absent.
+  // TODO when personal skills land (G-R3-03), filter by SKILL.md frontmatter category.
+  category?: "writing" | "research" | string;
 };
 
 // Built-in rephrase style presets. Clicking one submits the rephrase directly
@@ -98,6 +101,12 @@ function RephrasePanel({
     return () => { cancelled = true; };
   }, [skillsOpen, skills]);
 
+  // Filter skills shown in the rephrase popover to writing-tagged only (#70).
+  // System skills carry an explicit `category`; entries without one are
+  // excluded conservatively. Personal skills (G-R3-03) will declare their
+  // category via SKILL.md frontmatter and flow through this same filter.
+  const writingSkills = (skills ?? []).filter((s) => s.category === "writing");
+
   const isPortal = source === "portal";
   const placeholder = turns.length > 0
     ? isPortal ? "Refine the generated text…" : "Refine the rephrased text…"
@@ -116,7 +125,10 @@ function RephrasePanel({
       }}
     >
       {mode !== "rephrase-done" && (
-        <div className="flex items-center gap-2">
+        <div
+          data-testid="rephrase-prompt-row"
+          className="flex items-center justify-center gap-2 px-2"
+        >
           <input
             type="text"
             value={prompt}
@@ -128,7 +140,7 @@ function RephrasePanel({
               }
             }}
             placeholder={placeholder}
-            className="w-56 bg-transparent text-sm outline-none"
+            className="flex-1 bg-transparent text-sm outline-none"
             autoFocus
             disabled={mode === "rephrase-streaming"}
           />
@@ -143,7 +155,10 @@ function RephrasePanel({
         </div>
       )}
       {mode === "rephrase-prompt" && !isPortal && (
-        <div className="flex flex-wrap items-center gap-1">
+        <div
+          data-testid="rephrase-pill-row"
+          className="flex flex-wrap items-center justify-center gap-1 px-2"
+        >
           {REPHRASE_PRESETS.map((p) => (
             <button
               key={p.label}
@@ -162,12 +177,17 @@ function RephrasePanel({
                   className="flex items-center gap-1 rounded border border-border px-2 py-0.5 text-xs hover:bg-accent"
                   aria-label="Personal skill"
                 >
-                  <Sparkles className="h-3 w-3" />
+                  <span aria-hidden="true" className="text-sm leading-none">※</span>
                   Personal skill
                 </button>
               }
             />
-            <PopoverContent align="start" className="w-64 p-0">
+            <PopoverContent
+              side="bottom"
+              align="end"
+              sideOffset={8}
+              className="z-[60] w-64 p-0"
+            >
               <Command>
                 <CommandInput placeholder="Search skills..." />
                 <CommandList>
@@ -178,9 +198,9 @@ function RephrasePanel({
                         ? `Failed to load: ${skillsError}`
                         : "No skills."}
                   </CommandEmpty>
-                  {skills && skills.length > 0 && (
+                  {writingSkills.length > 0 && (
                     <CommandGroup>
-                      {skills.map((s) => (
+                      {writingSkills.map((s) => (
                         <CommandItem
                           key={s.name}
                           value={`${s.title} ${s.name}`}

@@ -58,8 +58,8 @@ beforeEach(() => {
       return new Response(
         JSON.stringify({
           skills: [
-            { name: "lit-triage", title: "Literature Triage", description: "x", instruction: "TRIAGE-INSTR" },
-            { name: "synthesis", title: "Synthesis", description: "y", instruction: "SYNTH-INSTR" },
+            { name: "lit-triage", title: "Literature Triage", description: "x", instruction: "TRIAGE-INSTR", category: "research" },
+            { name: "synthesis", title: "Synthesis", description: "y", instruction: "SYNTH-INSTR", category: "writing" },
           ],
         }),
         { status: 200, headers: { "content-type": "application/json" } },
@@ -98,28 +98,54 @@ describe("AiBubbleMenu rephrase prompt bar", () => {
     expect(call.prompt.toLowerCase()).toContain("formal");
   });
 
-  it("clicking 'Personal skill' opens the picker with skills from /api/agents/skills", async () => {
+  it("clicking 'Personal skill' opens the picker filtered to writing-category skills only (#70)", async () => {
     const editor = makeEditor();
     render(<AiBubbleMenu editor={editor} />);
     fireEvent.click(screen.getByText("AI Rephrase"));
     fireEvent.click(screen.getByRole("button", { name: /personal skill/i }));
     await waitFor(() => {
-      expect(screen.getByText("Literature Triage")).toBeTruthy();
+      // Synthesis is writing-tagged → visible.
       expect(screen.getByText("Synthesis")).toBeTruthy();
     });
+    // Literature Triage is research-tagged → excluded.
+    expect(screen.queryByText("Literature Triage")).toBeNull();
   });
 
-  it("selecting a skill triggers rephrase with the skill instruction", async () => {
+  it("selecting a writing skill triggers rephrase with the skill instruction", async () => {
     const editor = makeEditor();
     render(<AiBubbleMenu editor={editor} />);
     fireEvent.click(screen.getByText("AI Rephrase"));
     fireEvent.click(screen.getByRole("button", { name: /personal skill/i }));
-    const item = await screen.findByText("Literature Triage");
+    const item = await screen.findByText("Synthesis");
     fireEvent.click(item);
     await waitFor(() => {
       expect(runSlashAiMock).toHaveBeenCalledTimes(1);
     });
     const call = runSlashAiMock.mock.calls[0]![0] as { prompt: string };
-    expect(call.prompt).toBe("TRIAGE-INSTR");
+    expect(call.prompt).toBe("SYNTH-INSTR");
+  });
+
+  it("renders no Lucide Sparkles icon and uses the ※ glyph for personal-skill button (#71)", () => {
+    const editor = makeEditor();
+    const { container } = render(<AiBubbleMenu editor={editor} />);
+    fireEvent.click(screen.getByText("AI Rephrase"));
+    // No svg with the lucide-sparkles class anywhere.
+    expect(container.querySelector(".lucide-sparkles")).toBeNull();
+    // The literal glyph appears next to the personal-skill label.
+    const btn = screen.getByRole("button", { name: /personal skill/i });
+    expect(btn.textContent).toContain("※");
+  });
+
+  it("rephrase pill row and prompt+Send row share a centered flex container (#67a)", () => {
+    const editor = makeEditor();
+    const { container } = render(<AiBubbleMenu editor={editor} />);
+    fireEvent.click(screen.getByText("AI Rephrase"));
+    const pillRow = container.querySelector('[data-testid="rephrase-pill-row"]');
+    const promptRow = container.querySelector('[data-testid="rephrase-prompt-row"]');
+    expect(pillRow).toBeTruthy();
+    expect(promptRow).toBeTruthy();
+    // Both rows must be centered (justify-center) so left/right edges line up.
+    expect(pillRow!.className).toMatch(/justify-center/);
+    expect(promptRow!.className).toMatch(/justify-center/);
   });
 });
