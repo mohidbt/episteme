@@ -26,19 +26,19 @@ beforeEach(() => vi.resetAllMocks());
 
 describe("PATCH /api/documents/[id]", () => {
   it("401 when unauthenticated", async () => {
-    (auth.api.getSession as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+    vi.mocked(auth.api.getSession).mockResolvedValue(null);
     const res = await PATCH(buildReq({ title: "x" }), { params: Promise.resolve({ id: "1" }) });
     expect(res.status).toBe(401);
   });
 
   it("400 when title empty / whitespace", async () => {
-    (auth.api.getSession as ReturnType<typeof vi.fn>).mockResolvedValue({ user: { id: "u1" } });
+    vi.mocked(auth.api.getSession).mockResolvedValue({ user: { id: "u1" } } as never);
     const res = await PATCH(buildReq({ title: "   " }), { params: Promise.resolve({ id: "1" }) });
     expect(res.status).toBe(400);
   });
 
   it("400 when title >255 chars", async () => {
-    (auth.api.getSession as ReturnType<typeof vi.fn>).mockResolvedValue({ user: { id: "u1" } });
+    vi.mocked(auth.api.getSession).mockResolvedValue({ user: { id: "u1" } } as never);
     const res = await PATCH(
       buildReq({ title: "a".repeat(256) }),
       { params: Promise.resolve({ id: "1" }) }
@@ -47,19 +47,19 @@ describe("PATCH /api/documents/[id]", () => {
   });
 
   it("404 when doc not owned", async () => {
-    (auth.api.getSession as ReturnType<typeof vi.fn>).mockResolvedValue({ user: { id: "u1" } });
-    (db.select as ReturnType<typeof vi.fn>).mockReturnValue({
+    vi.mocked(auth.api.getSession).mockResolvedValue({ user: { id: "u1" } } as never);
+    vi.mocked(db.select).mockReturnValue({
       from: () => ({ where: () => ({ limit: async () => [] }) }),
-    });
+    } as never);
     const res = await PATCH(buildReq({ title: "ok" }), { params: Promise.resolve({ id: "1" }) });
     expect(res.status).toBe(404);
   });
 
   it("200 + trims title on success", async () => {
-    (auth.api.getSession as ReturnType<typeof vi.fn>).mockResolvedValue({ user: { id: "u1" } });
-    (db.select as ReturnType<typeof vi.fn>).mockReturnValue({
+    vi.mocked(auth.api.getSession).mockResolvedValue({ user: { id: "u1" } } as never);
+    vi.mocked(db.select).mockReturnValue({
       from: () => ({ where: () => ({ limit: async () => [{ id: 1, userId: "u1" }] }) }),
-    });
+    } as never);
     updateMock.mockResolvedValue(undefined);
     const res = await PATCH(
       buildReq({ title: "  New Title  " }),

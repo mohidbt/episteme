@@ -6,7 +6,7 @@
  *
  */
 import path from "path";
-import { test, expect, type Page, type Route } from "@playwright/test";
+import { test, expect, type Page, type Route, type Request as PlaywrightRequest } from "@playwright/test";
 import { signUpAndLogin } from "./helpers/auth";
 
 const TEST_PDF = path.resolve(__dirname, "fixtures/test_real_paper.pdf");
@@ -47,9 +47,9 @@ const MOCK_BATCH_RESPONSE = [
 /** Track how many times /paper/batch was called. */
 async function setupS2Mocks(
   page: Page
-): Promise<{ getBatchCallCount: () => number; getLastBatchRequest: () => Request | null }> {
+): Promise<{ getBatchCallCount: () => number; getLastBatchRequest: () => PlaywrightRequest | null }> {
   let batchCallCount = 0;
-  let lastBatchRequest: Request | null = null;
+  let lastBatchRequest: PlaywrightRequest | null = null;
 
   // DOI resolution
   await page.route(

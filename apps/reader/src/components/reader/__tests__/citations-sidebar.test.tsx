@@ -290,7 +290,7 @@ describe("CitationsSidebar — auto-enrich", () => {
     let capturedSignal!: AbortSignal;
     let resolveEnrich!: () => void;
     global.fetch = vi.fn(
-      (_url: string, opts?: RequestInit) => {
+      (_url: URL | RequestInfo, opts?: RequestInit) => {
         capturedSignal = opts?.signal as AbortSignal;
         return new Promise<Response>((resolve, reject) => {
           resolveEnrich = () => {

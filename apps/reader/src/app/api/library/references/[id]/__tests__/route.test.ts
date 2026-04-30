@@ -37,11 +37,11 @@ function mockDeleteChain() {
   vi.mocked(db.delete).mockReturnValue(chain as never);
 }
 
-function makeRequest(id: string): Request {
+function makeRequest(id: string): import("next/server").NextRequest {
   return new Request(`http://localhost/api/library/references/${id}`, {
     method: "DELETE",
     headers: { "content-type": "application/json" },
-  });
+  }) as unknown as import("next/server").NextRequest;
 }
 
 beforeEach(() => {

@@ -22,35 +22,35 @@ beforeEach(() => vi.resetAllMocks());
 
 describe("GET /api/documents/[id]/segments", () => {
   it("401 when unauthenticated", async () => {
-    (auth.api.getSession as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+    vi.mocked(auth.api.getSession).mockResolvedValue(null);
     const res = await GET(buildReq(), routeParams);
     expect(res.status).toBe(401);
   });
 
   it("404 when document belongs to a different user", async () => {
-    (auth.api.getSession as ReturnType<typeof vi.fn>).mockResolvedValue({ user: { id: "u1" } });
+    vi.mocked(auth.api.getSession).mockResolvedValue({ user: { id: "u1" } } as never);
     // First select (ownership check) returns empty
-    (db.select as ReturnType<typeof vi.fn>)
+    vi.mocked(db.select)
       .mockReturnValueOnce({
         from: () => ({ where: () => ({ limit: async () => [] }) }),
-      });
+      } as never);
     const res = await GET(buildReq(), routeParams);
     expect(res.status).toBe(404);
   });
 
   it("200 returns segments for owner", async () => {
-    (auth.api.getSession as ReturnType<typeof vi.fn>).mockResolvedValue({ user: { id: "u1" } });
+    vi.mocked(auth.api.getSession).mockResolvedValue({ user: { id: "u1" } } as never);
     const fakeSegments = [
       { id: 1, documentId: 1, page: 0, kind: "figure", bbox: { x0: 0, y0: 0, x1: 1, y1: 1 }, payload: { caption: "A figure" }, orderIndex: 0 },
       { id: 2, documentId: 1, page: 1, kind: "formula", bbox: { x0: 0, y0: 0, x1: 1, y1: 1 }, payload: { latex: "x^2" }, orderIndex: 1 },
     ];
-    (db.select as ReturnType<typeof vi.fn>)
+    vi.mocked(db.select)
       .mockReturnValueOnce({
         from: () => ({ where: () => ({ limit: async () => [{ id: 1 }] }) }),
-      })
+      } as never)
       .mockReturnValueOnce({
         from: () => ({ where: async () => fakeSegments }),
-      });
+      } as never);
     const res = await GET(buildReq(), routeParams);
     expect(res.status).toBe(200);
     const body = await res.json();
@@ -64,15 +64,15 @@ describe("GET /api/documents/[id]/segments", () => {
     // Since drizzle is mocked, we trust the SQL builder; what we can test is
     // that the second select's where() call receives an `and(...)` expression
     // (two conditions: documentId match + notInArray).
-    (auth.api.getSession as ReturnType<typeof vi.fn>).mockResolvedValue({ user: { id: "u1" } });
+    vi.mocked(auth.api.getSession).mockResolvedValue({ user: { id: "u1" } } as never);
     const whereCapture = vi.fn(async () => []);
-    (db.select as ReturnType<typeof vi.fn>)
+    vi.mocked(db.select)
       .mockReturnValueOnce({
         from: () => ({ where: () => ({ limit: async () => [{ id: 1 }] }) }),
-      })
+      } as never)
       .mockReturnValueOnce({
         from: () => ({ where: whereCapture }),
-      });
+      } as never);
     await GET(buildReq(), routeParams);
     expect(whereCapture).toHaveBeenCalledOnce();
     // The argument is a drizzle SQL node — just confirm it was called (not undefined)
