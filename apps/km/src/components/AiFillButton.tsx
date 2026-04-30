@@ -9,6 +9,8 @@ import { Wand2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
+import { isOpenRouterKeyError } from "@/lib/openrouter-errors";
+import { renderOpenRouterKeyToastDescription } from "@/components/OpenRouterKeyErrorToast";
 
 interface Props {
   /** Endpoint that PATCHes accepted suggestions (e.g. `/api/papers/ID`). */
@@ -48,6 +50,13 @@ export function AiFillButton({
         body: JSON.stringify({ kind, known, missing }),
       });
       if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        if (isOpenRouterKeyError(body.error)) {
+          toast.error("OpenRouter API key missing or invalid", {
+            description: renderOpenRouterKeyToastDescription(),
+          });
+          return;
+        }
         toast.error("AI fill failed", { description: `HTTP ${res.status}` });
         return;
       }

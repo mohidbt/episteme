@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { agentConfigs } from "@episteme/db/schema";
 import { signRequest } from "@/lib/agents/sign-request";
 import { streamPassthrough } from "@/lib/agents/stream-passthrough";
+import { OPENROUTER_KEY_MISSING } from "@/lib/openrouter-errors";
 
 export async function POST(req: Request) {
   const session = await getSessionInfo(req);
@@ -14,7 +15,7 @@ export async function POST(req: Request) {
   try {
     llmKey = await getDecryptedApiKey(session.userId);
   } catch {
-    return Response.json({ error: "no_api_key" }, { status: 400 });
+    return Response.json({ error: OPENROUTER_KEY_MISSING }, { status: 400 });
   }
 
   const bodyText = await req.text();

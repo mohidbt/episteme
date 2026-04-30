@@ -69,7 +69,7 @@ describe("POST /api/agents/km/resume", () => {
       }),
     );
     expect(r.status).toBe(400);
-    expect(await r.json()).toEqual({ error: "no_api_key" });
+    expect(await r.json()).toEqual({ error: "OPENROUTER_KEY_MISSING" });
   });
 
   it("pipes SSE stream through with correct Content-Type", async () => {

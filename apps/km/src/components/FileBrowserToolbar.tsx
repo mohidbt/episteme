@@ -2,10 +2,7 @@
 
 import { useState } from "react";
 import { LayoutGrid, List, Upload } from "lucide-react";
-import {
-  ToggleGroup,
-  ToggleGroupItem,
-} from "@/components/ui/toggle-group";
+import { PillSwitcher } from "@/components/ui/PillSwitcher";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -68,29 +65,25 @@ export function FileBrowserToolbar({
       />
 
       <div className="flex items-center gap-2">
-        <ToggleGroup
-          value={[view]}
-          onValueChange={(vals) => {
-            const next = vals[0] as ViewMode | undefined;
-            if (next) onViewChange(next);
-          }}
-          aria-label="View mode"
-        >
-          <ToggleGroupItem
-            value="tile"
-            aria-label="Tile view"
-            data-testid="fb-view-tile"
-          >
-            <LayoutGrid aria-hidden className="size-4" />
-          </ToggleGroupItem>
-          <ToggleGroupItem
-            value="list"
-            aria-label="List view"
-            data-testid="fb-view-list"
-          >
-            <List aria-hidden className="size-4" />
-          </ToggleGroupItem>
-        </ToggleGroup>
+        <PillSwitcher<ViewMode>
+          value={view}
+          onValueChange={onViewChange}
+          ariaLabel="View mode"
+          options={[
+            {
+              value: "tile",
+              ariaLabel: "Tile view",
+              testId: "fb-view-tile",
+              label: <LayoutGrid aria-hidden className="size-4" />,
+            },
+            {
+              value: "list",
+              ariaLabel: "List view",
+              testId: "fb-view-list",
+              label: <List aria-hidden className="size-4" />,
+            },
+          ]}
+        />
 
         {isTrashView ? (
           <>

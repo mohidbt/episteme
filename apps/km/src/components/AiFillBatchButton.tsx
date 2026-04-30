@@ -10,6 +10,8 @@ import { Wand2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { isOpenRouterKeyError } from "@/lib/openrouter-errors";
+import { renderOpenRouterKeyToastDescription } from "@/components/OpenRouterKeyErrorToast";
 
 export interface BatchRow {
   id: string;
@@ -42,6 +44,7 @@ export function AiFillBatchButton({ kind, rows }: Props) {
     setBusy(true);
     let filled = 0;
     let failed = 0;
+    let keyErrorSeen = false;
     for (const row of candidates) {
       try {
         const res = await fetch("/api/ai-fill", {
@@ -50,6 +53,13 @@ export function AiFillBatchButton({ kind, rows }: Props) {
           body: JSON.stringify({ kind, known: row.known, missing: row.missing }),
         });
         if (!res.ok) {
+          if (!keyErrorSeen) {
+            const body = (await res.json().catch(() => ({}))) as { error?: string };
+            if (isOpenRouterKeyError(body.error)) {
+              keyErrorSeen = true;
+              break;
+            }
+          }
           failed++;
           continue;
         }
@@ -67,8 +77,14 @@ export function AiFillBatchButton({ kind, rows }: Props) {
       }
     }
     setBusy(false);
+    if (keyErrorSeen) {
+      toast.error("OpenRouter API key missing or invalid", {
+        description: renderOpenRouterKeyToastDescription(),
+      });
+    }
     if (filled > 0) toast.success(`Filled ${filled} row${filled === 1 ? "" : "s"}`);
-    if (failed > 0) toast.error(`Failed on ${failed} row${failed === 1 ? "" : "s"}`);
+    if (failed > 0 && !keyErrorSeen)
+      toast.error(`Failed on ${failed} row${failed === 1 ? "" : "s"}`);
     router.refresh();
   }
 

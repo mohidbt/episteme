@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { toast } from "sonner";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { PillSwitcher } from "@/components/ui/PillSwitcher";
 import { Button } from "@/components/ui/button";
 import { SkillToggles } from "./SkillToggles";
 import { McpAttach } from "./McpAttach";
@@ -21,9 +21,12 @@ export type PermissionsFormState = {
   permissions: PermissionsMap;
 };
 
+type Section = "skills" | "mcps" | "rules" | "permissions";
+
 export function PermissionsForm({ initial }: { initial: PermissionsFormState }) {
   const [state, setState] = React.useState<PermissionsFormState>(initial);
   const [saving, setSaving] = React.useState(false);
+  const [section, setSection] = React.useState<Section>("skills");
   // Task #34: track the last-saved baseline so dirty resets after a successful
   // save. The `initial` prop stays fixed at the mount-time value, which would
   // otherwise leave the Save button enabled forever after the first save.
@@ -79,46 +82,53 @@ export function PermissionsForm({ initial }: { initial: PermissionsFormState }) 
         />
       </section>
 
-      <Tabs defaultValue="skills">
-        <TabsList>
-          <TabsTrigger value="skills">Skills</TabsTrigger>
-          <TabsTrigger value="mcps">MCPs</TabsTrigger>
-          <TabsTrigger value="rules">Rules</TabsTrigger>
-          <TabsTrigger value="permissions">Permissions</TabsTrigger>
-        </TabsList>
-        <TabsContent value="skills">
-          <SkillToggles
-            enabledSkills={state.enabledSkills}
-            onChange={(enabledSkills) =>
-              setState((s) => ({ ...s, enabledSkills }))
-            }
-          />
-        </TabsContent>
-        <TabsContent value="mcps">
-          <McpAttach
-            attachedMcps={state.attachedMcps}
-            onChange={(attachedMcps) =>
-              setState((s) => ({ ...s, attachedMcps }))
-            }
-          />
-        </TabsContent>
-        <TabsContent value="rules">
-          <ApprovalRules
-            approvalRules={state.approvalRules}
-            onChange={(approvalRules) =>
-              setState((s) => ({ ...s, approvalRules }))
-            }
-          />
-        </TabsContent>
-        <TabsContent value="permissions">
-          <PermissionToggles
-            permissions={state.permissions}
-            onChange={(permissions) =>
-              setState((s) => ({ ...s, permissions }))
-            }
-          />
-        </TabsContent>
-      </Tabs>
+      <div className="flex flex-col gap-3">
+        <PillSwitcher<Section>
+          value={section}
+          onValueChange={setSection}
+          ariaLabel="Settings section"
+          options={[
+            { value: "skills", label: "Skills", testId: "perm-section-skills" },
+            { value: "mcps", label: "MCPs", testId: "perm-section-mcps" },
+            { value: "rules", label: "Rules", testId: "perm-section-rules" },
+            { value: "permissions", label: "Permissions", testId: "perm-section-permissions" },
+          ]}
+        />
+        <div role="region" aria-label={`${section} settings`} className="flex-1">
+          {section === "skills" && (
+            <SkillToggles
+              enabledSkills={state.enabledSkills}
+              onChange={(enabledSkills) =>
+                setState((s) => ({ ...s, enabledSkills }))
+              }
+            />
+          )}
+          {section === "mcps" && (
+            <McpAttach
+              attachedMcps={state.attachedMcps}
+              onChange={(attachedMcps) =>
+                setState((s) => ({ ...s, attachedMcps }))
+              }
+            />
+          )}
+          {section === "rules" && (
+            <ApprovalRules
+              approvalRules={state.approvalRules}
+              onChange={(approvalRules) =>
+                setState((s) => ({ ...s, approvalRules }))
+              }
+            />
+          )}
+          {section === "permissions" && (
+            <PermissionToggles
+              permissions={state.permissions}
+              onChange={(permissions) =>
+                setState((s) => ({ ...s, permissions }))
+              }
+            />
+          )}
+        </div>
+      </div>
 
       <div className="flex justify-end">
         <Button onClick={handleSave} disabled={!dirty || saving}>

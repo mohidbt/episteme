@@ -4,6 +4,7 @@ import { getSessionInfo } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { agentConfigs } from "@episteme/db/schema";
 import { signRequest } from "@/lib/agents/sign-request";
+import { getDefaultAgentModel } from "@/lib/agent-config-defaults";
 
 const PatchBody = z
   .object({
@@ -33,7 +34,7 @@ export async function GET(req: Request) {
   // No row — insert defaults and return
   const inserted = await db
     .insert(agentConfigs)
-    .values({ userId: session.userId })
+    .values({ userId: session.userId, modelPreference: getDefaultAgentModel() })
     .onConflictDoUpdate({
       target: agentConfigs.userId,
       set: { updatedAt: new Date() },

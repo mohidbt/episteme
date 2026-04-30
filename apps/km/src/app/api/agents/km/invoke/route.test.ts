@@ -114,7 +114,7 @@ describe("POST /api/agents/km/invoke", () => {
       }),
     );
     expect(r.status).toBe(400);
-    expect(await r.json()).toEqual({ error: "no_api_key" });
+    expect(await r.json()).toEqual({ error: "OPENROUTER_KEY_MISSING" });
   });
 
   it("400 when body has no thread_id", async () => {

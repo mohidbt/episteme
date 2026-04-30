@@ -55,17 +55,17 @@ afterEach(() => {
 });
 
 describe("PermissionsForm", () => {
-  it("renders four tabs (Skills, MCPs, Rules, Permissions)", () => {
+  it("renders four section pills (Skills, MCPs, Rules, Permissions)", () => {
     render(<PermissionsForm initial={initial} />);
-    expect(screen.getByRole("tab", { name: /skills/i })).toBeTruthy();
-    expect(screen.getByRole("tab", { name: /mcps/i })).toBeTruthy();
-    expect(screen.getByRole("tab", { name: /rules/i })).toBeTruthy();
-    expect(screen.getByRole("tab", { name: /permissions/i })).toBeTruthy();
+    expect(screen.getByTestId("perm-section-skills")).toBeTruthy();
+    expect(screen.getByTestId("perm-section-mcps")).toBeTruthy();
+    expect(screen.getByTestId("perm-section-rules")).toBeTruthy();
+    expect(screen.getByTestId("perm-section-permissions")).toBeTruthy();
   });
 
   it("renders web_search permission toggle defaulted to off", async () => {
     render(<PermissionsForm initial={initial} />);
-    fireEvent.click(screen.getByRole("tab", { name: /permissions/i }));
+    fireEvent.click(screen.getByTestId("perm-section-permissions"));
     await waitFor(() => {
       const toggle = screen.getByRole("switch", { name: /web search/i }) as HTMLButtonElement;
       // shadcn Switch reflects state via aria-checked / data-state
@@ -75,7 +75,7 @@ describe("PermissionsForm", () => {
 
   it("toggling web_search and saving sends PATCH with permissions.web_search=true", async () => {
     render(<PermissionsForm initial={initial} />);
-    fireEvent.click(screen.getByRole("tab", { name: /permissions/i }));
+    fireEvent.click(screen.getByTestId("perm-section-permissions"));
 
     const toggle = await waitFor(() =>
       screen.getByRole("switch", { name: /web search/i }),
@@ -99,12 +99,12 @@ describe("PermissionsForm", () => {
     });
   });
 
-  it("switches tabs on click", async () => {
+  it("switches sections on click", async () => {
     render(<PermissionsForm initial={initial} />);
-    // skills tab default selected -> shows "Literature Triage"
+    // skills section default selected -> shows "Literature Triage"
     expect(screen.getByText(/Literature Triage/i)).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("tab", { name: /rules/i }));
+    fireEvent.click(screen.getByTestId("perm-section-rules"));
     await waitFor(() => {
       expect(screen.getByText(/Create note/i)).toBeTruthy();
     });

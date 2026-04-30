@@ -72,7 +72,7 @@ describe("POST /api/ai/complete", () => {
       }),
     );
     expect(r.status).toBe(400);
-    expect(await r.json()).toEqual({ error: "add_openrouter_key" });
+    expect(await r.json()).toEqual({ error: "OPENROUTER_KEY_MISSING" });
   });
 
   it("proxies body to AGENTS_URL/agents/km/complete with signed headers", async () => {

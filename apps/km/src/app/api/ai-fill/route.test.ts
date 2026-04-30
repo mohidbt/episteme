@@ -90,4 +90,23 @@ describe("POST /api/ai-fill", () => {
     );
     expect(res.status).toBe(502);
   });
+
+  it("returns OPENROUTER_KEY_MISSING when user has no key", async () => {
+    vi.mocked(getSessionInfo).mockResolvedValue({ userId: "u1", isAnonymous: false });
+    vi.mocked(getDecryptedApiKey).mockRejectedValue(new Error("no key"));
+
+    const res = await POST(makeReq({ kind: "paper", known: {}, missing: ["title"] }));
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe("OPENROUTER_KEY_MISSING");
+  });
+
+  it("maps upstream 401 to OPENROUTER_KEY_INVALID", async () => {
+    vi.mocked(getSessionInfo).mockResolvedValue({ userId: "u1", isAnonymous: false });
+    vi.mocked(getDecryptedApiKey).mockResolvedValue("sk-bad");
+    fetchMock.mockResolvedValue(new Response("unauthorized", { status: 401 }));
+
+    const res = await POST(makeReq({ kind: "paper", known: {}, missing: ["title"] }));
+    expect(res.status).toBe(401);
+    expect((await res.json()).error).toBe("OPENROUTER_KEY_INVALID");
+  });
 });

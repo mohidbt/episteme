@@ -4,6 +4,7 @@ import { getCurrentUserId } from "@/lib/session";
 import { db } from "@/lib/db";
 import { agentConfigs } from "@episteme/db/schema";
 import { PermissionsForm } from "@/components/settings/PermissionsForm";
+import { getDefaultAgentModel } from "@/lib/agent-config-defaults";
 
 export default async function AgentsSettingsPage() {
   const userId = await getCurrentUserId();
@@ -18,7 +19,7 @@ export default async function AgentsSettingsPage() {
   if (!row) {
     const inserted = await db
       .insert(agentConfigs)
-      .values({ userId })
+      .values({ userId, modelPreference: getDefaultAgentModel() })
       .onConflictDoUpdate({
         target: agentConfigs.userId,
         set: { updatedAt: new Date() },
@@ -34,7 +35,7 @@ export default async function AgentsSettingsPage() {
       name: string;
       account?: string;
     }>,
-    modelPreference: row.modelPreference ?? "google/gemma-4-26b-a4b-it",
+    modelPreference: row.modelPreference ?? getDefaultAgentModel(),
     approvalRules: (row.approvalRules ?? {}) as Record<
       string,
       "auto" | "require" | "never"

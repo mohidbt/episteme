@@ -210,7 +210,7 @@ describe("POST /api/papersets/:id/enrich", () => {
       params({ id }),
     );
     expect(res.status).toBe(400);
-    expect((await res.json()).error).toBe("add_openrouter_key");
+    expect((await res.json()).error).toBe("OPENROUTER_KEY_MISSING");
   });
 
   it("sets running_cells, calls upstream with signed request, proxies SSE chunks", async () => {

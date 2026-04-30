@@ -3,6 +3,7 @@ import { getSessionInfo } from "@/lib/auth";
 import { signRequest } from "@/lib/agents/sign-request";
 import { streamPassthrough } from "@/lib/agents/stream-passthrough";
 import { rateLimit, getClientIp } from "@/lib/ai-rate-limit";
+import { OPENROUTER_KEY_MISSING } from "@/lib/openrouter-errors";
 
 const MAX_BODY_BYTES = 16 * 1024;
 
@@ -35,7 +36,7 @@ export async function POST(req: Request) {
     try {
       llmKey = await getDecryptedApiKey(session.userId);
     } catch {
-      return Response.json({ error: "add_openrouter_key" }, { status: 400 });
+      return Response.json({ error: OPENROUTER_KEY_MISSING }, { status: 400 });
     }
   }
 

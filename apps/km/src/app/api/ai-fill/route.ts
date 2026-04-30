@@ -5,6 +5,10 @@
 import { z } from "zod";
 import { getDecryptedApiKey } from "@episteme/auth/byok";
 import { getSessionInfo } from "@/lib/auth";
+import {
+  OPENROUTER_KEY_MISSING,
+  mapOpenRouterStatus,
+} from "@/lib/openrouter-errors";
 
 const MODEL = "google/gemma-4-26b-a4b-it";
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
@@ -51,7 +55,7 @@ export async function POST(req: Request): Promise<Response> {
   try {
     llmKey = await getDecryptedApiKey(session.userId);
   } catch {
-    return Response.json({ error: "add_openrouter_key" }, { status: 400 });
+    return Response.json({ error: OPENROUTER_KEY_MISSING }, { status: 400 });
   }
 
   let upstream: Response;
@@ -76,6 +80,10 @@ export async function POST(req: Request): Promise<Response> {
   }
 
   if (!upstream.ok) {
+    const keyErr = mapOpenRouterStatus(upstream.status);
+    if (keyErr) {
+      return Response.json({ error: keyErr }, { status: 401 });
+    }
     return Response.json({ error: "upstream_error" }, { status: 502 });
   }
 

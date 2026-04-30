@@ -6,6 +6,7 @@ import { getAuthedUserId, MissingInternalSecretError } from "@/lib/internal-auth
 import { getDecryptedApiKey } from "@episteme/auth/byok";
 import { signRequest } from "@/lib/agents/sign-request";
 import { jsonError, requireOwned } from "@/lib/crud";
+import { OPENROUTER_KEY_MISSING } from "@/lib/openrouter-errors";
 
 export const runtime = "nodejs";
 
@@ -100,7 +101,7 @@ export async function POST(req: Request, { params }: Ctx) {
   try {
     llmKey = await getDecryptedApiKey(userId);
   } catch {
-    return jsonError(400, "add_openrouter_key");
+    return jsonError(400, OPENROUTER_KEY_MISSING);
   }
 
   const newRunning: RunningCell[] = parsedBody.data.cells.map((c) => ({
