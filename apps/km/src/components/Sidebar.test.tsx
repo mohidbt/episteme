@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, cleanup, within, fireEvent, act } from "@testing-library/react";
+import { render, screen, cleanup, within, fireEvent } from "@testing-library/react";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { SidebarShell } from "./SidebarShell";
 import type { TreeResponse } from "@/lib/tree-server";
@@ -193,32 +193,30 @@ describe("Sidebar", () => {
       expect(getRail()?.getAttribute("data-collapsed")).toBe("true");
     });
 
-    it("hover on collapsed rail expands (peek)", () => {
+    it("hover on collapsed rail does NOT auto-expand (no peek)", () => {
       renderShell(baseTree());
       fireEvent.click(screen.getByTestId("sidebar-collapse-toggle"));
       const rail = getRail()!;
       expect(rail.getAttribute("data-collapsed")).toBe("true");
-      expect(rail.getAttribute("data-peeking")).toBe("false");
+      const widthBefore = (rail.style as CSSStyleDeclaration).getPropertyValue(
+        "--sidebar-width",
+      );
       fireEvent.mouseEnter(rail);
-      expect(rail.getAttribute("data-peeking")).toBe("true");
+      const widthAfter = (rail.style as CSSStyleDeclaration).getPropertyValue(
+        "--sidebar-width",
+      );
+      expect(widthAfter).toBe(widthBefore);
+      expect(rail.getAttribute("data-collapsed")).toBe("true");
+      expect(rail.getAttribute("data-peeking")).toBeNull();
     });
 
-    it("mouseleave reverts peek to collapsed", () => {
-      vi.useFakeTimers();
-      try {
-        renderShell(baseTree());
-        fireEvent.click(screen.getByTestId("sidebar-collapse-toggle"));
-        const rail = getRail()!;
-        fireEvent.mouseEnter(rail);
-        expect(rail.getAttribute("data-peeking")).toBe("true");
-        fireEvent.mouseLeave(rail);
-        act(() => {
-          vi.advanceTimersByTime(500);
-        });
-        expect(rail.getAttribute("data-peeking")).toBe("false");
-      } finally {
-        vi.useRealTimers();
-      }
+    it("when collapsed and anonymous, signup CTA renders as icon (no full text)", () => {
+      renderShell(baseTree(), true);
+      fireEvent.click(screen.getByTestId("sidebar-collapse-toggle"));
+      const cta = screen.getByTestId("sidebar-anon-signup-cta");
+      expect(cta).toBeTruthy();
+      expect(cta.textContent ?? "").not.toMatch(/sign up to save/i);
+      expect(cta.querySelector("svg")).toBeTruthy();
     });
 
     it("persists collapsed state across remount via localStorage", () => {
