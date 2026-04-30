@@ -19,11 +19,23 @@ export interface CellSelectionOpts {
   cols: string[];
 }
 
+export type SelectionKind =
+  | { kind: "none" }
+  | { kind: "cells" }
+  | { kind: "row"; row: number }
+  | { kind: "col"; col: string };
+
 export class CellSelection {
   private set = new Set<string>();
   private anchor: string | null = null;
+  private lastKind: SelectionKind = { kind: "none" };
 
   constructor(private opts: CellSelectionOpts) {}
+
+  getKind(): SelectionKind {
+    if (this.set.size === 0) return { kind: "none" };
+    return this.lastKind.kind === "none" ? { kind: "cells" } : this.lastKind;
+  }
 
   private key(c: Cell): string {
     return `${c.row}:${c.col}`;
@@ -42,6 +54,7 @@ export class CellSelection {
     } else {
       this.anchor = null;
     }
+    this.lastKind = { kind: "cells" };
   }
 
   cmdClick(c: Cell): void {
@@ -53,6 +66,7 @@ export class CellSelection {
       this.set.add(k);
       this.anchor = k;
     }
+    this.lastKind = { kind: "cells" };
   }
 
   shiftClick(to: Cell): void {
@@ -60,6 +74,7 @@ export class CellSelection {
       this.click(to);
       return;
     }
+    this.lastKind = { kind: "cells" };
     const [r1s, c1] = this.anchor.split(":");
     const r1 = Number.parseInt(r1s, 10);
     const colIdx = (n: string) => this.opts.cols.indexOf(n);
@@ -82,6 +97,8 @@ export class CellSelection {
       if (!this.isFilled(c)) this.set.add(this.key(c));
     }
     this.anchor = null;
+    this.lastKind =
+      this.set.size > 0 ? { kind: "row", row } : { kind: "none" };
   }
 
   clickCol(col: string): void {
@@ -91,6 +108,8 @@ export class CellSelection {
       if (!this.isFilled(c)) this.set.add(this.key(c));
     }
     this.anchor = null;
+    this.lastKind =
+      this.set.size > 0 ? { kind: "col", col } : { kind: "none" };
   }
 
   list(): Cell[] {
@@ -132,5 +151,6 @@ export class CellSelection {
     if (this.anchor && !this.set.has(this.anchor)) {
       this.anchor = null;
     }
+    if (this.set.size === 0) this.lastKind = { kind: "none" };
   }
 }

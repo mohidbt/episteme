@@ -207,6 +207,38 @@ describe("PapersetView", () => {
     });
   });
 
+  it("table wrapper has rounded corners and overflow-hidden", () => {
+    render(<PapersetView {...baseProps} />);
+    const wrapper = screen.getByTestId("paperset-grid-wrapper");
+    expect(wrapper.className).toMatch(/rounded-lg/);
+    expect(wrapper.className).toMatch(/overflow-hidden/);
+  });
+
+  it("renders no selection-frame when nothing is selected", () => {
+    render(<PapersetView {...baseProps} />);
+    expect(screen.queryByTestId("selection-frame")).toBeNull();
+  });
+
+  it("selecting a row renders exactly ONE selection-frame element", async () => {
+    render(<PapersetView {...baseProps} />);
+    fireEvent.click(screen.getByTestId("row-header-0"));
+    await waitFor(() => {
+      const frames = screen.queryAllByTestId("selection-frame");
+      expect(frames.length).toBe(1);
+      expect(frames[0].getAttribute("data-selection-kind")).toBe("row");
+    });
+  });
+
+  it("selecting a column renders exactly ONE selection-frame element", async () => {
+    render(<PapersetView {...baseProps} />);
+    fireEvent.click(screen.getByTestId("col-header-x"));
+    await waitFor(() => {
+      const frames = screen.queryAllByTestId("selection-frame");
+      expect(frames.length).toBe(1);
+      expect(frames[0].getAttribute("data-selection-kind")).toBe("col");
+    });
+  });
+
   it("⌘↵ triggers enrichment when a cell is selected", async () => {
     const stream = new ReadableStream<Uint8Array>({
       start(c) {

@@ -1,5 +1,6 @@
 "use client";
 
+import { useLayoutEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import type { CellSelection } from "./lib/selection";
@@ -121,18 +122,86 @@ export function PapersetGrid({
     router.refresh();
   }
 
+  const selectionKind = selection.getKind();
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const [frameRect, setFrameRect] = useState<{
+    top: number;
+    left: number;
+    width: number;
+    height: number;
+  } | null>(null);
+
+  useLayoutEffect(() => {
+    const root = scrollRef.current;
+    if (!root || selectionKind.kind === "none" || selectionKind.kind === "cells") {
+      setFrameRect(null);
+      return;
+    }
+    const rootRect = root.getBoundingClientRect();
+    if (selectionKind.kind === "row") {
+      const headerEl = root.querySelector<HTMLElement>(
+        `[data-testid="row-header-${selectionKind.row}"]`,
+      );
+      const tr = headerEl?.parentElement;
+      if (!tr) {
+        setFrameRect(null);
+        return;
+      }
+      const r = tr.getBoundingClientRect();
+      setFrameRect({
+        top: r.top - rootRect.top + root.scrollTop,
+        left: r.left - rootRect.left + root.scrollLeft,
+        width: r.width,
+        height: r.height,
+      });
+    } else {
+      const cells = root.querySelectorAll<HTMLElement>(
+        `[data-testid^="cell-"][data-col="${selectionKind.col}"]`,
+      );
+      const header = root.querySelector<HTMLElement>(
+        `[data-testid="col-header-${selectionKind.col}"]`,
+      );
+      if (cells.length === 0 || !header) {
+        setFrameRect(null);
+        return;
+      }
+      const headerRect = header.getBoundingClientRect();
+      const firstRect = cells[0].getBoundingClientRect();
+      const lastRect = cells[cells.length - 1].getBoundingClientRect();
+      setFrameRect({
+        top: headerRect.bottom - rootRect.top + root.scrollTop,
+        left: firstRect.left - rootRect.left + root.scrollLeft,
+        width: firstRect.width,
+        height: lastRect.bottom - firstRect.top,
+      });
+    }
+  }, [
+    selectionKind.kind,
+    selectionKind.kind === "row" ? selectionKind.row : -1,
+    selectionKind.kind === "col" ? selectionKind.col : "",
+    columns.length,
+    rowRefs.length,
+  ]);
+
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="flex min-h-0 flex-1 flex-col p-4">
       {failedKeys.size > 0 && (
         <div
           role="alert"
-          className="border-b border-destructive/40 bg-destructive/5 px-6 py-2 text-sm text-destructive"
+          className="mb-2 rounded-lg border border-destructive/40 bg-destructive/5 px-6 py-2 text-sm text-destructive"
         >
           {failedKeys.size === 1 ? "1 cell" : `${failedKeys.size} cells`}{" "}
           failed enrichment.
         </div>
       )}
-      <div className="min-h-0 flex-1 overflow-auto">
+      <div
+        className="relative min-h-0 flex-1 overflow-hidden rounded-lg border border-border/60"
+        data-testid="paperset-grid-wrapper"
+      >
+        <div
+          ref={scrollRef}
+          className="relative h-full w-full overflow-auto"
+        >
         <table
           className="w-full table-fixed border-separate border-spacing-0 text-sm"
           data-testid="paperset-grid"
@@ -191,6 +260,22 @@ export function PapersetGrid({
             )}
           </tbody>
         </table>
+        {frameRect &&
+          (selectionKind.kind === "row" || selectionKind.kind === "col") && (
+            <div
+              data-testid="selection-frame"
+              data-selection-kind={selectionKind.kind}
+              aria-hidden
+              className="pointer-events-none absolute rounded-md ring-2 ring-inset ring-primary/70"
+              style={{
+                top: frameRect.top,
+                left: frameRect.left,
+                width: frameRect.width,
+                height: frameRect.height,
+              }}
+            />
+          )}
+        </div>
       </div>
     </div>
   );

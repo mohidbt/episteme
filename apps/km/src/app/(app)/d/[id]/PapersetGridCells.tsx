@@ -78,6 +78,8 @@ export function RowView({
               key={col.name}
               state={state}
               selected={selected}
+              showRing={selection.getKind().kind === "cells"}
+              colName={col.name}
               onMouseDown={(e) => onCellMouseDown(e, rowIdx, col.name)}
               testId={`cell-${rowIdx}-${col.name}`}
             />
@@ -169,11 +171,15 @@ export function ColumnHeaderCell({
 function CellView({
   state,
   selected,
+  showRing,
+  colName,
   onMouseDown,
   testId,
 }: {
   state: ReturnType<typeof deriveCellState>;
   selected: boolean;
+  showRing: boolean;
+  colName: string;
   onMouseDown: (e: React.MouseEvent) => void;
   testId: string;
 }) {
@@ -182,10 +188,12 @@ function CellView({
       onMouseDown={onMouseDown}
       className={cn(
         "relative h-9 cursor-cell border-b border-r border-border/60 px-3 py-1.5 align-middle",
-        selected && "bg-primary/10 ring-1 ring-inset ring-primary/40",
+        selected && "bg-primary/10",
+        selected && showRing && "ring-1 ring-inset ring-primary/40",
       )}
       data-cell-state={state.kind}
       data-selected={selected ? "true" : "false"}
+      data-col={colName}
       data-testid={testId}
     >
       {state.kind === "empty" && (
