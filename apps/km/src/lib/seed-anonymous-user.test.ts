@@ -6,6 +6,7 @@ import {
   libraries,
   notes,
   papers,
+  papersets,
   references_,
   user as userTable,
 } from "@episteme/db/schema";
@@ -116,15 +117,21 @@ describe("seedAnonymousUser", () => {
       .select()
       .from(references_)
       .where(eq(references_.userId, userId));
-    expect(refRows).toHaveLength(5);
+    // 5 original demo refs + 6 PCA references seeded into a "PCA" folder.
+    expect(refRows).toHaveLength(11);
     const dois = refRows.map((r) => (r.cslJson as CslItem).DOI).sort();
-    expect(dois).toEqual([
-      "10.1038/s41586-021-03819-2",
-      "10.48550/arXiv.1706.03762",
-      "10.48550/arXiv.1810.04805",
-      "10.48550/arXiv.2005.14165",
-      "10.48550/arXiv.2006.11239",
-    ]);
+    expect(dois).toContain("10.1038/s41586-021-03819-2");
+    expect(dois).toContain("10.48550/arXiv.1706.03762");
+    // PCA canon
+    expect(dois).toContain("10.1080/14786440109462720"); // Pearson 1901
+    expect(dois).toContain("10.1037/h0071325"); // Hotelling 1933
+    expect(dois).toContain("10.1111/1467-9868.00196"); // Tipping & Bishop 1999
+    expect(dois).toContain("10.1038/nature07331"); // Novembre et al. 2008
+    expect(dois).toContain("10.1162/jocn.1991.3.1.71"); // Turk & Pentland 1991
+    const pcaFolder = allFolders.find((f) => f.name === "PCA");
+    expect(pcaFolder).toBeDefined();
+    const pcaRefs = refRows.filter((r) => r.folderId === pcaFolder!.id);
+    expect(pcaRefs).toHaveLength(6);
     const rootRef = refRows.find(
       (r) => (r.cslJson as CslItem).DOI === "10.1038/s41586-021-03819-2",
     );
@@ -134,6 +141,27 @@ describe("seedAnonymousUser", () => {
     );
     expect(nestedRef!.folderPath).toBe("Reading List/Foundations");
     expect(nestedRef!.folderId).toBe(foundations!.id);
+
+    // PCA paperset CSV is seeded inside the PCA folder, with two columns
+    // ("Uses PCA" + "Variables matched on") and one row per PCA reference.
+    const psRows = await db
+      .select()
+      .from(papersets)
+      .where(eq(papersets.userId, userId));
+    expect(psRows).toHaveLength(1);
+    expect(psRows[0].filename).toMatch(/\.csv$/);
+    expect(psRows[0].folderId).toBe(pcaFolder!.id);
+    expect(psRows[0].columns).toHaveLength(2);
+    const colNames = psRows[0].columns.map((c) => c.name);
+    expect(colNames).toContain("Uses PCA");
+    expect(colNames).toContain("Variables matched on");
+    expect(psRows[0].rowRefs).toHaveLength(6);
+    // Each row references exactly one PCA reference (paper_id field is the
+    // reference id since these aren't backed by uploaded PDFs).
+    for (const row of psRows[0].rowRefs) {
+      expect(typeof row.paper_id).toBe("string");
+      expect(row.paper_id.length).toBeGreaterThan(0);
+    }
   });
 
   it("is idempotent on a second call for the same user", async () => {
@@ -164,7 +192,7 @@ describe("seedAnonymousUser", () => {
       .select()
       .from(references_)
       .where(eq(references_.userId, userId));
-    expect(refRows).toHaveLength(5);
+    expect(refRows).toHaveLength(11);
   });
 
   it("recovers from a partial seed (orphan library, no other rows)", async () => {
@@ -196,6 +224,6 @@ describe("seedAnonymousUser", () => {
       .select()
       .from(references_)
       .where(eq(references_.userId, userId));
-    expect(refRows).toHaveLength(5);
+    expect(refRows).toHaveLength(11);
   });
 });

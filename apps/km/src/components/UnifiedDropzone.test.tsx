@@ -11,6 +11,10 @@ vi.mock("sonner", () => ({
   toast: { error: vi.fn(), success: vi.fn(), info: vi.fn() },
 }));
 
+vi.mock("@episteme/auth/client", () => ({
+  useSession: () => ({ data: { user: { isAnonymous: false } } }),
+}));
+
 import { toast } from "sonner";
 
 beforeEach(() => {
@@ -284,6 +288,85 @@ describe("UnifiedDropzone", () => {
     });
 
     expect(screen.getByText(/Image · cancelled/)).toBeTruthy();
+  });
+
+  it("blocks PDF upload and shows sign-in prompt when isAnonymous=true", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    render(
+      <UnifiedDropzone libraryId={1} folderPath="" folderId={null} isAnonymous />,
+    );
+    const input = document.querySelector("input[type=file]") as HTMLInputElement;
+    const file = new File(["%PDF-"], "paper.pdf", { type: "application/pdf" });
+
+    await act(async () => {
+      dropFile(input, file);
+    });
+
+    await waitFor(() => {
+      expect(vi.mocked(toast.error)).toHaveBeenCalled();
+    });
+
+    // No upload network call was made
+    const initCall = fetchMock.mock.calls.find(
+      (c) => String(c[0]) === "/api/papers" && (c[1] as RequestInit)?.method === "POST",
+    );
+    expect(initCall).toBeUndefined();
+
+    // Sign-in CTA present in the toast
+    const errorCall = vi.mocked(toast.error).mock.calls.find((c) =>
+      String(c[0]).toLowerCase().includes("sign in"),
+    );
+    expect(errorCall).toBeDefined();
+    const action = (errorCall![1] as { action?: { label: string } } | undefined)
+      ?.action;
+    expect(action?.label.toLowerCase()).toContain("sign in");
+  });
+
+  it("blocks image asset upload when isAnonymous=true", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    render(
+      <UnifiedDropzone libraryId={1} folderPath="" folderId={null} isAnonymous />,
+    );
+    const input = document.querySelector("input[type=file]") as HTMLInputElement;
+    const file = new File(["bytes"], "pic.png", { type: "image/png" });
+
+    await act(async () => {
+      dropFile(input, file);
+    });
+
+    await waitFor(() => {
+      expect(vi.mocked(toast.error)).toHaveBeenCalled();
+    });
+
+    const initCall = fetchMock.mock.calls.find(
+      (c) => String(c[0]) === "/api/assets" && (c[1] as RequestInit)?.method === "POST",
+    );
+    expect(initCall).toBeUndefined();
+  });
+
+  it("blocks .md note upload when isAnonymous=true", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    render(
+      <UnifiedDropzone libraryId={1} folderPath="" folderId={null} isAnonymous />,
+    );
+    const input = document.querySelector("input[type=file]") as HTMLInputElement;
+    const file = new File(["# x"], "n.md", { type: "text/markdown" });
+
+    await act(async () => {
+      dropFile(input, file);
+    });
+
+    await waitFor(() => {
+      expect(vi.mocked(toast.error)).toHaveBeenCalled();
+    });
+
+    const noteCall = fetchMock.mock.calls.find(
+      (c) => String(c[0]) === "/api/notes/from-file",
+    );
+    expect(noteCall).toBeUndefined();
   });
 
   it("shows toast.error for unknown extension files", async () => {

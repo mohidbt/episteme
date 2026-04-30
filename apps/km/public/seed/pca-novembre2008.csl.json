@@ -1,0 +1,25 @@
+{
+  "id": "10.1038/nature07331",
+  "type": "article-journal",
+  "DOI": "10.1038/nature07331",
+  "title": "Genes mirror geography within Europe",
+  "author": [
+    { "family": "Novembre", "given": "John" },
+    { "family": "Johnson", "given": "Toby" },
+    { "family": "Bryc", "given": "Katarzyna" },
+    { "family": "Kutalik", "given": "Zoltán" },
+    { "family": "Boyko", "given": "Adam R." },
+    { "family": "Auton", "given": "Adam" },
+    { "family": "Indap", "given": "Amit" },
+    { "family": "King", "given": "Karen S." },
+    { "family": "Bergmann", "given": "Sven" },
+    { "family": "Nelson", "given": "Matthew R." },
+    { "family": "Stephens", "given": "Matthew" },
+    { "family": "Bustamante", "given": "Carlos D." }
+  ],
+  "issued": { "date-parts": [[2008]] },
+  "container-title": "Nature",
+  "volume": "456",
+  "issue": "7218",
+  "page": "98-101"
+}

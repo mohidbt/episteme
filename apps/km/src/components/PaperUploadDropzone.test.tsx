@@ -12,6 +12,12 @@ vi.mock("sonner", () => ({
   toast: { error: vi.fn(), success: vi.fn() },
 }));
 
+vi.mock("@episteme/auth/client", () => ({
+  useSession: () => ({ data: { user: { isAnonymous: false } } }),
+}));
+
+import { toast } from "sonner";
+
 // Capture FormData bodies sent via fetch
 let capturedBody: FormData | null = null;
 
@@ -147,5 +153,33 @@ describe("PaperUploadDropzone folderId", () => {
     expect(paperCall).toBeDefined();
     const body = JSON.parse(String((paperCall![1] as RequestInit).body));
     expect(body.folderId).toBeUndefined();
+  });
+
+  it("blocks upload and shows sign-in prompt when isAnonymous=true", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    render(<PaperUploadDropzone libraryId={1} folderPath="" isAnonymous />);
+    const input = document.querySelector("input[type=file]") as HTMLInputElement;
+    const file = new File(["pdf"], "test.pdf", { type: "application/pdf" });
+    await act(async () => {
+      dropFile(input, file);
+    });
+
+    await waitFor(() => {
+      expect(vi.mocked(toast.error)).toHaveBeenCalled();
+    });
+
+    const initCall = fetchMock.mock.calls.find(
+      (c) => String(c[0]) === "/api/papers" && (c[1] as RequestInit)?.method === "POST",
+    );
+    expect(initCall).toBeUndefined();
+
+    const errorCall = vi.mocked(toast.error).mock.calls.find((c) =>
+      String(c[0]).toLowerCase().includes("sign in"),
+    );
+    expect(errorCall).toBeDefined();
+    const action = (errorCall![1] as { action?: { label: string } } | undefined)
+      ?.action;
+    expect(action?.label.toLowerCase()).toContain("sign in");
   });
 });

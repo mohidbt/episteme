@@ -70,7 +70,7 @@ describe("migrateAnonymousUser via onLinkAccount", () => {
         .select()
         .from(references_)
         .where(eq(references_.userId, anonId)),
-    ).toHaveLength(5);
+    ).toHaveLength(11);
 
     // Seed a paperset for the anon user — verifies migrate re-parents papersets too.
     const [libRow] = await db.select().from(libraries).where(eq(libraries.userId, anonId));
@@ -136,7 +136,7 @@ describe("migrateAnonymousUser via onLinkAccount", () => {
       .select()
       .from(references_)
       .where(eq(references_.userId, newId));
-    expect(refsForNew).toHaveLength(5);
+    expect(refsForNew).toHaveLength(11);
     expect(
       refsForNew.some((r) => r.citationKey === "jumper2021highly"),
     ).toBe(true);

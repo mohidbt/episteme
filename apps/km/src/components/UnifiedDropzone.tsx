@@ -6,6 +6,8 @@ import { useDropzone } from "react-dropzone";
 import { toast } from "sonner";
 import { XIcon, RotateCcwIcon, CheckIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { showSignInToUpload } from "@/lib/upload-gate";
+import { useSession } from "@episteme/auth/client";
 
 const DONE_AUTO_DISMISS_MS = 1500;
 
@@ -38,6 +40,12 @@ interface UnifiedDropzoneProps {
   libraryId: number;
   folderPath: string;
   folderId?: string | null;
+  /**
+   * When true, drops are intercepted with a "sign in to upload" prompt and no
+   * network call is made. Guests still see the dropzone so the layout is
+   * stable across sign-in.
+   */
+  isAnonymous?: boolean;
 }
 
 const IMAGE_MIME_BY_EXT: Record<string, string> = {
@@ -103,8 +111,16 @@ export function UnifiedDropzone({
   libraryId,
   folderPath,
   folderId,
+  isAnonymous: isAnonymousProp,
 }: UnifiedDropzoneProps) {
   const router = useRouter();
+  const session = useSession();
+  // Prop wins (tests + SSR-known consumers); otherwise fall back to the
+  // client session so consumers don't have to thread `isAnonymous` everywhere.
+  const sessionIsAnon =
+    (session.data?.user as { isAnonymous?: boolean } | undefined)
+      ?.isAnonymous ?? false;
+  const isAnonymous = isAnonymousProp ?? sessionIsAnon;
   const [items, setItems] = useState<UploadItem[]>([]);
   const counterRef = useRef(0);
 
@@ -307,6 +323,10 @@ export function UnifiedDropzone({
 
   const onDrop = useCallback(
     async (accepted: File[]) => {
+      if (isAnonymous && accepted.length > 0) {
+        showSignInToUpload();
+        return;
+      }
       const toProcess: UploadItem[] = [];
       const summary = { papers: 0, notes: 0, references: 0, images: 0 };
 
@@ -371,7 +391,7 @@ export function UnifiedDropzone({
         toast.success(`Uploaded ${parts.join(", ")}`);
       }
     },
-    [processFile, router],
+    [processFile, router, isAnonymous],
   );
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({

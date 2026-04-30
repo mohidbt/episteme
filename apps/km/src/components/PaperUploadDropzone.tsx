@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { useDropzone } from "react-dropzone";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { showSignInToUpload } from "@/lib/upload-gate";
+import { useSession } from "@episteme/auth/client";
 
 const PDF_CONTENT_TYPE = "application/pdf";
 const MAX_PDF_BYTES = 50 * 1024 * 1024;
@@ -25,6 +27,12 @@ interface PaperUploadDropzoneProps {
   libraryId: number;
   folderPath: string;
   folderId?: string | null;
+  /**
+   * When true, the dropzone short-circuits any drop with a sign-in prompt
+   * instead of starting the upload. Guests can still see the surface so the
+   * UI doesn't shift when they sign up.
+   */
+  isAnonymous?: boolean;
 }
 
 function humanSize(bytes: number): string {
@@ -68,8 +76,14 @@ export function PaperUploadDropzone({
   libraryId,
   folderPath,
   folderId,
+  isAnonymous: isAnonymousProp,
 }: PaperUploadDropzoneProps) {
   const router = useRouter();
+  const session = useSession();
+  const sessionIsAnon =
+    (session.data?.user as { isAnonymous?: boolean } | undefined)
+      ?.isAnonymous ?? false;
+  const isAnonymous = isAnonymousProp ?? sessionIsAnon;
   const [items, setItems] = useState<UploadItem[]>([]);
   const counterRef = useRef(0);
 
@@ -132,6 +146,10 @@ export function PaperUploadDropzone({
 
   const onDrop = useCallback(
     async (accepted: File[], rejected: readonly unknown[]) => {
+      if (isAnonymous) {
+        showSignInToUpload();
+        return;
+      }
       if (rejected.length > 0) {
         toast.error(`${rejected.length} file(s) rejected (PDF only)`);
       }
@@ -156,7 +174,7 @@ export function PaperUploadDropzone({
       await runChunks(next, PARALLEL, processFile);
       router.refresh();
     },
-    [processFile, router],
+    [processFile, router, isAnonymous],
   );
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({

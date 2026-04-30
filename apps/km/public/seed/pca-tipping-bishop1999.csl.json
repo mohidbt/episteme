@@ -1,0 +1,15 @@
+{
+  "id": "10.1111/1467-9868.00196",
+  "type": "article-journal",
+  "DOI": "10.1111/1467-9868.00196",
+  "title": "Probabilistic Principal Component Analysis",
+  "author": [
+    { "family": "Tipping", "given": "Michael E." },
+    { "family": "Bishop", "given": "Christopher M." }
+  ],
+  "issued": { "date-parts": [[1999]] },
+  "container-title": "Journal of the Royal Statistical Society: Series B (Statistical Methodology)",
+  "volume": "61",
+  "issue": "3",
+  "page": "611-622"
+}

@@ -7,6 +7,7 @@ import {
   libraries,
   notes,
   papers,
+  papersets,
   references_,
   TRASH_FOLDER_NAME,
 } from "@episteme/db/schema";
@@ -48,6 +49,88 @@ const SEED_REFERENCES = [
 
 const READING_LIST_FOLDER = "Reading List";
 const FOUNDATIONS_FOLDER = "Foundations";
+const PCA_FOLDER = "PCA";
+
+// Real PCA references (Principal Component Analysis canon). Citation keys are
+// derived automatically; no fabrication — every entry below has a verifiable
+// publication. The accompanying paperset rows (see SEED_PCA_PAPERSET) ARE
+// fabricated demo data, marked accordingly.
+const SEED_PCA_REFERENCES = [
+  "pca-pearson1901.csl.json",
+  "pca-hotelling1933.csl.json",
+  "pca-jolliffe2002.csl.json",
+  "pca-tipping-bishop1999.csl.json",
+  "pca-novembre2008.csl.json",
+  "pca-turk-pentland1991.csl.json",
+];
+
+// DUMMY DATA — fabricated for the guest-mode demo. NOT real research findings
+// for any of the cited papers. Kept in lockstep order with SEED_PCA_REFERENCES.
+const SEED_PCA_PAPERSET_FILENAME = "pca-survey.csv";
+const SEED_PCA_PAPERSET_COLUMNS = [
+  {
+    name: "Uses PCA",
+    description:
+      "Whether and how PCA is used in the paper (yes/no plus extent).",
+  },
+  {
+    name: "Variables matched on",
+    description:
+      "Which variables or features the analysis is performed over.",
+  },
+] as const;
+const SEED_PCA_PAPERSET_ROWS = [
+  {
+    "Uses PCA": "Yes, foundational derivation",
+    "Variables matched on": "n-dimensional point coordinates",
+  },
+  {
+    "Uses PCA": "Yes, primary statistical method",
+    "Variables matched on": "psychometric test scores",
+  },
+  {
+    "Uses PCA": "Yes, comprehensive treatment (book)",
+    "Variables matched on": "general multivariate observations",
+  },
+  {
+    "Uses PCA": "Yes, probabilistic latent-variable form",
+    "Variables matched on": "Gaussian observed variables",
+  },
+  {
+    "Uses PCA": "Yes, dimensionality reduction",
+    "Variables matched on": "SNP genotype frequencies across individuals",
+  },
+  {
+    "Uses PCA": "Yes, primary method",
+    "Variables matched on": "image pixel intensities (face images)",
+  },
+] as const;
+
+function dummyPapersetCsv(
+  rowRefs: Array<{ paper_id: string; citationKey: string; title: string }>,
+): string {
+  const header = ["Reference", ...SEED_PCA_PAPERSET_COLUMNS.map((c) => c.name)];
+  const lines = [header.map(csvEscape).join(",")];
+  for (let i = 0; i < rowRefs.length; i++) {
+    const ref = rowRefs[i];
+    const row = SEED_PCA_PAPERSET_ROWS[i];
+    lines.push(
+      [
+        `${ref.citationKey} — ${ref.title}`,
+        row["Uses PCA"],
+        row["Variables matched on"],
+      ]
+        .map(csvEscape)
+        .join(","),
+    );
+  }
+  return lines.join("\n");
+}
+
+function csvEscape(field: string): string {
+  if (/[",\n]/.test(field)) return `"${field.replace(/"/g, '""')}"`;
+  return field;
+}
 
 /**
  * Seed app-level demo content for a freshly-created anonymous user. Idempotent:
@@ -83,7 +166,7 @@ export async function seedAnonymousUser(userId: string): Promise<void> {
     await db.delete(libraries).where(eq(libraries.userId, userId));
   }
 
-  const { lib, foundationsFolder } = await db.transaction(async (tx) => {
+  const { lib, foundationsFolder, pcaFolder } = await db.transaction(async (tx) => {
     const [created] = await tx
       .insert(libraries)
       .values({ userId, name: "My Library" })
@@ -113,7 +196,16 @@ export async function seedAnonymousUser(userId: string): Promise<void> {
         name: FOUNDATIONS_FOLDER,
       })
       .returning();
-    return { lib: created, foundationsFolder: foundations };
+    const [pca] = await tx
+      .insert(folders)
+      .values({
+        libraryId: created.id,
+        userId,
+        parentId: null,
+        name: PCA_FOLDER,
+      })
+      .returning();
+    return { lib: created, foundationsFolder: foundations, pcaFolder: pca };
   });
 
   const noteMdPath = path.join(process.cwd(), SEED_DIR, WELCOME_NOTE_FILE);
@@ -178,4 +270,51 @@ export async function seedAnonymousUser(userId: string): Promise<void> {
       paperId: null,
     });
   }
+
+  // PCA folder — real references + a dummy paperset that demonstrates the
+  // research-survey workflow on guest accounts without requiring uploads.
+  const pcaInsertedRefs: Array<{
+    id: string;
+    citationKey: string;
+    title: string;
+  }> = [];
+  for (const file of SEED_PCA_REFERENCES) {
+    const cslPath = path.join(process.cwd(), SEED_DIR, file);
+    const cslRaw = JSON.parse(await fs.readFile(cslPath, "utf8")) as CslItem;
+    const cslJson = validateCslJson(cslRaw);
+    const citationKey = deriveCitationKey(cslJson);
+    const [inserted] = await db
+      .insert(references_)
+      .values({
+        libraryId: lib.id,
+        userId,
+        folderPath: PCA_FOLDER,
+        folderId: pcaFolder.id,
+        citationKey,
+        cslJson,
+        paperId: null,
+      })
+      .returning();
+    pcaInsertedRefs.push({
+      id: inserted.id,
+      citationKey,
+      title: typeof cslJson.title === "string" ? cslJson.title : citationKey,
+    });
+  }
+
+  const rowRefs = pcaInsertedRefs.map((r) => ({ paper_id: r.id }));
+  await db.insert(papersets).values({
+    libraryId: lib.id,
+    userId,
+    folderId: pcaFolder.id,
+    filename: SEED_PCA_PAPERSET_FILENAME,
+    columns: SEED_PCA_PAPERSET_COLUMNS.map((c) => ({
+      name: c.name,
+      description: c.description,
+    })),
+    rowRefs,
+    cellGrounding: {},
+    runningCells: [],
+    content: dummyPapersetCsv(pcaInsertedRefs),
+  });
 }
