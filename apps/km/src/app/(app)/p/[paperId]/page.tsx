@@ -9,12 +9,14 @@ import { papers } from "@episteme/db/schema";
 import { getDefaultLibrary } from "@/lib/default-library";
 import { getReferencesForPaper } from "@/lib/references-server";
 import { papersetCountForPaper, papersetsForPaper } from "@/lib/papersets-server";
+import { listAllFolders } from "@/lib/folders-server";
 import { denormaliseForList, validateCslJson } from "@/lib/csl";
 import { PathPill, type PathPillSegment } from "@/components/PathPill";
 import { splitFolderPath } from "@/lib/tree";
 import { PaperMetadataPanel } from "@/components/PaperMetadataPanel";
 import { PaperHighlightsList } from "@/components/PaperHighlightsList";
 import { InPapersetsBadge } from "@/components/InPapersetsBadge";
+import { DetailUploadBar } from "@/components/DetailUploadBar";
 
 type PaperRow = typeof papers.$inferSelect;
 
@@ -52,6 +54,9 @@ export default async function PaperPage({
     papersetCountForPaper(paper.id, userId),
     papersetsForPaper(paper.id, userId),
   ]);
+  const allFolders = library
+    ? await listAllFolders(library.id, userId)
+    : [];
   const displayTitle = paper.title && paper.title.trim().length > 0 ? paper.title : paper.filename;
   const firstRef = refs[0];
   const firstRefYear = firstRef ? refYear(firstRef.cslJson) : null;
@@ -89,6 +94,16 @@ export default async function PaperPage({
           </Link>
         )}
         <h1 className="font-display text-2xl leading-tight">{displayTitle}</h1>
+        {library && (
+          <div className="mt-3">
+            <DetailUploadBar
+              kind="paper"
+              libraryId={library.id}
+              folders={allFolders}
+              defaultFolderId={paper.folderId ?? null}
+            />
+          </div>
+        )}
       </div>
       <div className="mt-4 grid flex-1 min-h-0 grid-cols-1 border-t border-border/60 lg:grid-cols-[minmax(0,1fr)_420px]">
         <div className="relative min-h-[60vh] lg:min-h-0">

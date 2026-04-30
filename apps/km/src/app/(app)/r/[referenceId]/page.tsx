@@ -4,11 +4,13 @@ import { BookMarked } from "lucide-react";
 import { getRequiredUserId } from "@/lib/session";
 import { getDefaultLibrary } from "@/lib/default-library";
 import { getReference, listPapersInLibrary } from "@/lib/references-server";
+import { listAllFolders } from "@/lib/folders-server";
 import { PathPill, type PathPillSegment } from "@/components/PathPill";
 import { splitFolderPath } from "@/lib/tree";
 import { ReferenceForm } from "@/components/ReferenceForm";
 import { ReferenceAttachToPaperButton } from "@/components/ReferenceAttachToPaperButton";
 import { ReferenceAgenticSearchButton } from "@/components/ReferenceAgenticSearchButton";
+import { DetailUploadBar } from "@/components/DetailUploadBar";
 
 export default async function ReferencePage({
   params,
@@ -23,9 +25,10 @@ export default async function ReferencePage({
   ]);
   if (!ref) notFound();
 
-  const papersInLib = library
-    ? await listPapersInLibrary(library.id, userId)
-    : [];
+  const [papersInLib, allFolders] = await Promise.all([
+    library ? listPapersInLibrary(library.id, userId) : Promise.resolve([]),
+    library ? listAllFolders(library.id, userId) : Promise.resolve([]),
+  ]);
 
   const attachedPaper = ref.paperId
     ? (papersInLib.find((p) => p.id === ref.paperId) ?? null)
@@ -75,6 +78,16 @@ export default async function ReferencePage({
           </Link>
         )}
       </div>
+      {library && (
+        <div className="mb-4">
+          <DetailUploadBar
+            kind="reference"
+            libraryId={library.id}
+            folders={allFolders}
+            defaultFolderId={ref.folderId ?? null}
+          />
+        </div>
+      )}
       <ReferenceForm reference={ref} />
     </div>
   );
