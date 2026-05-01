@@ -15,7 +15,6 @@ import { PathPill, type PathPillSegment } from "@/components/PathPill";
 import { splitFolderPath } from "@/lib/tree";
 import { PaperMetadataPanel } from "@/components/PaperMetadataPanel";
 import { PaperHighlightsList } from "@/components/PaperHighlightsList";
-import { InPapersetsBadge } from "@/components/InPapersetsBadge";
 import { DetailUploadBar } from "@/components/DetailUploadBar";
 
 type PaperRow = typeof papers.$inferSelect;
@@ -112,14 +111,9 @@ export default async function PaperPage({
             title={displayTitle}
             className="h-full w-full border-0"
           />
-          <div className="pointer-events-none absolute top-3 right-3 z-10">
-            <div className="pointer-events-auto">
-              <InPapersetsBadge count={papersetCount} papersets={papersetList} />
-            </div>
-          </div>
         </div>
         <aside className="flex flex-col gap-8 overflow-y-auto border-t border-border/60 p-6 lg:border-t-0 lg:border-l">
-          <PaperMetadataPanel paper={paper} />
+          <PaperMetadataPanel paper={paper} papersetCount={papersetCount} papersets={papersetList} />
           <PaperHighlightsList paperId={paper.id} />
         </aside>
       </div>

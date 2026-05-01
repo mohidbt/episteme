@@ -6,12 +6,22 @@ import type { papers } from "@episteme/db/schema";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { InPapersetsBadge } from "@/components/InPapersetsBadge";
 
 type PaperRow = typeof papers.$inferSelect;
+
+interface PapersetItem {
+  id: string;
+  filename: string;
+}
 
 interface PaperMetadataPanelProps {
   paper: PaperRow;
   onSaved?: (updated: PaperRow) => void;
+  /** Number of papersets containing this paper. When 0 the badge is hidden. */
+  papersetCount?: number;
+  /** Paperset list shown in the badge popover. */
+  papersets?: PapersetItem[];
 }
 
 interface FormState {
@@ -78,7 +88,7 @@ function diffPatch(
   return patch;
 }
 
-export function PaperMetadataPanel({ paper, onSaved }: PaperMetadataPanelProps) {
+export function PaperMetadataPanel({ paper, onSaved, papersetCount = 0, papersets = [] }: PaperMetadataPanelProps) {
   const [form, setForm] = useState<FormState>(() => toForm(paper));
   const [busy, setBusy] = useState(false);
 
@@ -125,9 +135,12 @@ export function PaperMetadataPanel({ paper, onSaved }: PaperMetadataPanelProps) 
 
   return (
     <form onSubmit={submit} className="flex flex-col gap-4">
-      <p className="text-[11px] text-muted-foreground">
-        Metadata
-      </p>
+      <div data-testid="metadata-header" className="flex items-center justify-between">
+        <p className="text-[11px] text-muted-foreground">
+          Metadata
+        </p>
+        <InPapersetsBadge count={papersetCount} papersets={papersets} />
+      </div>
 
       <div className="grid gap-2">
         <Label htmlFor="paper-title">Title</Label>

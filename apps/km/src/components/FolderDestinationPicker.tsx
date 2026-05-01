@@ -11,6 +11,7 @@ import {
 import {
   resolveChain,
   breadcrumbFromChain,
+  isHiddenFolder,
   type FolderRow,
 } from "@/lib/folders";
 
@@ -36,7 +37,7 @@ export function FolderDestinationPicker({
   triggerTestId,
 }: FolderDestinationPickerProps) {
   const visibleFolders = folders
-    .filter((f) => !f.isTrash)
+    .filter((f) => !f.isTrash && !isHiddenFolder(folders, f.id))
     .map((f) => {
       const chain = resolveChain(folders, f.id);
       return { folder: f, breadcrumb: breadcrumbFromChain(chain) };

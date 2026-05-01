@@ -9,7 +9,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { resolveChain, breadcrumbFromChain, type FolderRow } from "@/lib/folders";
+import { resolveChain, breadcrumbFromChain, isHiddenFolder, type FolderRow } from "@/lib/folders";
 
 interface FolderFilterDropdownProps {
   folders: FolderRow[];
@@ -26,7 +26,7 @@ export function FolderFilterDropdown({
   const router = useRouter();
 
   const nonTrashFolders = folders
-    .filter((f) => !f.isTrash)
+    .filter((f) => !f.isTrash && !isHiddenFolder(folders, f.id))
     .map((f) => {
       const chain = resolveChain(folders, f.id);
       return { folder: f, breadcrumb: breadcrumbFromChain(chain) };
