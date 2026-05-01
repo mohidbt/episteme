@@ -1,6 +1,7 @@
 """Tool registry — exports ALL_TOOLS for use by km_agent factory."""
 from langchain_core.tools import BaseTool
 
+from tools.data import TOOLS as _DATA_TOOLS
 from tools.library import TOOLS as _LIBRARY_TOOLS
 from tools.notes import TOOLS as _NOTES_TOOLS
 from tools.paper_search import TOOLS as _PAPER_SEARCH_TOOLS
@@ -18,5 +19,6 @@ ALL_TOOLS: list[BaseTool] = (
     + _PUBLISH_TOOLS
     + _PAPER_SEARCH_TOOLS
     + _PAPERS_TOOLS
+    + _DATA_TOOLS
     + _WEB_SEARCH_TOOLS
 )
