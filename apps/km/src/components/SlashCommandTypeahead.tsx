@@ -33,7 +33,7 @@ const COMMANDS: SlashCommandItem[] = [
     title: "AI",
     description: "Ask AI to write or edit",
     keywords: ["ai", "ask", "write", "edit", "rephrase", "generate"],
-    icon: "※",
+    icon: "⬡",
   },
   {
     title: "Cite",
@@ -263,7 +263,7 @@ export const SlashCommandTypeahead = forwardRef<
             }
             onSelect({ title: cmd.title });
           }}
-          className={`w-full rounded px-2 py-1.5 text-left flex items-center gap-2 ${
+          className={`w-full rounded px-2 py-1.5 text-left flex items-center gap-2 hover:bg-accent ${
             i === selected ? "bg-accent text-accent-foreground" : ""
           }`}
         >

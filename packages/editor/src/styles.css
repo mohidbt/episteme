@@ -3,7 +3,7 @@
 .episteme-prose h2 { font-size: 1.35em; font-weight: 600; margin: 0.7em 0 0.35em; }
 .episteme-prose p  { margin: 0.5em 0; }
 .episteme-prose code { background: var(--muted); padding: 0 4px; border-radius: 3px; font-family: ui-monospace, monospace; }
-.episteme-prose pre  { background: var(--muted); padding: 12px; border-radius: 6px; overflow-x: auto; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
+.episteme-prose pre  { background: var(--muted); padding: 12px 14px; border-radius: 8px; overflow-x: auto; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; line-height: 1.6; }
 .episteme-prose pre code { background: transparent; padding: 0; border-radius: 0; font-size: inherit; }
 
 /* Code-block NodeView wrapper hosts the language-switcher dropdown. */

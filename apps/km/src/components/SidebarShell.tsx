@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { PanelLeftClose, PanelLeftOpen, UserPlus } from "lucide-react";
+import { UserPlus } from "lucide-react";
 import {
   Sidebar as ShadcnSidebar,
   SidebarContent,
@@ -24,8 +24,40 @@ interface SidebarShellProps {
 }
 
 const COLLAPSED_KEY = "sidebar-collapsed";
-const COLLAPSED_WIDTH = "3.5rem";
-const EXPANDED_WIDTH = "16rem";
+const COLLAPSED_WIDTH = "4rem";
+const EXPANDED_WIDTH = "15.5rem";
+
+const SidebarCollapsedContext = React.createContext(false);
+export const useSidebarCollapsed = () => React.useContext(SidebarCollapsedContext);
+
+function CollapseHandle({ collapsed, toggle }: { collapsed: boolean; toggle: () => void }) {
+  return (
+    <button
+      type="button"
+      data-testid="sidebar-collapse-handle"
+      onClick={toggle}
+      aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+      className="ep-sb-handle absolute right-0 top-1/2 -translate-y-1/2 z-20 h-6 w-3.5 rounded-l-md border border-[var(--roof-border)] border-r-0 bg-[var(--bg-roof)] flex items-center justify-center text-[var(--fg-muted)] hover:text-[var(--fg)] hover:bg-[var(--bg-roof-2)] transition-colors opacity-0 group-hover/sidebar-rail:opacity-100 transition-opacity"
+    >
+      <svg
+        width="12"
+        height="12"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        {collapsed ? (
+          <path d="m9 18 6-6-6-6" />
+        ) : (
+          <path d="m15 18-6-6 6-6" />
+        )}
+      </svg>
+    </button>
+  );
+}
 
 export function SidebarShell({ library, tree, isAnonymous }: SidebarShellProps) {
   const router = useRouter();
@@ -59,78 +91,87 @@ export function SidebarShell({ library, tree, isAnonymous }: SidebarShellProps) 
   const width = collapsed ? COLLAPSED_WIDTH : EXPANDED_WIDTH;
 
   return (
-    <div
-      data-testid="sidebar-rail-root"
-      data-collapsed={collapsed ? "true" : "false"}
-      style={{ "--sidebar-width": width } as React.CSSProperties}
-      className="h-full transition-[width] duration-200 ease-out [&_[data-sidebar=menu-button]_svg]:transition-transform [&_[data-sidebar=menu-button]:hover_svg]:scale-110"
-    >
-      <ShadcnSidebar
-        collapsible="none"
-        className="border border-foreground rounded-r-xl overflow-hidden shadow-[4px_4px_20px_rgba(0,0,0,0.08)]"
+    <SidebarCollapsedContext.Provider value={collapsed}>
+      <div
+        data-testid="sidebar-rail-root"
+        data-collapsed={collapsed ? "true" : "false"}
+        style={{ "--sidebar-width": width } as React.CSSProperties}
+        className="group/sidebar-rail group relative h-full transition-[width] duration-200 ease-out"
       >
-        <SidebarHeader className="px-4 pt-5 pb-3 flex flex-row items-center justify-between gap-2">
-          <Link
-            href="/"
-            className="font-display text-[20px] leading-none tracking-tight text-sidebar-foreground hover:underline truncate min-w-0"
-            data-testid="km-sidebar-library-name"
-            aria-hidden={collapsed ? true : undefined}
-            tabIndex={collapsed ? -1 : 0}
-            style={collapsed ? { opacity: 0, pointerEvents: "none" } : undefined}
-          >
-            {library.name}
-          </Link>
-          <button
-            type="button"
-            data-testid="sidebar-collapse-toggle"
-            onClick={toggle}
-            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-            className="shrink-0 inline-flex h-7 w-7 items-center justify-center rounded-md text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors [&_svg]:transition-transform hover:[&_svg]:scale-110"
-          >
-            {collapsed ? (
-              <PanelLeftOpen className="size-4" aria-hidden />
-            ) : (
-              <PanelLeftClose className="size-4" aria-hidden />
-            )}
-          </button>
-        </SidebarHeader>
-        <SidebarContent>
-          <DriveTree
-            libraryId={library.id}
-            folders={tree.folders}
-            papers={tree.papers}
-            references={tree.references}
-            notes={tree.notes}
-            papersets={tree.papersets}
-            trashId={trashFolder?.id ?? null}
-            onMutate={onMutate}
-          />
-          <ByTypeNav />
-          <SidebarAgentSection />
-          <SidebarSettingsSection />
-        </SidebarContent>
-        {isAnonymous ? (
-          <SidebarFooter className="px-3 pb-3">
-            <Button
-              nativeButton={false}
-              render={
+        <ShadcnSidebar
+          collapsible="none"
+          className="overflow-hidden bg-[var(--bg-roof)]"
+        >
+          {/* Workspace pill */}
+          {collapsed ? (
+            <SidebarHeader className="px-0 pt-3 pb-1">
+              <div className="flex justify-center">
                 <Link
-                  href="/sign-up"
-                  aria-label={collapsed ? "Sign up to save across devices" : undefined}
-                />
-              }
-              data-testid="sidebar-anon-signup-cta"
-              className={collapsed ? "w-full px-0" : "w-full"}
-            >
-              {collapsed ? (
-                <UserPlus className="size-4" aria-hidden />
-              ) : (
-                "Sign up to save across devices"
-              )}
-            </Button>
-          </SidebarFooter>
-        ) : null}
-      </ShadcnSidebar>
-    </div>
+                  href="/"
+                  className="flex h-9 w-9 items-center justify-center rounded-md bg-foreground text-background font-display italic text-[17px] leading-none"
+                  title="Personal"
+                >
+                  ε
+                </Link>
+              </div>
+            </SidebarHeader>
+          ) : (
+            <SidebarHeader className="px-2 pt-4 pb-2 flex flex-row items-center gap-2">
+              <Link
+                href="/"
+                className="flex h-9 items-center gap-2 rounded-md px-2 hover:bg-[var(--bg-roof-2)] transition-colors"
+              >
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-foreground text-background font-display italic text-[17px] leading-none pb-0.5">
+                  ε
+                </span>
+                <span className="font-semibold text-[14px] tracking-tight text-foreground truncate">
+                  {library.name}
+                </span>
+              </Link>
+            </SidebarHeader>
+          )}
+          <SidebarContent>
+            {!collapsed && (
+              <DriveTree
+                libraryId={library.id}
+                folders={tree.folders}
+                papers={tree.papers}
+                references={tree.references}
+                notes={tree.notes}
+                papersets={tree.papersets}
+                trashId={trashFolder?.id ?? null}
+                onMutate={onMutate}
+              />
+            )}
+            <ByTypeNav />
+            <SidebarAgentSection />
+            <SidebarSettingsSection />
+          </SidebarContent>
+          {isAnonymous ? (
+            <SidebarFooter className="px-3 pb-3">
+              <Button
+                nativeButton={false}
+                render={
+                  <Link
+                    href="/sign-up"
+                    aria-label={collapsed ? "Sign up to save across devices" : undefined}
+                  />
+                }
+                data-testid="sidebar-anon-signup-cta"
+                className={collapsed ? "w-full px-0" : "w-full"}
+              >
+                {collapsed ? (
+                  <UserPlus className="size-4" aria-hidden />
+                ) : (
+                  "Sign up to save across devices"
+                )}
+              </Button>
+            </SidebarFooter>
+          ) : null}
+        </ShadcnSidebar>
+
+        <CollapseHandle collapsed={collapsed} toggle={toggle} />
+      </div>
+    </SidebarCollapsedContext.Provider>
   );
 }

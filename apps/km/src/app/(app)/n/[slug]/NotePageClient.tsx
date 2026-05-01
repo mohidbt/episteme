@@ -16,6 +16,19 @@ import { AskNotesPanel } from "@/components/AskNotesPanel";
 import { PublishDialog } from "@/components/PublishDialog";
 import { DownloadButton } from "@/components/DownloadButton";
 
+function formatRelativeTime(date: Date): string {
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMin = Math.floor(diffMs / 60000);
+  if (diffMin < 1) return "just now";
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return `${diffHr}h ago`;
+  const diffDay = Math.floor(diffHr / 24);
+  if (diffDay < 30) return `${diffDay}d ago`;
+  return date.toLocaleDateString();
+}
+
 export function NotePageClient({
   id,
   title,
@@ -27,6 +40,8 @@ export function NotePageClient({
   noteSlug,
   userName,
   initialCollabToken,
+  updatedAt,
+  referenceCount = 0,
 }: {
   id: string;
   title: string;
@@ -38,6 +53,8 @@ export function NotePageClient({
   noteSlug: string;
   userName: string;
   initialCollabToken?: string | null;
+  updatedAt?: string | null;
+  referenceCount?: number;
 }) {
   const router = useRouter();
   const flushRef = useRef<(() => Promise<void>) | null>(null);
@@ -123,8 +140,13 @@ export function NotePageClient({
     router.refresh();
   }, [router]);
 
+  const editedLabel = updatedAt
+    ? `Last edited ${formatRelativeTime(new Date(updatedAt))}`
+    : "Synced";
+
   return (
     <>
+      {/* Title */}
       <div className="mb-3 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2 min-w-0 flex-1">
           <input
@@ -141,7 +163,7 @@ export function NotePageClient({
                 setTitleDraft(title);
               }
             }}
-            className="text-2xl font-semibold bg-transparent border-0 outline-none focus:ring-0 min-w-0 flex-1 px-0"
+            className="font-display text-[28px] sm:text-[44px] leading-[1.1] tracking-[-0.02em] font-normal bg-transparent border-0 outline-none focus:ring-0 min-w-0 flex-1 px-0 my-2 mb-3"
             aria-label="Note title"
           />
           {titleDirty ? (
@@ -184,6 +206,22 @@ export function NotePageClient({
           />
         </div>
       </div>
+
+      {/* Meta row */}
+      <div className="flex items-center gap-2 text-[12px] text-[var(--fg-muted)] mb-8">
+        <span>{editedLabel}</span>
+        {referenceCount > 0 && (
+          <>
+            <span className="opacity-50">·</span>
+            <span>{referenceCount} references</span>
+          </>
+        )}
+        <span className="synced-pill">
+          <span className="inline-block size-1.5 rounded-full bg-green-500" />
+          Synced
+        </span>
+      </div>
+
       <NoteFrontmatter
         rows={frontmatterRows}
         onChange={onFrontmatterChange}

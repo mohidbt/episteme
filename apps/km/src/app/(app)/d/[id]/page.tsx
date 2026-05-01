@@ -7,6 +7,7 @@ import { getDefaultLibrary } from "@/lib/default-library";
 import { PapersetBreadcrumbs } from "./PapersetBreadcrumbs";
 import { PapersetView } from "./PapersetView";
 import { getFolderChain } from "./lib/folder-chain";
+import { parseCsvCells } from "@/lib/papersets/cell-write";
 
 type ColumnSpec = { name: string; description: string };
 type RowRef = { paper_id: string };
@@ -53,6 +54,7 @@ export default async function PapersetPage({
   const columns = ps.columns as ColumnSpec[];
   const cellGrounding = ps.cellGrounding as CellGrounding;
   const runningCells = ps.runningCells as RunningCell[];
+  const cellValues = parseCsvCells(ps.content, columns);
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -72,6 +74,7 @@ export default async function PapersetPage({
           rowRefs: refs,
           cellGrounding,
           runningCells,
+          cellValues,
         }}
         paperById={paperById}
       />

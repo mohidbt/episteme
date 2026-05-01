@@ -178,7 +178,7 @@ function RephrasePanel({
                   className="flex items-center gap-1 rounded border border-border px-2 py-0.5 text-xs hover:bg-accent"
                   aria-label="Personal skill"
                 >
-                  <span aria-hidden="true" className="text-sm leading-none">※</span>
+                  <span aria-hidden="true" className="text-sm leading-none">⬡</span>
                   Personal skill
                 </button>
               }
@@ -528,7 +528,7 @@ export function AiBubbleMenu({
             </div>
             <button onClick={enterRephrase}
               className="flex items-center gap-1 rounded-r-lg px-2 py-1.5 text-sm hover:bg-accent">
-              <span aria-hidden="true" className="text-sm leading-none">※</span>
+              <span aria-hidden="true" className="text-sm leading-none">⬡</span>
               <span className="text-xs">AI Rephrase</span>
             </button>
           </>

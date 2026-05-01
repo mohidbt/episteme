@@ -310,18 +310,18 @@ export function DriveTree({
 
   return (
     <SidebarGroup>
-      <SidebarGroupLabel className="h-auto bg-background border border-border/60 rounded-md px-2 py-1.5 text-[13px] font-semibold text-foreground [&>svg]:size-3 [&>svg]:text-foreground">
+      <SidebarGroupLabel className="sidebar-section-toggle h-auto bg-transparent border-0 rounded-none px-0 py-0 text-[13px] font-semibold text-foreground [&>svg]:size-3.5 [&>svg]:text-foreground">
         <button
           type="button"
           onClick={() => setDriveOpen(!driveOpen)}
           aria-expanded={driveOpen}
-          className="flex w-full items-center gap-2 text-[13px] font-semibold text-foreground"
+          className="flex w-full items-center gap-2 px-[10px] py-[5px] rounded-[6px] text-[13px] font-semibold text-[var(--fg)] hover:bg-[var(--bg-roof-2)] transition-colors"
         >
-          <FolderTree aria-hidden className="size-3 text-foreground" />
+          <FolderTree aria-hidden className="size-3.5 text-foreground" />
           Drive
           {hasContent && (
             <ChevronRight
-              className={`ml-auto !size-3.5 text-foreground transition-transform ${driveOpen ? "rotate-90" : ""}`}
+              className={`ml-auto size-3.5 text-[var(--fg-muted)] transition-transform ${driveOpen ? "rotate-90" : ""}`}
               aria-hidden
             />
           )}
@@ -481,7 +481,7 @@ function DriveLeafRow({ item }: { item: TreeItem }) {
           />
         }
         isActive={pathname === href}
-        className={`data-[active=true]:bg-transparent data-[active=true]:border-l-2 data-[active=true]:border-foreground data-[active=true]:font-medium data-[active=true]:rounded-l-none data-[active=true]:pl-[calc(0.5rem-2px)]${hasTitle ? "" : " text-muted-foreground italic"}${isDragging ? " opacity-50" : ""}`}
+        className={`data-[active=true]:bg-[var(--bg-roof-2)] data-[active=true]:font-medium data-[active=true]:text-[var(--fg)]${hasTitle ? "" : " text-muted-foreground italic"}${isDragging ? " opacity-50" : ""}`}
       >
         <span>{itemLabel(item)}</span>
       </SidebarMenuButton>

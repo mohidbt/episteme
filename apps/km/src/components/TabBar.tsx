@@ -204,7 +204,7 @@ export function TabBar() {
     <div
       role="tablist"
       aria-label="Open tabs"
-      className="flex h-9 shrink-0 items-center gap-1 border-b border-border bg-background/60 px-2 backdrop-blur"
+      className="flex shrink-0 items-end gap-0 bg-[var(--bg-roof)] px-3 pt-5 h-[52px]"
     >
       {tabs.map((tab) => {
         const active = tab.href === activeHref;
@@ -216,10 +216,10 @@ export function TabBar() {
             data-testid="tab-bar-tab"
             data-href={tab.href}
             className={cn(
-              "group flex h-7 max-w-[180px] items-center gap-1 rounded-md border border-transparent px-2 text-xs",
+              "group relative flex h-8 max-w-[280px] items-center gap-1.5 px-3 text-[12.5px] rounded-t-lg",
               active
-                ? "bg-muted text-foreground border-border"
-                : "text-muted-foreground hover:bg-muted/50",
+                ? "bg-background text-foreground font-medium border border-[var(--roof-border)] border-b-0 -mb-px z-10"
+                : "text-[var(--fg-muted)] hover:bg-[var(--bg-roof-2)]",
             )}
           >
             <button
@@ -237,7 +237,7 @@ export function TabBar() {
                 e.stopPropagation();
                 closeTab(tab.href);
               }}
-              className="rounded p-0.5 text-muted-foreground opacity-0 hover:bg-background hover:text-foreground group-hover:opacity-100"
+              className="rounded p-0.5 text-[var(--fg-muted)] opacity-0 hover:bg-[var(--bg-roof-2)] hover:text-[var(--fg)] group-hover:opacity-100"
             >
               <X className="h-3 w-3" />
             </button>
@@ -249,7 +249,7 @@ export function TabBar() {
         data-testid="tab-bar-new"
         aria-label="New tab"
         onClick={() => openTab(DEFAULT_HREF, DEFAULT_TITLE)}
-        className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+        className="mb-px flex h-8 w-8 items-center justify-center rounded-lg text-[var(--fg-muted)] hover:bg-[var(--bg-roof-2)] hover:text-[var(--fg)]"
       >
         <Plus className="h-3.5 w-3.5" />
       </button>

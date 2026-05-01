@@ -64,7 +64,7 @@ export function NoteFrontmatter({
   return (
     <div
       data-testid="note-frontmatter"
-      className="mb-4 rounded-md border bg-muted/20 p-3"
+      className="mb-4 rounded-lg border bg-[var(--bg-muted)] p-3"
     >
       {rows.length === 0 && !adding ? (
         <p className="text-sm text-muted-foreground">No properties yet.</p>

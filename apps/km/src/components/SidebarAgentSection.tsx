@@ -4,13 +4,11 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Bot, MessagesSquare } from "lucide-react";
 import {
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarGroupLabel,
-  SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
+import { SidebarSection } from "./SidebarSection";
+import { cn } from "@/lib/utils";
 
 const AGENT_ROWS = [
   { label: "Convos", href: "/agents", Icon: MessagesSquare },
@@ -19,27 +17,26 @@ const AGENT_ROWS = [
 export function SidebarAgentSection() {
   const pathname = usePathname();
   return (
-    <SidebarGroup>
-      <SidebarGroupLabel className="h-auto gap-2 bg-background border border-border/60 rounded-md px-2 py-1.5 text-[13px] font-semibold text-foreground [&>svg]:size-3 [&>svg]:text-foreground">
-        <Bot data-icon="inline-start" aria-hidden className="size-3 text-foreground" />
-        Agent
-      </SidebarGroupLabel>
-      <SidebarGroupContent>
-        <SidebarMenu>
-          {AGENT_ROWS.map(({ label, href, Icon }) => (
-            <SidebarMenuItem key={href}>
-              <SidebarMenuButton
-                render={<Link href={href} />}
-                isActive={pathname === href}
-                className="data-[active=true]:bg-transparent data-[active=true]:border-l-2 data-[active=true]:border-foreground data-[active=true]:font-medium data-[active=true]:rounded-l-none data-[active=true]:pl-[calc(0.5rem-2px)]"
-              >
-                <Icon aria-hidden />
-                <span>{label}</span>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          ))}
-        </SidebarMenu>
-      </SidebarGroupContent>
-    </SidebarGroup>
+    <SidebarSection
+      label="Agent"
+      icon={<Bot className="size-3.5" aria-hidden />}
+    >
+      {AGENT_ROWS.map(({ label, href, Icon }) => (
+        <SidebarMenuItem key={href}>
+          <SidebarMenuButton
+            render={<Link href={href} />}
+            isActive={pathname === href}
+            className={cn(
+              "text-[13px] font-normal text-[var(--fg-2)] gap-2 px-[10px] py-[5px] rounded-[6px]",
+              "data-[active=true]:bg-[var(--bg-roof-2)] data-[active=true]:font-medium data-[active=true]:text-[var(--fg)]",
+              "hover:bg-[var(--bg-roof-2)]",
+            )}
+          >
+            <Icon aria-hidden className="size-4" />
+            <span>{label}</span>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+      ))}
+    </SidebarSection>
   );
 }

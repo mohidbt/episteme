@@ -106,7 +106,7 @@ export default async function NotePage({
     : [];
   return (
     <div className="mx-auto max-w-3xl p-6">
-      {library && <PathPill className="mb-4" segments={pillSegments} />}
+      {library && <PathPill className="mb-2 font-mono text-[11px] tracking-[0.06em] text-[var(--fg-muted)]" segments={pillSegments} />}
       {library && (
         <div className="mb-4">
           <DetailUploadBar
@@ -128,6 +128,8 @@ export default async function NotePage({
         noteSlug={slug}
         userName={me?.name ?? me?.email ?? "anonymous"}
         initialCollabToken={initialCollabToken}
+        updatedAt={note.updatedAt.toISOString()}
+        referenceCount={Object.keys(resolvedLinks).length}
       />
       <BacklinksPanel noteId={note.id} />
     </div>

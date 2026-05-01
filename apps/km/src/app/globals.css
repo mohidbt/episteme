@@ -53,13 +53,17 @@
   --bg-roof-2: oklch(0.97 0 0);
   --roof-border: oklch(0.922 0 0);
   --fg-2: oklch(0.371 0 0);
+  /* Design-system aliases — map design kit names to shadcn vars */
+  --bg: var(--background);
+  --fg: var(--foreground);
+  --fg-muted: var(--muted-foreground);
 }
 
 @theme inline {
-  --font-sans: "Geist", "Geist Fallback", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Outfit", "Geist Fallback", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "Geist Mono", "Geist Mono Fallback", ui-monospace, monospace;
   --font-heading: var(--font-sans);
-  --font-display: "Instrument Serif", ui-serif, Georgia, serif;
+  --font-display: "Philosopher", ui-serif, Georgia, serif;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -95,6 +99,9 @@
   --color-bg-roof-2: var(--bg-roof-2);
   --color-roof-border: var(--roof-border);
   --color-fg-2: var(--fg-2);
+  --color-fg: var(--fg);
+  --color-fg-muted: var(--fg-muted);
+  --color-bg: var(--bg);
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -148,6 +155,10 @@
   --bg-roof-2: oklch(0.269 0 0);
   --roof-border: oklch(1 0 0 / 10%);
   --fg-2: oklch(0.7 0 0);
+  /* Design-system aliases */
+  --bg: var(--background);
+  --fg: var(--foreground);
+  --fg-muted: var(--muted-foreground);
 }
 
 @layer base {
@@ -227,9 +238,10 @@
 
   /* Collapsed sidebar — icon-only mode */
   [data-collapsed="true"] [data-sidebar="menu-button"] {
-    width: 2rem !important;
-    height: 2rem !important;
+    width: 2.25rem !important;
+    height: 2.25rem !important;
     padding: 0.5rem !important;
+    margin: 3px auto !important;
     justify-content: center;
   }
   [data-collapsed="true"] [data-sidebar="menu-button"] > span:last-child {
@@ -240,6 +252,12 @@
   }
   [data-collapsed="true"] .sidebar-section-toggle {
     display: none;
+  }
+  [data-collapsed="true"] [data-sidebar="group-content"] {
+    gap: 4px;
+  }
+  [data-collapsed="true"] [data-sidebar="menu"] {
+    gap: 2px;
   }
 
   /* Sidebar section chevron — visible on hover */
