@@ -106,6 +106,16 @@ describe("Sidebar", () => {
     expect(screen.queryByText(/co-scientist/i)).toBeNull();
   });
 
+  it("G-R3-07 #86: agent nav row label reads 'Convos'", () => {
+    const { container } = renderShell(baseTree());
+    const link = container.querySelector(
+      'a[href="/agents"]',
+    ) as HTMLAnchorElement | null;
+    expect(link).toBeTruthy();
+    expect(link?.textContent).toMatch(/convos/i);
+    expect(link?.textContent).not.toMatch(/agents/i);
+  });
+
   it("renames the agent settings link to 'Agent Settings'", () => {
     const { container } = renderShell(baseTree());
     const link = container.querySelector(

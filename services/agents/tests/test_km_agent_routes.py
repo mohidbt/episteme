@@ -665,6 +665,62 @@ def test_state_returns_serialized_messages_from_checkpoint():
     ]
 
 
+def test_state_serializes_tool_calls_into_parts_for_hydration():
+    """G-R3-07 #78: assistant messages with tool_calls expose a structured
+    `parts` array (text + tool-call + tool-result) so the UI can rebuild the
+    rich <Tool> card on history hydration instead of falling back to a flat
+    text bubble that strips the tool turns.
+    """
+    from unittest.mock import AsyncMock  # noqa: PLC0415
+    from langchain_core.messages import AIMessage, HumanMessage, ToolMessage  # noqa: PLC0415
+
+    path = "/agents/km/state/thread-tools"
+    ai = AIMessage(
+        content="Looking now.",
+        id="a-1",
+        tool_calls=[
+            {"id": "tc-1", "name": "paper_search", "args": {"q": "transformers"}},
+        ],
+    )
+    msgs = [
+        HumanMessage(content="find a paper", id="u-1"),
+        ai,
+        ToolMessage(content="hits=3", tool_call_id="tc-1"),
+        AIMessage(content="Found three.", id="a-2"),
+    ]
+    mock_tuple = MagicMock()
+    mock_tuple.checkpoint = {"channel_values": {"todos": [], "messages": msgs}}
+    mock_saver = MagicMock()
+    mock_saver.aget_tuple = AsyncMock(return_value=mock_tuple)
+
+    with patch("routers.km_agent.get_saver", return_value=mock_saver):
+        r = client.get(path, headers=_signed_headers("GET", path, b""))
+
+    assert r.status_code == 200
+    data = r.json()
+    # User message: plain shape, no parts.
+    assert data["messages"][0] == {"id": "u-1", "role": "user", "text": "find a paper"}
+    # Assistant w/ tool_calls: parts array carries text + tool-call + tool-result.
+    a1 = data["messages"][1]
+    assert a1["id"] == "a-1"
+    assert a1["role"] == "assistant"
+    parts = a1["parts"]
+    assert parts[0] == {"type": "text", "text": "Looking now."}
+    assert parts[1] == {
+        "type": "tool-call",
+        "id": "tc-1",
+        "name": "paper_search",
+        "args": {"q": "transformers"},
+    }
+    assert parts[2] == {"type": "tool-result", "id": "tc-1", "output": "hits=3"}
+    # Trailing assistant message lands as a plain text dict.
+    assert data["messages"][2] == {
+        "id": "a-2",
+        "role": "assistant",
+        "text": "Found three.",
+    }
+
+
 # ---------------------------------------------------------------------------
 # /config POST
 # ---------------------------------------------------------------------------

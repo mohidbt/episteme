@@ -55,6 +55,16 @@ describe("ThreadList", () => {
     expect(screen.getByText(/No conversations yet/i)).toBeTruthy();
   });
 
+  it("G-R3-07 #86: list heading reads 'Convos'", () => {
+    render(
+      <ThreadList
+        initialThreads={[makeThread({ threadId: "t-1", title: "Hello" })]}
+      />,
+    );
+    const heading = screen.getByRole("heading", { level: 1 });
+    expect(heading.textContent).toBe("Convos");
+  });
+
   it("renders one row per thread", () => {
     render(
       <ThreadList

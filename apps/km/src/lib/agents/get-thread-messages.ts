@@ -1,9 +1,31 @@
 import { signRequest } from "@/lib/agents/sign-request";
 
+export type PersistedMessagePart =
+  | { type: "text"; text: string }
+  | {
+      type: "tool-call";
+      id: string;
+      name: string;
+      args: Record<string, unknown>;
+    }
+  | {
+      type: "tool-result";
+      id: string;
+      output?: unknown;
+      errorText?: string;
+    };
+
 export interface PersistedMessage {
   id: string;
   role: "user" | "assistant";
   text: string;
+  /**
+   * G-R3-07 #78 — when the assistant turn included tool calls/results, the
+   * agents service emits a structured `parts` array so hydration can rebuild
+   * the rich `<Tool>` cards instead of falling back to a flat text bubble
+   * (which previously rendered the literal "thought" model leakage).
+   */
+  parts?: PersistedMessagePart[];
 }
 
 /**

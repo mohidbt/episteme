@@ -457,33 +457,106 @@ async def resume(req: Request, auth: InternalAuthDep):
     )
 
 
-def _serialize_message(msg) -> dict | None:
-    """Serialize a LangChain BaseMessage into a minimal {role, text} dict.
+def _extract_text(raw) -> str:
+    """Pull plain text out of a LangChain content payload (str | list[block])."""
+    if isinstance(raw, list):
+        return "".join(
+            part.get("text", "") for part in raw if isinstance(part, dict)
+        )
+    return str(raw or "")
 
-    Returns None for tool messages and other non-displayable types — the UI
-    transcript only seeds user/assistant text cards on hydration. Live
-    streams continue to drive the richer card set via SSE.
+
+def _serialize_message(msg) -> dict | None:
+    """Serialize a LangChain BaseMessage into a hydration-friendly dict.
+
+    Shape:
+        {"id": str, "role": "user"|"assistant", "text": str, "parts"?: [...]}
+
+    For AI messages with tool_calls, `parts` interleaves text + tool-call
+    entries so the UI can rebuild the rich `<Tool>` cards on history hydration
+    (G-R3-07 #78). Tool results live on separate ToolMessages and are folded
+    in by `_serialize_messages_with_tools` below — we cannot do it here
+    because a single _serialize_message call only sees one message.
+
+    Returns None for non-displayable types (tool messages handled at the
+    list-level join, system messages skipped).
     """
     msg_type = getattr(msg, "type", None)
-    role: str | None
     if msg_type == "human":
         role = "user"
     elif msg_type == "ai":
         role = "assistant"
     else:
         return None
-    raw = getattr(msg, "content", "")
-    if isinstance(raw, list):
-        # LangChain content blocks — concat any text parts.
-        text = "".join(
-            part.get("text", "") for part in raw if isinstance(part, dict)
-        )
-    else:
-        text = str(raw or "")
+
+    text = _extract_text(getattr(msg, "content", ""))
+    tool_calls = list(getattr(msg, "tool_calls", []) or [])
+
+    msg_id = getattr(msg, "id", None) or f"{role}-{id(msg)}"
+    out: dict = {"id": str(msg_id), "role": role, "text": text}
+
+    if role == "assistant" and tool_calls:
+        parts: list[dict] = []
+        if text.strip():
+            parts.append({"type": "text", "text": text})
+        for tc in tool_calls:
+            # tool_calls are dicts on AIMessage: {id, name, args}
+            parts.append(
+                {
+                    "type": "tool-call",
+                    "id": str(tc.get("id") or f"tc-{id(tc)}"),
+                    "name": str(tc.get("name") or ""),
+                    "args": tc.get("args") or {},
+                }
+            )
+        out["parts"] = parts
+        return out
+
     if not text.strip():
         return None
-    msg_id = getattr(msg, "id", None) or f"{role}-{id(msg)}"
-    return {"id": str(msg_id), "role": role, "text": text}
+    return out
+
+
+def _serialize_messages_with_tools(raw_messages: list) -> list[dict]:
+    """List-level serializer that folds ToolMessage results back into the
+    preceding assistant message's `parts` array.
+
+    Walks the LangChain message list once. For every ToolMessage we find,
+    locate the most recent assistant message with a tool-call matching its
+    `tool_call_id` and append a `tool-result` part. This rebuilds the
+    text/tool/text/tool/text shape the live SSE reducer produces.
+    """
+    serialized: list[dict] = []
+    # Index from tool_call_id -> assistant-message dict so we can append
+    # results without an O(n^2) scan.
+    by_call_id: dict[str, dict] = {}
+
+    for m in raw_messages:
+        msg_type = getattr(m, "type", None)
+        if msg_type == "tool":
+            call_id = str(getattr(m, "tool_call_id", "") or "")
+            target = by_call_id.get(call_id)
+            if target is None:
+                continue
+            content = _extract_text(getattr(m, "content", ""))
+            status = getattr(m, "status", None)
+            part: dict = {"type": "tool-result", "id": call_id}
+            if status == "error":
+                part["errorText"] = content
+            else:
+                part["output"] = content
+            target.setdefault("parts", []).append(part)
+            continue
+
+        s = _serialize_message(m)
+        if s is None:
+            continue
+        serialized.append(s)
+        for part in s.get("parts", []):
+            if part.get("type") == "tool-call":
+                by_call_id[part["id"]] = s
+
+    return serialized
 
 
 @router.get("/state/{thread_id}")
@@ -497,7 +570,7 @@ async def state(thread_id: str, auth: InternalAuthDep):
     channel_values = tuple_.checkpoint.get("channel_values", {})
     todos = channel_values.get("todos", [])
     raw_messages = channel_values.get("messages", []) or []
-    messages = [m for m in (_serialize_message(m) for m in raw_messages) if m]
+    messages = _serialize_messages_with_tools(raw_messages)
     # pending_interrupts detail deferred to 1.3b
     return {
         "todos": todos,

@@ -78,6 +78,66 @@ describe("AgentTranscript", () => {
     expect(screen.getByText("hi there")).toBeTruthy();
   });
 
+  it("G-R3-07 #81: placeholder reads 'Ask anything'", () => {
+    render(<AgentTranscript threadId="t-ph" />);
+    const ta = screen.getByLabelText("Message agent") as HTMLTextAreaElement;
+    expect(ta.placeholder).toBe("Ask anything");
+  });
+
+  it("G-R3-07 #78: hydration renders tool cards from persisted parts (not literal text)", () => {
+    render(
+      <AgentTranscript
+        threadId="t-hyd"
+        initialMessages={[
+          { id: "u-1", role: "user", text: "find a paper" },
+          {
+            id: "a-1",
+            role: "assistant",
+            text: "",
+            parts: [
+              { type: "text", text: "Looking now." },
+              {
+                type: "tool-call",
+                id: "tc-1",
+                name: "paper_search",
+                args: { q: "transformers" },
+              },
+              {
+                type: "tool-result",
+                id: "tc-1",
+                output: { hits: 3 },
+              },
+              { type: "text", text: "Found three." },
+            ],
+          },
+        ]}
+      />,
+    );
+    // Tool card renders as the rich <Tool> component, not literal text.
+    expect(screen.getByTestId("card-tool")).toBeTruthy();
+    // Both bracketing assistant text bubbles render.
+    expect(screen.getByText("Looking now.")).toBeTruthy();
+    expect(screen.getByText("Found three.")).toBeTruthy();
+    // No literal "tool-call" / "tool-result" placeholder text leaked.
+    expect(screen.queryByText(/tool-call/)).toBeNull();
+  });
+
+  it("G-R3-07 #78: hydration strips leading 'thought' prefix from assistant text", () => {
+    render(
+      <AgentTranscript
+        threadId="t-thought"
+        initialMessages={[
+          { id: "a-1", role: "assistant", text: "thought hello world" },
+        ]}
+      />,
+    );
+    const assistant = screen
+      .getAllByTestId("card-text")
+      .find((el) => el.getAttribute("data-role") === "assistant");
+    expect(assistant?.textContent).toContain("hello world");
+    expect(assistant?.textContent?.startsWith("thought")).toBe(false);
+  });
+
   it("invokes onSendMessage override when provided (no fetch)", () => {
     const sent = vi.fn();
     render(<AgentTranscript threadId="t1" onSendMessage={sent} />);

@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/sidebar";
 
 const AGENT_ROWS = [
-  { label: "Agents", href: "/agents", Icon: MessagesSquare },
+  { label: "Convos", href: "/agents", Icon: MessagesSquare },
 ] as const;
 
 export function SidebarAgentSection() {

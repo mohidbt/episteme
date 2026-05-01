@@ -100,8 +100,33 @@ export interface AgentTranscriptProps {
    * on mount when reopening an existing thread, so the user doesn't see an
    * empty placeholder. Live streams continue to merge in via the SSE reducer.
    */
-  initialMessages?: Array<{ id: string; role: "user" | "assistant"; text: string }>;
+  initialMessages?: Array<{
+    id: string;
+    role: "user" | "assistant";
+    text: string;
+    parts?: Array<
+      | { type: "text"; text: string }
+      | {
+          type: "tool-call";
+          id: string;
+          name: string;
+          args: Record<string, unknown>;
+        }
+      | {
+          type: "tool-result";
+          id: string;
+          output?: unknown;
+          errorText?: string;
+        }
+    >;
+  }>;
 }
+
+// G-R3-07 #78 — same regex used by the live SSE reducer (#64). Some models
+// emit a literal "thought" token as the first word of the assistant reply;
+// strip it on hydration so historical convos match live-stream rendering.
+const stripLeadingThought = (text: string): string =>
+  text.replace(/^\s*thought\b[\s:,.\-]*/i, "");
 
 /**
  * Parse a chunk of SSE text. Handles partial frames via `buffer` arg.
@@ -162,12 +187,60 @@ export function AgentTranscript({
     initialAgentTranscriptState,
     (base) => {
       if (!initialMessages || initialMessages.length === 0) return base;
-      const cards: TranscriptCard[] = initialMessages.map((m) => ({
-        kind: "text",
-        id: m.id,
-        role: m.role,
-        text: m.text,
-      }));
+      // G-R3-07 #78 — when a persisted assistant message carries `parts`,
+      // expand into one card per part (text + tool) so historical convos
+      // mirror the live SSE rendering. Otherwise fall back to a single
+      // text card. Either way, strip the model "thought" prefix once.
+      const cards: TranscriptCard[] = [];
+      for (const m of initialMessages) {
+        if (m.parts && m.parts.length > 0) {
+          let textIdx = 0;
+          for (const part of m.parts) {
+            if (part.type === "text") {
+              const t = stripLeadingThought(part.text);
+              if (!t.trim()) continue;
+              cards.push({
+                kind: "text",
+                id: `${m.id}:t${textIdx++}`,
+                role: m.role,
+                text: t,
+              });
+            } else if (part.type === "tool-call") {
+              cards.push({
+                kind: "tool",
+                id: part.id,
+                name: part.name,
+                args: part.args ?? {},
+                state: "input-available",
+              });
+            } else if (part.type === "tool-result") {
+              // Locate the matching tool card and transition its state.
+              const existing = [...cards]
+                .reverse()
+                .find(
+                  (c): c is Extract<TranscriptCard, { kind: "tool" }> =>
+                    c.kind === "tool" && c.id === part.id,
+                );
+              if (existing) {
+                existing.state = part.errorText
+                  ? "output-error"
+                  : "output-available";
+                existing.output = part.output;
+                existing.errorText = part.errorText;
+              }
+            }
+          }
+          continue;
+        }
+        const text = stripLeadingThought(m.text);
+        if (!text.trim()) continue;
+        cards.push({
+          kind: "text",
+          id: m.id,
+          role: m.role,
+          text,
+        });
+      }
       return { ...base, cards };
     },
   );
@@ -462,7 +535,7 @@ export function AgentTranscript({
       <div className="border-t p-2 flex items-center gap-2">
         <Textarea
           className="min-h-9 max-h-48 resize-none py-1.5 text-sm"
-          placeholder="Message agent…"
+          placeholder="Ask anything"
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => {
