@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { validateCslJson, deriveCitationKey, denormaliseForList } from "./csl";
+import { validateCslJson, deriveCitationKey, denormaliseForList, suggestionsToCslPatch } from "./csl";
 
 const canonicalItem = {
   id: "item-1",
@@ -198,5 +198,88 @@ describe("denormaliseForList", () => {
   it("returns null doi when DOI absent", () => {
     const r = denormaliseForList({ id: "x", type: "misc" });
     expect(r.doi).toBeNull();
+  });
+});
+
+// ── suggestionsToCslPatch ──────────────────────────────────────────────────────
+
+describe("suggestionsToCslPatch", () => {
+  it("maps title to cslJson.title", () => {
+    const result = suggestionsToCslPatch({ title: "Attention Is All You Need" });
+    expect(result.title).toBe("Attention Is All You Need");
+  });
+
+  it("maps authors array to cslJson.author with literal objects", () => {
+    const result = suggestionsToCslPatch({ authors: ["Smith, John", "Doe, Jane"] });
+    expect(result.author).toEqual([
+      { literal: "Smith, John" },
+      { literal: "Doe, Jane" },
+    ]);
+  });
+
+  it("maps authors string to single literal author", () => {
+    const result = suggestionsToCslPatch({ authors: "Smith et al." });
+    expect(result.author).toEqual([{ literal: "Smith et al." }]);
+  });
+
+  it("maps year to cslJson.issued date-parts", () => {
+    const result = suggestionsToCslPatch({ year: 2024 });
+    expect(result.issued).toEqual({ "date-parts": [[2024]] });
+  });
+
+  it("maps doi to cslJson.DOI (uppercase)", () => {
+    const result = suggestionsToCslPatch({ doi: "10.1234/example" });
+    expect(result.DOI).toBe("10.1234/example");
+  });
+
+  it("maps venue to cslJson.container-title", () => {
+    const result = suggestionsToCslPatch({ venue: "Nature" });
+    expect(result["container-title"]).toBe("Nature");
+  });
+
+  it("merges with existing cslJson preserving existing fields", () => {
+    const existing = { id: "r1", type: "article-journal", abstract: "foo" };
+    const result = suggestionsToCslPatch({ title: "Bar" }, existing);
+    expect(result.id).toBe("r1");
+    expect(result.type).toBe("article-journal");
+    expect(result.abstract).toBe("foo");
+    expect(result.title).toBe("Bar");
+  });
+
+  it("overwrites existing cslJson field when suggestion provides it", () => {
+    const existing = { id: "r1", type: "article-journal", title: "Old Title" };
+    const result = suggestionsToCslPatch({ title: "New Title" }, existing);
+    expect(result.title).toBe("New Title");
+  });
+
+  it("handles all fields together", () => {
+    const result = suggestionsToCslPatch({
+      title: "A Paper",
+      authors: ["Smith"],
+      year: 2023,
+      doi: "10.1/x",
+      venue: "ICML",
+    });
+    expect(result.title).toBe("A Paper");
+    expect(result.author).toEqual([{ literal: "Smith" }]);
+    expect(result.issued).toEqual({ "date-parts": [[2023]] });
+    expect(result.DOI).toBe("10.1/x");
+    expect(result["container-title"]).toBe("ICML");
+  });
+
+  it("skips null/undefined suggestions", () => {
+    const result = suggestionsToCslPatch({ title: null, year: undefined });
+    expect(result.title).toBeUndefined();
+    expect(result.issued).toBeUndefined();
+  });
+
+  it("handles string year by parsing to int", () => {
+    const result = suggestionsToCslPatch({ year: "2024" });
+    expect(result.issued).toEqual({ "date-parts": [[2024]] });
+  });
+
+  it("skips non-finite year", () => {
+    const result = suggestionsToCslPatch({ year: "not-a-number" });
+    expect(result.issued).toBeUndefined();
   });
 });

@@ -3,7 +3,7 @@
 // G17 — /references view-mode toggle (grid <-> list).
 // List view = enhanced shadcn Table with AI fill column.
 // Grid view = simple compact card grid (like papers).
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { LayoutGrid, List } from "lucide-react";
 import Link from "next/link";
 import {
@@ -45,6 +45,7 @@ interface DisplayRow {
   folderId: string | null;
   missing: string[];
   known: Record<string, unknown>;
+  cslJson: Record<string, unknown>;
 }
 
 function toDisplay(row: ReferenceRow): DisplayRow {
@@ -78,11 +79,13 @@ function toDisplay(row: ReferenceRow): DisplayRow {
     folderId: row.folderId ?? null,
     missing,
     known,
+    cslJson: csl as Record<string, unknown>,
   };
 }
 
 export function ReferencesView({ rows, folders }: Props) {
   const [view, setView] = useState<View>("list");
+  const [fillingIds, setFillingIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     const saved = window.localStorage.getItem(STORAGE_KEY);
@@ -96,6 +99,22 @@ export function ReferencesView({ rows, folders }: Props) {
 
   const display = useMemo(() => rows.map(toDisplay), [rows]);
 
+  const handleFillStart = useCallback((rowId: string) => {
+    setFillingIds((prev) => {
+      const next = new Set(prev);
+      next.add(rowId);
+      return next;
+    });
+  }, []);
+
+  const handleFillEnd = useCallback((rowId: string) => {
+    setFillingIds((prev) => {
+      const next = new Set(prev);
+      next.delete(rowId);
+      return next;
+    });
+  }, []);
+
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-end gap-2">
@@ -107,7 +126,10 @@ export function ReferencesView({ rows, folders }: Props) {
               patchUrl: `/api/references/${r.id}`,
               known: r.known,
               missing: r.missing,
+              cslJson: r.cslJson,
             }))}
+            onFillStart={handleFillStart}
+            onFillEnd={handleFillEnd}
           />
         ) : null}
         <ToggleGroup
@@ -136,7 +158,7 @@ export function ReferencesView({ rows, folders }: Props) {
       </div>
 
       {view === "list" ? (
-        <ReferencesListTable display={display} folders={folders} />
+        <ReferencesListTable display={display} folders={folders} fillingIds={fillingIds} onFillStart={handleFillStart} onFillEnd={handleFillEnd} />
       ) : (
         <ReferencesGrid display={display} folders={folders} />
       )}
@@ -147,9 +169,15 @@ export function ReferencesView({ rows, folders }: Props) {
 function ReferencesListTable({
   display,
   folders,
+  fillingIds,
+  onFillStart,
+  onFillEnd,
 }: {
   display: DisplayRow[];
   folders?: FolderRow[];
+  fillingIds: Set<string>;
+  onFillStart: (rowId: string) => void;
+  onFillEnd: (rowId: string) => void;
 }) {
   return (
     <div className="overflow-x-auto rounded-md border border-border/60">
@@ -168,7 +196,12 @@ function ReferencesListTable({
         </TableHeader>
         <TableBody>
           {display.map((r) => (
-            <TableRow key={r.id} data-testid={`refs-row-${r.id}`}>
+            <TableRow
+              key={r.id}
+              data-testid={`refs-row-${r.id}`}
+              data-ai-filling={fillingIds.has(r.id) || undefined}
+              className={fillingIds.has(r.id) ? "ai-filling" : undefined}
+            >
               <TableCell className="font-mono text-xs">{r.citationKey}</TableCell>
               <TableCell className="max-w-md">
                 <Link href={`/r/${r.id}`} className="line-clamp-2 hover:underline">
@@ -198,7 +231,10 @@ function ReferencesListTable({
                   kind="reference"
                   known={r.known}
                   missing={r.missing}
+                  cslJson={r.cslJson}
                   ariaLabel={`Fill missing fields for ${r.citationKey}`}
+                  onFillStart={() => onFillStart(r.id)}
+                  onFillEnd={() => onFillEnd(r.id)}
                 />
               </TableCell>
             </TableRow>

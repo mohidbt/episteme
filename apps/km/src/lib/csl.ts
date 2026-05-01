@@ -88,3 +88,49 @@ export function denormaliseForList(
 
   return { title, authorsText, year, doi };
 }
+
+/**
+ * Convert AI-fill suggestions (denormalised field names) back to a CSL JSON
+ * patch that can be merged with the existing cslJson before PATCHing.
+ *
+ * The AI fill endpoint returns fields like { title, authors, year, doi, venue }
+ * but the references PATCH endpoint only accepts { cslJson } — so we must
+ * map these denormalised names back to their CSL equivalents.
+ */
+export function suggestionsToCslPatch(
+  suggestions: Record<string, unknown>,
+  existing: Record<string, unknown> = {},
+): Record<string, unknown> {
+  const merged: Record<string, unknown> = { ...existing };
+
+  if ("title" in suggestions && suggestions.title != null) {
+    merged.title = String(suggestions.title);
+  }
+  if ("authors" in suggestions && suggestions.authors != null) {
+    const raw = suggestions.authors;
+    if (Array.isArray(raw)) {
+      merged.author = raw.map((a) =>
+        typeof a === "string" ? { literal: a } : a,
+      );
+    } else {
+      merged.author = [{ literal: String(raw) }];
+    }
+  }
+  if ("year" in suggestions && suggestions.year != null) {
+    const y =
+      typeof suggestions.year === "number"
+        ? suggestions.year
+        : parseInt(String(suggestions.year), 10);
+    if (Number.isFinite(y)) {
+      merged.issued = { "date-parts": [[y]] };
+    }
+  }
+  if ("doi" in suggestions && suggestions.doi != null) {
+    merged.DOI = String(suggestions.doi);
+  }
+  if ("venue" in suggestions && suggestions.venue != null) {
+    merged["container-title"] = String(suggestions.venue);
+  }
+
+  return merged;
+}
