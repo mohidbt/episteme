@@ -30,7 +30,7 @@ export async function GET(req: Request, { params }: Ctx) {
     ? (rawSection as Section)
     : "all";
 
-  const archive = exportLibraryZip({ libraryId: libId, section });
+  const archive = exportLibraryZip({ libraryId: libId, section, userId });
   const webStream = Readable.toWeb(archive) as unknown as ReadableStream<Uint8Array>;
 
   return new Response(webStream, {

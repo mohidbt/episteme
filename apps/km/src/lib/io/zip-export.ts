@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { libraries, notes, references_, papers } from "@episteme/db/schema";
 import { storage, paperSourceKey } from "@/lib/storage";
+import { getSkillStore } from "@/lib/skills-store";
 
 export type Section = "notes" | "papers" | "references" | "all";
 
@@ -10,6 +11,28 @@ const PRESIGN_TTL_SEC = 600;
 
 function sanitizeLibName(name: string): string {
   return name.replace(/[\/\\]/g, "-");
+}
+
+/**
+ * Append personal skills under `skills/<slug>/SKILL.md` to an open archive.
+ * Personal skills only — system skills live in the agent service, not the
+ * user's library. Failures here are warnings, never fatal: an unreadable
+ * skill should not poison a notes/papers export.
+ */
+export async function appendPersonalSkills(
+  archive: archiver.Archiver,
+  userId: string,
+): Promise<void> {
+  try {
+    const store = getSkillStore();
+    const manifests = await store.list(userId);
+    for (const m of manifests) {
+      const md = await store.read(userId, m.slug);
+      archive.append(md, { name: `skills/${m.slug}/SKILL.md` });
+    }
+  } catch (err) {
+    console.warn("[zip-export] personal skills append failed", err);
+  }
 }
 
 function notesFrontmatter(title: string, slug: string, folderPath: string): string {
@@ -32,6 +55,8 @@ function notesFrontmatter(title: string, slug: string, folderPath: string): stri
 export function exportLibraryZip(opts: {
   libraryId: number;
   section: Section;
+  /** When set and section === "all", personal skills are included under skills/. */
+  userId?: string;
 }): archiver.Archiver {
   const archive = archiver("zip", { zlib: { level: 9 } });
 
@@ -91,6 +116,10 @@ export function exportLibraryZip(opts: {
             name: `${safeLib}/papers/${p.folderPath}${p.filename}`,
           });
         }
+      }
+
+      if (opts.section === "all" && opts.userId) {
+        await appendPersonalSkills(archive, opts.userId);
       }
 
       archive.finalize();

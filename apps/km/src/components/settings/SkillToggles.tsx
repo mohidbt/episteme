@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/field";
 import { Empty, EmptyTitle, EmptyDescription } from "@/components/ui/empty";
 import { SKILLS, type Skill } from "@/lib/skills";
+import { PersonalSkills } from "./PersonalSkills";
 
 /**
  * Build a SKILL.md body for a single skill. Mirrors the deep-agents skill
@@ -98,6 +99,9 @@ export function SkillToggles({
           {exporting ? "Exporting..." : "Export skills"}
         </Button>
       </div>
+      <div className="text-sm font-medium" data-testid="system-skills-heading">
+        System Skills
+      </div>
       <FieldGroup>
         {SKILLS.map((skill) => {
           const checked = enabledSkills.includes(skill.name);
@@ -123,6 +127,9 @@ export function SkillToggles({
           <EmptyDescription>Enable a skill above to give your agents capabilities.</EmptyDescription>
         </Empty>
       )}
+      <div className="mt-4">
+        <PersonalSkills />
+      </div>
     </div>
   );
 }
