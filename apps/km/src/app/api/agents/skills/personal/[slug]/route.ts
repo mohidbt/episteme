@@ -1,10 +1,11 @@
-// Per-skill read + mutation: GET (fetch SKILL.md body), PATCH (update), DELETE.
+// Per-skill read + mutation: GET (fetch skill JSON), PATCH (update), DELETE.
 import { z } from "zod";
 import { getSessionInfo } from "@/lib/auth";
-import { getSkillStore } from "@/lib/skills-store";
+import { getSkillStore, type SkillJson } from "@/lib/skills-store";
 
 const PatchBody = z.object({
-  md: z.string(),
+  description: z.string().optional(),
+  instructions: z.string().optional(),
 });
 
 type Ctx = { params: Promise<{ slug: string }> };
@@ -16,13 +17,19 @@ export async function GET(req: Request, { params }: Ctx) {
   if (!slug || slug.includes("/")) {
     return Response.json({ error: "invalid_slug" }, { status: 400 });
   }
-  let md: string;
+  let content: string;
   try {
-    md = await getSkillStore().read(session.userId, slug);
+    content = await getSkillStore().read(session.userId, slug);
   } catch {
     return Response.json({ error: "not_found" }, { status: 404 });
   }
-  return Response.json({ slug, md });
+  let skill: SkillJson;
+  try {
+    skill = JSON.parse(content) as SkillJson;
+  } catch {
+    skill = { name: slug, description: "", instructions: "" };
+  }
+  return Response.json({ slug, ...skill });
 }
 
 export async function PATCH(req: Request, { params }: Ctx) {
@@ -42,8 +49,24 @@ export async function PATCH(req: Request, { params }: Ctx) {
   if (!parsed.success) {
     return Response.json({ error: "invalid_body" }, { status: 400 });
   }
+
+  // Read-merge-write: load existing, overlay patch fields, write back.
+  let existing: SkillJson;
   try {
-    await getSkillStore().write(session.userId, slug, parsed.data.md);
+    const content = await getSkillStore().read(session.userId, slug);
+    existing = JSON.parse(content) as SkillJson;
+  } catch {
+    return Response.json({ error: "not_found" }, { status: 404 });
+  }
+
+  const merged: SkillJson = {
+    name: existing.name,
+    description: parsed.data.description ?? existing.description,
+    instructions: parsed.data.instructions ?? existing.instructions,
+  };
+
+  try {
+    await getSkillStore().write(session.userId, slug, JSON.stringify(merged, null, 2));
   } catch (err) {
     console.error("[skills/personal/:slug] patch failed", err);
     return Response.json({ error: "write_failed" }, { status: 500 });

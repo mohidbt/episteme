@@ -100,11 +100,13 @@ function RephrasePanel({
     return () => { cancelled = true; };
   }, [skillsOpen, skills]);
 
-  // Filter skills shown in the rephrase popover to writing-tagged only (#70).
-  // System skills carry an explicit `category`; entries without one are
-  // excluded conservatively. Personal skills (G-R3-03) will declare their
-  // category via SKILL.md frontmatter and flow through this same filter.
-  const writingSkills = (skills ?? []).filter((s) => s.category === "writing");
+  // Show writing-category system skills + all personal skills (which have no
+  // category — they always appear in the rephrase picker). Personal skills
+  // use their `description` as the display label and `instructions` as the
+  // rephrase prompt (falling back to description if instructions are empty).
+  const menuSkills = (skills ?? []).filter(
+    (s) => s.category === "writing" || !s.category,
+  );
 
   const isPortal = source === "portal";
   const placeholder = turns.length > 0
@@ -197,9 +199,9 @@ function RephrasePanel({
                         ? `Failed to load: ${skillsError}`
                         : "No skills."}
                   </CommandEmpty>
-                  {writingSkills.length > 0 && (
+                  {menuSkills.length > 0 && (
                     <CommandGroup>
-                      {writingSkills.map((s) => (
+                      {menuSkills.map((s) => (
                         <CommandItem
                           key={s.name}
                           value={`${s.title} ${s.name}`}
@@ -354,7 +356,7 @@ export function AiBubbleMenu({
   }, [editor]);
 
   const submitWithPromptText = useCallback((promptText: string) => {
-    const text = promptText.trim();
+    const text = (promptText ?? "").trim();
     if (!text) return;
     abortRef.current?.abort();
     const controller = new AbortController();

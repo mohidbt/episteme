@@ -2,7 +2,7 @@
 //
 // GET   /api/agents/skills/personal       — list manifests (auto-seed safe).
 // POST  /api/agents/skills/personal       — create new skill from `{name}`,
-//                                            auto-slug, empty SKILL.md body.
+//                                            auto-slug, empty JSON body.
 import { z } from "zod";
 import { getSessionInfo } from "@/lib/auth";
 import { getSkillStore, defaultSkillBody, parseManifest } from "@/lib/skills-store";
@@ -41,12 +41,12 @@ export async function POST(req: Request) {
 
   const name = parsed.data.name;
   const slug = toSlug(name);
-  const md = defaultSkillBody(name);
+  const json = defaultSkillBody(name);
   try {
-    await getSkillStore().write(session.userId, slug, md);
+    await getSkillStore().write(session.userId, slug, json);
   } catch (err) {
     console.error("[skills/personal] write failed", err);
     return Response.json({ error: "write_failed" }, { status: 500 });
   }
-  return Response.json(parseManifest(slug, md));
+  return Response.json(parseManifest(slug, json));
 }

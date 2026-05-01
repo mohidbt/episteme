@@ -20,8 +20,18 @@ function makeFakeStore(): SkillStore & { dump: () => Map<string, string> } {
       for (const [k, v] of data) {
         const [u, slug] = k.split("::");
         if (u !== userId) continue;
-        const name = /name:\s*([^\n]+)/.exec(v)?.[1]?.trim() ?? slug;
-        out.push({ slug, name, description: "", category: "writing" });
+        let parsed: { name?: string; description?: string; instructions?: string };
+        try {
+          parsed = JSON.parse(v);
+        } catch {
+          parsed = {};
+        }
+        out.push({
+          slug,
+          name: parsed.name || slug,
+          description: parsed.description ?? "",
+          instructions: parsed.instructions ?? "",
+        });
       }
       return out.sort((a, b) => a.slug.localeCompare(b.slug));
     },
@@ -30,8 +40,8 @@ function makeFakeStore(): SkillStore & { dump: () => Map<string, string> } {
       if (v === undefined) throw new Error("NoSuchKey");
       return v;
     },
-    async write(userId, slug, md) {
-      data.set(`${userId}::${slug}`, md);
+    async write(userId, slug, content) {
+      data.set(`${userId}::${slug}`, content);
     },
     async delete(userId, slug) {
       data.delete(`${userId}::${slug}`);
@@ -67,7 +77,7 @@ describe("GET/POST /api/agents/skills/personal", () => {
     expect(body).toEqual({ skills: [] });
   });
 
-  it("POST creates a new skill with auto-slug + frontmatter", async () => {
+  it("POST creates a new skill with auto-slug + JSON body", async () => {
     const fake = makeFakeStore();
     __resetSkillStoreForTests(fake);
     const { POST } = await import("./route");
@@ -81,9 +91,10 @@ describe("GET/POST /api/agents/skills/personal", () => {
     const body = await res.json();
     expect(body.slug).toBe("my-cool-skill");
     expect(body.name).toBe("My Cool Skill");
-    const md = fake.dump().get("u1::my-cool-skill");
-    expect(md).toContain("name: My Cool Skill");
-    expect(md).toContain("# My Cool Skill");
+    expect(body.description).toBe("");
+    expect(body.instructions).toBe("");
+    const stored = fake.dump().get("u1::my-cool-skill");
+    expect(stored).toContain('"name": "My Cool Skill"');
   });
 
   it("POST 400 when name missing", async () => {
@@ -107,57 +118,6 @@ describe("GET/POST /api/agents/skills/personal", () => {
         method: "POST",
         body: JSON.stringify({ name: "x" }),
       }),
-    );
-    expect(res.status).toBe(401);
-  });
-});
-
-describe("PATCH/DELETE /api/agents/skills/personal/[slug]", () => {
-  async function importHandler() {
-    return await import("./[slug]/route");
-  }
-
-  it("PATCH writes new body", async () => {
-    const fake = makeFakeStore();
-    await fake.write("u1", "alpha", "---\nname: Alpha\n---\nold body");
-    __resetSkillStoreForTests(fake);
-    const { PATCH } = await importHandler();
-    const res = await PATCH(
-      new Request("http://localhost/api/agents/skills/personal/alpha", {
-        method: "PATCH",
-        body: JSON.stringify({ md: "---\nname: Alpha\n---\nnew body" }),
-      }),
-      { params: Promise.resolve({ slug: "alpha" }) },
-    );
-    expect(res.status).toBe(200);
-    expect(await fake.read("u1", "alpha")).toBe("---\nname: Alpha\n---\nnew body");
-  });
-
-  it("DELETE removes the skill", async () => {
-    const fake = makeFakeStore();
-    await fake.write("u1", "tmp", "---\nname: T\n---\n");
-    __resetSkillStoreForTests(fake);
-    const { DELETE } = await importHandler();
-    const res = await DELETE(
-      new Request("http://localhost/api/agents/skills/personal/tmp", {
-        method: "DELETE",
-      }),
-      { params: Promise.resolve({ slug: "tmp" }) },
-    );
-    expect(res.status).toBe(200);
-    expect(fake.dump().has("u1::tmp")).toBe(false);
-  });
-
-  it("PATCH 401 unauthenticated", async () => {
-    vi.mocked(getSessionInfo).mockResolvedValue(null);
-    __resetSkillStoreForTests(makeFakeStore());
-    const { PATCH } = await importHandler();
-    const res = await PATCH(
-      new Request("http://localhost/api/agents/skills/personal/x", {
-        method: "PATCH",
-        body: JSON.stringify({ md: "x" }),
-      }),
-      { params: Promise.resolve({ slug: "x" }) },
     );
     expect(res.status).toBe(401);
   });

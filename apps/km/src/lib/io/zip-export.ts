@@ -14,7 +14,7 @@ function sanitizeLibName(name: string): string {
 }
 
 /**
- * Append personal skills under `skills/<slug>/SKILL.md` to an open archive.
+ * Append personal skills under `skills/<slug>/SKILL.json` to an open archive.
  * Personal skills only — system skills live in the agent service, not the
  * user's library. Failures here are warnings, never fatal: an unreadable
  * skill should not poison a notes/papers export.
@@ -27,8 +27,8 @@ export async function appendPersonalSkills(
     const store = getSkillStore();
     const manifests = await store.list(userId);
     for (const m of manifests) {
-      const md = await store.read(userId, m.slug);
-      archive.append(md, { name: `skills/${m.slug}/SKILL.md` });
+      const content = await store.read(userId, m.slug);
+      archive.append(content, { name: `skills/${m.slug}/SKILL.json` });
     }
   } catch (err) {
     console.warn("[zip-export] personal skills append failed", err);

@@ -1,14 +1,15 @@
 "use client";
 
-// Personal skills CRUD table for Settings → Agent → Skills.
+// Personal skills CRUD table for Settings -> Agent -> Skills.
 //
-// Lists user-authored SKILL.md entries from /api/agents/skills/personal,
-// supports + new (dialog), edit body in textarea, delete inline.
+// Lists user-authored skill entries from /api/agents/skills/personal,
+// supports + new (dialog), edit description + instructions, delete inline.
 import * as React from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
@@ -23,7 +24,7 @@ export type PersonalSkill = {
   slug: string;
   name: string;
   description: string;
-  category: "writing" | "research";
+  instructions: string;
 };
 
 async function fetchList(): Promise<PersonalSkill[]> {
@@ -40,7 +41,8 @@ export function PersonalSkills() {
   const [busy, setBusy] = React.useState(false);
   const [editing, setEditing] = React.useState<{
     slug: string;
-    md: string;
+    description: string;
+    instructions: string;
   } | null>(null);
 
   React.useEffect(() => {
@@ -85,13 +87,21 @@ export function PersonalSkills() {
   }
 
   async function openEdit(slug: string) {
-    setEditing({ slug, md: "" });
+    setEditing({ slug, description: "", instructions: "" });
     setBusy(true);
     try {
       const res = await fetch(`/api/agents/skills/personal/${slug}`);
       if (!res.ok) throw new Error(`http ${res.status}`);
-      const body = (await res.json()) as { slug: string; md: string };
-      setEditing({ slug, md: body.md });
+      const body = (await res.json()) as {
+        slug: string;
+        description: string;
+        instructions: string;
+      };
+      setEditing({
+        slug: body.slug,
+        description: body.description ?? "",
+        instructions: body.instructions ?? "",
+      });
     } catch (err) {
       setEditing(null);
       toast.error(
@@ -111,10 +121,16 @@ export function PersonalSkills() {
         {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ md: editing.md }),
+          body: JSON.stringify({
+            description: editing.description,
+            instructions: editing.instructions,
+          }),
         },
       );
       if (!res.ok) throw new Error(`http ${res.status}`);
+      // Refresh list to pick up updated description.
+      const updated = await fetchList();
+      setSkills(updated);
       setEditing(null);
       toast.success("Saved");
     } catch (err) {
@@ -176,7 +192,9 @@ export function PersonalSkills() {
                   data-testid={`personal-skill-row-${s.slug}`}
                 >
                   <td className="px-3 py-2 font-medium">{s.name}</td>
-                  <td className="px-3 py-2 text-muted-foreground">{s.slug}</td>
+                  <td className="px-3 py-2 text-muted-foreground">
+                    {s.description || s.slug}
+                  </td>
                   <td className="px-3 py-2 text-right">
                     <Button
                       type="button"
@@ -209,7 +227,7 @@ export function PersonalSkills() {
           <DialogHeader>
             <DialogTitle>New skill</DialogTitle>
             <DialogDescription>
-              Give your skill a short name. You can edit the body next.
+              Give your skill a short name. You can edit the details next.
             </DialogDescription>
           </DialogHeader>
           <Input
@@ -241,23 +259,46 @@ export function PersonalSkills() {
       <Dialog open={editing !== null} onOpenChange={(o) => !o && setEditing(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Edit SKILL.md</DialogTitle>
+            <DialogTitle>Edit your Skill</DialogTitle>
             <DialogDescription>
-              Edit the markdown body. The frontmatter `name` should not change.
+              Describe what the skill does and provide full instructions for the
+              agent.
             </DialogDescription>
           </DialogHeader>
-          <Textarea
-            value={editing?.md ?? ""}
-            onChange={(e) =>
-              setEditing((prev) =>
-                prev ? { ...prev, md: e.target.value } : prev,
-              )
-            }
-            rows={14}
-            placeholder={busy && !editing?.md ? "Loading…" : ""}
-            disabled={busy && !editing?.md}
-            data-testid="edit-skill-textarea"
-          />
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="skill-description">Description</Label>
+              <Textarea
+                id="skill-description"
+                value={editing?.description ?? ""}
+                onChange={(e) =>
+                  setEditing((prev) =>
+                    prev ? { ...prev, description: e.target.value } : prev,
+                  )
+                }
+                rows={2}
+                placeholder="Description for agent, what it can do, and when to automatically use it"
+                disabled={busy && !editing?.description}
+                data-testid="edit-skill-description"
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="skill-instructions">Skill Instructions</Label>
+              <Textarea
+                id="skill-instructions"
+                value={editing?.instructions ?? ""}
+                onChange={(e) =>
+                  setEditing((prev) =>
+                    prev ? { ...prev, instructions: e.target.value } : prev,
+                  )
+                }
+                rows={10}
+                placeholder="Full instructions for agent."
+                disabled={busy && !editing?.instructions}
+                data-testid="edit-skill-instructions"
+              />
+            </div>
+          </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setEditing(null)}>
               Cancel

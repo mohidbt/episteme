@@ -21,10 +21,21 @@ function makeFakeStore(): SkillStore & {
   return {
     async list(userId) {
       const out: SkillManifest[] = [];
-      for (const [k] of data) {
+      for (const [k, v] of data) {
         const [u, slug] = k.split("::");
         if (u !== userId) continue;
-        out.push({ slug, name: slug, description: "", category: "writing" });
+        let parsed: { name?: string; description?: string; instructions?: string };
+        try {
+          parsed = JSON.parse(v);
+        } catch {
+          parsed = {};
+        }
+        out.push({
+          slug,
+          name: parsed.name || slug,
+          description: parsed.description ?? "",
+          instructions: parsed.instructions ?? "",
+        });
       }
       return out;
     },
@@ -34,8 +45,8 @@ function makeFakeStore(): SkillStore & {
       if (v === undefined) throw new Error("NoSuchKey");
       return v;
     },
-    async write(userId, slug, md) {
-      data.set(`${userId}::${slug}`, md);
+    async write(userId, slug, content) {
+      data.set(`${userId}::${slug}`, content);
     },
     async delete(userId, slug) {
       data.delete(`${userId}::${slug}`);
@@ -55,9 +66,13 @@ afterEach(() => {
 });
 
 describe("GET /api/agents/skills/personal/[slug]", () => {
-  it("returns 200 + {slug, md} for own skill", async () => {
+  it("returns 200 + {slug, name, description, instructions} for own skill", async () => {
     const fake = makeFakeStore();
-    await fake.write("u1", "alpha", "---\nname: Alpha\n---\n# Alpha\n\nBody.");
+    await fake.write(
+      "u1",
+      "alpha",
+      JSON.stringify({ name: "Alpha", description: "A skill", instructions: "Do X" }),
+    );
     __resetSkillStoreForTests(fake);
     const { GET } = await import("./route");
     const res = await GET(
@@ -68,9 +83,10 @@ describe("GET /api/agents/skills/personal/[slug]", () => {
     const body = await res.json();
     expect(body).toEqual({
       slug: "alpha",
-      md: "---\nname: Alpha\n---\n# Alpha\n\nBody.",
+      name: "Alpha",
+      description: "A skill",
+      instructions: "Do X",
     });
-    expect(fake.readCalls).toEqual([{ userId: "u1", slug: "alpha" }]);
   });
 
   it("returns 404 for unknown slug", async () => {
@@ -87,7 +103,7 @@ describe("GET /api/agents/skills/personal/[slug]", () => {
   it("returns 401 with no session", async () => {
     vi.mocked(getSessionInfo).mockResolvedValue(null);
     const fake = makeFakeStore();
-    await fake.write("u1", "alpha", "x");
+    await fake.write("u1", "alpha", "{}");
     __resetSkillStoreForTests(fake);
     const { GET } = await import("./route");
     const res = await GET(
@@ -99,7 +115,7 @@ describe("GET /api/agents/skills/personal/[slug]", () => {
 
   it("scopes by session userId (does not leak other users' skills)", async () => {
     const fake = makeFakeStore();
-    await fake.write("u2", "secret", "other user content");
+    await fake.write("u2", "secret", JSON.stringify({ name: "Secret", description: "", instructions: "" }));
     __resetSkillStoreForTests(fake);
     const { GET } = await import("./route");
     const res = await GET(
@@ -108,5 +124,98 @@ describe("GET /api/agents/skills/personal/[slug]", () => {
     );
     expect(res.status).toBe(404);
     expect(fake.readCalls).toEqual([{ userId: "u1", slug: "secret" }]);
+  });
+});
+
+describe("PATCH /api/agents/skills/personal/[slug]", () => {
+  it("patches description and instructions independently", async () => {
+    const fake = makeFakeStore();
+    await fake.write(
+      "u1",
+      "alpha",
+      JSON.stringify({ name: "Alpha", description: "old desc", instructions: "old instr" }),
+    );
+    __resetSkillStoreForTests(fake);
+    const { PATCH } = await import("./route");
+    const res = await PATCH(
+      new Request("http://localhost/api/agents/skills/personal/alpha", {
+        method: "PATCH",
+        body: JSON.stringify({ description: "new desc", instructions: "new instr" }),
+      }),
+      { params: Promise.resolve({ slug: "alpha" }) },
+    );
+    expect(res.status).toBe(200);
+    const stored = JSON.parse(await fake.read("u1", "alpha"));
+    expect(stored).toEqual({
+      name: "Alpha",
+      description: "new desc",
+      instructions: "new instr",
+    });
+  });
+
+  it("patches only description, leaving instructions unchanged", async () => {
+    const fake = makeFakeStore();
+    await fake.write(
+      "u1",
+      "alpha",
+      JSON.stringify({ name: "Alpha", description: "", instructions: "keep me" }),
+    );
+    __resetSkillStoreForTests(fake);
+    const { PATCH } = await import("./route");
+    await PATCH(
+      new Request("http://localhost/api/agents/skills/personal/alpha", {
+        method: "PATCH",
+        body: JSON.stringify({ description: "new desc" }),
+      }),
+      { params: Promise.resolve({ slug: "alpha" }) },
+    );
+    const stored = JSON.parse(await fake.read("u1", "alpha"));
+    expect(stored.instructions).toBe("keep me");
+    expect(stored.description).toBe("new desc");
+  });
+
+  it("returns 404 for nonexistent skill", async () => {
+    const fake = makeFakeStore();
+    __resetSkillStoreForTests(fake);
+    const { PATCH } = await import("./route");
+    const res = await PATCH(
+      new Request("http://localhost/api/agents/skills/personal/ghost", {
+        method: "PATCH",
+        body: JSON.stringify({ description: "x" }),
+      }),
+      { params: Promise.resolve({ slug: "ghost" }) },
+    );
+    expect(res.status).toBe(404);
+  });
+
+  it("PATCH 401 unauthenticated", async () => {
+    vi.mocked(getSessionInfo).mockResolvedValue(null);
+    __resetSkillStoreForTests(makeFakeStore());
+    const { PATCH } = await import("./route");
+    const res = await PATCH(
+      new Request("http://localhost/api/agents/skills/personal/x", {
+        method: "PATCH",
+        body: JSON.stringify({ description: "x" }),
+      }),
+      { params: Promise.resolve({ slug: "x" }) },
+    );
+    expect(res.status).toBe(401);
+  });
+});
+
+describe("DELETE /api/agents/skills/personal/[slug]", () => {
+  it("deletes the skill", async () => {
+    const fake = makeFakeStore();
+    await fake.write("u1", "tmp", JSON.stringify({ name: "T", description: "", instructions: "" }));
+    __resetSkillStoreForTests(fake);
+    const { DELETE } = await import("./route");
+    const res = await DELETE(
+      new Request("http://localhost/api/agents/skills/personal/tmp", {
+        method: "DELETE",
+      }),
+      { params: Promise.resolve({ slug: "tmp" }) },
+    );
+    expect(res.status).toBe(200);
+    expect(fake.dump().has("u1::tmp")).toBe(false);
   });
 });

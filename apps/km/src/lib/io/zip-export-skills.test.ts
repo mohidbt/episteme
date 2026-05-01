@@ -7,19 +7,31 @@ import unzipper from "unzipper";
 import {
   __resetSkillStoreForTests,
   type SkillStore,
+  type SkillManifest,
 } from "@/lib/skills-store";
 import { appendPersonalSkills } from "./zip-export";
 
 function fakeStore(entries: Array<[string, string, string]>): SkillStore {
   const data = new Map<string, string>();
-  for (const [uid, slug, md] of entries) data.set(`${uid}::${slug}`, md);
+  for (const [uid, slug, content] of entries) data.set(`${uid}::${slug}`, content);
   return {
     async list(userId) {
-      const out = [];
-      for (const [k] of data) {
+      const out: SkillManifest[] = [];
+      for (const [k, v] of data) {
         const [uid, slug] = k.split("::");
         if (uid !== userId) continue;
-        out.push({ slug, name: slug, description: "", category: "writing" as const });
+        let parsed: { name?: string; description?: string; instructions?: string };
+        try {
+          parsed = JSON.parse(v);
+        } catch {
+          parsed = {};
+        }
+        out.push({
+          slug,
+          name: parsed.name || slug,
+          description: parsed.description ?? "",
+          instructions: parsed.instructions ?? "",
+        });
       }
       return out;
     },
@@ -46,12 +58,12 @@ afterEach(() => {
 });
 
 describe("appendPersonalSkills", () => {
-  it("appends only personal slugs, naming them skills/<slug>/SKILL.md", async () => {
+  it("appends only personal slugs, naming them skills/<slug>/SKILL.json", async () => {
     __resetSkillStoreForTests(
       fakeStore([
-        ["u1", "tone", "---\nname: Tone\n---\n# Tone\n"],
-        ["u1", "voice", "---\nname: Voice\n---\n# Voice\n"],
-        ["u2", "other-user", "---\nname: Other\n---\n"], // different user
+        ["u1", "tone", JSON.stringify({ name: "Tone", description: "", instructions: "" })],
+        ["u1", "voice", JSON.stringify({ name: "Voice", description: "", instructions: "" })],
+        ["u2", "other-user", JSON.stringify({ name: "Other", description: "", instructions: "" })],
       ]),
     );
     const arc = archiver("zip");
@@ -61,10 +73,10 @@ describe("appendPersonalSkills", () => {
     const buf = await collect;
     const dir = await unzipper.Open.buffer(buf);
     const paths = dir.files.map((f) => f.path).sort();
-    expect(paths).toEqual(["skills/tone/SKILL.md", "skills/voice/SKILL.md"]);
+    expect(paths).toEqual(["skills/tone/SKILL.json", "skills/voice/SKILL.json"]);
 
     // System skill names should NOT appear (system list excluded by contract).
-    expect(paths.some((p) => p === "skills/synthesis/SKILL.md")).toBe(false);
-    expect(paths.some((p) => p === "skills/paper-search/SKILL.md")).toBe(false);
+    expect(paths.some((p) => p === "skills/synthesis/SKILL.json")).toBe(false);
+    expect(paths.some((p) => p === "skills/paper-search/SKILL.json")).toBe(false);
   });
 });

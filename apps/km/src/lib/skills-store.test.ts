@@ -56,43 +56,44 @@ describe("skill key helpers", () => {
     expect(userPrefix("u1")).toBe("skills/users/u1/");
   });
   it("skillKey nests slug under user", () => {
-    expect(skillKey("u1", "my-skill")).toBe("skills/users/u1/my-skill/SKILL.md");
+    expect(skillKey("u1", "my-skill")).toBe("skills/users/u1/my-skill/SKILL.json");
   });
 });
 
 describe("parseManifest", () => {
-  it("falls back when frontmatter is missing", () => {
+  it("falls back when JSON is malformed", () => {
     const m = parseManifest("foo", "# foo\n\nhello");
     expect(m).toEqual({
       slug: "foo",
       name: "foo",
       description: "",
-      category: "writing",
+      instructions: "",
     });
   });
-  it("reads name/description/category from frontmatter", () => {
-    const md = `---\nname: My Skill\ndescription: Does a thing\ncategory: research\n---\n\nbody`;
-    const m = parseManifest("my-skill", md);
+  it("reads name/description/instructions from JSON", () => {
+    const json = JSON.stringify({ name: "My Skill", description: "Does a thing", instructions: "Do X then Y" });
+    const m = parseManifest("my-skill", json);
     expect(m).toEqual({
       slug: "my-skill",
       name: "My Skill",
       description: "Does a thing",
-      category: "research",
+      instructions: "Do X then Y",
     });
   });
-  it("rejects unknown category", () => {
-    const md = `---\nname: x\ncategory: bogus\n---\n`;
-    const m = parseManifest("x", md);
-    expect(m.category).toBe("writing");
+  it("falls back to slug when name is empty", () => {
+    const json = JSON.stringify({ name: "", description: "", instructions: "" });
+    const m = parseManifest("x", json);
+    expect(m.name).toBe("x");
   });
 });
 
 describe("defaultSkillBody", () => {
-  it("includes name in frontmatter and heading", () => {
+  it("returns valid JSON with name field", () => {
     const body = defaultSkillBody("My Skill");
-    expect(body).toContain("name: My Skill");
-    expect(body).toContain("# My Skill");
-    expect(body).toContain("category: writing");
+    const parsed = JSON.parse(body);
+    expect(parsed.name).toBe("My Skill");
+    expect(parsed.description).toBe("");
+    expect(parsed.instructions).toBe("");
   });
 });
 
@@ -103,22 +104,22 @@ describe("MinioSkillStore — round trip", () => {
   });
 
   it("write → read returns same body", async () => {
-    const md = "---\nname: t\n---\nhi";
-    await store.write("u1", "t", md);
-    expect(await store.read("u1", "t")).toBe(md);
+    const json = JSON.stringify({ name: "t", description: "", instructions: "" });
+    await store.write("u1", "t", json);
+    expect(await store.read("u1", "t")).toBe(json);
   });
 
   it("list returns manifests for the user only", async () => {
-    await store.write("u1", "alpha", "---\nname: Alpha\n---\n");
-    await store.write("u1", "beta", "---\nname: Beta\ncategory: research\n---\n");
-    await store.write("u2", "gamma", "---\nname: Gamma\n---\n");
+    await store.write("u1", "alpha", JSON.stringify({ name: "Alpha", description: "", instructions: "" }));
+    await store.write("u1", "beta", JSON.stringify({ name: "Beta", description: "Research skill", instructions: "Do research" }));
+    await store.write("u2", "gamma", JSON.stringify({ name: "Gamma", description: "", instructions: "" }));
     const list = await store.list("u1");
     expect(list.map((s) => s.slug)).toEqual(["alpha", "beta"]);
-    expect(list.find((s) => s.slug === "beta")?.category).toBe("research");
+    expect(list.find((s) => s.slug === "beta")?.instructions).toBe("Do research");
   });
 
   it("delete removes the skill", async () => {
-    await store.write("u1", "tmp", "---\nname: T\n---\n");
+    await store.write("u1", "tmp", JSON.stringify({ name: "T", description: "", instructions: "" }));
     await store.delete("u1", "tmp");
     const list = await store.list("u1");
     expect(list).toEqual([]);

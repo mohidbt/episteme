@@ -1,11 +1,10 @@
 // Personal-skills storage abstraction.
 //
-// Phase 1 (now): MinioSkillStore — keys `skills/users/<userId>/<slug>/SKILL.md`.
-// Phase 2 (future Tauri): LocalFsSkillStore reading `~/Episteme/skills/<slug>/SKILL.md`.
-// The factory `getSkillStore()` lets us swap impls without touching call sites.
-// The contract: the on-disk format (SKILL.md + frontmatter) is identical to
-// system skills shipped under `services/agents/skills/*` — so personal skills
-// round-trip and become grepable by the agent's drive tools for free in Phase 2.
+// Skills are stored as JSON objects in MinIO under
+// `skills/users/<userId>/<slug>/SKILL.json`.
+//
+// Shape: { name: string, description: string, instructions: string }
+// — no category field. Personal skills always show in the bubble menu.
 
 import {
   S3Client,
@@ -14,22 +13,19 @@ import {
   DeleteObjectCommand,
   ListObjectsV2Command,
 } from "@aws-sdk/client-s3";
-import matter from "gray-matter";
 import { S3_BUCKET } from "@/lib/storage";
-
-export type SkillCategory = "writing" | "research";
 
 export interface SkillManifest {
   slug: string;
   name: string;
   description: string;
-  category: SkillCategory;
+  instructions: string;
 }
 
 export interface SkillStore {
   list(userId: string): Promise<SkillManifest[]>;
   read(userId: string, slug: string): Promise<string>;
-  write(userId: string, slug: string, md: string): Promise<void>;
+  write(userId: string, slug: string, content: string): Promise<void>;
   delete(userId: string, slug: string): Promise<void>;
 }
 
@@ -38,7 +34,13 @@ export function userPrefix(userId: string): string {
 }
 
 export function skillKey(userId: string, slug: string): string {
-  return `${userPrefix(userId)}${slug}/SKILL.md`;
+  return `${userPrefix(userId)}${slug}/SKILL.json`;
+}
+
+export interface SkillJson {
+  name: string;
+  description: string;
+  instructions: string;
 }
 
 const env = (k: string, d?: string) => process.env[k] ?? d;
@@ -55,30 +57,21 @@ function buildClient(): S3Client {
   });
 }
 
-export function parseManifest(slug: string, md: string): SkillManifest {
-  const { data } = matter(md);
-  const name = typeof data.name === "string" && data.name.trim() ? data.name : slug;
-  const description = typeof data.description === "string" ? data.description : "";
-  const rawCategory = typeof data.category === "string" ? data.category : "writing";
-  const category: SkillCategory =
-    rawCategory === "research" ? "research" : "writing";
-  return { slug, name, description, category };
+export function parseManifest(slug: string, json: string): SkillManifest {
+  let parsed: SkillJson;
+  try {
+    parsed = JSON.parse(json) as SkillJson;
+  } catch {
+    return { slug, name: slug, description: "", instructions: "" };
+  }
+  const name = typeof parsed.name === "string" && parsed.name.trim() ? parsed.name : slug;
+  const description = typeof parsed.description === "string" ? parsed.description : "";
+  const instructions = typeof parsed.instructions === "string" ? parsed.instructions : "";
+  return { slug, name, description, instructions };
 }
 
 export function defaultSkillBody(name: string): string {
-  // Mirrors deep-agents SKILL.md format: yaml frontmatter + body. Sparse on
-  // purpose — user fills in the rest in the editor.
-  return [
-    "---",
-    `name: ${name}`,
-    "description: ",
-    "category: writing",
-    "---",
-    "",
-    `# ${name}`,
-    "",
-    "",
-  ].join("\n");
+  return JSON.stringify({ name, description: "", instructions: "" }, null, 2);
 }
 
 export class MinioSkillStore implements SkillStore {
@@ -103,12 +96,12 @@ export class MinioSkillStore implements SkillStore {
         }),
       );
       for (const obj of resp.Contents ?? []) {
-        if (!obj.Key || !obj.Key.endsWith("/SKILL.md")) continue;
-        const slug = obj.Key.slice(prefix.length, -"/SKILL.md".length);
+        if (!obj.Key || !obj.Key.endsWith("/SKILL.json")) continue;
+        const slug = obj.Key.slice(prefix.length, -"/SKILL.json".length);
         if (!slug || slug.includes("/")) continue;
         try {
-          const md = await this.read(userId, slug);
-          out.push(parseManifest(slug, md));
+          const content = await this.read(userId, slug);
+          out.push(parseManifest(slug, content));
         } catch {
           // Skip unreadable files rather than failing the whole list.
         }
@@ -131,13 +124,13 @@ export class MinioSkillStore implements SkillStore {
     return await body.transformToString();
   }
 
-  async write(userId: string, slug: string, md: string): Promise<void> {
+  async write(userId: string, slug: string, content: string): Promise<void> {
     await this.client.send(
       new PutObjectCommand({
         Bucket: this.bucket,
         Key: skillKey(userId, slug),
-        Body: md,
-        ContentType: "text/markdown",
+        Body: content,
+        ContentType: "application/json",
       }),
     );
   }
