@@ -19,6 +19,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { CellGroundingChip } from "@/components/papersets/CellGroundingChip";
 import type { CellSelection } from "./lib/selection";
 import {
   deriveCellState,
@@ -73,6 +74,7 @@ export function RowView({
             grounding: cellGrounding,
           });
           const selected = selection.has({ row: rowIdx, col: col.name });
+          const ground = cellGrounding[String(rowIdx)]?.[col.name];
           return (
             <CellView
               key={col.name}
@@ -80,6 +82,8 @@ export function RowView({
               selected={selected}
               showRing={selection.getKind().kind === "cells"}
               colName={col.name}
+              groundingPaperId={ground?.paper_id ?? paper.id}
+              groundingBlockIds={ground?.block_ids ?? []}
               onMouseDown={(e) => onCellMouseDown(e, rowIdx, col.name)}
               testId={`cell-${rowIdx}-${col.name}`}
             />
@@ -173,6 +177,8 @@ function CellView({
   selected,
   showRing,
   colName,
+  groundingPaperId,
+  groundingBlockIds,
   onMouseDown,
   testId,
 }: {
@@ -180,6 +186,8 @@ function CellView({
   selected: boolean;
   showRing: boolean;
   colName: string;
+  groundingPaperId: string;
+  groundingBlockIds: string[];
   onMouseDown: (e: React.MouseEvent) => void;
   testId: string;
 }) {
@@ -217,10 +225,15 @@ function CellView({
       {state.kind === "filled" && (
         <span className="flex items-center gap-1.5">
           <span className="truncate">{state.value}</span>
-          {state.firstPage != null && (
-            <span className="shrink-0 text-xs text-muted-foreground">
-              p.{state.firstPage}
-            </span>
+          {groundingBlockIds.length > 0 && (
+            <CellGroundingChip
+              paperId={groundingPaperId}
+              blockIds={groundingBlockIds}
+              label={
+                state.firstPage != null ? `p.${state.firstPage}` : undefined
+              }
+              className="shrink-0"
+            />
           )}
         </span>
       )}
