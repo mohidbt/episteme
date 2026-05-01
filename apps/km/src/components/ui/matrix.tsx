@@ -32,11 +32,19 @@ interface MatrixProps extends React.HTMLAttributes<HTMLDivElement> {
   onFrame?: (index: number) => void
   mode?: MatrixMode
   levels?: number[]
+  /** Multiplies effective fps. >1 = faster (e.g. 1.6 on hover). */
+  speedMultiplier?: number
 }
 
-// RG1 #60 — global animation speed multiplier. >1 slows playback; 1/0.75 ≈ 1.333
-// renders all matrix animations at 75% visual speed (frame interval × 1.333).
-const MATRIX_FRAME_INTERVAL_MULTIPLIER = 1 / 0.75
+// G-R3-05 #84 — clamp RAF deltas to prevent burst-render after tab refocus.
+// Browsers may deliver one giant elapsed value when a backgrounded tab regains
+// focus; without clamping the animation runs "godspeed" to catch up.
+export const MAX_DT_MS = 50
+
+export function clampDt(elapsed: number): number {
+  if (!Number.isFinite(elapsed) || elapsed < 0) return 0
+  return Math.min(elapsed, MAX_DT_MS)
+}
 
 function clamp(value: number): number {
   return Math.max(0, Math.min(1, value))
@@ -60,6 +68,7 @@ function useAnimation(
     fps: number
     autoplay: boolean
     loop: boolean
+    speedMultiplier?: number
     onFrame?: (index: number) => void
   }
 ): { frameIndex: number; isPlaying: boolean } {
@@ -68,20 +77,24 @@ function useAnimation(
   const frameIdRef = useRef<number | undefined>(undefined)
   const lastTimeRef = useRef<number>(0)
   const accumulatorRef = useRef<number>(0)
+  const speedMultiplier = options.speedMultiplier ?? 1
 
   useEffect(() => {
     if (!frames || frames.length === 0 || !isPlaying) {
       return
     }
 
-    const frameInterval = (1000 / options.fps) * MATRIX_FRAME_INTERVAL_MULTIPLIER
+    // G-R3-05 #73 — baseline speed: 1000/fps. Optional multiplier (#88 hover)
+    // shortens the interval when >1 (faster).
+    const frameInterval = 1000 / (options.fps * speedMultiplier)
 
     const animate = (currentTime: number) => {
       if (lastTimeRef.current === 0) {
         lastTimeRef.current = currentTime
       }
 
-      const deltaTime = currentTime - lastTimeRef.current
+      // #84 — clamp dt so backgrounded-tab catch-up doesn't fast-forward.
+      const deltaTime = clampDt(currentTime - lastTimeRef.current)
       lastTimeRef.current = currentTime
       accumulatorRef.current += deltaTime
 
@@ -114,7 +127,7 @@ function useAnimation(
         cancelAnimationFrame(frameIdRef.current)
       }
     }
-  }, [frames, isPlaying, options.fps, options.loop, options.onFrame])
+  }, [frames, isPlaying, options.fps, options.loop, options.onFrame, speedMultiplier])
 
   useEffect(() => {
     setFrameIndex(0)
@@ -441,6 +454,7 @@ export const Matrix = React.forwardRef<HTMLDivElement, MatrixProps>(
       onFrame,
       mode = "default",
       levels,
+      speedMultiplier,
       className,
       ...props
     },
@@ -450,6 +464,7 @@ export const Matrix = React.forwardRef<HTMLDivElement, MatrixProps>(
       fps,
       autoplay: autoplay && !pattern,
       loop,
+      speedMultiplier,
       onFrame,
     })
 

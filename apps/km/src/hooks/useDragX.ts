@@ -7,18 +7,29 @@ interface UseDragXOptions {
   storageKey: string;
   /** When set, clamp computed x to [0, window.innerWidth - elementWidth]. */
   elementWidth?: number;
+  /** When set with axis='xy', clamp y to [0, window.innerHeight - elementHeight]. */
+  elementHeight?: number;
+  /** "x" (default, legacy) or "xy" — also tracks vertical. */
+  axis?: "x" | "xy";
+  /**
+   * On pointer release, snap y. "bottom" pins y to viewport bottom
+   * (gravity). Only meaningful when axis === "xy".
+   */
+  snapY?: "bottom" | "none";
 }
 
 /**
- * Horizontal-only drag hook. Persists the resulting x offset (px from
- * viewport left) to localStorage so it restores across reloads.
- *
- * Returns:
- *  - `x`: current pixel offset from left, or `null` while no offset has been
- *    set (caller falls back to default centering).
- *  - `pointerHandlers`: spread onto the draggable element.
+ * Drag hook. Persists the x offset to localStorage; y is transient (not
+ * persisted) and — when `snapY === "bottom"` — snaps to the viewport floor on
+ * release (G-R3-05 #83 gravity).
  */
-export function useDragX({ storageKey, elementWidth }: UseDragXOptions) {
+export function useDragX({
+  storageKey,
+  elementWidth,
+  elementHeight,
+  axis = "x",
+  snapY = "none",
+}: UseDragXOptions) {
   const [x, setX] = useState<number | null>(() => {
     if (typeof window === "undefined") return null;
     try {
@@ -30,11 +41,13 @@ export function useDragX({ storageKey, elementWidth }: UseDragXOptions) {
       return null;
     }
   });
+  const [y, setY] = useState<number | null>(null);
 
   const draggingRef = useRef(false);
-  const offsetRef = useRef(0); // pointer offset within the element
+  const offsetXRef = useRef(0);
+  const offsetYRef = useRef(0);
 
-  const clamp = useCallback(
+  const clampX = useCallback(
     (next: number) => {
       if (typeof window === "undefined") return next;
       const max = Math.max(0, window.innerWidth - (elementWidth ?? 0));
@@ -45,27 +58,44 @@ export function useDragX({ storageKey, elementWidth }: UseDragXOptions) {
     [elementWidth],
   );
 
+  const clampY = useCallback(
+    (next: number) => {
+      if (typeof window === "undefined") return next;
+      const max = Math.max(0, window.innerHeight - (elementHeight ?? 0));
+      if (next < 0) return 0;
+      if (next > max) return max;
+      return next;
+    },
+    [elementHeight],
+  );
+
   const onPointerDown = useCallback((e: React.PointerEvent<HTMLElement>) => {
     // RG3 #56 — bail when pointerdown originates on an interactive descendant
-    // (header buttons, links, inputs). Otherwise the drag handler captures
-    // the pointer and swallows the subsequent click on the button.
+    // (header buttons, links, inputs).
     const target = e.target as Element | null;
-    if (target && target !== e.currentTarget && target.closest?.("button,a,input,textarea,select,[role='button']")) {
+    if (
+      target &&
+      target !== e.currentTarget &&
+      target.closest?.("button,a,input,textarea,select,[role='button']")
+    ) {
       return;
     }
     draggingRef.current = true;
     const rect = e.currentTarget.getBoundingClientRect();
-    offsetRef.current = e.clientX - rect.left;
+    offsetXRef.current = e.clientX - rect.left;
+    offsetYRef.current = e.clientY - rect.top;
     e.currentTarget.setPointerCapture?.(e.pointerId);
   }, []);
 
   const onPointerMove = useCallback(
     (e: React.PointerEvent<HTMLElement>) => {
       if (!draggingRef.current) return;
-      const next = clamp(e.clientX - offsetRef.current);
-      setX(next);
+      setX(clampX(e.clientX - offsetXRef.current));
+      if (axis === "xy") {
+        setY(clampY(e.clientY - offsetYRef.current));
+      }
     },
-    [clamp],
+    [axis, clampX, clampY],
   );
 
   const onPointerUp = useCallback(
@@ -83,22 +113,35 @@ export function useDragX({ storageKey, elementWidth }: UseDragXOptions) {
         }
         return curr;
       });
+      if (axis === "xy" && snapY === "bottom") {
+        if (typeof window !== "undefined") {
+          setY(Math.max(0, window.innerHeight - (elementHeight ?? 0)));
+        }
+      }
     },
-    [storageKey],
+    [axis, elementHeight, snapY, storageKey],
   );
 
   // Re-clamp on viewport resize so the element doesn't sit off-screen.
   useEffect(() => {
     if (typeof window === "undefined") return;
     const handler = () => {
-      setX((curr) => (curr === null ? curr : clamp(curr)));
+      setX((curr) => (curr === null ? curr : clampX(curr)));
+      setY((curr) => {
+        if (curr === null) return curr;
+        if (snapY === "bottom") {
+          return Math.max(0, window.innerHeight - (elementHeight ?? 0));
+        }
+        return clampY(curr);
+      });
     };
     window.addEventListener("resize", handler);
     return () => window.removeEventListener("resize", handler);
-  }, [clamp]);
+  }, [clampX, clampY, elementHeight, snapY]);
 
   return {
     x,
+    y,
     pointerHandlers: { onPointerDown, onPointerMove, onPointerUp },
   };
 }

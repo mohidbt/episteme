@@ -305,6 +305,100 @@ describe("AgentBall", () => {
     });
   });
 
+  describe("G-R3-05 #83 — ball drags vertically and snaps to bottom on release", () => {
+    afterEach(() => {
+      window.localStorage.clear();
+    });
+
+    it("snaps y to viewport bottom on pointer up (gravity)", () => {
+      Object.defineProperty(window, "innerHeight", {
+        configurable: true,
+        value: 800,
+      });
+      renderBall();
+      const ball = screen.getByTestId("agent-ball");
+      // Ball is 7 cells * (4+2) - 2 = 40px wide/tall (size=4, gap=2, rows=cols=7)
+      fireEvent.pointerDown(ball, { clientX: 100, clientY: 100, pointerId: 1 });
+      fireEvent.pointerMove(ball, { clientX: 250, clientY: 200, pointerId: 1 });
+      fireEvent.pointerUp(ball, { clientX: 250, clientY: 200, pointerId: 1 });
+      // After release, top style should equal innerHeight - ballHeight (40 → 760).
+      expect(ball.style.top).toMatch(/^\d+px$/);
+      const top = parseInt(ball.style.top, 10);
+      expect(top).toBeGreaterThan(700);
+    });
+
+    it("persists x to localStorage but not y", () => {
+      renderBall();
+      const ball = screen.getByTestId("agent-ball");
+      fireEvent.pointerDown(ball, { clientX: 100, clientY: 100, pointerId: 1 });
+      fireEvent.pointerMove(ball, { clientX: 280, clientY: 220, pointerId: 1 });
+      fireEvent.pointerUp(ball, { clientX: 280, clientY: 220, pointerId: 1 });
+      expect(window.localStorage.getItem("agent-ball-x")).not.toBeNull();
+      expect(window.localStorage.getItem("agent-ball-y")).toBeNull();
+    });
+  });
+
+  describe("G-R3-05 #88 — hover responsiveness on the matrix square", () => {
+    it("attaches mousemove + mouseleave on the ball element", () => {
+      renderBall();
+      const ball = screen.getByTestId("agent-ball");
+      // mousemove updates a CSS transform with translate (parallax tilt).
+      fireEvent.mouseEnter(ball);
+      fireEvent.mouseMove(ball, { clientX: 50, clientY: 50 });
+      const transformAfterMove = ball.style.transform;
+      // The hover handler should have written some transform.
+      expect(transformAfterMove.length).toBeGreaterThan(0);
+
+      fireEvent.mouseLeave(ball);
+      // On leave, transform clears.
+      expect(ball.style.transform).toBe("");
+    });
+
+    it("flags hovered state via data attribute so child Matrix gets a speed boost", () => {
+      renderBall();
+      const ball = screen.getByTestId("agent-ball");
+      expect(ball.getAttribute("data-hovered")).not.toBe("true");
+      fireEvent.mouseEnter(ball);
+      expect(ball.getAttribute("data-hovered")).toBe("true");
+      fireEvent.mouseLeave(ball);
+      expect(ball.getAttribute("data-hovered")).not.toBe("true");
+    });
+  });
+
+  describe("G-R3-05 #76 — collapse animates the panel into the matrix square", () => {
+    it("when collapsed, panel sets data-shrunk='true' and the transcript stays mounted", async () => {
+      renderBall();
+      fireEvent.click(screen.getByTestId("agent-ball"));
+      const panel = await waitFor(() => screen.getByTestId("agent-panel"));
+      const input = (await waitFor(() =>
+        screen.getByTestId("agent-draft-input"),
+      )) as HTMLInputElement;
+      fireEvent.change(input, { target: { value: "draft preserved" } });
+
+      fireEvent.click(screen.getByLabelText(/collapse agent/i));
+      // The panel must mark itself shrunk so CSS can run the matrix-square tween.
+      expect(panel.getAttribute("data-shrunk")).toBe("true");
+      // Transcript still in DOM (state preserved).
+      expect(screen.getByTestId("agent-transcript-stub")).toBeTruthy();
+      const inputAfter = screen.getByTestId(
+        "agent-draft-input",
+      ) as HTMLInputElement;
+      expect(inputAfter.value).toBe("draft preserved");
+    });
+  });
+
+  describe("G-R3-05 #77 — expanded panel respects sidebar / tabbar bounds", () => {
+    it("includes max-w (viewport - sidebar) and below-tabbar top constraints", async () => {
+      renderBall();
+      fireEvent.click(screen.getByTestId("agent-ball"));
+      const panel = await waitFor(() => screen.getByTestId("agent-panel"));
+      const cls = panel.className;
+      // Token-based clamps; either CSS var or fallback fixed value is acceptable.
+      expect(cls).toMatch(/max-w-\[calc\(100vw-/);
+      expect(cls).toMatch(/--tabbar-h/);
+    });
+  });
+
   describe("RG3 #56 — drag handle does not swallow header button pointer events", () => {
     it("collapse/fullscreen/close buttons remain clickable when pointerdown on a button (drag must not capture)", async () => {
       renderBall();
