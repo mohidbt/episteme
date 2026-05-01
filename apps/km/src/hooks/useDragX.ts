@@ -18,6 +18,9 @@ interface UseDragXOptions {
   snapY?: "bottom" | "none";
 }
 
+/** Movement threshold (px) beyond which pointerDown+pointerUp counts as a drag, not a click. */
+const DRAG_THRESHOLD = 4;
+
 /**
  * Drag hook. Persists the x offset to localStorage; y is transient (not
  * persisted) and — when `snapY === "bottom"` — snaps to the viewport floor on
@@ -46,6 +49,10 @@ export function useDragX({
   const draggingRef = useRef(false);
   const offsetXRef = useRef(0);
   const offsetYRef = useRef(0);
+  /** Tracks whether the pointer moved beyond the drag threshold this gesture. */
+  const didMoveRef = useRef(false);
+  const startClientXRef = useRef(0);
+  const startClientYRef = useRef(0);
 
   const clampX = useCallback(
     (next: number) => {
@@ -81,6 +88,9 @@ export function useDragX({
       return;
     }
     draggingRef.current = true;
+    didMoveRef.current = false;
+    startClientXRef.current = e.clientX;
+    startClientYRef.current = e.clientY;
     const rect = e.currentTarget.getBoundingClientRect();
     offsetXRef.current = e.clientX - rect.left;
     offsetYRef.current = e.clientY - rect.top;
@@ -90,6 +100,12 @@ export function useDragX({
   const onPointerMove = useCallback(
     (e: React.PointerEvent<HTMLElement>) => {
       if (!draggingRef.current) return;
+      // Check if the pointer has moved beyond the drag threshold.
+      const dx = e.clientX - startClientXRef.current;
+      const dy = e.clientY - startClientYRef.current;
+      if (!didMoveRef.current && Math.sqrt(dx * dx + dy * dy) > DRAG_THRESHOLD) {
+        didMoveRef.current = true;
+      }
       setX(clampX(e.clientX - offsetXRef.current));
       if (axis === "xy") {
         setY(clampY(e.clientY - offsetYRef.current));
@@ -142,6 +158,8 @@ export function useDragX({
   return {
     x,
     y,
+    /** Ref that is `true` when the current pointer gesture moved beyond the drag threshold. */
+    didMoveRef,
     pointerHandlers: { onPointerDown, onPointerMove, onPointerUp },
   };
 }

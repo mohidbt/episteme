@@ -41,14 +41,9 @@ interface MatrixBadgeProps {
   preset: BallPreset;
   size?: number;
   gap?: number;
-  /** When true, multiplies frame rate (#88 hover speedup). */
-  hovered?: boolean;
 }
 
-// G-R3-05 #88 — speedup factor while hovered. ~1.6x = noticeably snappier.
-const HOVER_SPEED_MULTIPLIER = 1.6;
-
-function MatrixBadge({ preset, size = 4, gap = 2, hovered = false }: MatrixBadgeProps) {
+function MatrixBadge({ preset, size = 4, gap = 2 }: MatrixBadgeProps) {
   const props = useMemo(() => {
     switch (preset) {
       case "working":
@@ -68,15 +63,11 @@ function MatrixBadge({ preset, size = 4, gap = 2, hovered = false }: MatrixBadge
       size={size}
       gap={gap}
       autoplay
-      speedMultiplier={hovered ? HOVER_SPEED_MULTIPLIER : 1}
       data-testid={`agent-matrix-${preset}`}
       {...props}
     />
   );
 }
-
-// G-R3-05 #88 (a) — parallax tilt: translate the ball ~6px toward the cursor.
-const PARALLAX_PX = 6;
 
 export function AgentBall(_props: AgentBallProps) {
   const agentBall = useAgentBall();
@@ -95,8 +86,6 @@ export function AgentBall(_props: AgentBallProps) {
     snapY: "bottom",
   });
   const panelDrag = useDragX({ storageKey: "agent-convo-x", elementWidth: 400 });
-  const [hovered, setHovered] = useState(false);
-  const [tilt, setTilt] = useState<{ x: number; y: number } | null>(null);
   const ballRef = useRef<HTMLButtonElement | null>(null);
   const open = agentBall.open;
   const working = agentBall.working;
@@ -118,6 +107,14 @@ export function AgentBall(_props: AgentBallProps) {
     if (open) agentBall.close();
     else agentBall.openWithPrompt("");
   }, [open, agentBall]);
+
+  // #90 — only toggle on click if the pointer did NOT move beyond the drag
+  // threshold (otherwise a drag gesture would accidentally open/close).
+  const onClickBall = useCallback(() => {
+    if (ballDrag.didMoveRef.current) return;
+    toggle();
+  }, [ballDrag.didMoveRef, toggle]);
+
   useDoubleTapSpace(toggle);
 
   const startNewChat = useCallback(async () => {
@@ -181,27 +178,6 @@ export function AgentBall(_props: AgentBallProps) {
     const inlineStyle: React.CSSProperties = {};
     if (positionedX) inlineStyle.left = `${ballDrag.x}px`;
     if (positionedY) inlineStyle.top = `${ballDrag.y}px`;
-    // #88 (a) parallax tilt: translate the matrix toward the cursor.
-    if (tilt) {
-      inlineStyle.transform = `translate(${tilt.x}px, ${tilt.y}px)`;
-    }
-
-    const onMouseEnter = () => setHovered(true);
-    const onMouseLeave = () => {
-      setHovered(false);
-      setTilt(null);
-    };
-    const onMouseMove = (e: React.MouseEvent<HTMLButtonElement>) => {
-      const rect = e.currentTarget.getBoundingClientRect();
-      const cx = rect.left + rect.width / 2;
-      const cy = rect.top + rect.height / 2;
-      const nx = (e.clientX - cx) / Math.max(1, rect.width / 2);
-      const ny = (e.clientY - cy) / Math.max(1, rect.height / 2);
-      setTilt({
-        x: Math.max(-1, Math.min(1, nx)) * PARALLAX_PX,
-        y: Math.max(-1, Math.min(1, ny)) * PARALLAX_PX,
-      });
-    };
 
     // RG1 #59 — Matrix renders standalone (no circular wrapper). Subtle
     // drop-shadow keeps it visible on light/dark surfaces.
@@ -209,30 +185,23 @@ export function AgentBall(_props: AgentBallProps) {
       <button
         ref={ballRef}
         type="button"
-        onClick={() => agentBall.openWithPrompt("")}
+        onClick={onClickBall}
         aria-label="Open agent"
         data-testid="agent-ball"
         data-preset={preset}
-        data-hovered={hovered ? "true" : "false"}
         style={inlineStyle}
-        onMouseEnter={onMouseEnter}
-        onMouseLeave={onMouseLeave}
-        onMouseMove={onMouseMove}
         {...ballDrag.pointerHandlers}
         className={`${positionClass} inline-flex items-center justify-center text-foreground drop-shadow-md hover:opacity-90 transition-[opacity,transform] duration-150 ease-out touch-none select-none`}
       >
-        <MatrixBadge preset={preset} hovered={hovered} />
+        <MatrixBadge preset={preset} />
       </button>
     );
   }
 
   const panelPositioned = panelDrag.x !== null;
   // G-R3-05 #77 — expanded panel must not cover the sidebar or the TabBar.
-  // Bound max-w to viewport minus sidebar width, max-h to viewport minus
-  // tabbar height. `--sidebar-width` is set on the sidebar root by
-  // SidebarShell; `--tabbar-h` defaults to 36px (h-9) when unset.
-  const TABBAR_FALLBACK = "36px";
-  const panelBoundsClass = `top-[calc(var(--tabbar-h,${TABBAR_FALLBACK}))] max-h-[calc(100dvh-var(--tabbar-h,${TABBAR_FALLBACK})-1rem)] max-w-[calc(100vw-var(--sidebar-width,0px)-1rem)]`;
+  // max-w = viewport - sidebar width; top = tabbar height.
+  const panelBoundsClass = `top-[var(--tabbar-h)] max-h-[calc(100dvh-var(--tabbar-h))] max-w-[calc(100vw-var(--sidebar-width))]`;
   const panelLayoutClass = fullscreen
     ? `fixed inset-0 z-50 flex flex-col rounded-lg border bg-background shadow-xl`
     : panelPositioned

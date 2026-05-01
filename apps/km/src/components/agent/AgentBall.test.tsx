@@ -192,14 +192,25 @@ describe("AgentBall", () => {
     await waitFor(() => expect(countThreadCreatePosts()).toBe(2));
   });
 
-  it("toggles on double-tap Space", async () => {
+  it("#111 — double-tap Space fires same toggle as clicking the matrix square", async () => {
     renderBall();
     expect(screen.queryByTestId("agent-panel")).toBeNull();
+
+    // Double-space should open (same as clicking the ball)
     await act(async () => {
       fireEvent.keyDown(document, { key: " ", code: "Space" });
       fireEvent.keyDown(document, { key: " ", code: "Space" });
     });
     await waitFor(() => expect(screen.getByTestId("agent-panel")).toBeTruthy());
+
+    // Double-space again should close (toggle behavior, same as clicking the ball)
+    await act(async () => {
+      fireEvent.keyDown(document, { key: " ", code: "Space" });
+      fireEvent.keyDown(document, { key: " ", code: "Space" });
+    });
+    await waitFor(() =>
+      expect(screen.queryByTestId("agent-panel")).toBeNull(),
+    );
   });
 
   describe("G10 #37 — draggable agent ball (horizontal, bottom-pinned)", () => {
@@ -229,6 +240,33 @@ describe("AgentBall", () => {
 
       expect(ball.style.left).toMatch(/^\d+px$/);
       expect(window.localStorage.getItem("agent-ball-x")).not.toBeNull();
+    });
+
+    it("#90 — pointerdown starts drag and pointermove moves the element", () => {
+      renderBall();
+      const ball = screen.getByTestId("agent-ball");
+      expect(ball.style.left).toBe("");
+
+      // Simulate drag: pointerdown, then pointermove by a significant distance
+      fireEvent.pointerDown(ball, { clientX: 200, clientY: 760, pointerId: 1 });
+      fireEvent.pointerMove(ball, { clientX: 400, clientY: 760, pointerId: 1 });
+      fireEvent.pointerUp(ball, { clientX: 400, clientY: 760, pointerId: 1 });
+
+      // The ball should have moved — left should now be set
+      expect(ball.style.left).toMatch(/^\d+px$/);
+      const left = parseInt(ball.style.left, 10);
+      expect(left).toBeGreaterThan(100);
+    });
+
+    it("#90 — click (no movement) opens the panel, drag (with movement) does NOT open", async () => {
+      renderBall();
+      const ball = screen.getByTestId("agent-ball");
+
+      // A short click with no movement should open the panel
+      fireEvent.pointerDown(ball, { clientX: 200, clientY: 760, pointerId: 1 });
+      fireEvent.pointerUp(ball, { clientX: 200, clientY: 760, pointerId: 1 });
+      fireEvent.click(ball);
+      await waitFor(() => expect(screen.getByTestId("agent-panel")).toBeTruthy());
     });
   });
 
@@ -338,30 +376,26 @@ describe("AgentBall", () => {
     });
   });
 
-  describe("G-R3-05 #88 — hover responsiveness on the matrix square", () => {
-    it("attaches mousemove + mouseleave on the ball element", () => {
+  describe("#91 — NO hover behavior on the matrix square", () => {
+    it("hovering does NOT change position (no parallax translate)", () => {
       renderBall();
       const ball = screen.getByTestId("agent-ball");
-      // mousemove updates a CSS transform with translate (parallax tilt).
+      const transformBefore = ball.style.transform;
       fireEvent.mouseEnter(ball);
       fireEvent.mouseMove(ball, { clientX: 50, clientY: 50 });
-      const transformAfterMove = ball.style.transform;
-      // The hover handler should have written some transform.
-      expect(transformAfterMove.length).toBeGreaterThan(0);
-
-      fireEvent.mouseLeave(ball);
-      // On leave, transform clears.
-      expect(ball.style.transform).toBe("");
+      // Transform must remain unchanged — no parallax tilt.
+      expect(ball.style.transform).toBe(transformBefore);
     });
 
-    it("flags hovered state via data attribute so child Matrix gets a speed boost", () => {
+    it("no data-hovered attribute and no speedMultiplier on Matrix", () => {
       renderBall();
       const ball = screen.getByTestId("agent-ball");
-      expect(ball.getAttribute("data-hovered")).not.toBe("true");
-      fireEvent.mouseEnter(ball);
-      expect(ball.getAttribute("data-hovered")).toBe("true");
-      fireEvent.mouseLeave(ball);
-      expect(ball.getAttribute("data-hovered")).not.toBe("true");
+      // data-hovered should not exist at all.
+      expect(ball.hasAttribute("data-hovered")).toBe(false);
+      // MatrixBadge should not receive hovered prop (no speed boost).
+      const matrix = screen.getByTestId("agent-matrix-inactive");
+      // Matrix speedMultiplier defaults to 1; verify no speedMultiplier attr.
+      expect(matrix.getAttribute("data-speed-multiplier")).toBeNull();
     });
   });
 
@@ -387,15 +421,16 @@ describe("AgentBall", () => {
     });
   });
 
-  describe("G-R3-05 #77 — expanded panel respects sidebar / tabbar bounds", () => {
-    it("includes max-w (viewport - sidebar) and below-tabbar top constraints", async () => {
+  describe("#98 — expanded panel stays within sidebar + tabbar bounds", () => {
+    it("max-w uses calc(100vw - var(--sidebar-width)) without extra 1rem padding", async () => {
       renderBall();
       fireEvent.click(screen.getByTestId("agent-ball"));
       const panel = await waitFor(() => screen.getByTestId("agent-panel"));
       const cls = panel.className;
-      // Token-based clamps; either CSS var or fallback fixed value is acceptable.
-      expect(cls).toMatch(/max-w-\[calc\(100vw-/);
-      expect(cls).toMatch(/--tabbar-h/);
+      // max-w must be calc(100vw - var(--sidebar-width)), NOT calc(100vw - var(--sidebar-width) - 1rem)
+      expect(cls).toMatch(/max-w-\[calc\(100vw-var\(--sidebar-width\)\)\]/);
+      // top must be var(--tabbar-h), NOT a calc with fallback
+      expect(cls).toMatch(/top-\[var\(--tabbar-h\)\]/);
     });
   });
 
