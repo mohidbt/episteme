@@ -121,4 +121,4 @@ def test_data_tools_exported():
     from tools import data  # noqa: PLC0415
 
     names = {t.name for t in data.TOOLS}
-    assert names == {"csv_read", "csv_write_cell"}
+    assert names == {"browse_papersets", "csv_read", "csv_write_cell"}

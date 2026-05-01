@@ -1,6 +1,6 @@
-"""LangChain tools: csv_read + csv_write_cell.
+"""LangChain tools: browse_papersets + csv_read + csv_write_cell.
 
-These tools are the data-extract skill's write surface — they call back into
+These tools are the data-extract skill's surface — they call back into
 apps/km via the same HMAC-signed channel that ``tools/notes.py`` uses (see
 ``lib/km_http.py``). All write guards (grounding non-empty, idempotent retry,
 row/col bounds) live server-side; this client surfaces KM-side errors as
@@ -34,6 +34,26 @@ class CsvView(TypedDict):
 
 def _is_error(resp: object) -> bool:
     return isinstance(resp, dict) and bool(resp.get("error"))
+
+
+@tool
+async def browse_papersets(*, config: RunnableConfig) -> object:
+    """List all papersets the user owns (filename, ID, row count, column schema).
+
+    USE THIS when the user asks to enumerate, list, show all, or browse their
+    papersets. Returns the full set from the KM API; no query required.
+
+    Each paperset in the response includes:
+    - id: UUID for use with csv_read and csv_write_cell
+    - filename: Display name
+    - rowRefs: Array of {paper_id} — len = row count
+    - columns: Array of {name, description} — column schema
+
+    After browsing, use csv_read to inspect a specific paperset's cells and
+    csv_write_cell to write extracted data into cells.
+    """
+    user_id = user_id_from_config(config)
+    return await km_get("/api/papersets", user_id=user_id)
 
 
 @tool
@@ -102,4 +122,4 @@ async def csv_write_cell(
     return "ok"
 
 
-TOOLS = [csv_read, csv_write_cell]
+TOOLS = [browse_papersets, csv_read, csv_write_cell]
