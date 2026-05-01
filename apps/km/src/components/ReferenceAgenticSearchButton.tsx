@@ -1,6 +1,5 @@
 "use client";
 
-import { Wand2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAgentBall } from "@/components/agent/agent-ball-context";
 
@@ -24,7 +23,7 @@ export function ReferenceAgenticSearchButton({ referenceId, citationKey }: Props
         )
       }
     >
-      <Wand2 className="h-4 w-4" aria-hidden />
+      <span aria-hidden="true" className="text-sm leading-none">※</span>
       🪄 Agentic PDF Search
     </Button>
   );

@@ -5,7 +5,7 @@ import { useRef, useState, useCallback, useEffect } from "react";
 import { runSlashAi } from "@/app/(app)/n/[slug]/run-slash-ai";
 import type { SkillCategory } from "@/lib/skills";
 import {
-  Bold, Italic, Code, Wand2, Loader2,
+  Bold, Italic, Code, Loader2,
   ArrowDown, RefreshCw,
 } from "lucide-react";
 import {
@@ -528,7 +528,7 @@ export function AiBubbleMenu({
             </div>
             <button onClick={enterRephrase}
               className="flex items-center gap-1 rounded-r-lg px-2 py-1.5 text-sm hover:bg-accent">
-              <Wand2 className="h-4 w-4" />
+              <span aria-hidden="true" className="text-sm leading-none">※</span>
               <span className="text-xs">AI Rephrase</span>
             </button>
           </>

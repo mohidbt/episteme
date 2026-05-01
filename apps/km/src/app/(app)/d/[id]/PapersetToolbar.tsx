@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Plus, FilePlus2, Wand2, Loader2 } from "lucide-react";
+import { Plus, FilePlus2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PaperPickerDialog } from "@/components/PaperPickerDialog";
 import { AddColumnDialog } from "./AddColumnDialog";
@@ -59,7 +59,7 @@ export function PapersetToolbar({
         {isRunning ? (
           <Loader2 className="size-4 animate-spin" aria-hidden />
         ) : (
-          <Wand2 className="size-4" aria-hidden />
+          <span aria-hidden="true" className="text-sm leading-none">※</span>
         )}
         Run enrichment
         <span

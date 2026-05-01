@@ -142,12 +142,13 @@ describe("AiBubbleMenu rephrase prompt bar", () => {
     expect(call.prompt).toBe("REWRITE-INSTR");
   });
 
-  it("renders no Lucide Sparkles icon and uses the glyph for personal-skill button (#71)", () => {
+  it("renders no Lucide Sparkles/Wand2 icons and uses the glyph for personal-skill button (#71, #102)", () => {
     const editor = makeEditor();
     const { container } = render(<AiBubbleMenu editor={editor} />);
     fireEvent.click(screen.getByText("AI Rephrase"));
-    // No svg with the lucide-sparkles class anywhere.
+    // No svg with the lucide-sparkles or lucide-wand-2 class anywhere.
     expect(container.querySelector(".lucide-sparkles")).toBeNull();
+    expect(container.querySelector(".lucide-wand-2")).toBeNull();
     // The literal glyph appears next to the personal-skill label.
     const btn = screen.getByRole("button", { name: /personal skill/i });
     expect(btn.textContent).toContain("※");

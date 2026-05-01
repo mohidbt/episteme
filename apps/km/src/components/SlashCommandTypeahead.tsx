@@ -33,7 +33,7 @@ const COMMANDS: SlashCommandItem[] = [
     title: "AI",
     description: "Ask AI to write or edit",
     keywords: ["ai", "ask", "write", "edit", "rephrase", "generate"],
-    icon: "✨",
+    icon: "※",
   },
   {
     title: "Cite",

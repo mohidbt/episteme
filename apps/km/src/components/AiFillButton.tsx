@@ -3,14 +3,15 @@
 // G17 — Per-row "fill missing" action.
 // Posts known fields + missing field names to /api/ai-fill, shows the preview
 // inside a confirm() dialog (one-time, no auto-apply), and on accept calls
-// the supplied PATCH path. Wand2 icon per G3 convention.
+// the supplied PATCH path. Uses ※ glyph per G3 convention.
 import { useState } from "react";
-import { Wand2, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { isOpenRouterKeyError } from "@/lib/openrouter-errors";
 import { renderOpenRouterKeyToastDescription } from "@/components/OpenRouterKeyErrorToast";
+import { suggestionsToCslPatch } from "@/lib/csl";
 
 interface Props {
   /** Endpoint that PATCHes accepted suggestions (e.g. `/api/papers/ID`). */
@@ -25,6 +26,12 @@ interface Props {
   ariaLabel?: string;
   /** Optional CSS classes appended to the button. */
   className?: string;
+  /** Existing CSL JSON for the row (needed to merge suggestions into cslJson). */
+  cslJson?: Record<string, unknown> | null;
+  /** Called when the fill request starts (for animation). */
+  onFillStart?: () => void;
+  /** Called when the fill request ends, success or failure (for animation). */
+  onFillEnd?: () => void;
 }
 
 export function AiFillButton({
@@ -34,6 +41,9 @@ export function AiFillButton({
   missing,
   ariaLabel,
   className,
+  cslJson,
+  onFillStart,
+  onFillEnd,
 }: Props) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -43,6 +53,7 @@ export function AiFillButton({
   async function onClick() {
     if (disabled) return;
     setBusy(true);
+    onFillStart?.();
     try {
       const res = await fetch("/api/ai-fill", {
         method: "POST",
@@ -71,10 +82,18 @@ export function AiFillButton({
       const ok = window.confirm(`Apply these suggestions?\n\n${previewLines}`);
       if (!ok) return;
 
+      // For references, suggestions use denormalised field names (title, authors,
+      // year, doi, venue) but the PATCH endpoint only accepts cslJson. Convert
+      // and merge into existing cslJson before PATCHing.
+      const patchBody =
+        kind === "reference"
+          ? { cslJson: suggestionsToCslPatch(suggestions, cslJson ?? {}) }
+          : suggestions;
+
       const patch = await fetch(patchUrl, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(suggestions),
+        body: JSON.stringify(patchBody),
       });
       if (!patch.ok) {
         toast.error("Apply failed", { description: `HTTP ${patch.status}` });
@@ -86,6 +105,7 @@ export function AiFillButton({
       toast.error("AI fill failed");
     } finally {
       setBusy(false);
+      onFillEnd?.();
     }
   }
 
@@ -96,6 +116,7 @@ export function AiFillButton({
       disabled={disabled}
       aria-label={ariaLabel ?? `Fill missing fields with AI`}
       data-testid="ai-fill-button"
+      data-ai-filling={busy || undefined}
       className={cn(
         "inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground",
         disabled && "pointer-events-none opacity-30",
@@ -105,7 +126,7 @@ export function AiFillButton({
       {busy ? (
         <Loader2 aria-hidden className="size-3.5 animate-spin" />
       ) : (
-        <Wand2 aria-hidden className="size-3.5" />
+        <span aria-hidden="true" className="text-sm leading-none">※</span>
       )}
     </button>
   );

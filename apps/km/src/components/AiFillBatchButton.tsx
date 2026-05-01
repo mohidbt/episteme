@@ -6,26 +6,33 @@
 // through the per-row PATCH URL. NO confirmation per row in batch mode —
 // the user already opted in by clicking "Fill all visible".
 import { useState } from "react";
-import { Wand2, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { isOpenRouterKeyError } from "@/lib/openrouter-errors";
 import { renderOpenRouterKeyToastDescription } from "@/components/OpenRouterKeyErrorToast";
+import { suggestionsToCslPatch } from "@/lib/csl";
 
 export interface BatchRow {
   id: string;
   patchUrl: string;
   known: Record<string, unknown>;
   missing: string[];
+  /** Existing CSL JSON for the row (needed to merge suggestions into cslJson). */
+  cslJson?: Record<string, unknown> | null;
 }
 
 interface Props {
   kind: "paper" | "reference";
   rows: BatchRow[];
+  /** Called when a row's fill request starts (row id for animation). */
+  onFillStart?: (rowId: string) => void;
+  /** Called when a row's fill request ends (row id for animation). */
+  onFillEnd?: (rowId: string) => void;
 }
 
-export function AiFillBatchButton({ kind, rows }: Props) {
+export function AiFillBatchButton({ kind, rows, onFillStart, onFillEnd }: Props) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
 
@@ -46,6 +53,7 @@ export function AiFillBatchButton({ kind, rows }: Props) {
     let failed = 0;
     let keyErrorSeen = false;
     for (const row of candidates) {
+      onFillStart?.(row.id);
       try {
         const res = await fetch("/api/ai-fill", {
           method: "POST",
@@ -65,15 +73,26 @@ export function AiFillBatchButton({ kind, rows }: Props) {
         }
         const data = (await res.json()) as { suggestions: Record<string, unknown> };
         if (!data.suggestions || Object.keys(data.suggestions).length === 0) continue;
+
+        // For references, suggestions use denormalised field names (title, authors,
+        // year, doi, venue) but the PATCH endpoint only accepts cslJson. Convert
+        // and merge into existing cslJson before PATCHing.
+        const patchBody =
+          kind === "reference"
+            ? { cslJson: suggestionsToCslPatch(data.suggestions, row.cslJson ?? {}) }
+            : data.suggestions;
+
         const patch = await fetch(row.patchUrl, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(data.suggestions),
+          body: JSON.stringify(patchBody),
         });
         if (patch.ok) filled++;
         else failed++;
       } catch {
         failed++;
+      } finally {
+        onFillEnd?.(row.id);
       }
     }
     setBusy(false);
@@ -100,7 +119,7 @@ export function AiFillBatchButton({ kind, rows }: Props) {
       {busy ? (
         <Loader2 aria-hidden className="size-3.5 animate-spin" />
       ) : (
-        <Wand2 aria-hidden className="size-3.5" />
+        <span aria-hidden="true" className="text-sm leading-none">※</span>
       )}
       {busy ? "Filling…" : `Fill all missing (${candidates.length})`}
     </Button>
