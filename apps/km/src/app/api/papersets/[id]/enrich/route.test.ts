@@ -258,7 +258,10 @@ describe("POST /api/papersets/:id/enrich", () => {
     expect(updated.runningCells).toEqual([]);
   });
 
-  it("emits error event when upstream returns 501", async () => {
+  // Regression guard. 1.4.x T6 (commit 3cdf5a8) replaced the upstream 501
+  // stub with the real /extract handler, but the route keeps the 501
+  // short-circuit defensively in case the handler is ever reverted.
+  it("defensive: emits error event if upstream returns 501 (regression guard for 1.4.x T6 backout)", async () => {
     const id = await seedPaperset();
     const paper = await seedPaper();
     await addRow(id, paper);
