@@ -148,7 +148,7 @@ describe("seedAnonymousUser", () => {
     expect(dois).toContain("10.1111/1467-9868.00196"); // Tipping & Bishop 1999
     expect(dois).toContain("10.1038/nature07331"); // Novembre et al. 2008
     expect(dois).toContain("10.1162/jocn.1991.3.1.71"); // Turk & Pentland 1991
-    const pcaFolder = allFolders.find((f) => f.name === "PCA");
+    const pcaFolder = allFolders.find((f) => f.name === "PSM");
     expect(pcaFolder).toBeDefined();
     const pcaRefs = refRows.filter((r) => r.folderId === pcaFolder!.id);
     expect(pcaRefs).toHaveLength(6);

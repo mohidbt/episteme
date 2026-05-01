@@ -49,7 +49,7 @@ const SEED_REFERENCES = [
 
 const READING_LIST_FOLDER = "Reading List";
 const FOUNDATIONS_FOLDER = "Foundations";
-const PCA_FOLDER = "PCA";
+const PCA_FOLDER = "PSM";
 
 // Real PCA references (Principal Component Analysis canon). Citation keys are
 // derived automatically; no fabrication — every entry below has a verifiable
