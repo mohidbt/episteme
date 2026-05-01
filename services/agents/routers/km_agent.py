@@ -1,4 +1,4 @@
-"""KM Agent routes — /agents/km/{invoke,resume,state,config}.
+"""KM Agent routes — /agents/km/{invoke,resume,state,config,extract}.
 
 SSE library: StreamingResponse (consistent with existing km_complete.py).
 Event format: event: <type>\ndata: <json>\n\n  (typed SSE per format_sse helper).
@@ -13,11 +13,12 @@ flow easily plans + delegates + iterates beyond 25 steps. We set
 enough for legitimate runs while still bounding pathological loops
 (§1.3b-E2E-fix-2).
 """
+import asyncio
 import logging
 
 import openai
 from fastapi import APIRouter, HTTPException, Query, Request
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import StreamingResponse
 from langgraph.types import Command
 
 from deps.auth import InternalAuthDep
@@ -26,6 +27,7 @@ from skills.drive_loader import DriveSkillsLoader
 from checkpointer import get_saver
 from store import get_store
 from lib.config_cache import GUEST_USER_ID, load_user_config, save_user_config
+from lib.km_http import km_get
 from lib.openrouter_model import model_for
 from lib.sse_events import _jsonable, format_sse, format_typed
 
@@ -587,20 +589,185 @@ async def config_post(req: Request, auth: InternalAuthDep):
     return {"ok": True}
 
 
-@router.post("/extract")
-async def extract_stub(req: Request, auth: InternalAuthDep) -> JSONResponse:
-    """501 stub for data-extract; real handler ships in 1.4.x T6.
+_EXTRACT_CONCURRENCY = 4
 
-    KM-side enrich route already special-cases upstream 501 with a graceful
-    SSE error event. This stub closes the 404 gap users see today.
+
+def _extract_filled_payload(ev: dict) -> dict | None:
+    """If `ev` is a successful csv_write_cell tool_end, return the cell_filled payload.
+
+    The agent calls ``csv_write_cell(file_id, row, col, value, grounding)``;
+    on success the tool returns the literal string ``"ok"``. We mine the
+    on_tool_end's ``data.input`` (preserved by langchain when both input and
+    output are passed through) for the structured args.
+    """
+    if ev.get("event") != "on_tool_end" or ev.get("name") != "csv_write_cell":
+        return None
+    data = ev.get("data") or {}
+    output = data.get("output")
+    text = getattr(output, "content", output)
+    if isinstance(output, Exception):
+        return None
+    if isinstance(text, str) and not text.startswith("ok"):
+        # csv_write_cell returns "error: ..." on KM-side rejection.
+        return None
+    args = data.get("input") or {}
+    if not isinstance(args, dict):
+        return None
+    return {
+        "row": args.get("row"),
+        "col": args.get("col"),
+        "value": args.get("value"),
+        "grounding": args.get("grounding") or {},
+    }
+
+
+@router.post("/extract")
+async def extract(req: Request, auth: InternalAuthDep):
+    """Real SSE handler for the data-extract workflow (Phase 1.4.x-T6).
+
+    Per-cell fan-out with ``asyncio.Semaphore(4)`` cap; each cell runs in its
+    own checkpoint thread (``extract:<paperset>:<row>:<col>``); per-cell errors
+    emit ``cell_failed`` and the stream continues. Replaces the 501 stub from
+    phase-1.4 T0.
+
+    Body:
+        ``{"paperset_id": str, "cells": [{"row_idx": int, "col_name": str}, ...]}``
+
+    SSE events: cell_started, tool_call, tool_result, cell_filled, cell_failed,
+    done {filled, failed}.
     """
     _reject_guest(auth["user_id"])
-    return JSONResponse(
-        status_code=501,
-        content={
-            "code": "not_implemented",
-            "message": "data-extract skill ships in Phase 1.4.x",
-        },
+    body = await req.json()
+    user_id = auth["user_id"]
+
+    paperset_id = body.get("paperset_id")
+    cells = body.get("cells")
+    if not isinstance(paperset_id, str) or not paperset_id:
+        raise HTTPException(status_code=400, detail={"error": "paperset_id_required"})
+    if not isinstance(cells, list) or not cells:
+        raise HTTPException(status_code=400, detail={"error": "cells_required"})
+    for c in cells:
+        if not isinstance(c, dict):
+            raise HTTPException(status_code=400, detail={"error": "validation"})
+        if not isinstance(c.get("row_idx"), int) or c["row_idx"] < 0:
+            raise HTTPException(status_code=400, detail={"error": "validation"})
+        if not isinstance(c.get("col_name"), str) or not c["col_name"]:
+            raise HTTPException(status_code=400, detail={"error": "validation"})
+
+    # Resolve column descriptions + paper_ids from the KM-side paperset view.
+    pset = await km_get(f"/api/papersets/{paperset_id}/csv-view", user_id=user_id)
+    if not isinstance(pset, dict) or pset.get("error"):
+        raise HTTPException(status_code=502, detail={"error": "paperset_fetch_failed"})
+
+    columns = pset.get("columns") or []
+    row_refs = pset.get("row_refs") or []
+    col_by_name = {c["name"]: c for c in columns if isinstance(c, dict) and "name" in c}
+
+    for c in cells:
+        if c["row_idx"] >= len(row_refs):
+            raise HTTPException(status_code=400, detail={"error": "row_oob"})
+        if c["col_name"] not in col_by_name:
+            raise HTTPException(status_code=400, detail={"error": "unknown_col"})
+
+    cfg = load_user_config(user_id)
+    model_pref = body.get("model_preference") or cfg["modelPreference"]
+    permissions = cfg.get("permissions", {})
+    agent = await build_km_agent(
+        user_id=user_id,
+        thread_id=f"extract:{paperset_id}",
+        model=model_for(model_pref, auth["llm_key"]),
+        enabled_skills=["data-extract"],
+        approval_rules=cfg.get("approvalRules", {}),
+        store=get_store(),
+        saver=get_saver(),
+        permissions=permissions,
+    )
+
+    sem = asyncio.Semaphore(_EXTRACT_CONCURRENCY)
+    queue: asyncio.Queue = asyncio.Queue()
+    SENTINEL = object()
+
+    async def run_cell(cell: dict) -> bool:
+        row = cell["row_idx"]
+        col = cell["col_name"]
+        async with sem:
+            await queue.put(("cell_started", {"row": row, "col": col}))
+            paper_id = (row_refs[row] or {}).get("paper_id", "")
+            description = col_by_name[col].get("description", "")
+            prompt = (
+                f"Fill cell (row={row}, col=\"{col}\") in paperset file_id={paperset_id}.\n"
+                f"Target paper_id: {paper_id}\n"
+                f"Column description (your extraction prompt): {description}\n"
+                "Follow the data-extract skill rules: scope-first read, one-value, "
+                "mandatory grounding, \"n/a\" for unanswered."
+            )
+            tid = f"extract:{paperset_id}:{row}:{col}"
+            filled_payload: dict | None = None
+            try:
+                async for ev in agent.astream_events(
+                    {"messages": [{"role": "user", "content": prompt}]},
+                    config={
+                        "configurable": {"thread_id": tid, "user_id": user_id},
+                        "recursion_limit": _AGENT_RECURSION_LIMIT,
+                    },
+                    version="v2",
+                ):
+                    mapped = _map_event(ev)
+                    if mapped:
+                        ev_type, payload = mapped
+                        if ev_type in ("tool_call", "tool_result"):
+                            tagged = {**payload, "row": row, "col": col}
+                            await queue.put((ev_type, tagged))
+                    candidate = _extract_filled_payload(ev)
+                    if candidate is not None:
+                        filled_payload = candidate
+            except Exception as e:  # noqa: BLE001
+                logger.exception("extract cell failed row=%s col=%s", row, col)
+                await queue.put(("cell_failed", {"row": row, "col": col, "error": str(e)}))
+                return False
+            if filled_payload is None:
+                await queue.put((
+                    "cell_failed",
+                    {"row": row, "col": col, "error": "agent did not write cell"},
+                ))
+                return False
+            # Normalize row/col on the filled payload (the agent might mismatch).
+            await queue.put((
+                "cell_filled",
+                {
+                    "row": row,
+                    "col": col,
+                    "value": filled_payload.get("value"),
+                    "grounding": filled_payload.get("grounding") or {},
+                },
+            ))
+            return True
+
+    async def run_all() -> None:
+        results = await asyncio.gather(
+            *[run_cell(c) for c in cells], return_exceptions=True,
+        )
+        filled = sum(1 for r in results if r is True)
+        failed = len(results) - filled
+        await queue.put(("done", {"filled": filled, "failed": failed}))
+        await queue.put((SENTINEL, None))
+
+    async def gen():
+        task = asyncio.create_task(run_all())
+        try:
+            while True:
+                item = await queue.get()
+                ev_type, payload = item
+                if ev_type is SENTINEL:
+                    break
+                yield format_sse(ev_type, payload)
+        finally:
+            await task
+
+    return StreamingResponse(
+        gen(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache"},
     )
 
 
