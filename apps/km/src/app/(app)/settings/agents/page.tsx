@@ -4,14 +4,6 @@ import { getCurrentUserId } from "@/lib/session";
 import { db } from "@/lib/db";
 import { agentConfigs } from "@episteme/db/schema";
 import { PermissionsForm } from "@/components/settings/PermissionsForm";
-import { ConfigExportImport } from "@/components/settings/ConfigExportImport";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { getDefaultAgentModel } from "@/lib/agent-config-defaults";
 
 export default async function AgentsSettingsPage() {
@@ -63,21 +55,7 @@ export default async function AgentsSettingsPage() {
         Control which skills, tools, and models your agents can use.
       </p>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Agent Settings</CardTitle>
-          <CardDescription>
-            Configure model, skills, and tool permissions.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <PermissionsForm initial={initial} />
-        </CardContent>
-      </Card>
-
-      <div className="mt-8">
-        <ConfigExportImport />
-      </div>
+      <PermissionsForm initial={initial} />
     </div>
   );
 }

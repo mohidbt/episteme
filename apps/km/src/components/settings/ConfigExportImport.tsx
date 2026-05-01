@@ -9,13 +9,8 @@
 import * as React from "react";
 import { toast } from "sonner";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+  Button,
+} from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -228,15 +223,7 @@ export function ConfigExportImport() {
   }
 
   return (
-    <Card data-testid="agent-config-export-import">
-      <CardHeader>
-        <CardTitle>Data</CardTitle>
-        <CardDescription>
-          Export your agent config (skills, memories, settings) as a portable
-          bundle, or import one from another workspace.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+    <div data-testid="agent-config-export-import" className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex flex-1 flex-col gap-2">
           <h3 className="text-sm font-medium">Export</h3>
           <p className="text-xs text-muted-foreground">
@@ -283,7 +270,6 @@ export function ConfigExportImport() {
             </Button>
           </div>
         </div>
-      </CardContent>
 
       <Dialog
         open={diff !== null}
@@ -324,6 +310,6 @@ export function ConfigExportImport() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </Card>
+    </div>
   );
 }

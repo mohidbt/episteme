@@ -9,6 +9,7 @@ import { McpAttach } from "./McpAttach";
 import { ApprovalRules } from "./ApprovalRules";
 import { ModelPicker } from "./ModelPicker";
 import { PermissionToggles, type PermissionsMap } from "./PermissionToggles";
+import { ConfigExportImport } from "./ConfigExportImport";
 
 export type AttachedMcp = { name: string; account?: string };
 export type ApprovalRule = "auto" | "require" | "never";
@@ -21,7 +22,7 @@ export type PermissionsFormState = {
   permissions: PermissionsMap;
 };
 
-type Section = "skills" | "mcps" | "rules" | "permissions";
+type Section = "skills" | "mcps" | "rules" | "permissions" | "export";
 
 export function PermissionsForm({ initial }: { initial: PermissionsFormState }) {
   const [state, setState] = React.useState<PermissionsFormState>(initial);
@@ -92,6 +93,7 @@ export function PermissionsForm({ initial }: { initial: PermissionsFormState }) 
             { value: "mcps", label: "MCPs", testId: "perm-section-mcps" },
             { value: "rules", label: "Rules", testId: "perm-section-rules" },
             { value: "permissions", label: "Permissions", testId: "perm-section-permissions" },
+            { value: "export", label: "Export", testId: "perm-section-export" },
           ]}
         />
         <div role="region" aria-label={`${section} settings`} className="flex-1">
@@ -127,14 +129,17 @@ export function PermissionsForm({ initial }: { initial: PermissionsFormState }) 
               }
             />
           )}
+          {section === "export" && <ConfigExportImport />}
         </div>
       </div>
 
-      <div className="flex justify-end">
-        <Button onClick={handleSave} disabled={!dirty || saving}>
-          {saving ? "Saving..." : "Save"}
-        </Button>
-      </div>
+      {section !== "export" && (
+        <div className="flex justify-end">
+          <Button onClick={handleSave} disabled={!dirty || saving}>
+            {saving ? "Saving..." : "Save"}
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
