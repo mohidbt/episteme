@@ -25,6 +25,7 @@ interface Props {
     rowRefs: RowRef[];
     cellGrounding: CellGrounding;
     runningCells: RunningCell[];
+    cellValues: Record<string, string>;
   };
   paperById: Record<
     string,
@@ -44,7 +45,9 @@ export function PapersetView({ id, libraryId, initial, paperById }: Props) {
   const [columns, setColumns] = useState<ColumnSpec[]>(initial.columns);
   const rowRefs = initial.rowRefs;
 
-  const [cellValues, setCellValues] = useState<Map<string, string>>(new Map());
+  const [cellValues, setCellValues] = useState<Map<string, string>>(
+    () => new Map(Object.entries(initial.cellValues)),
+  );
   const [runningKeys, setRunningKeys] = useState<Set<string>>(
     () => new Set(initial.runningCells.map((c) => cellKey(c.row, c.col))),
   );
@@ -86,7 +89,18 @@ export function PapersetView({ id, libraryId, initial, paperById }: Props) {
 
   const runEnrichment = useCallback(async () => {
     if (selectionRef.current.isEmpty() || isRunning) return;
-    const cells = selectionRef.current.list().map((c) => ({
+    // #106: confirm before re-running enrichment on already-filled cells
+    const selectedCells = selectionRef.current.list();
+    const hasFilled = selectedCells.some((c) =>
+      cellValues.has(`${c.row}:${c.col}`),
+    );
+    if (hasFilled) {
+      const confirmed = window.confirm(
+        "Cell already enriched. Continue?",
+      );
+      if (!confirmed) return;
+    }
+    const cells = selectedCells.map((c) => ({
       row_idx: c.row,
       col_name: c.col,
     }));

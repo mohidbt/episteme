@@ -38,6 +38,7 @@ export function RowView({
   selection,
   onRowHeaderClick,
   onCellMouseDown,
+  onCellClick,
   onRemoveRow,
 }: {
   rowIdx: number;
@@ -50,6 +51,7 @@ export function RowView({
   selection: CellSelection;
   onRowHeaderClick: () => void;
   onCellMouseDown: (e: React.MouseEvent, row: number, col: string) => void;
+  onCellClick: (row: number, col: string) => void;
   onRemoveRow: () => void;
 }) {
   return (
@@ -85,6 +87,7 @@ export function RowView({
               groundingPaperId={ground?.paper_id ?? paper.id}
               groundingBlockIds={ground?.block_ids ?? []}
               onMouseDown={(e) => onCellMouseDown(e, rowIdx, col.name)}
+              onClick={() => onCellClick(rowIdx, col.name)}
               testId={`cell-${rowIdx}-${col.name}`}
             />
           );
@@ -180,6 +183,7 @@ function CellView({
   groundingPaperId,
   groundingBlockIds,
   onMouseDown,
+  onClick,
   testId,
 }: {
   state: ReturnType<typeof deriveCellState>;
@@ -189,15 +193,17 @@ function CellView({
   groundingPaperId: string;
   groundingBlockIds: string[];
   onMouseDown: (e: React.MouseEvent) => void;
+  onClick: () => void;
   testId: string;
 }) {
   return (
     <td
       onMouseDown={onMouseDown}
+      onClick={state.kind === "filled" ? onClick : undefined}
       className={cn(
         "relative h-9 cursor-cell border-b border-r border-border/60 px-3 py-1.5 align-middle",
         selected && "bg-primary/10",
-        selected && showRing && "ring-1 ring-inset ring-primary/40",
+        selected && showRing && "ring-2 ring-inset ring-primary/70",
       )}
       data-cell-state={state.kind}
       data-selected={selected ? "true" : "false"}
@@ -225,13 +231,14 @@ function CellView({
       {state.kind === "filled" && (
         <span className="flex items-center gap-1.5">
           <span className="truncate">{state.value}</span>
-          {groundingBlockIds.length > 0 && (
+          {/* #104: only render grounding chip when firstPage is a valid page
+              number. Blocks without a page anchor produce firstPage=null and
+              are silently hidden. */}
+          {state.firstPage != null && groundingBlockIds.length > 0 && (
             <CellGroundingChip
               paperId={groundingPaperId}
               blockIds={groundingBlockIds}
-              label={
-                state.firstPage != null ? `p.${state.firstPage}` : undefined
-              }
+              label={`p.${state.firstPage}`}
               className="shrink-0"
             />
           )}

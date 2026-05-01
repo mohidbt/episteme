@@ -118,7 +118,9 @@ const SEED_PCA_PAPERS: Array<{
 ];
 
 // DUMMY DATA — fabricated for the guest-mode demo. NOT real research findings
-// for any of the cited papers. Kept in lockstep order with SEED_PCA_REFERENCES.
+// for any of the cited papers. Kept in lockstep order with SEED_PCA_PAPERS
+// (only the paper-backed rows; reference-only rows that produced "(missing
+// paper)" entries have been removed — see #110).
 const SEED_PCA_PAPERSET_FILENAME = "pca-survey.csv";
 const SEED_PCA_PAPERSET_COLUMNS = [
   {
@@ -144,18 +146,6 @@ const SEED_PCA_PAPERSET_ROWS = [
   {
     "Uses PCA": "Yes, comprehensive treatment (book)",
     "Variables matched on": "general multivariate observations",
-  },
-  {
-    "Uses PCA": "Yes, probabilistic latent-variable form",
-    "Variables matched on": "Gaussian observed variables",
-  },
-  {
-    "Uses PCA": "Yes, dimensionality reduction",
-    "Variables matched on": "SNP genotype frequencies across individuals",
-  },
-  {
-    "Uses PCA": "Yes, primary method",
-    "Variables matched on": "image pixel intensities (face images)",
   },
 ] as const;
 
@@ -393,21 +383,13 @@ export async function seedAnonymousUser(userId: string): Promise<void> {
     pcaInsertedPapers.push({ id: inserted.id, title: meta.title });
   }
 
-  // First 3 rowRefs → real paper IDs (paper-backed rows). Remaining 3 →
-  // reference IDs (reference-only rows).
-  const rowRefs = [
-    ...pcaInsertedPapers.map((p) => ({ paper_id: p.id })),
-    ...pcaInsertedRefs.slice(3).map((r) => ({ paper_id: r.id })),
-  ];
-  // The CSV body should reflect the paper title for paper-backed rows and the
-  // citation-key + ref-title for reference-only rows.
-  const rowLabels = [
-    ...pcaInsertedPapers.map((p) => ({
-      citationKey: "paper",
-      title: p.title,
-    })),
-    ...pcaInsertedRefs.slice(3),
-  ];
+  // #110: Only paper-backed rows — reference-only rows that produced
+  // "(missing paper)" have been removed.
+  const rowRefs = pcaInsertedPapers.map((p) => ({ paper_id: p.id }));
+  const rowLabels = pcaInsertedPapers.map((p) => ({
+    citationKey: "paper",
+    title: p.title,
+  }));
   await db.insert(papersets).values({
     libraryId: lib.id,
     userId,

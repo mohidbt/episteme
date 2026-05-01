@@ -10,6 +10,13 @@ import type {
   RowRef,
 } from "./lib/grid-helpers";
 import { ColumnHeaderCell, RowView } from "./PapersetGridCells";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from "@/components/ui/sheet";
 
 interface Props {
   id: string;
@@ -28,6 +35,14 @@ interface Props {
   onColumnsChange: (next: (prev: ColumnSpec[]) => ColumnSpec[]) => void;
   onCellValuesPurge: (predicate: (key: string) => boolean) => void;
 }
+
+type DetailCell = {
+  rowIdx: number;
+  colName: string;
+  value: string;
+  paperTitle: string | null;
+  pageAnchor: number | null;
+};
 
 /**
  * Presentational grid. All state lives in PapersetView; this component
@@ -51,6 +66,9 @@ export function PapersetGrid({
 }: Props) {
   const router = useRouter();
 
+  // #105: cell detail sheet state
+  const [detailCell, setDetailCell] = useState<DetailCell | null>(null);
+
   function onCellMouseDown(e: React.MouseEvent, row: number, col: string) {
     if (e.button !== 0) return;
     if (e.shiftKey) selection.shiftClick({ row, col });
@@ -67,6 +85,27 @@ export function PapersetGrid({
   function onColHeaderClick(col: string) {
     selection.clickCol(col);
     onSelectionChange();
+  }
+
+  // #105: clicking a filled cell opens the detail sheet
+  function onCellClick(row: number, col: string) {
+    const k = `${row}:${col}`;
+    const value = cellValues.get(k);
+    if (value === undefined) return; // empty cell — nothing to show
+    const ground = cellGrounding[String(row)]?.[col];
+    const pageAnchor = ground?.block_ids.length
+      ? extractPageFromBlockId(ground.block_ids[0])
+      : null;
+    const paper = rowRefs[row]
+      ? paperById[rowRefs[row].paper_id]
+      : undefined;
+    setDetailCell({
+      rowIdx: row,
+      colName: col,
+      value,
+      paperTitle: paper?.title ?? paper?.filename ?? null,
+      pageAnchor,
+    });
   }
 
   async function deleteColumn(name: string) {
@@ -139,20 +178,22 @@ export function PapersetGrid({
     }
     const rootRect = root.getBoundingClientRect();
     if (selectionKind.kind === "row") {
-      const headerEl = root.querySelector<HTMLElement>(
-        `[data-testid="row-header-${selectionKind.row}"]`,
+      // #103a: exclude column-0 (title) from the selection frame — only
+      // frame data cells (<td>), not the row header (<th>).
+      const dataCells = root.querySelectorAll<HTMLElement>(
+        `[data-testid^="cell-${selectionKind.row}-"]`,
       );
-      const tr = headerEl?.parentElement;
-      if (!tr) {
+      if (dataCells.length === 0) {
         setFrameRect(null);
         return;
       }
-      const r = tr.getBoundingClientRect();
+      const firstRect = dataCells[0].getBoundingClientRect();
+      const lastRect = dataCells[dataCells.length - 1].getBoundingClientRect();
       setFrameRect({
-        top: r.top - rootRect.top + root.scrollTop,
-        left: r.left - rootRect.left + root.scrollLeft,
-        width: r.width,
-        height: r.height,
+        top: firstRect.top - rootRect.top + root.scrollTop,
+        left: firstRect.left - rootRect.left + root.scrollLeft,
+        width: lastRect.right - firstRect.left,
+        height: lastRect.bottom - firstRect.top,
       });
     } else {
       const cells = root.querySelectorAll<HTMLElement>(
@@ -242,6 +283,7 @@ export function PapersetGrid({
                   selection={selection}
                   onRowHeaderClick={() => onRowHeaderClick(rowIdx)}
                   onCellMouseDown={onCellMouseDown}
+                  onCellClick={onCellClick}
                   onRemoveRow={() => removeRow(rowIdx)}
                 />
               );
@@ -277,6 +319,46 @@ export function PapersetGrid({
           )}
         </div>
       </div>
+
+      {/* #105: cell detail sheet */}
+      <Sheet
+        open={detailCell !== null}
+        onOpenChange={(open) => {
+          if (!open) setDetailCell(null);
+        }}
+      >
+        <SheetContent
+          data-testid="cell-detail-sheet"
+          side="right"
+        >
+          <SheetHeader>
+            <SheetTitle>
+              {detailCell?.colName ?? "Cell detail"}
+            </SheetTitle>
+            {detailCell?.paperTitle && (
+              <SheetDescription>{detailCell.paperTitle}</SheetDescription>
+            )}
+          </SheetHeader>
+          <div className="flex-1 overflow-y-auto px-4 py-2">
+            <p className="whitespace-pre-wrap text-sm leading-relaxed">
+              {detailCell?.value ?? ""}
+            </p>
+          </div>
+          {detailCell?.pageAnchor != null && (
+            <div className="border-t px-4 py-3 text-sm text-muted-foreground">
+              See more on Page {detailCell.pageAnchor}
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
     </div>
   );
+}
+
+/** Extract page number from a block ID like `block_<id>_p<page>_<idx>`. */
+function extractPageFromBlockId(blockId: string): number | null {
+  const m = blockId.match(/_p(\d+)_/);
+  if (!m) return null;
+  const n = Number.parseInt(m[1], 10);
+  return Number.isFinite(n) && n > 0 ? n : null;
 }

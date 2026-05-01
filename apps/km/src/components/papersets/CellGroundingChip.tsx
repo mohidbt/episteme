@@ -7,8 +7,11 @@ import { cn } from "@/lib/utils";
 export interface CellGroundingChipProps {
   paperId: string;
   blockIds: string[];
-  /** Optional override for display text (e.g. "p.5"). Falls back to block ref. */
-  label?: string;
+  /** Optional override for display text (e.g. "p.5"). When null the chip is
+   *  hidden; when undefined the chip derives a page label from blockIds. */
+  label?: string | null;
+  /** Max valid page number; pills with page numbers exceeding this are hidden. */
+  maxPage?: number | null;
   className?: string;
 }
 
@@ -16,18 +19,42 @@ export interface CellGroundingChipProps {
  * Small chip rendered inside a paperset cell. Clicking opens the paper
  * viewer at the cited block: `/p/<paperId>?block=<first_block_id>`.
  *
- * If `blockIds` is empty (cell is empty or "n/a"), the chip is not rendered.
+ * Only rendered when a valid page number can be derived from the block ID
+ * and (when maxPage is provided) the page number doesn't exceed it.
+ * Block IDs that don't carry a genuine page anchor are silently hidden —
+ * see #104.
  */
 export function CellGroundingChip({
   paperId,
   blockIds,
   label,
+  maxPage,
   className,
 }: CellGroundingChipProps) {
   const router = useRouter();
   if (blockIds.length === 0) return null;
   const firstBlockId = blockIds[0];
-  const text = label ?? blockRefShort(firstBlockId);
+
+  // Derive page number from label or block ID. If label is explicitly null,
+  // hide the chip. If label is a string, use it. Otherwise, try extracting
+  // from the block ID.
+  let displayText: string | null;
+  if (label === null) {
+    displayText = null;
+  } else if (label !== undefined) {
+    displayText = label;
+  } else {
+    const pageNum = blockRefPageNumber(firstBlockId);
+    displayText = pageNum !== null ? `p.${pageNum}` : null;
+  }
+
+  // #104: validate page number against maxPage when provided
+  if (displayText === null) return null;
+  if (maxPage != null) {
+    const pageNum = blockRefPageNumber(firstBlockId);
+    if (pageNum !== null && pageNum > maxPage) return null;
+  }
+
   const ariaLabel = `Open paper at cited block ${firstBlockId}`;
 
   return (
@@ -50,17 +77,19 @@ export function CellGroundingChip({
         />
       }
     >
-      {text}
+      {displayText}
     </Badge>
   );
 }
 
 /**
- * Block ids are `<paper_id>:<order_index>` (T3/T4 spec). Show just the
- * order index when possible; fall back to the raw id.
+ * Extract the page number from a block ID that uses the
+ * `block_<paperId>_p<page>_<idx>` convention. Returns null when no
+ * genuine page anchor can be parsed — e.g. segment-only indices.
  */
-function blockRefShort(blockId: string): string {
-  const i = blockId.lastIndexOf(":");
-  if (i === -1 || i === blockId.length - 1) return blockId;
-  return `#${blockId.slice(i + 1)}`;
+export function blockRefPageNumber(blockId: string): number | null {
+  const m = blockId.match(/_p(\d+)_/);
+  if (!m) return null;
+  const n = Number.parseInt(m[1], 10);
+  return Number.isFinite(n) && n > 0 ? n : null;
 }

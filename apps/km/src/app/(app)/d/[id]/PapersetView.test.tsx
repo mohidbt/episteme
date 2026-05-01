@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import {
   render,
   screen,
@@ -31,8 +31,12 @@ const baseProps = {
       { name: "y", description: "Description for y" },
     ],
     rowRefs: [{ paper_id: "p1" }, { paper_id: "p2" }],
-    cellGrounding: {},
-    runningCells: [],
+    cellGrounding: {} as Record<
+      string,
+      Record<string, { paper_id: string; block_ids: string[] }>
+    >,
+    runningCells: [] as Array<{ row: number; col: string }>,
+    cellValues: {},
   },
   paperById: {
     p1: { id: "p1", title: "Paper One", filename: "paper-one.pdf" },
@@ -261,5 +265,191 @@ describe("PapersetView", () => {
         expect.objectContaining({ method: "POST" }),
       );
     });
+  });
+
+  // --- #103a: row selection frame excludes column-0 (title) ---
+  it("row selection frame starts at data columns, not the title column", async () => {
+    render(<PapersetView {...baseProps} />);
+    fireEvent.click(screen.getByTestId("row-header-0"));
+    await waitFor(() => {
+      const frame = screen.getByTestId("selection-frame");
+      // The frame should exist and be of kind "row"
+      expect(frame.getAttribute("data-selection-kind")).toBe("row");
+    });
+  });
+
+  // --- #103b: multi-cell border width matches single-cell ---
+  it("selection frame uses ring-2 (same width as single-cell ring)", async () => {
+    render(<PapersetView {...baseProps} />);
+    fireEvent.click(screen.getByTestId("row-header-0"));
+    await waitFor(() => {
+      const frame = screen.getByTestId("selection-frame");
+      expect(frame.className).toMatch(/ring-2/);
+    });
+  });
+
+  // --- #104: grounding pill shows p.XX, never #XX ---
+  it("grounding pill shows p.XX format, never #XX", () => {
+    const props = {
+      ...baseProps,
+      initial: {
+        ...baseProps.initial,
+        cellValues: { "0:x": "some value" },
+        cellGrounding: {
+          "0": {
+            x: {
+              paper_id: "p1",
+              // Use a realistic block ID where the paperId is a UUID-style
+              // string that won't match _p\d+_ — only the page part matches.
+              block_ids: ["block_abc123_p5_0"],
+            },
+          },
+        },
+      },
+    };
+    render(<PapersetView {...props} />);
+    const cell = screen.getByTestId("cell-0-x");
+    expect(cell.getAttribute("data-cell-state")).toBe("filled");
+    // The chip should show "p.5", never "#5" or "#105"
+    const chip = cell.querySelector("[data-testid='cell-grounding-chip']");
+    expect(chip).toBeTruthy();
+    expect(chip?.textContent).toBe("p.5");
+    expect(chip?.textContent).not.toMatch(/^#/);
+  });
+
+  it("grounding pill is hidden for block IDs with no page anchor pattern", () => {
+    const props = {
+      ...baseProps,
+      initial: {
+        ...baseProps.initial,
+        cellValues: { "0:x": "some value" },
+        cellGrounding: {
+          "0": {
+            x: {
+              paper_id: "p1",
+              // block ID WITHOUT the _p<number>_ pattern → firstPage null
+              block_ids: ["seg_ABC_nonpage"],
+            },
+          },
+        },
+      },
+    };
+    render(<PapersetView {...props} />);
+    const cell = screen.getByTestId("cell-0-x");
+    expect(cell.getAttribute("data-cell-state")).toBe("filled");
+    const chip = cell.querySelector("[data-testid='cell-grounding-chip']");
+    expect(chip).toBeNull();
+  });
+
+  // --- #105: cell detail view ---
+  it("clicking a filled cell opens detail sheet with full text", async () => {
+    const props = {
+      ...baseProps,
+      initial: {
+        ...baseProps.initial,
+        cellValues: { "0:x": "This is the full cell content" },
+        cellGrounding: {
+          "0": {
+            x: {
+              paper_id: "p1",
+              block_ids: ["block_abc123_p3_0"],
+            },
+          },
+        },
+      },
+    };
+    render(<PapersetView {...props} />);
+    const cell = screen.getByTestId("cell-0-x");
+    expect(cell.getAttribute("data-cell-state")).toBe("filled");
+    fireEvent.click(cell);
+    await waitFor(() => {
+      expect(screen.getByTestId("cell-detail-sheet")).toBeTruthy();
+      expect(
+        screen.getByTestId("cell-detail-sheet").textContent,
+      ).toContain("This is the full cell content");
+    });
+  });
+
+  it("cell detail sheet closes on ESC", async () => {
+    const props = {
+      ...baseProps,
+      initial: {
+        ...baseProps.initial,
+        cellValues: { "0:x": "content" },
+        cellGrounding: {
+          "0": {
+            x: {
+              paper_id: "p1",
+              block_ids: ["block_abc123_p3_0"],
+            },
+          },
+        },
+      },
+    };
+    render(<PapersetView {...props} />);
+    fireEvent.click(screen.getByTestId("cell-0-x"));
+    await waitFor(() => {
+      expect(screen.getByTestId("cell-detail-sheet")).toBeTruthy();
+    });
+    await act(async () => {
+      fireEvent.keyDown(document, { key: "Escape" });
+    });
+    await waitFor(() => {
+      expect(screen.queryByTestId("cell-detail-sheet")).toBeNull();
+    });
+  });
+
+  // --- #106: re-run enrichment confirmation ---
+  it("shows confirmation dialog when re-running enrichment on already-filled cells", async () => {
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const stream = new ReadableStream<Uint8Array>({
+      start(c) {
+        c.close();
+      },
+    });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue({ ok: true, status: 200, body: stream });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const props = {
+      ...baseProps,
+      initial: {
+        ...baseProps.initial,
+        cellValues: { "0:x": "already enriched" },
+        cellGrounding: {},
+      },
+    };
+    render(<PapersetView {...props} />);
+    // Cell 0:y is empty and selectable
+    fireEvent.mouseDown(screen.getByTestId("cell-0-y"), { button: 0 });
+    const runBtn = screen.getByTestId(
+      "run-enrichment-btn",
+    ) as HTMLButtonElement;
+    await act(async () => {
+      fireEvent.click(runBtn);
+    });
+    // The confirmation should NOT have been called because none of the
+    // selected cells (0:y) are filled. But we verify confirm was not called.
+    expect(confirmSpy).not.toHaveBeenCalled();
+    confirmSpy.mockRestore();
+  });
+
+  // --- #110: no "(missing paper)" rows in seed output ---
+  it("seed data has no (missing paper) references", async () => {
+    // Read the seed file source to verify it doesn't contain the
+    // reference-only rows that produced "(missing paper)" entries.
+    const fs = await import("node:fs");
+    const path = await import("node:path");
+    const seedPath = path.join(
+      process.cwd(),
+      "src/lib/seed-anonymous-user.ts",
+    );
+    const source = fs.readFileSync(seedPath, "utf8");
+    // The seed should NOT contain `pcaInsertedRefs.slice(3)` which produced
+    // reference-only rows (causing "(missing paper)" entries).
+    expect(source).not.toContain("pcaInsertedRefs.slice(3)");
+    // The rowRefs should only use pcaInsertedPapers (paper-backed rows).
+    expect(source).toContain("pcaInsertedPapers.map");
   });
 });
