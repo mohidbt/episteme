@@ -4,6 +4,7 @@ import { getCurrentUserId } from "@/lib/session";
 import { db } from "@/lib/db";
 import { agentConfigs } from "@episteme/db/schema";
 import { PermissionsForm } from "@/components/settings/PermissionsForm";
+import { ConfigExportImport } from "@/components/settings/ConfigExportImport";
 import { getDefaultAgentModel } from "@/lib/agent-config-defaults";
 
 export default async function AgentsSettingsPage() {
@@ -55,6 +56,9 @@ export default async function AgentsSettingsPage() {
         Control which skills, tools, and models your agents can use.
       </p>
       <PermissionsForm initial={initial} />
+      <div className="mt-8">
+        <ConfigExportImport />
+      </div>
     </div>
   );
 }
