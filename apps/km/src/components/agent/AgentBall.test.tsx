@@ -258,15 +258,30 @@ describe("AgentBall", () => {
       expect(left).toBeGreaterThan(100);
     });
 
-    it("#90 — click (no movement) opens the panel, drag (with movement) does NOT open", async () => {
+    it("#90 — click (no movement) opens the panel", async () => {
       renderBall();
       const ball = screen.getByTestId("agent-ball");
 
-      // A short click with no movement should open the panel
       fireEvent.pointerDown(ball, { clientX: 200, clientY: 760, pointerId: 1 });
       fireEvent.pointerUp(ball, { clientX: 200, clientY: 760, pointerId: 1 });
       fireEvent.click(ball);
       await waitFor(() => expect(screen.getByTestId("agent-panel")).toBeTruthy());
+    });
+
+    it("#90 — drag (with movement) does NOT open the panel", async () => {
+      renderBall();
+      const ball = screen.getByTestId("agent-ball");
+
+      // Pointer down, move beyond 4px threshold, up, then click
+      fireEvent.pointerDown(ball, { clientX: 200, clientY: 760, pointerId: 1 });
+      fireEvent.pointerMove(ball, { clientX: 210, clientY: 760, pointerId: 1 });
+      fireEvent.pointerUp(ball, { clientX: 210, clientY: 760, pointerId: 1 });
+      fireEvent.click(ball);
+
+      // Panel should NOT open after a drag gesture
+      await expect(
+        screen.findByTestId("agent-panel", undefined, { timeout: 500 })
+      ).rejects.toThrow();
     });
   });
 
