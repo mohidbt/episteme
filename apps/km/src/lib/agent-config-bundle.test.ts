@@ -1,0 +1,165 @@
+// Phase 1.4.x — Task 9: agent-config bundle export/import.
+//
+// We keep tests on the *pure* core (zip serialization, OAuth strip, diff,
+// parse/round-trip). The DB-bound `buildBundle(userId)` / `applyBundle(userId)`
+// composers are thin wrappers tested at the route level (Task 10) and E2E
+// (Task 13) — mirroring how `cell-write.test.ts` keeps lib tests pure.
+
+import { describe, expect, it } from "vitest";
+import {
+  buildBundleFromSnapshot,
+  diffSnapshots,
+  parseBundle,
+  serializeAgentConfig,
+  type AgentConfigSnapshot,
+} from "./agent-config-bundle";
+
+function snap(over: Partial<AgentConfigSnapshot> = {}): AgentConfigSnapshot {
+  return {
+    agentConfig: {
+      enabledSkills: ["lit-triage"],
+      attachedMcps: [],
+      modelPreference: "anthropic/claude-3.5-sonnet",
+      approvalRules: { web_search: "auto" },
+      settingsJson: { permissions: { web_search: true } },
+    },
+    skills: [
+      { path: ".episteme/agents/skills/lit-triage/SKILL.md", body: "# triage\nbody1" },
+    ],
+    memories: [
+      { path: ".episteme/agents/memories/foo.md", body: "remember foo" },
+    ],
+    ...over,
+  };
+}
+
+describe("serializeAgentConfig — OAuth strip", () => {
+  it("drops oauth_tokens / accessToken / refreshToken from attachedMcps entries", () => {
+    const out = serializeAgentConfig({
+      enabledSkills: ["x"],
+      attachedMcps: [
+        {
+          name: "linear",
+          url: "https://mcp.linear.app",
+          oauth_tokens: { accessToken: "a", refreshToken: "b" },
+          accessToken: "top-level-a",
+          refreshToken: "top-level-b",
+          oauth_token: "top-level-c",
+        },
+      ],
+      modelPreference: "m",
+      approvalRules: {},
+      settingsJson: {},
+    });
+    const mcp = out.attachedMcps[0] as Record<string, unknown>;
+    expect(mcp.name).toBe("linear");
+    expect(mcp.url).toBe("https://mcp.linear.app");
+    expect(mcp.oauth_tokens).toBeUndefined();
+    expect(mcp.accessToken).toBeUndefined();
+    expect(mcp.refreshToken).toBeUndefined();
+    expect(mcp.oauth_token).toBeUndefined();
+  });
+
+  it("does not export user_id even if present on input", () => {
+    const out = serializeAgentConfig({
+      user_id: "uid-1",
+      userId: "uid-1",
+      enabledSkills: [],
+      attachedMcps: [],
+      modelPreference: "m",
+      approvalRules: {},
+      settingsJson: {},
+    });
+    expect((out as Record<string, unknown>).user_id).toBeUndefined();
+    expect((out as Record<string, unknown>).userId).toBeUndefined();
+  });
+});
+
+describe("buildBundleFromSnapshot + parseBundle — round trip", () => {
+  it("round-trips snapshot through zip", async () => {
+    const s = snap();
+    const zip = await buildBundleFromSnapshot(s);
+    expect(zip).toBeInstanceOf(Uint8Array);
+    expect(zip.byteLength).toBeGreaterThan(0);
+
+    const parsed = await parseBundle(zip);
+    expect(parsed.agent_config.enabledSkills).toEqual(["lit-triage"]);
+    expect(parsed.agent_config.modelPreference).toBe("anthropic/claude-3.5-sonnet");
+    expect(parsed.skills).toHaveLength(1);
+    expect(parsed.skills[0].path).toBe(".episteme/agents/skills/lit-triage/SKILL.md");
+    expect(parsed.skills[0].body.trim()).toBe("# triage\nbody1");
+    expect(parsed.memories).toHaveLength(1);
+    expect(parsed.memories[0].path).toBe(".episteme/agents/memories/foo.md");
+    expect(parsed.memories[0].body.trim()).toBe("remember foo");
+  });
+
+  it("handles empty skills/memories", async () => {
+    const zip = await buildBundleFromSnapshot(snap({ skills: [], memories: [] }));
+    const parsed = await parseBundle(zip);
+    expect(parsed.skills).toEqual([]);
+    expect(parsed.memories).toEqual([]);
+  });
+
+  it("preserves multiple skill bodies w/ delimiter", async () => {
+    const zip = await buildBundleFromSnapshot(
+      snap({
+        skills: [
+          { path: ".episteme/agents/skills/a/SKILL.md", body: "alpha" },
+          { path: ".episteme/agents/skills/b/SKILL.md", body: "beta\nbeta-line2" },
+        ],
+      }),
+    );
+    const parsed = await parseBundle(zip);
+    expect(parsed.skills.map((s) => s.path)).toEqual([
+      ".episteme/agents/skills/a/SKILL.md",
+      ".episteme/agents/skills/b/SKILL.md",
+    ]);
+    expect(parsed.skills[1].body.trim()).toBe("beta\nbeta-line2");
+  });
+});
+
+describe("diffSnapshots", () => {
+  const base = snap();
+
+  it("detects added skill (in bundle, not local)", () => {
+    const local = snap({ skills: [] });
+    const diff = diffSnapshots(local, base);
+    expect(diff.skills.added).toEqual([".episteme/agents/skills/lit-triage/SKILL.md"]);
+    expect(diff.skills.removed).toEqual([]);
+    expect(diff.skills.modified).toEqual([]);
+  });
+
+  it("detects removed skill (in local, not bundle)", () => {
+    const bundle = snap({ skills: [] });
+    const diff = diffSnapshots(base, bundle);
+    expect(diff.skills.removed).toEqual([".episteme/agents/skills/lit-triage/SKILL.md"]);
+  });
+
+  it("detects modified skill (path matches, body differs)", () => {
+    const bundle = snap({
+      skills: [
+        { path: ".episteme/agents/skills/lit-triage/SKILL.md", body: "DIFFERENT" },
+      ],
+    });
+    const diff = diffSnapshots(base, bundle);
+    expect(diff.skills.modified).toEqual([".episteme/agents/skills/lit-triage/SKILL.md"]);
+  });
+
+  it("treats whitespace-only body diff as unchanged", () => {
+    const bundle = snap({
+      skills: [
+        { path: ".episteme/agents/skills/lit-triage/SKILL.md", body: "  # triage\nbody1  " },
+      ],
+    });
+    const diff = diffSnapshots(base, bundle);
+    expect(diff.skills.modified).toEqual([]);
+  });
+
+  it("detects settings keys changed (model_preference flip)", () => {
+    const bundle = snap({
+      agentConfig: { ...base.agentConfig, modelPreference: "openai/gpt-4o" },
+    });
+    const diff = diffSnapshots(base, bundle);
+    expect(diff.settings.changed).toContain("modelPreference");
+  });
+});
