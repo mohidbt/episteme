@@ -3,7 +3,7 @@ import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 import { render, cleanup, act } from "@testing-library/react";
 
 const push = vi.fn();
-let mockPathname = "/drive";
+let mockPathname = "/";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push, refresh: () => {}, replace: () => {} }),
@@ -15,7 +15,7 @@ const STORAGE_KEY = "app-tabs-v1";
 beforeEach(() => {
   window.localStorage.clear();
   push.mockClear();
-  mockPathname = "/drive";
+  mockPathname = "/";
 });
 
 afterEach(() => {
@@ -110,9 +110,9 @@ describe("useTabs hook", () => {
         <Probe />
       </TabBarProvider>,
     );
-    expect(api!.tabs).toHaveLength(2);
-    expect(api!.tabs[0].href).toBe("/n/persisted");
-    expect(api!.tabs[1].href).toBe("/papers");
+    // Stored tabs are restored; pathname-sync also adds a tab for "/"
+    expect(api!.tabs.find((t) => t.href === "/n/persisted")).toBeTruthy();
+    expect(api!.tabs.find((t) => t.href === "/papers")).toBeTruthy();
   });
 
   it("first render returns SSR-safe defaults even when localStorage is populated, then hydrates from storage", async () => {
@@ -143,10 +143,11 @@ describe("useTabs hook", () => {
     // First render must equal what SSR would produce: empty default state.
     expect(renders[0].tabs).toEqual([]);
     expect(renders[0].activeHref).toBeNull();
-    // After effects flush, state hydrates from localStorage.
+    // After effects flush, stored tabs are restored AND pathname-sync
+    // adds a tab for the current path ("/"), making it active.
     const last = renders[renders.length - 1];
     expect(last.tabs.some((t) => t.href === "/n/persisted")).toBe(true);
-    expect(last.activeHref).toBe("/n/persisted");
+    expect(last.activeHref).toBe("/");
   });
 
   it("openTab on existing href does not duplicate, just activates", async () => {
@@ -175,8 +176,8 @@ describe("TabBar component", () => {
     window.localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify({
-        tabs: [{ href: "/drive", title: "Drive" }],
-        activeHref: "/drive",
+        tabs: [{ href: "/", title: "Drive" }],
+        activeHref: "/",
       }),
     );
     const { container, getByText } = render(

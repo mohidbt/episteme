@@ -15,8 +15,14 @@ import { X, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const STORAGE_KEY = "app-tabs-v1";
-const DEFAULT_HREF = "/drive";
+const DEFAULT_HREF = "/";
 const DEFAULT_TITLE = "Drive";
+
+/** /drive redirects to /, so normalize to the canonical path. */
+function normalizeHref(href: string): string {
+  if (href === "/drive") return "/";
+  return href;
+}
 
 export type Tab = { href: string; title: string };
 
@@ -39,13 +45,16 @@ function loadFromStorage(): TabsState | null {
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<TabsState>;
     const tabs = Array.isArray(parsed.tabs)
-      ? parsed.tabs.filter(
-          (t): t is Tab =>
-            !!t && typeof t.href === "string" && typeof t.title === "string",
-        )
+      ? parsed.tabs
+          .filter(
+            (t): t is Tab =>
+              !!t && typeof t.href === "string" && typeof t.title === "string",
+          )
+          .map((t) => ({ ...t, href: normalizeHref(t.href) }))
       : [];
-    const activeHref =
-      typeof parsed.activeHref === "string" ? parsed.activeHref : null;
+    const activeHref = typeof parsed.activeHref === "string"
+      ? normalizeHref(parsed.activeHref)
+      : null;
     return { tabs, activeHref };
   } catch {
     return null;
@@ -59,7 +68,6 @@ export function TabBarProvider({ children }: { children: ReactNode }) {
   // hydration mismatch. localStorage is read in a mount-only effect below.
   const [state, setState] = useState<TabsState>(DEFAULT_STATE);
   const persistedRef = useRef(false);
-  const hydratedRef = useRef(false);
 
   // Hydrate from localStorage after mount (client-only).
   useEffect(() => {
@@ -82,52 +90,58 @@ export function TabBarProvider({ children }: { children: ReactNode }) {
     }
   }, [state]);
 
-  // Track current pathname as the active tab; if no tab matches, add an
-  // ephemeral one so the user always sees where they are.
+  // Sync tab state with the current pathname — always ensure a tab exists
+  // for wherever the user has navigated.
   useEffect(() => {
     if (!pathname) return;
+    const href = normalizeHref(pathname);
     setState((prev) => {
-      const exists = prev.tabs.some((t) => t.href === pathname);
+      const exists = prev.tabs.some((t) => t.href === href);
       if (exists) {
-        if (prev.activeHref === pathname) return prev;
-        return { ...prev, activeHref: pathname };
+        if (prev.activeHref === href) return prev;
+        return { ...prev, activeHref: href };
       }
-      // First load: seed a tab for the current page so user sees it.
-      if (!hydratedRef.current && prev.tabs.length === 0) {
-        hydratedRef.current = true;
-        return {
-          tabs: [{ href: pathname, title: titleFromHref(pathname) }],
-          activeHref: pathname,
-        };
-      }
-      return prev;
+      return {
+        tabs: [...prev.tabs, { href, title: titleFromHref(href) }],
+        activeHref: href,
+      };
     });
-    hydratedRef.current = true;
   }, [pathname]);
 
   const openTab = useCallback(
     (href: string, title: string) => {
+      const normalized = normalizeHref(href);
       setState((prev) => {
-        const exists = prev.tabs.some((t) => t.href === href);
-        const tabs = exists ? prev.tabs : [...prev.tabs, { href, title }];
-        return { tabs, activeHref: href };
+        const exists = prev.tabs.some((t) => t.href === normalized);
+        const tabs = exists
+          ? prev.tabs
+          : [...prev.tabs, { href: normalized, title }];
+        return { tabs, activeHref: normalized };
       });
-      router.push(href);
+      router.push(normalized);
     },
     [router],
   );
 
   const closeTab = useCallback(
     (href: string) => {
+      const normalized = normalizeHref(href);
       setState((prev) => {
-        const idx = prev.tabs.findIndex((t) => t.href === href);
+        const idx = prev.tabs.findIndex((t) => t.href === normalized);
         if (idx === -1) return prev;
-        const tabs = prev.tabs.filter((t) => t.href !== href);
+        const tabs = prev.tabs.filter((t) => t.href !== normalized);
         let activeHref = prev.activeHref;
-        if (activeHref === href) {
+        if (activeHref === normalized) {
           const next = tabs[idx] ?? tabs[idx - 1] ?? null;
-          activeHref = next?.href ?? null;
-          if (activeHref) router.push(activeHref);
+          activeHref = next?.href ?? DEFAULT_HREF;
+          router.push(activeHref);
+        }
+        // Never leave zero tabs — fall back to default
+        if (tabs.length === 0) {
+          return {
+            tabs: [{ href: DEFAULT_HREF, title: DEFAULT_TITLE }],
+            activeHref: DEFAULT_HREF,
+          };
         }
         return { tabs, activeHref };
       });
@@ -137,8 +151,9 @@ export function TabBarProvider({ children }: { children: ReactNode }) {
 
   const setActive = useCallback(
     (href: string) => {
-      setState((prev) => ({ ...prev, activeHref: href }));
-      router.push(href);
+      const normalized = normalizeHref(href);
+      setState((prev) => ({ ...prev, activeHref: normalized }));
+      router.push(normalized);
     },
     [router],
   );
@@ -158,16 +173,28 @@ export function useTabs(): TabsApi {
 }
 
 function titleFromHref(href: string): string {
-  if (href === "/drive" || href === "/") return "Drive";
+  if (href === "/") return "Drive";
+  if (href.startsWith("/drive/")) return lastSegment(href);
+  if (href.startsWith("/papers/folder/")) return lastSegment(href);
+  if (href.startsWith("/papersets")) return "Papersets";
   if (href.startsWith("/papers")) return "Papers";
-  if (href.startsWith("/notes")) return "Notes";
+  if (href.startsWith("/references/folder/")) return lastSegment(href);
   if (href.startsWith("/references")) return "References";
+  if (href.startsWith("/notes")) return "Notes";
   if (href.startsWith("/n/")) return decodeURIComponent(href.slice(3));
   if (href.startsWith("/p/")) return "Paper";
-  if (href.startsWith("/d/")) return "Folder";
+  if (href.startsWith("/d/")) return "Paperset";
   if (href.startsWith("/r/")) return "Reference";
+  if (href.startsWith("/tags")) return lastSegment(href) || "Tags";
+  if (href.startsWith("/agents")) return "Agent";
   if (href.startsWith("/settings")) return "Settings";
-  return href;
+  if (href.startsWith("/trash")) return "Trash";
+  return lastSegment(href) || href;
+}
+
+function lastSegment(href: string): string {
+  const seg = href.split("/").filter(Boolean).pop();
+  return seg ? decodeURIComponent(seg) : "";
 }
 
 export function TabBar() {
