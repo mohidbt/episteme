@@ -85,13 +85,18 @@ export function PersonalSkills() {
   }
 
   async function openEdit(slug: string) {
+    setEditing({ slug, md: "" });
     setBusy(true);
     try {
-      // Fetch raw body via dedicated endpoint? We don't have a GET-one route;
-      // re-derive a minimal stub here. For Phase 1 we skip read-back and let
-      // the user paste fresh content; once a GET-one route lands the editor
-      // can pre-populate.
-      setEditing({ slug, md: `---\nname: ${slug}\n---\n\n# ${slug}\n\n` });
+      const res = await fetch(`/api/agents/skills/personal/${slug}`);
+      if (!res.ok) throw new Error(`http ${res.status}`);
+      const body = (await res.json()) as { slug: string; md: string };
+      setEditing({ slug, md: body.md });
+    } catch (err) {
+      setEditing(null);
+      toast.error(
+        `Load failed: ${err instanceof Error ? err.message : "unknown"}`,
+      );
     } finally {
       setBusy(false);
     }
@@ -249,6 +254,8 @@ export function PersonalSkills() {
               )
             }
             rows={14}
+            placeholder={busy && !editing?.md ? "Loading…" : ""}
+            disabled={busy && !editing?.md}
             data-testid="edit-skill-textarea"
           />
           <DialogFooter>

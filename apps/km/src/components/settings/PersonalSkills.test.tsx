@@ -73,6 +73,12 @@ describe("PersonalSkills", () => {
           { status: 200 },
         );
       }
+      if (u.endsWith("/api/agents/skills/personal/alpha")) {
+        return new Response(
+          JSON.stringify({ slug: "alpha", md: "stub" }),
+          { status: 200 },
+        );
+      }
       return new Response("{}", { status: 200 });
     }) as typeof fetch;
 
@@ -82,5 +88,47 @@ describe("PersonalSkills", () => {
     await waitFor(() => {
       expect(screen.getByTestId("edit-skill-textarea")).toBeTruthy();
     });
+  });
+
+  it("clicking edit fetches real body and prefills textarea", async () => {
+    const fetchMock = vi.fn(async (url: RequestInfo | URL) => {
+      const u = String(url);
+      if (u.endsWith("/api/agents/skills/personal")) {
+        return new Response(
+          JSON.stringify({
+            skills: [
+              { slug: "alpha", name: "Alpha", description: "", category: "writing" },
+            ],
+          }),
+          { status: 200 },
+        );
+      }
+      if (u.endsWith("/api/agents/skills/personal/alpha")) {
+        return new Response(
+          JSON.stringify({
+            slug: "alpha",
+            md: "---\nname: Alpha\n---\n# Real body content from server",
+          }),
+          { status: 200 },
+        );
+      }
+      return new Response("{}", { status: 200 });
+    });
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    render(<PersonalSkills />);
+    const editBtn = await screen.findByTestId("edit-skill-alpha");
+    fireEvent.click(editBtn);
+
+    const textarea = (await screen.findByTestId(
+      "edit-skill-textarea",
+    )) as HTMLTextAreaElement;
+    await waitFor(() => {
+      expect(textarea.value).toContain("Real body content from server");
+    });
+    expect(textarea.value).not.toMatch(/^---\nname: alpha\n---\n\n# alpha/);
+
+    const calls = fetchMock.mock.calls.map((c) => String(c[0]));
+    expect(calls).toContain("/api/agents/skills/personal/alpha");
   });
 });

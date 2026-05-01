@@ -1,4 +1,4 @@
-// Per-skill mutation: PATCH (update SKILL.md body) and DELETE.
+// Per-skill read + mutation: GET (fetch SKILL.md body), PATCH (update), DELETE.
 import { z } from "zod";
 import { getSessionInfo } from "@/lib/auth";
 import { getSkillStore } from "@/lib/skills-store";
@@ -8,6 +8,22 @@ const PatchBody = z.object({
 });
 
 type Ctx = { params: Promise<{ slug: string }> };
+
+export async function GET(req: Request, { params }: Ctx) {
+  const session = await getSessionInfo(req);
+  if (!session) return Response.json({ error: "unauthorized" }, { status: 401 });
+  const { slug } = await params;
+  if (!slug || slug.includes("/")) {
+    return Response.json({ error: "invalid_slug" }, { status: 400 });
+  }
+  let md: string;
+  try {
+    md = await getSkillStore().read(session.userId, slug);
+  } catch {
+    return Response.json({ error: "not_found" }, { status: 404 });
+  }
+  return Response.json({ slug, md });
+}
 
 export async function PATCH(req: Request, { params }: Ctx) {
   const session = await getSessionInfo(req);
