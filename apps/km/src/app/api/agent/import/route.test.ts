@@ -23,11 +23,13 @@ const FAKE_BUNDLE = {
     settingsJson: {},
   },
   skills: [],
+  personalSkills: [],
   memories: [],
   settings_json: {},
 };
 const FAKE_DIFF = {
   skills: { added: [], removed: [], modified: [] },
+  personalSkills: { added: [], removed: [], modified: [] },
   memories: { added: [], removed: [], modified: [] },
   settings: { changed: [] },
 };

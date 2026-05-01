@@ -20,6 +20,7 @@ import JSZip from "jszip";
 import { and, eq, like, or } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { agentConfigs, notes, libraries } from "@episteme/db/schema";
+import { getSkillStore } from "@/lib/skills-store";
 
 // ---------- Types ----------------------------------------------------------
 
@@ -33,22 +34,26 @@ export type SerializedAgentConfig = {
 
 export type SkillNote = { path: string; body: string };
 export type MemoryNote = { path: string; body: string };
+export type PersonalSkillEntry = { slug: string; json: string };
 
 export type AgentConfigSnapshot = {
   agentConfig: SerializedAgentConfig;
   skills: SkillNote[];
+  personalSkills: PersonalSkillEntry[];
   memories: MemoryNote[];
 };
 
 export type AgentConfigBundle = {
   agent_config: SerializedAgentConfig;
   skills: SkillNote[];
+  personalSkills: PersonalSkillEntry[];
   memories: MemoryNote[];
   settings_json: Record<string, unknown>;
 };
 
 export type BundleDiff = {
   skills: { added: string[]; removed: string[]; modified: string[] };
+  personalSkills: { added: string[]; removed: string[]; modified: string[] };
   memories: { added: string[]; removed: string[]; modified: string[] };
   settings: { changed: string[] };
 };
@@ -56,6 +61,7 @@ export type BundleDiff = {
 // ---------- Constants ------------------------------------------------------
 
 const SKILLS_PREFIX = ".episteme/agents/skills/";
+const PERSONAL_SKILLS_PREFIX = ".episteme/agents/skills-personal/";
 const MEMORIES_PREFIX = ".episteme/agents/memories/";
 
 const OAUTH_KEYS_TO_STRIP = new Set([
@@ -139,9 +145,16 @@ export async function buildBundleFromSnapshot(
 ): Promise<Uint8Array> {
   const zip = new JSZip();
   zip.file("agent_config.json", JSON.stringify(s.agentConfig, null, 2));
-  zip.file("skills.md", encodeNotes(s.skills));
   zip.file("memory.md", encodeNotes(s.memories));
   zip.file("settings.json", JSON.stringify(s.agentConfig.settingsJson, null, 2));
+  // System skills as structured .md entries
+  for (const sk of s.skills) {
+    zip.file(sk.path, sk.body);
+  }
+  // Personal skills as structured .json entries
+  for (const ps of s.personalSkills) {
+    zip.file(`${PERSONAL_SKILLS_PREFIX}${ps.slug}/SKILL.json`, ps.json);
+  }
   return zip.generateAsync({ type: "uint8array" });
 }
 
@@ -152,9 +165,28 @@ export async function parseBundle(zipBytes: Uint8Array): Promise<AgentConfigBund
   const cfgRaw = JSON.parse(await cfgFile.async("string")) as Record<string, unknown>;
   const agent_config = serializeAgentConfig(cfgRaw);
 
-  const skillsBlob = (await zip.file("skills.md")?.async("string")) ?? "";
   const memBlob = (await zip.file("memory.md")?.async("string")) ?? "";
   const settingsBlob = (await zip.file("settings.json")?.async("string")) ?? "{}";
+
+  // Collect system skills from structured .episteme/agents/skills/<slug>/SKILL.md entries
+  const skills: SkillNote[] = [];
+  for (const [relativePath, file] of Object.entries(zip.files)) {
+    if (!file.dir && relativePath.startsWith(SKILLS_PREFIX) && relativePath.endsWith(".md")) {
+      const body = await file.async("string");
+      skills.push({ path: relativePath, body });
+    }
+  }
+
+  // Collect personal skills from .episteme/agents/skills-personal/<slug>/SKILL.json
+  const personalSkills: PersonalSkillEntry[] = [];
+  for (const [relativePath, file] of Object.entries(zip.files)) {
+    if (!file.dir && relativePath.startsWith(PERSONAL_SKILLS_PREFIX) && relativePath.endsWith("/SKILL.json")) {
+      const json = await file.async("string");
+      // Extract slug: .episteme/agents/skills-personal/<slug>/SKILL.json
+      const slug = relativePath.slice(PERSONAL_SKILLS_PREFIX.length, -"/SKILL.json".length);
+      personalSkills.push({ slug, json });
+    }
+  }
 
   let settings_json: Record<string, unknown> = {};
   try {
@@ -166,7 +198,8 @@ export async function parseBundle(zipBytes: Uint8Array): Promise<AgentConfigBund
 
   return {
     agent_config,
-    skills: decodeNotes(skillsBlob),
+    skills,
+    personalSkills,
     memories: decodeNotes(memBlob),
     settings_json,
   };
@@ -208,12 +241,32 @@ function diffSettings(
   return { changed };
 }
 
+function diffPersonalSkills(
+  local: PersonalSkillEntry[],
+  bundle: PersonalSkillEntry[],
+): { added: string[]; removed: string[]; modified: string[] } {
+  const localBySlug = new Map(local.map((ps) => [ps.slug, ps.json.trim()]));
+  const bundleBySlug = new Map(bundle.map((ps) => [ps.slug, ps.json.trim()]));
+  const added: string[] = [];
+  const removed: string[] = [];
+  const modified: string[] = [];
+  for (const [slug, json] of bundleBySlug) {
+    if (!localBySlug.has(slug)) added.push(slug);
+    else if (localBySlug.get(slug) !== json) modified.push(slug);
+  }
+  for (const slug of localBySlug.keys()) {
+    if (!bundleBySlug.has(slug)) removed.push(slug);
+  }
+  return { added: added.sort(), removed: removed.sort(), modified: modified.sort() };
+}
+
 export function diffSnapshots(
   local: AgentConfigSnapshot,
   bundle: AgentConfigSnapshot,
 ): BundleDiff {
   return {
     skills: diffNoteSets(local.skills, bundle.skills),
+    personalSkills: diffPersonalSkills(local.personalSkills, bundle.personalSkills),
     memories: diffNoteSets(local.memories, bundle.memories),
     settings: diffSettings(local.agentConfig, bundle.agentConfig),
   };
@@ -259,7 +312,21 @@ async function readSnapshot(userId: string): Promise<AgentConfigSnapshot> {
       memories.push({ path, body: r.contentMd });
     }
   }
-  return { agentConfig: cfg, skills, memories };
+
+  // Personal skills from MinIO (SkillStore)
+  const personalSkills: PersonalSkillEntry[] = [];
+  try {
+    const store = getSkillStore();
+    const manifests = await store.list(userId);
+    for (const m of manifests) {
+      const json = await store.read(userId, m.slug);
+      personalSkills.push({ slug: m.slug, json });
+    }
+  } catch {
+    // MinIO unavailable in test/dev — personal skills section stays empty.
+  }
+
+  return { agentConfig: cfg, skills, personalSkills, memories };
 }
 
 // ---------- Public DB-bound facade ----------------------------------------
@@ -277,6 +344,7 @@ export async function diffBundle(
   return diffSnapshots(local, {
     agentConfig: bundle.agent_config,
     skills: bundle.skills,
+    personalSkills: bundle.personalSkills,
     memories: bundle.memories,
   });
 }
@@ -310,21 +378,29 @@ export async function applyBundle(
     });
 
   // 2) Additive merge of skill + memory notes. We never delete.
-  if (bundle.skills.length === 0 && bundle.memories.length === 0) return;
+  if (bundle.skills.length > 0 || bundle.memories.length > 0) {
+    // Resolve default library for inserts.
+    const libRows = await db
+      .select({ id: libraries.id })
+      .from(libraries)
+      .where(eq(libraries.userId, userId))
+      .limit(1);
+    if (libRows.length === 0) {
+      throw new Error(`applyBundle: no library found for user ${userId}`);
+    }
+    const libraryId = libRows[0].id;
 
-  // Resolve default library for inserts.
-  const libRows = await db
-    .select({ id: libraries.id })
-    .from(libraries)
-    .where(eq(libraries.userId, userId))
-    .limit(1);
-  if (libRows.length === 0) {
-    throw new Error(`applyBundle: no library found for user ${userId}`);
+    for (const note of [...bundle.skills, ...bundle.memories]) {
+      await upsertNoteByPath(userId, libraryId, note.path, note.body);
+    }
   }
-  const libraryId = libRows[0].id;
 
-  for (const note of [...bundle.skills, ...bundle.memories]) {
-    await upsertNoteByPath(userId, libraryId, note.path, note.body);
+  // 3) Additive merge of personal skills into MinIO.
+  if (bundle.personalSkills.length > 0) {
+    const store = getSkillStore();
+    for (const ps of bundle.personalSkills) {
+      await store.write(userId, ps.slug, ps.json);
+    }
   }
 }
 

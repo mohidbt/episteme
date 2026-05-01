@@ -5,6 +5,13 @@ import { db } from "@/lib/db";
 import { agentConfigs } from "@episteme/db/schema";
 import { PermissionsForm } from "@/components/settings/PermissionsForm";
 import { ConfigExportImport } from "@/components/settings/ConfigExportImport";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { getDefaultAgentModel } from "@/lib/agent-config-defaults";
 
 export default async function AgentsSettingsPage() {
@@ -55,7 +62,19 @@ export default async function AgentsSettingsPage() {
       <p className="text-sm text-muted-foreground mb-8">
         Control which skills, tools, and models your agents can use.
       </p>
-      <PermissionsForm initial={initial} />
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Agent Settings</CardTitle>
+          <CardDescription>
+            Configure model, skills, and tool permissions.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <PermissionsForm initial={initial} />
+        </CardContent>
+      </Card>
+
       <div className="mt-8">
         <ConfigExportImport />
       </div>

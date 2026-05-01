@@ -6,12 +6,14 @@
 // (Task 13) — mirroring how `cell-write.test.ts` keeps lib tests pure.
 
 import { describe, expect, it } from "vitest";
+import JSZip from "jszip";
 import {
   buildBundleFromSnapshot,
   diffSnapshots,
   parseBundle,
   serializeAgentConfig,
   type AgentConfigSnapshot,
+  type PersonalSkillEntry,
 } from "./agent-config-bundle";
 
 function snap(over: Partial<AgentConfigSnapshot> = {}): AgentConfigSnapshot {
@@ -26,6 +28,7 @@ function snap(over: Partial<AgentConfigSnapshot> = {}): AgentConfigSnapshot {
     skills: [
       { path: ".episteme/agents/skills/lit-triage/SKILL.md", body: "# triage\nbody1" },
     ],
+    personalSkills: [],
     memories: [
       { path: ".episteme/agents/memories/foo.md", body: "remember foo" },
     ],
@@ -93,14 +96,35 @@ describe("buildBundleFromSnapshot + parseBundle — round trip", () => {
     expect(parsed.memories[0].body.trim()).toBe("remember foo");
   });
 
-  it("handles empty skills/memories", async () => {
-    const zip = await buildBundleFromSnapshot(snap({ skills: [], memories: [] }));
+  it("does not include skills.md in exported zip", async () => {
+    const s = snap();
+    const zipBytes = await buildBundleFromSnapshot(s);
+    const zip = await JSZip.loadAsync(zipBytes);
+    expect(zip.file("skills.md")).toBeNull();
+  });
+
+  it("includes personal skills as .episteme/agents/skills-personal/<slug>/SKILL.json", async () => {
+    const personalSkills: PersonalSkillEntry[] = [
+      { slug: "tone", json: JSON.stringify({ name: "Tone", description: "", instructions: "Be concise" }) },
+      { slug: "voice", json: JSON.stringify({ name: "Voice", description: "Writing style", instructions: "Use active voice" }) },
+    ];
+    const s = snap({ personalSkills });
+    const zipBytes = await buildBundleFromSnapshot(s);
+    const parsed = await parseBundle(zipBytes);
+    expect(parsed.personalSkills).toHaveLength(2);
+    expect(parsed.personalSkills[0].slug).toBe("tone");
+    expect(parsed.personalSkills[1].slug).toBe("voice");
+  });
+
+  it("handles empty skills/memories/personalSkills", async () => {
+    const zip = await buildBundleFromSnapshot(snap({ skills: [], personalSkills: [], memories: [] }));
     const parsed = await parseBundle(zip);
     expect(parsed.skills).toEqual([]);
+    expect(parsed.personalSkills).toEqual([]);
     expect(parsed.memories).toEqual([]);
   });
 
-  it("preserves multiple skill bodies w/ delimiter", async () => {
+  it("preserves multiple skill bodies as structured entries", async () => {
     const zip = await buildBundleFromSnapshot(
       snap({
         skills: [
@@ -161,5 +185,25 @@ describe("diffSnapshots", () => {
     });
     const diff = diffSnapshots(base, bundle);
     expect(diff.settings.changed).toContain("modelPreference");
+  });
+
+  it("detects added/removed/modified personal skills", () => {
+    const local = snap({
+      personalSkills: [
+        { slug: "tone", json: '{"name":"Tone"}' },
+        { slug: "old", json: '{"name":"Old"}' },
+      ],
+    });
+    const bundle = snap({
+      personalSkills: [
+        { slug: "tone", json: '{"name":"Tone"}' },
+        { slug: "new-skill", json: '{"name":"New"}' },
+        { slug: "old", json: '{"name":"Changed"}' },
+      ],
+    });
+    const diff = diffSnapshots(local, bundle);
+    expect(diff.personalSkills.added).toEqual(["new-skill"]);
+    expect(diff.personalSkills.removed).toEqual([]);
+    expect(diff.personalSkills.modified).toEqual(["old"]);
   });
 });

@@ -20,6 +20,7 @@ import { ConfigExportImport } from "./ConfigExportImport";
 
 const sampleDiff = {
   skills: { added: [".episteme/agents/skills/foo.md"], removed: [], modified: [] },
+  personalSkills: { added: ["tone"], removed: [], modified: [] },
   memories: { added: [], removed: [], modified: [".episteme/agents/memories/bar.md"] },
   settings: { changed: ["modelPreference"] },
 };
@@ -51,6 +52,12 @@ describe("ConfigExportImport", () => {
     render(<ConfigExportImport />);
     expect(screen.getByTestId("agent-config-export-button")).toBeTruthy();
     expect(screen.getByTestId("agent-config-import-input")).toBeTruthy();
+    expect(screen.getByTestId("agent-config-import-button")).toBeTruthy();
+  });
+
+  it("import button renders Add Zip File text", () => {
+    render(<ConfigExportImport />);
+    expect(screen.getByText("Add Zip File")).toBeTruthy();
   });
 
   it("clicking Export fetches /api/agent/export and triggers a download", async () => {

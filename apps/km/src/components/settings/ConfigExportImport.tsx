@@ -16,7 +16,6 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogContent,
@@ -87,6 +86,21 @@ function BundleDiffView({ diff }: { diff: BundleDiff }) {
             <NoteList label="Added" paths={diff.skills.added} tone="added" />
             <NoteList label="Removed" paths={diff.skills.removed} tone="removed" />
             <NoteList label="Modified" paths={diff.skills.modified} tone="modified" />
+          </div>
+        ),
+    },
+    {
+      title: "Personal Skills",
+      body:
+        diff.personalSkills.added.length === 0 &&
+        diff.personalSkills.removed.length === 0 &&
+        diff.personalSkills.modified.length === 0 ? (
+          <p className="text-xs text-muted-foreground">No changes</p>
+        ) : (
+          <div className="flex flex-col gap-2">
+            <NoteList label="Added" paths={diff.personalSkills.added} tone="added" />
+            <NoteList label="Removed" paths={diff.personalSkills.removed} tone="removed" />
+            <NoteList label="Modified" paths={diff.personalSkills.modified} tone="modified" />
           </div>
         ),
     },
@@ -216,7 +230,7 @@ export function ConfigExportImport() {
   return (
     <Card data-testid="agent-config-export-import">
       <CardHeader>
-        <CardTitle>Agent config</CardTitle>
+        <CardTitle>Data</CardTitle>
         <CardDescription>
           Export your agent config (skills, memories, settings) as a portable
           bundle, or import one from another workspace.
@@ -242,15 +256,13 @@ export function ConfigExportImport() {
           </div>
         </div>
         <div className="flex flex-1 flex-col gap-2">
-          <h3 className="text-sm font-medium">
-            <label htmlFor="agent-config-import-file">Import</label>
-          </h3>
+          <h3 className="text-sm font-medium">Import</h3>
           <p className="text-xs text-muted-foreground">
             Pick a previously-exported .zip. You will see a diff before
             anything is applied.
           </p>
           <div>
-            <Input
+            <input
               ref={fileRef}
               id="agent-config-import-file"
               type="file"
@@ -258,7 +270,17 @@ export function ConfigExportImport() {
               onChange={handleFile}
               disabled={importing}
               data-testid="agent-config-import-input"
+              className="sr-only"
             />
+            <Button
+              type="button"
+              variant="outline"
+              disabled={importing}
+              onClick={() => fileRef.current?.click()}
+              data-testid="agent-config-import-button"
+            >
+              {importing ? "Importing…" : "Add Zip File"}
+            </Button>
           </div>
         </div>
       </CardContent>
