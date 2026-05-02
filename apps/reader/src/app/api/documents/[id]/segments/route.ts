@@ -39,7 +39,7 @@ export async function GET(
       .from(documentSegments)
       .where(
         and(
-          eq(documentSegments.documentId, documentId),
+          eq(documentSegments.documentId, String(documentId)),
           notInArray(documentSegments.kind, [...EXCLUDED_KINDS])
         )
       );

@@ -1,5 +1,4 @@
 import { pgTable, text, timestamp, serial, integer, index, jsonb } from "drizzle-orm/pg-core";
-import { documents } from "./documents";
 
 export type DocumentSegmentKind = "section_header" | "figure" | "formula" | "paragraph" | "table";
 
@@ -21,9 +20,7 @@ export const documentSegments = pgTable(
   "document_segments",
   {
     id: serial("id").primaryKey(),
-    documentId: integer("document_id")
-      .notNull()
-      .references(() => documents.id, { onDelete: "cascade" }),
+    documentId: text("document_id").notNull(),
     page: integer("page").notNull(),
     kind: text("kind").$type<DocumentSegmentKind>().notNull(),
     bbox: jsonb("bbox").$type<DocumentSegmentBbox>().notNull(),

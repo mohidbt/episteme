@@ -144,7 +144,7 @@ async def run_chandra(file_path: str, api_key: str):
 
 async def insert_segments(
     conn,
-    document_id: int,
+    document_id: str | int,
     rows: list[tuple[int, str, dict, dict]],
 ) -> None:
     """Bulk INSERT parsed rows into document_segments."""
@@ -237,7 +237,10 @@ async def ensure_parsed(
         if not storage_url:
             raise ChandraParseFailed(f"paper {paper_id} has no storage_url")
 
-        result = await run_chandra(storage_url, ocr_key)
+        from lib.storage import download_to_tempfile
+
+        async with download_to_tempfile(storage_url) as local_path:
+            result = await run_chandra(local_path, ocr_key)
         if not result.success or result.json is None:
             raise ChandraParseFailed(
                 f"chandra convert failed for paper {paper_id}: {getattr(result, 'error', None)}"

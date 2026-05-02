@@ -19,6 +19,7 @@ dependencies = [
     "psycopg[binary]>=3.2",
     "langchain-mcp-adapters>=0.2.2",
     "tavily-python>=0.5.0",
+    "boto3>=1.35",
 ]
 
 [project.optional-dependencies]

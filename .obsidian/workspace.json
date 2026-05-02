@@ -50,7 +50,7 @@
             }
           },
           {
-            "id": "f840d75774a9da29",
+            "id": "263b0f73da3fdbbd",
             "type": "leaf",
             "state": {
               "type": "markdown",
@@ -62,9 +62,37 @@
               "icon": "lucide-file",
               "title": "2026-04-19-episteme-km"
             }
+          },
+          {
+            "id": "444930d6e412560a",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "docs/superpowers/plans/phases/phase-1.5-rag-rewrite.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "phase-1.5-rag-rewrite"
+            }
+          },
+          {
+            "id": "29f4a4eaefddc08e",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "docs/superpowers/specs/2026-04-26-roadmap-update-design.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "2026-04-26-roadmap-update-design"
+            }
           }
         ],
-        "currentTab": 3
+        "currentTab": 4
       }
     ],
     "direction": "vertical"
@@ -121,8 +149,7 @@
       }
     ],
     "direction": "horizontal",
-    "width": 300,
-    "collapsed": true
+    "width": 300
   },
   "right": {
     "id": "b4b79e0e40bd2950",
@@ -138,7 +165,7 @@
             "state": {
               "type": "backlink",
               "state": {
-                "file": "docs/superpowers/plans/2026-04-19-episteme-km.md",
+                "file": "docs/superpowers/plans/phases/phase-1.4-agent-workflows.md",
                 "collapseAll": false,
                 "extraContext": false,
                 "sortOrder": "alphabetical",
@@ -148,7 +175,7 @@
                 "unlinkedCollapsed": true
               },
               "icon": "links-coming-in",
-              "title": "Rückverweise auf 2026-04-19-episteme-km"
+              "title": "Rückverweise auf phase-1.4-agent-workflows"
             }
           },
           {
@@ -157,12 +184,12 @@
             "state": {
               "type": "outgoing-link",
               "state": {
-                "file": "docs/superpowers/plans/2026-04-19-episteme-km.md",
+                "file": "docs/superpowers/plans/phases/phase-1.4-agent-workflows.md",
                 "linksCollapsed": false,
                 "unlinkedCollapsed": true
               },
               "icon": "links-going-out",
-              "title": "Ausgehende Links von 2026-04-19-episteme-km öffnen"
+              "title": "Ausgehende Links von phase-1.4-agent-workflows öffnen"
             }
           },
           {
@@ -200,13 +227,13 @@
             "state": {
               "type": "outline",
               "state": {
-                "file": "docs/superpowers/plans/2026-04-19-episteme-km.md",
+                "file": "docs/superpowers/plans/phases/phase-1.4-agent-workflows.md",
                 "followCursor": false,
                 "showSearch": false,
                 "searchQuery": ""
               },
               "icon": "lucide-list",
-              "title": "Gliederung von 2026-04-19-episteme-km"
+              "title": "Gliederung von phase-1.4-agent-workflows"
             }
           }
         ]
@@ -227,12 +254,47 @@
       "bases:Neue Base erstellen": false
     }
   },
-  "active": "f840d75774a9da29",
+  "active": "444930d6e412560a",
   "lastOpenFiles": [
-    "episteme-km-prd.md",
+    "services/agents/tests/__pycache__/test_km_extract_stub.cpython-313-pytest-9.0.3.pyc",
+    "services/agents/tests/test_km_extract_stub.py",
+    "docs/superpowers/plans/phases/phase-1.4.x-extraction-skill.md",
     "docs/superpowers/plans/2026-04-19-episteme-km.md",
+    "docs/superpowers/specs/2026-04-26-roadmap-update-design.md",
+    "docs/superpowers/plans/phases/phase-1.5-rag-rewrite.md",
+    "docs/superpowers/plans/phases/phase-4.3-extra-workflows.md",
     "docs/superpowers/plans/phases/phase-1.4-agent-workflows.md",
+    "episteme-km-prd.md",
+    "apps/km/src/components/DetailUploadBar.tsx",
+    "apps/km/src/components/FolderDestinationPicker.tsx",
+    "apps/km/src/components/DetailUploadBar.test.tsx",
+    "apps/km/src/app/(app)/agents/[id]/page.test.tsx",
+    "apps/km/src/lib/agents/get-thread-messages.test.ts",
+    "apps/km/src/lib/agents/get-thread-messages.ts",
+    "services/sync/tsconfig.tsbuildinfo",
+    "apps/km/src/components/ui/PillSwitcher.tsx",
+    "apps/km/public/seed/pca-jolliffe2002.csl.json",
+    "services/agents/skills/paper-search/SKILL.md",
+    "docs/superpowers/plans/phases/phase-1.5.1-agent-paper-reading.md",
+    "docs/superpowers/plans/phases/phase-1.3h-skills-subagents-disambiguation.md",
+    "docs/superpowers/plans/phases/phase-1.3g-skills-vs-subagents-honesty-pass.md",
+    "docs/superpowers/plans/phases/phase-1.3g-agentic-paper-search.md",
+    "services/agents/skills/_deep-read/SKILL.md",
+    "docs/superpowers/specs/2026-04-23-unified-drive-and-data-type-design.md",
+    "docs/superpowers/specs/2026-04-29-agentic-paper-search-design.md",
+    "docs/superpowers/plans/phases/phase-2.2-drive-as-filesystem.md",
+    "docs/superpowers/plans/phases/phase-1.3.x-papersets.md",
+    "docs/superpowers/plans/phases/phase-1.3f-drive-unified-skills.md",
+    "docs/superpowers/plans/phases/phase-1.3e-drive-unified-memory.md",
     "docs/superpowers/plans/phases/phase-1.3-agent-platform.md",
-    "docs/superpowers/specs/2026-04-23-unified-drive-and-data-type-design.md"
+    "docs/superpowers/specs/2026-04-28-queued-changes-triage-design.md",
+    "docs/superpowers/plans/phases/phase-1.7-migration.md",
+    "services/agents/skills/fixture-skill-scalability-gate/SKILL.md",
+    "services/agents/skills/synthesis/SKILL.md",
+    "services/agents/skills/deep-read/SKILL.md",
+    "apps/km/e2e/fixtures/phase-1.0-yjs-page2.png",
+    "apps/km/e2e/fixtures/phase-1.0-yjs-page1.png",
+    "apps/km/e2e/fixtures/perf-fix-instant-load.png",
+    "apps/km/e2e/fixtures/cursor-fix-google-docs-style.png"
   ]
 }

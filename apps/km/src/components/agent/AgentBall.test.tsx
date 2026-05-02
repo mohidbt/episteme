@@ -374,12 +374,12 @@ describe("AgentBall", () => {
     });
   });
 
-  describe("G-R3-05 #83 — ball drags vertically and snaps to bottom on release", () => {
+  describe("G-R3-05 #83 — ball drags vertically and snaps near bottom on release", () => {
     afterEach(() => {
       window.localStorage.clear();
     });
 
-    it("snaps y to viewport bottom on pointer up (gravity)", () => {
+    it("snaps y to the bottom band with a viewport inset on pointer up", () => {
       Object.defineProperty(window, "innerHeight", {
         configurable: true,
         value: 800,
@@ -390,10 +390,11 @@ describe("AgentBall", () => {
       fireEvent.pointerDown(ball, { clientX: 100, clientY: 100, pointerId: 1 });
       fireEvent.pointerMove(ball, { clientX: 250, clientY: 200, pointerId: 1 });
       fireEvent.pointerUp(ball, { clientX: 250, clientY: 200, pointerId: 1 });
-      // After release, top style should equal innerHeight - ballHeight (40 → 760).
+      // After release, top style should keep the square in the lower band
+      // without pinning it exactly to the viewport floor.
       expect(ball.style.top).toMatch(/^\d+px$/);
       const top = parseInt(ball.style.top, 10);
-      expect(top).toBeGreaterThan(700);
+      expect(top).toBe(664);
     });
 
     it("persists x to localStorage but not y", () => {

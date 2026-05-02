@@ -3,7 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { papersets } from "@episteme/db/schema";
 import { getAuthedUserId, MissingInternalSecretError } from "@/lib/internal-auth";
-import { getDecryptedApiKey } from "@episteme/auth/byok";
+import { getDecryptedApiKey, getDecryptedChandraKey } from "@episteme/auth/byok";
 import { signRequest } from "@/lib/agents/sign-request";
 import { jsonError, requireOwned } from "@/lib/crud";
 import { OPENROUTER_KEY_MISSING } from "@/lib/openrouter-errors";
@@ -125,6 +125,7 @@ export async function POST(req: Request, { params }: Ctx) {
     body: upstreamBody,
     userId,
     llmKey,
+    ocrKey: (await getDecryptedChandraKey(userId)) ?? "",
   });
 
   let upstream: Response;
