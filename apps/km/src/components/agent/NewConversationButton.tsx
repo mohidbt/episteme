@@ -12,21 +12,26 @@ export function NewConversationButton() {
   const onClick = useCallback(async () => {
     if (pending) return;
     setPending(true);
+    let navigated = false;
     try {
       const res = await fetch("/api/agent/threads", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({}),
       });
-      if (!res.ok) return;
+      if (!res.ok) {
+        setPending(false);
+        return;
+      }
       const data = (await res.json()) as { thread: AgentThreadRow };
       if (data.thread?.threadId) {
+        navigated = true;
         router.push(`/agents/${data.thread.threadId}`);
       }
     } catch {
       // Silent for MVP.
     } finally {
-      setPending(false);
+      if (!navigated) setPending(false);
     }
   }, [pending, router]);
 
