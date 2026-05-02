@@ -8,7 +8,7 @@ export interface CellGroundingChipProps {
   paperId: string;
   blockIds: string[];
   /** Optional override for display text (e.g. "p.5"). When null the chip is
-   *  hidden; when undefined the chip derives a page label from blockIds. */
+   *  hidden; when undefined the chip derives a label from blockIds. */
   label?: string | null;
   /** Max valid page number; pills with page numbers exceeding this are hidden. */
   maxPage?: number | null;
@@ -19,10 +19,12 @@ export interface CellGroundingChipProps {
  * Small chip rendered inside a paperset cell. Clicking opens the paper
  * viewer at the cited block: `/p/<paperId>?block=<first_block_id>`.
  *
- * Only rendered when a valid page number can be derived from the block ID
- * and (when maxPage is provided) the page number doesn't exceed it.
- * Block IDs that don't carry a genuine page anchor are silently hidden —
- * see #104.
+ * Display priority:
+ *   1. `p.<page>` when the block ID carries a genuine page anchor.
+ *   2. `§<order_index>` when only a segment/order index is available
+ *      (legacy data, OCR-less docs). The `§` prefix avoids confusing
+ *      readers with page-number-shaped values like `#105` (see #155).
+ *   3. Hidden when neither can be parsed or `blockIds` is empty.
  */
 export function CellGroundingChip({
   paperId,
@@ -35,9 +37,8 @@ export function CellGroundingChip({
   if (blockIds.length === 0) return null;
   const firstBlockId = blockIds[0];
 
-  // Derive page number from label or block ID. If label is explicitly null,
-  // hide the chip. If label is a string, use it. Otherwise, try extracting
-  // from the block ID.
+  // Derive label. Explicit null hides the chip; explicit string overrides;
+  // undefined → auto-derive from block ID (page first, segment fallback).
   let displayText: string | null;
   if (label === null) {
     displayText = null;
@@ -45,15 +46,15 @@ export function CellGroundingChip({
     displayText = label;
   } else {
     const pageNum = blockRefPageNumber(firstBlockId);
-    displayText = pageNum !== null ? `p.${pageNum}` : null;
+    if (pageNum !== null && (maxPage == null || pageNum <= maxPage)) {
+      displayText = `p.${pageNum}`;
+    } else {
+      const segNum = blockRefSegmentIndex(firstBlockId);
+      displayText = segNum !== null ? `§${segNum}` : null;
+    }
   }
 
-  // #104: validate page number against maxPage when provided
   if (displayText === null) return null;
-  if (maxPage != null) {
-    const pageNum = blockRefPageNumber(firstBlockId);
-    if (pageNum !== null && pageNum > maxPage) return null;
-  }
 
   const ariaLabel = `Open paper at cited block ${firstBlockId}`;
 
@@ -102,4 +103,26 @@ export function blockRefPageNumber(blockId: string): number | null {
   if (!m) return null;
   const n = Number.parseInt(m[1], 10);
   return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+/**
+ * Extract the segment / order-index from a block ID when no page anchor
+ * is available. This is the chandra block sequence number — not a page
+ * number. Used as a fallback so cells citing legacy block IDs still
+ * render a clickable chip (#155).
+ *
+ * Supports:
+ * - Legacy without page: `<paper_id>:<order_index>`  (pre-R5 read_paper)
+ * - New format: trailing `:<order_index>` after `:p<page>:` is preferred
+ *   via blockRefPageNumber and not handled here.
+ * Returns null when nothing parseable trails the final colon.
+ */
+export function blockRefSegmentIndex(blockId: string): number | null {
+  // Skip block IDs that already carry a page anchor — those are handled
+  // by blockRefPageNumber.
+  if (/:p\d+:/.test(blockId) || /_p\d+_/.test(blockId)) return null;
+  const i = blockId.lastIndexOf(":");
+  if (i === -1 || i === blockId.length - 1) return null;
+  const n = Number.parseInt(blockId.slice(i + 1), 10);
+  return Number.isFinite(n) && n >= 0 ? n : null;
 }

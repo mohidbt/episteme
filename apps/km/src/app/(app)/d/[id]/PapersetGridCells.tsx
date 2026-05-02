@@ -231,14 +231,13 @@ function CellView({
       {state.kind === "filled" && (
         <span className="flex items-center gap-1.5">
           <span className="truncate">{state.value}</span>
-          {/* #104: only render grounding chip when firstPage is a valid page
-              number. Blocks without a page anchor produce firstPage=null and
-              are silently hidden. */}
-          {state.firstPage != null && groundingBlockIds.length > 0 && (
+          {/* #155: let CellGroundingChip choose its own label —
+              `p.<n>` when a page anchor is available, `§<n>` for
+              legacy/segment-only block IDs, hidden otherwise. */}
+          {groundingBlockIds.length > 0 && (
             <CellGroundingChip
               paperId={groundingPaperId}
               blockIds={groundingBlockIds}
-              label={`p.${state.firstPage}`}
               className="shrink-0"
             />
           )}

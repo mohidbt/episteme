@@ -8,7 +8,11 @@ vi.mock("next/navigation", () => ({
   useRouter: () => routerMock,
 }));
 
-import { CellGroundingChip, blockRefPageNumber } from "./CellGroundingChip";
+import {
+  CellGroundingChip,
+  blockRefPageNumber,
+  blockRefSegmentIndex,
+} from "./CellGroundingChip";
 
 beforeEach(() => {
   routerMock.push.mockReset();
@@ -38,6 +42,27 @@ describe("blockRefPageNumber", () => {
     const result = blockRefPageNumber("block_x_p105_0");
     expect(result).toBe(105);
     expect(typeof result).toBe("number");
+  });
+
+  it("parses new read_paper format `<paper>:p<n>:<order>`", () => {
+    expect(blockRefPageNumber("uuid-abc:p7:42")).toBe(7);
+  });
+});
+
+describe("blockRefSegmentIndex", () => {
+  it("extracts trailing order_index from legacy `<paper>:<n>` format", () => {
+    expect(blockRefSegmentIndex("paper-uuid:42")).toBe(42);
+    expect(blockRefSegmentIndex("p-1:0")).toBe(0);
+  });
+
+  it("returns null when block ID already carries a page anchor", () => {
+    expect(blockRefSegmentIndex("uuid:p5:12")).toBeNull();
+    expect(blockRefSegmentIndex("block_abc_p5_0")).toBeNull();
+  });
+
+  it("returns null for block IDs with no parseable segment index", () => {
+    expect(blockRefSegmentIndex("seg_ABC_nonpage")).toBeNull();
+    expect(blockRefSegmentIndex("paper-uuid:")).toBeNull();
   });
 });
 
@@ -76,10 +101,34 @@ describe("CellGroundingChip", () => {
     expect(screen.queryByTestId("cell-grounding-chip")).toBeNull();
   });
 
-  it("does not render when block ID has no page anchor pattern", () => {
-    // #104: block IDs without _p<num>_ produce no pill
+  it("does not render when block ID has no page anchor and no parseable segment", () => {
+    // Block ID without _p<num>_ AND without a trailing :<n> segment → hidden
     const { container } = render(
       <CellGroundingChip paperId="p-1" blockIds={["seg_ABC_nonpage"]} />,
+    );
+    expect(container.firstChild).toBeNull();
+  });
+
+  it("falls back to §<n> for legacy `<paper>:<order>` block IDs (#155)", () => {
+    // Pre-R5 read_paper used `<paper_id>:<order_index>` with no page anchor.
+    // Showing #105 looked like a page; §105 makes the segment meaning clear.
+    render(
+      <CellGroundingChip paperId="p-1" blockIds={["paper-uuid:105"]} />,
+    );
+    const chip = screen.getByTestId("cell-grounding-chip");
+    expect(chip.textContent).toBe("§105");
+  });
+
+  it("prefers p.<n> over §<n> when both could apply via maxPage filter", () => {
+    // page exceeds maxPage → fall through to segment fallback if present.
+    // Here new-format block has both page and order; segment helper sees
+    // the :pN: anchor and returns null, so chip hides.
+    const { container } = render(
+      <CellGroundingChip
+        paperId="p-1"
+        blockIds={["uuid:p999:5"]}
+        maxPage={15}
+      />,
     );
     expect(container.firstChild).toBeNull();
   });

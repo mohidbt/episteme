@@ -42,6 +42,7 @@ type DetailCell = {
   value: string;
   paperTitle: string | null;
   pageAnchor: number | null;
+  segmentAnchor: number | null;
 };
 
 /**
@@ -93,9 +94,16 @@ export function PapersetGrid({
     const value = cellValues.get(k);
     if (value === undefined) return; // empty cell — nothing to show
     const ground = cellGrounding[String(row)]?.[col];
-    const pageAnchor = ground?.block_ids.length
-      ? extractPageFromBlockId(ground.block_ids[0])
+    const firstBlockId = ground?.block_ids[0];
+    const pageAnchor = firstBlockId
+      ? extractPageFromBlockId(firstBlockId)
       : null;
+    // #155: fall back to segment index when no page anchor is available so
+    // the detail panel still tells the user what the chip points at.
+    const segmentAnchor =
+      firstBlockId && pageAnchor === null
+        ? extractSegmentFromBlockId(firstBlockId)
+        : null;
     const paper = rowRefs[row]
       ? paperById[rowRefs[row].paper_id]
       : undefined;
@@ -105,6 +113,7 @@ export function PapersetGrid({
       value,
       paperTitle: paper?.title ?? paper?.filename ?? null,
       pageAnchor,
+      segmentAnchor,
     });
   }
 
@@ -349,16 +358,41 @@ export function PapersetGrid({
               See more on Page {detailCell.pageAnchor}
             </div>
           )}
+          {detailCell?.pageAnchor == null && detailCell?.segmentAnchor != null && (
+            <div className="border-t px-4 py-3 text-sm text-muted-foreground">
+              Cited segment §{detailCell.segmentAnchor}
+            </div>
+          )}
         </SheetContent>
       </Sheet>
     </div>
   );
 }
 
-/** Extract page number from a block ID like `block_<id>_p<page>_<idx>`. */
+/**
+ * Extract page number from a block ID. Supports new format
+ * `<paper_id>:p<page>:<order_index>` and legacy `block_<id>_p<page>_<idx>`.
+ */
 function extractPageFromBlockId(blockId: string): number | null {
+  const newFmt = blockId.match(/:p(\d+):/);
+  if (newFmt) {
+    const n = Number.parseInt(newFmt[1], 10);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  }
   const m = blockId.match(/_p(\d+)_/);
   if (!m) return null;
   const n = Number.parseInt(m[1], 10);
   return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+/**
+ * Extract segment / order-index from a legacy `<paper_id>:<order_index>`
+ * block ID when no page anchor is available. Returns null otherwise.
+ */
+function extractSegmentFromBlockId(blockId: string): number | null {
+  if (/:p\d+:/.test(blockId) || /_p\d+_/.test(blockId)) return null;
+  const i = blockId.lastIndexOf(":");
+  if (i === -1 || i === blockId.length - 1) return null;
+  const n = Number.parseInt(blockId.slice(i + 1), 10);
+  return Number.isFinite(n) && n >= 0 ? n : null;
 }
