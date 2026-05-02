@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { UserPlus } from "lucide-react";
+import { FilePlus, UserPlus } from "lucide-react";
 import {
   Sidebar as ShadcnSidebar,
   SidebarContent,
@@ -167,7 +167,38 @@ export function SidebarShell({ library, tree, isAnonymous }: SidebarShellProps) 
                 )}
               </Button>
             </SidebarFooter>
-          ) : null}
+          ) : (
+            <SidebarFooter className="px-3 pb-3">
+              <Button
+                nativeButton={false}
+                onClick={() => {
+                  void fetch("/api/notes", {
+                    method: "POST",
+                    headers: { "content-type": "application/json" },
+                    body: JSON.stringify({ libraryId: library.id }),
+                  })
+                    .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`http ${r.status}`))))
+                    .then((data: { slug?: string }) => {
+                      if (data.slug) router.push(`/n/${encodeURIComponent(data.slug)}`);
+                    })
+                    .catch(() => {});
+                }}
+                data-testid="sidebar-new-note"
+                className={collapsed ? "w-full px-0" : "w-full"}
+                variant="outline"
+                size="sm"
+              >
+                {collapsed ? (
+                  <FilePlus className="size-4" aria-hidden />
+                ) : (
+                  <>
+                    <FilePlus className="size-3.5" aria-hidden />
+                    New note
+                  </>
+                )}
+              </Button>
+            </SidebarFooter>
+          )}
         </ShadcnSidebar>
 
         <CollapseHandle collapsed={collapsed} toggle={toggle} />
