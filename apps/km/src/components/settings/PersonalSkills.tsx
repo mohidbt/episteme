@@ -41,6 +41,7 @@ export function PersonalSkills() {
   const [busy, setBusy] = React.useState(false);
   const [editing, setEditing] = React.useState<{
     slug: string;
+    name: string;
     description: string;
     instructions: string;
   } | null>(null);
@@ -87,7 +88,7 @@ export function PersonalSkills() {
   }
 
   async function openEdit(slug: string) {
-    setEditing({ slug, description: "", instructions: "" });
+    setEditing({ slug, name: "", description: "", instructions: "" });
     setBusy(true);
     try {
       const res = await fetch(`/api/agents/skills/personal/${slug}`);
@@ -99,6 +100,7 @@ export function PersonalSkills() {
       };
       setEditing({
         slug: body.slug,
+        name: body.name ?? "",
         description: body.description ?? "",
         instructions: body.instructions ?? "",
       });
@@ -122,6 +124,7 @@ export function PersonalSkills() {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
+            name: editing.name,
             description: editing.description,
             instructions: editing.instructions,
           }),
@@ -193,7 +196,7 @@ export function PersonalSkills() {
                 >
                   <td className="px-3 py-2 font-medium">{s.name}</td>
                   <td className="px-3 py-2 text-muted-foreground">
-                    {s.description || s.slug}
+                    {s.description || <span className="italic text-muted-foreground/60">Description missing</span>}
                   </td>
                   <td className="px-3 py-2 text-right">
                     <Button
@@ -266,6 +269,21 @@ export function PersonalSkills() {
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="skill-name">Name</Label>
+              <Input
+                id="skill-name"
+                value={editing?.name ?? ""}
+                onChange={(e) =>
+                  setEditing((prev) =>
+                    prev ? { ...prev, name: e.target.value } : prev,
+                  )
+                }
+                placeholder="Skill name"
+                disabled={busy}
+                data-testid="edit-skill-name"
+              />
+            </div>
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="skill-description">Description</Label>
               <Textarea

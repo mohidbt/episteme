@@ -4,6 +4,7 @@ import { getSessionInfo } from "@/lib/auth";
 import { getSkillStore, type SkillJson } from "@/lib/skills-store";
 
 const PatchBody = z.object({
+  name: z.string().optional(),
   description: z.string().optional(),
   instructions: z.string().optional(),
 });
@@ -60,7 +61,7 @@ export async function PATCH(req: Request, { params }: Ctx) {
   }
 
   const merged: SkillJson = {
-    name: existing.name,
+    name: parsed.data.name ?? existing.name,
     description: parsed.data.description ?? existing.description,
     instructions: parsed.data.instructions ?? existing.instructions,
   };

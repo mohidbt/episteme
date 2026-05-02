@@ -207,10 +207,10 @@ function RephrasePanel({
                           value={`${s.title} ${s.name}`}
                           onSelect={() => {
                             setSkillsOpen(false);
-                            submitWithPrompt(s.instruction);
+                            submitWithPrompt(s.instruction || s.description || "");
                           }}
                         >
-                          <span className="truncate">{s.title}</span>
+                          <span className="truncate">{s.title || s.name}</span>
                         </CommandItem>
                       ))}
                     </CommandGroup>
