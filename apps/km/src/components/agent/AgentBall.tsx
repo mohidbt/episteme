@@ -202,19 +202,21 @@ export function AgentBall(_props: AgentBallProps) {
   }
 
   const panelPositioned = panelDrag.x !== null;
-  // G-R3-05 #77 — expanded panel must not cover the sidebar or the TabBar.
-  // top clamps to bottom of TabBar; max-h prevents overflow above; max-w
-  // prevents overflow into the sidebar. Bottom anchor (bottom-4) keeps the
-  // panel resting just above the matrix ball.
-  const panelBoundsClass = `top-[var(--tabbar-h)] max-h-[calc(100dvh-var(--tabbar-h))] max-w-[calc(100vw-var(--sidebar-width))]`;
-  // Default open size: roomy enough to be useful (≥600px tall, 480px wide on
-  // typical viewports). On small viewports the max-h/max-w clamps win.
-  const panelSizeClass = `h-[min(720px,calc(100dvh-var(--tabbar-h)-2rem))] w-[min(480px,calc(100vw-var(--sidebar-width)-2rem))]`;
+  // G-R6-04 #152, #168 — expanded panel must not cover the sidebar or the
+  // TabBar, AND must use the full available height by default. We anchor
+  // BOTH top (= bottom of TabBar) and bottom (= 1rem above viewport floor),
+  // letting CSS resolve height from the gap. `max-w` keeps width clamped to
+  // the available content area (viewport minus sidebar). Width has a comfy
+  // 480px default but shrinks on narrow viewports.
+  const panelBoundsClass = `top-[var(--tabbar-h)] bottom-4 max-h-[calc(100dvh-var(--tabbar-h))] max-w-[calc(100vw-var(--sidebar-width))]`;
+  // Width default: 480px, but never wider than the available content area.
+  // (Height is implied by top+bottom anchors above — no explicit h.)
+  const panelSizeClass = `w-[min(480px,calc(100vw-var(--sidebar-width)-2rem))]`;
   const panelLayoutClass = fullscreen
     ? `fixed inset-0 z-50 flex flex-col rounded-lg border bg-background shadow-xl`
     : panelPositioned
-      ? `fixed bottom-4 z-50 flex ${panelSizeClass} ${panelBoundsClass} flex-col rounded-lg border bg-background shadow-xl`
-      : `fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex ${panelSizeClass} ${panelBoundsClass} flex-col rounded-lg border bg-background shadow-xl`;
+      ? `fixed z-50 flex ${panelSizeClass} ${panelBoundsClass} flex-col rounded-lg border bg-background shadow-xl`
+      : `fixed left-1/2 -translate-x-1/2 z-50 flex ${panelSizeClass} ${panelBoundsClass} flex-col rounded-lg border bg-background shadow-xl`;
 
   // G-R3-05 #76 — when collapsed, animate the panel down into the matrix
   // square: scale to a 40px ball anchored at the bottom-center while keeping
