@@ -36,7 +36,6 @@ export function NewConversationButton() {
     <Button
       type="button"
       onClick={onClick}
-      disabled={pending}
       data-testid="new-conversation-button"
       aria-busy={pending}
     >

@@ -19,12 +19,11 @@ export interface CellGroundingChipProps {
  * Small chip rendered inside a paperset cell. Clicking opens the paper
  * viewer at the cited block: `/p/<paperId>?block=<first_block_id>`.
  *
- * Display priority:
- *   1. `p.<page>` when the block ID carries a genuine page anchor.
- *   2. `§<order_index>` when only a segment/order index is available
- *      (legacy data, OCR-less docs). The `§` prefix avoids confusing
- *      readers with page-number-shaped values like `#105` (see #155).
- *   3. Hidden when neither can be parsed or `blockIds` is empty.
+ * Display:
+ *   - `p.<page>` when the block ID carries a genuine page anchor.
+ *   - Hidden otherwise (legacy/OCR-less data has only a segment/order
+ *     index, which would confuse readers — e.g. "#105" on a 15-page PDF.
+ *     Re-enrichment regenerates the page-anchored block IDs.) (#155)
  */
 export function CellGroundingChip({
   paperId,
@@ -46,12 +45,10 @@ export function CellGroundingChip({
     displayText = label;
   } else {
     const pageNum = blockRefPageNumber(firstBlockId);
-    if (pageNum !== null && (maxPage == null || pageNum <= maxPage)) {
-      displayText = `p.${pageNum}`;
-    } else {
-      const segNum = blockRefSegmentIndex(firstBlockId);
-      displayText = segNum !== null ? `§${segNum}` : null;
-    }
+    displayText =
+      pageNum !== null && (maxPage == null || pageNum <= maxPage)
+        ? `p.${pageNum}`
+        : null;
   }
 
   if (displayText === null) return null;

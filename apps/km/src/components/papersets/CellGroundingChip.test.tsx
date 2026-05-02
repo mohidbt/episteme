@@ -109,14 +109,13 @@ describe("CellGroundingChip", () => {
     expect(container.firstChild).toBeNull();
   });
 
-  it("falls back to §<n> for legacy `<paper>:<order>` block IDs (#155)", () => {
-    // Pre-R5 read_paper used `<paper_id>:<order_index>` with no page anchor.
-    // Showing #105 looked like a page; §105 makes the segment meaning clear.
-    render(
+  it("hides chip for legacy `<paper>:<order>` block IDs without page anchor (#155)", () => {
+    // Pre-R5 read_paper produced `<paper_id>:<order_index>` (no page).
+    // Surfacing it as #105 / §105 confused users on small PDFs — hide instead.
+    const { container } = render(
       <CellGroundingChip paperId="p-1" blockIds={["paper-uuid:105"]} />,
     );
-    const chip = screen.getByTestId("cell-grounding-chip");
-    expect(chip.textContent).toBe("§105");
+    expect(container.firstChild).toBeNull();
   });
 
   it("prefers p.<n> over §<n> when both could apply via maxPage filter", () => {

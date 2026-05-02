@@ -231,9 +231,8 @@ function CellView({
       {state.kind === "filled" && (
         <span className="flex items-center gap-1.5">
           <span className="truncate">{state.value}</span>
-          {/* #155: let CellGroundingChip choose its own label —
-              `p.<n>` when a page anchor is available, `§<n>` for
-              legacy/segment-only block IDs, hidden otherwise. */}
+          {/* #155: chip renders `p.<n>` when a page anchor is parseable;
+              hides for legacy/segment-only block IDs. */}
           {groundingBlockIds.length > 0 && (
             <CellGroundingChip
               paperId={groundingPaperId}

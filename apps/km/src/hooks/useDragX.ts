@@ -80,14 +80,15 @@ export function useDragX({
 
   const onPointerDown = useCallback((e: React.PointerEvent<HTMLElement>) => {
     // RG3 #56 — bail when pointerdown originates on an interactive descendant
-    // (header buttons, links, inputs).
+    // OTHER than the drag handle itself. Without the currentTarget check, a
+    // <button>-style drag handle (like the matrix ball) bailed because
+    // closest("button") returns the handle itself.
     const target = e.target as Element | null;
-    if (
-      target &&
-      target !== e.currentTarget &&
-      target.closest?.("button,a,input,textarea,select,[role='button']")
-    ) {
-      return;
+    if (target && target !== e.currentTarget) {
+      const interactive = target.closest?.(
+        "button,a,input,textarea,select,[role='button']",
+      );
+      if (interactive && interactive !== e.currentTarget) return;
     }
     draggingRef.current = true;
     didMoveRef.current = false;

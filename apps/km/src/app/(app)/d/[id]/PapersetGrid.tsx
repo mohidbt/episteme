@@ -98,12 +98,10 @@ export function PapersetGrid({
     const pageAnchor = firstBlockId
       ? extractPageFromBlockId(firstBlockId)
       : null;
-    // #155: fall back to segment index when no page anchor is available so
-    // the detail panel still tells the user what the chip points at.
-    const segmentAnchor =
-      firstBlockId && pageAnchor === null
-        ? extractSegmentFromBlockId(firstBlockId)
-        : null;
+    // #155: when only a segment/order index is available the value is too
+    // confusing to surface (e.g. "#105" on a 15-page PDF). Show nothing —
+    // re-enrichment regenerates page-anchored block IDs.
+    const segmentAnchor = null;
     const paper = rowRefs[row]
       ? paperById[rowRefs[row].paper_id]
       : undefined;
@@ -356,11 +354,6 @@ export function PapersetGrid({
           {detailCell?.pageAnchor != null && (
             <div className="border-t px-4 py-3 text-sm text-muted-foreground">
               See more on Page {detailCell.pageAnchor}
-            </div>
-          )}
-          {detailCell?.pageAnchor == null && detailCell?.segmentAnchor != null && (
-            <div className="border-t px-4 py-3 text-sm text-muted-foreground">
-              Cited segment §{detailCell.segmentAnchor}
             </div>
           )}
         </SheetContent>
