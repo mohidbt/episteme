@@ -41,7 +41,11 @@ export async function POST(
     let usedAnnotations = false;
 
     try {
-      const annResult = await extractAnnotationMarkers(doc.filePath);
+      const annResult = await extractAnnotationMarkers(doc.filePath, {
+        userId: session.user.id,
+        documentId,
+        llmKey: "",
+      });
       annRefs = annResult.references;
       annMarkers = annResult.markers;
       // Require at least 3 resolved references to trust annotation extraction.
@@ -114,7 +118,11 @@ export async function POST(
       }
     } else {
       // Text-regex fallback
-      const pages = await extractPdfPages(doc.filePath);
+      const pages = await extractPdfPages(doc.filePath, {
+        userId: session.user.id,
+        documentId,
+        llmKey: "",
+      });
       const { markers, references } = extractCitations(pages);
 
       const markerPageMap = new Map<number, number>(

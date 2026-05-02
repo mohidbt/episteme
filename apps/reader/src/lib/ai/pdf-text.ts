@@ -1,21 +1,54 @@
-// Server-side PDF text extraction using unpdf (serverless-compatible, no native deps)
-import { extractText, getDocumentProxy } from "unpdf";
-import { getFile } from "@/lib/storage";
+import { signRequest } from "@/lib/agents/sign-request";
 
 export interface ExtractedPage {
   pageNumber: number;
   text: string;
 }
 
-export async function extractPdfPages(filePath: string): Promise<ExtractedPage[]> {
-  const buffer = await getFile(filePath);
-  const pdf = await getDocumentProxy(new Uint8Array(buffer));
-  // mergePages: false returns string[] — one entry per page
-  const { totalPages, text } = await extractText(pdf, { mergePages: false });
+export interface AgentPdfRequestContext {
+  userId: string;
+  documentId?: number;
+  llmKey?: string;
+}
 
-  const pages: ExtractedPage[] = [];
-  for (let i = 0; i < totalPages; i++) {
-    pages.push({ pageNumber: i + 1, text: text[i] ?? "" });
+interface PdfTextResponse {
+  pages: Array<{ pageNumber: number; text: string }>;
+}
+
+function toExtractedPages(payload: unknown): ExtractedPage[] {
+  if (!payload || typeof payload !== "object" || !Array.isArray((payload as PdfTextResponse).pages)) {
+    throw new Error("[pdf-text] invalid response payload");
   }
-  return pages;
+  return (payload as PdfTextResponse).pages.map((p) => ({
+    pageNumber: p.pageNumber,
+    text: p.text,
+  }));
+}
+
+export async function extractPdfPages(
+  filePath: string,
+  context: AgentPdfRequestContext
+): Promise<ExtractedPage[]> {
+  const path = "/agents/pdf/text";
+  const body = JSON.stringify({ file_path: filePath });
+  const { headers } = signRequest({
+    method: "POST",
+    path,
+    body,
+    userId: context.userId,
+    documentId: context.documentId,
+    llmKey: context.llmKey ?? "",
+  });
+
+  const res = await fetch(`${process.env.AGENTS_URL}${path}`, {
+    method: "POST",
+    headers: { ...headers, "Content-Type": "application/json" },
+    body,
+  });
+  if (!res.ok) {
+    throw new Error(`[pdf-text] agents request failed: ${res.status}`);
+  }
+
+  const payload = await res.json();
+  return toExtractedPages(payload);
 }

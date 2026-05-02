@@ -113,6 +113,11 @@ describe("GET /api/pdfs/[id]/pages/[n]/text", () => {
       params: Promise.resolve({ id: "1", n: "2" }),
     });
     expect(res.status).toBe(200);
+    expect(extractPdfPages).toHaveBeenCalledWith("/tmp/x.pdf", {
+      userId: "u1",
+      documentId: 1,
+      llmKey: "",
+    });
     expect(await res.json()).toEqual({ pageNumber: 2, text: "second" });
   });
 });

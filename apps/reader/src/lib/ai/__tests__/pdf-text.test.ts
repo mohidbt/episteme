@@ -8,9 +8,9 @@ vi.mock("@/lib/agents/sign-request", () => ({
 }));
 
 import { signRequest } from "@/lib/agents/sign-request";
-import { extractAnnotationMarkers } from "../annotation-extractor";
+import { extractPdfPages } from "../pdf-text";
 
-describe("extractAnnotationMarkers", () => {
+describe("extractPdfPages", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     process.env.AGENTS_URL = "http://agents";
@@ -25,34 +25,29 @@ describe("extractAnnotationMarkers", () => {
     });
   });
 
-  it("calls agents /agents/pdf/annotations with signed headers", async () => {
+  it("calls agents /agents/pdf/text with signed headers and returns pages", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(
-        JSON.stringify({
-          references: [
-            { markerIndex: 2, rawText: "2. Example Ref", title: null, authors: null, year: null, doi: null, url: null },
-          ],
-          markers: [{ markerIndex: 2, pageNumber: 4, x0: 10, y0: 20, x1: 30, y1: 40 }],
-        }),
+        JSON.stringify({ pages: [{ pageNumber: 1, text: "hello" }, { pageNumber: 2, text: "" }] }),
         { status: 200 }
       )
     );
 
-    const result = await extractAnnotationMarkers("uploads/doc.pdf", {
+    const pages = await extractPdfPages("uploads/doc.pdf", {
       userId: "u1",
-      documentId: 12,
+      documentId: 11,
       llmKey: "",
     });
 
     expect(signRequest).toHaveBeenCalledWith({
       method: "POST",
-      path: "/agents/pdf/annotations",
+      path: "/agents/pdf/text",
       body: JSON.stringify({ file_path: "uploads/doc.pdf" }),
       userId: "u1",
-      documentId: 12,
+      documentId: 11,
       llmKey: "",
     });
-    expect(fetchSpy).toHaveBeenCalledWith("http://agents/agents/pdf/annotations", {
+    expect(fetchSpy).toHaveBeenCalledWith("http://agents/agents/pdf/text", {
       method: "POST",
       headers: expect.objectContaining({
         "Content-Type": "application/json",
@@ -61,26 +56,26 @@ describe("extractAnnotationMarkers", () => {
       }),
       body: JSON.stringify({ file_path: "uploads/doc.pdf" }),
     });
-    expect(result).toEqual({
-      references: [{ markerIndex: 2, rawText: "2. Example Ref" }],
-      markers: [{ markerIndex: 2, pageNumber: 4, x0: 10, y0: 20, x1: 30, y1: 40 }],
-    });
+    expect(pages).toEqual([
+      { pageNumber: 1, text: "hello" },
+      { pageNumber: 2, text: "" },
+    ]);
   });
 
   it("throws on non-2xx response", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("bad", { status: 400 }));
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("bad", { status: 404 }));
 
     await expect(
-      extractAnnotationMarkers("uploads/bad.pdf", {
+      extractPdfPages("uploads/missing.pdf", {
         userId: "u1",
-        documentId: 12,
+        documentId: 11,
         llmKey: "",
       })
-    ).rejects.toThrow(/400/);
+    ).rejects.toThrow(/404/);
   });
 
   it("does not import unpdf", () => {
-    const source = fs.readFileSync(path.resolve(__dirname, "../annotation-extractor.ts"), "utf8");
+    const source = fs.readFileSync(path.resolve(__dirname, "../pdf-text.ts"), "utf8");
     expect(source).not.toMatch(/from ["']unpdf["']/);
   });
 });

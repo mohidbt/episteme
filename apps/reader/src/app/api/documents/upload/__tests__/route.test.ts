@@ -80,6 +80,11 @@ describe("POST /api/documents/upload — chandra-segments integration", () => {
     const res = await POST(buildRequest(makePdf()));
 
     expect(res.status).toBe(201);
+    expect(extractPdfPages).toHaveBeenCalledWith("uploads/test.pdf", {
+      userId: "u1",
+      documentId: 99,
+      llmKey: "",
+    });
     const chandraCall = fetchSpy.mock.calls.find(([url]) =>
       String(url).includes("chandra-segments")
     );

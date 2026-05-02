@@ -40,7 +40,11 @@ export async function POST(request: NextRequest) {
   try {
     await db.update(documents).set({ processingStatus: "processing" }).where(eq(documents.id, doc.id));
 
-    const pages = await extractPdfPages(doc.filePath);
+    const pages = await extractPdfPages(doc.filePath, {
+      userId: session.user.id,
+      documentId: doc.id,
+      llmKey: "",
+    });
     const chunks = chunkPages(pages);
 
     if (chunks.length === 0) {

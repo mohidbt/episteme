@@ -1,9 +1,8 @@
 /**
  * GET /api/pdfs/:id/pages/:n/text — extract text for a single PDF page.
  *
- * Wired for the agent `get_page_text` tool. Currently extracts on-demand using
- * the same unpdf-based extractor used during upload; per-page caching is a
- * future optimization (TODO(1.5)).
+ * Wired for the agent `get_page_text` tool via the agents PDF text endpoint;
+ * per-page caching is a future optimization (TODO(1.5)).
  */
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@episteme/db";
@@ -42,7 +41,11 @@ export async function GET(request: NextRequest, { params }: Ctx) {
 
   let pages;
   try {
-    pages = await extractPdfPages(doc.filePath);
+    pages = await extractPdfPages(doc.filePath, {
+      userId,
+      documentId: docId,
+      llmKey: request.headers.get("x-inhale-llm-key") ?? "",
+    });
   } catch {
     return NextResponse.json({ error: "page text not extracted" }, { status: 404 });
   }
