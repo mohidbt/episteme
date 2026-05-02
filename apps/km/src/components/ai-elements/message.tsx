@@ -333,7 +333,7 @@ export const MessageResponse = memo(
         "[&_code]:rounded [&_code]:bg-muted [&_code]:px-1 [&_code]:py-0.5 [&_code]:text-xs [&_pre]:my-2",
         "[&_blockquote]:border-l-2 [&_blockquote]:pl-3 [&_blockquote]:italic [&_blockquote]:text-muted-foreground",
         "[&_a]:text-primary [&_a]:underline",
-        "whitespace-pre-wrap",
+        "whitespace-normal",
         className
       )}
       plugins={streamdownPlugins}
