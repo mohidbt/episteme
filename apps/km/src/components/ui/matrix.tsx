@@ -13,6 +13,9 @@ interface CellPosition {
   y: number
 }
 
+const HOVER_TRAIL_RADIUS = 1.65
+const HOVER_TRAIL_DECAY_MS = 650
+
 interface MatrixProps extends React.HTMLAttributes<HTMLDivElement> {
   rows: number
   cols: number
@@ -467,6 +470,9 @@ export const Matrix = React.forwardRef<HTMLDivElement, MatrixProps>(
       speedMultiplier,
       onFrame,
     })
+    const [hoverTrail, setHoverTrail] = useState<Record<string, number>>({})
+    const hoverTrailRef = useRef<Record<string, number>>({})
+    const trailFrameRef = useRef<number | undefined>(undefined)
 
     const currentFrame = useMemo(() => {
       if (mode === "vu" && levels && levels.length > 0) {
@@ -509,6 +515,67 @@ export const Matrix = React.forwardRef<HTMLDivElement, MatrixProps>(
 
     const isAnimating = !pattern && frames && frames.length > 0
 
+    const pruneHoverTrail = React.useCallback((now: number) => {
+      const next: Record<string, number> = {}
+      for (const [key, stampedAt] of Object.entries(hoverTrailRef.current)) {
+        if (now - stampedAt < HOVER_TRAIL_DECAY_MS) {
+          next[key] = stampedAt
+        }
+      }
+      hoverTrailRef.current = next
+      setHoverTrail(next)
+      if (Object.keys(next).length > 0) {
+        trailFrameRef.current = requestAnimationFrame(pruneHoverTrail)
+      } else {
+        trailFrameRef.current = undefined
+      }
+    }, [])
+
+    const scheduleHoverTrailPrune = React.useCallback(() => {
+      if (trailFrameRef.current !== undefined) return
+      trailFrameRef.current = requestAnimationFrame(pruneHoverTrail)
+    }, [pruneHoverTrail])
+
+    useEffect(() => {
+      return () => {
+        if (trailFrameRef.current !== undefined) {
+          cancelAnimationFrame(trailFrameRef.current)
+        }
+      }
+    }, [])
+
+    const onPointerMove = React.useCallback(
+      (event: React.PointerEvent<HTMLDivElement>) => {
+        props.onPointerMove?.(event)
+        const svg = event.currentTarget.querySelector("svg")
+        if (!svg) return
+        const rect = svg.getBoundingClientRect()
+        const cellPitch = size + gap
+        const pointerCol = (event.clientX - rect.left - size / 2) / cellPitch
+        const pointerRow = (event.clientY - rect.top - size / 2) / cellPitch
+        const minRow = Math.max(0, Math.floor(pointerRow - HOVER_TRAIL_RADIUS))
+        const maxRow = Math.min(rows - 1, Math.ceil(pointerRow + HOVER_TRAIL_RADIUS))
+        const minCol = Math.max(0, Math.floor(pointerCol - HOVER_TRAIL_RADIUS))
+        const maxCol = Math.min(cols - 1, Math.ceil(pointerCol + HOVER_TRAIL_RADIUS))
+        const now = performance.now()
+        const next = { ...hoverTrailRef.current }
+
+        for (let row = minRow; row <= maxRow; row++) {
+          for (let col = minCol; col <= maxCol; col++) {
+            const distance = Math.hypot(row - pointerRow, col - pointerCol)
+            if (distance <= HOVER_TRAIL_RADIUS) {
+              next[`${row}:${col}`] = now
+            }
+          }
+        }
+
+        hoverTrailRef.current = next
+        setHoverTrail(next)
+        scheduleHoverTrailPrune()
+      },
+      [cols, gap, props, rows, scheduleHoverTrailPrune, size],
+    )
+
     return (
       <div
         ref={ref}
@@ -525,6 +592,7 @@ export const Matrix = React.forwardRef<HTMLDivElement, MatrixProps>(
           } as React.CSSProperties
         }
         {...props}
+        onPointerMove={onPointerMove}
       >
         <svg
           width={svgDimensions.width}
@@ -601,6 +669,15 @@ export const Matrix = React.forwardRef<HTMLDivElement, MatrixProps>(
 
               const scale = isActive ? 1.1 : 1
               const radius = (size / 2) * 0.9
+              const trailStampedAt = hoverTrail[`${rowIndex}:${colIndex}`]
+              const trailAge =
+                trailStampedAt === undefined
+                  ? HOVER_TRAIL_DECAY_MS
+                  : Math.min(HOVER_TRAIL_DECAY_MS, performance.now() - trailStampedAt)
+              const trailOpacity =
+                trailStampedAt === undefined
+                  ? 0
+                  : 1 - trailAge / HOVER_TRAIL_DECAY_MS
 
               return (
                 <circle
@@ -613,10 +690,14 @@ export const Matrix = React.forwardRef<HTMLDivElement, MatrixProps>(
                   cx={pos.x + size / 2}
                   cy={pos.y + size / 2}
                   r={radius}
-                  fill={fill}
+                  fill={trailOpacity > 0 ? "#000000" : fill}
                   opacity={isOn ? opacity : 0.1}
                   style={{
                     transform: `scale(${scale})`,
+                    opacity:
+                      trailOpacity > 0
+                        ? Math.max(isOn ? opacity : 0.1, trailOpacity)
+                        : undefined,
                   }}
                 />
               )
