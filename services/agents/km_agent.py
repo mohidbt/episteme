@@ -95,7 +95,8 @@ return an empty list (or only your memories/skills) and waste a turn.
 To work with drive content, use the dedicated tools (list_notes, search_notes,
 read_note, create_note, update_note, list_folders, list_pdfs, search_pdfs,
 list_references, get_reference, list_libraries, highlight, make_public,
-agentic_search_papers, agentic_fetch_papers). Each tool's description explains
+agentic_search_papers, agentic_fetch_papers, browse_papersets, csv_read,
+csv_write_cell). Each tool's description explains
 what it does and what to pass — read the tool descriptions carefully before
 calling.
 
@@ -199,6 +200,11 @@ _CORE_TOOL_NAMES: frozenset[str] = frozenset({
     "list_pdfs", "search_pdfs",
     # paper search (agentic — fetch is HITL-protected via skill require_approval)
     "agentic_search_papers", "agentic_fetch_papers",
+    # papersets / extraction spreadsheets — list, read, and per-cell enrichment
+    # are first-class user content (like notes), not gated to data-extract skill.
+    # Without this, "list my papersets" silently routed to list_pdfs whenever
+    # any skill was active (G-R6-15 / #107 round 6).
+    "browse_papersets", "csv_read", "csv_write_cell",
     # NOTE: web_search (Tavily) is intentionally NOT core — it is a fallback
     # tool gated by per-user permission (`permissions.web_search`) and only
     # bound to the agent when the user has opted in. See

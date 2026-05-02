@@ -38,19 +38,26 @@ def _is_error(resp: object) -> bool:
 
 @tool
 async def browse_papersets(*, config: RunnableConfig) -> object:
-    """List all papersets the user owns (filename, ID, row count, column schema).
+    """List all papersets / spreadsheets / extraction tables the user owns.
 
-    USE THIS when the user asks to enumerate, list, show all, or browse their
-    papersets. Returns the full set from the KM API; no query required.
+    A "paperset" (also called a spreadsheet, CSV, or extraction table) is a
+    structured table where each ROW is a paper and each COLUMN is a piece of
+    information to extract from that paper.
 
-    Each paperset in the response includes:
+    USE THIS — not list_pdfs — whenever the user asks about:
+      - "papersets", "paper sets"
+      - "spreadsheets", "csvs", "tables", "extraction tables"
+      - "show me my data", "what tables do I have", "list my sheets"
+
+    Returns the full set from the KM API; no query required. Each paperset in
+    the response includes:
     - id: UUID for use with csv_read and csv_write_cell
     - filename: Display name
     - rowRefs: Array of {paper_id} — len = row count
     - columns: Array of {name, description} — column schema
 
     After browsing, use csv_read to inspect a specific paperset's cells and
-    csv_write_cell to write extracted data into cells.
+    csv_write_cell to write/enrich a cell with extracted data.
     """
     user_id = user_id_from_config(config)
     return await km_get("/api/papersets", user_id=user_id)
@@ -58,18 +65,22 @@ async def browse_papersets(*, config: RunnableConfig) -> object:
 
 @tool
 async def csv_read(file_id: str, *, config: RunnableConfig) -> object:
-    """Fetch the current CSV view of a paperset.
+    """Read the contents of a paperset / spreadsheet / extraction table.
+
+    USE THIS when the user asks to "read", "show", "open", "view", or
+    "inspect" a specific paperset/spreadsheet/CSV/table. Returns the full
+    grid of cells plus column schema and row references.
 
     Returns ``{file_id, columns, row_refs, cells}`` where ``cells`` is a dict
     keyed by ``"<row>:<col>"`` mapping to the current cell value (only
     non-empty cells are present).
 
-    Use this BEFORE ``csv_write_cell`` to confirm a cell is empty (or to
+    Also use this BEFORE ``csv_write_cell`` to confirm a cell is empty (or to
     confirm the value you intend to write matches an existing one — the
     server accepts idempotent retries with the same value).
 
     Args:
-        file_id: Paperset UUID.
+        file_id: Paperset UUID (get it from browse_papersets).
     """
     user_id = user_id_from_config(config)
     return await km_get(f"/api/papersets/{file_id}/csv-view", user_id=user_id)
@@ -85,7 +96,11 @@ async def csv_write_cell(
     *,
     config: RunnableConfig,
 ) -> object:
-    """Write ONE cell of a paperset CSV with required source grounding.
+    """Write / enrich ONE cell of a paperset / spreadsheet / extraction table.
+
+    USE THIS to "fill", "enrich", "extract into", or "write" a single cell
+    of a paperset/spreadsheet/CSV. One call = one cell. Source grounding
+    (paper_id + block_ids) is REQUIRED for any non-"n/a" value.
 
     Server-side guards (return a clear error string on violation):
       - ``grounding.block_ids`` MUST be non-empty for any value other

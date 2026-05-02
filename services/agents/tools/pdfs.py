@@ -33,10 +33,14 @@ _UNAVAILABLE = {
 
 @tool
 async def list_pdfs(libraryId: int | None = None, *, config: RunnableConfig) -> object:
-    """List PDFs/papers belonging to the user.
+    """List individual PDF files / papers in the user's library.
 
     USE THIS when the user asks to enumerate, list, show all, or count
     PDFs/papers — do NOT use search_pdfs for that.
+
+    DO NOT USE THIS for papersets, spreadsheets, CSVs, extraction tables, or
+    any tabular/structured data — those are a different concept. Use
+    `browse_papersets` for paperset/spreadsheet/CSV/table listings.
 
     Behavior:
     - If `libraryId` is omitted, returns the UNION of papers across EVERY

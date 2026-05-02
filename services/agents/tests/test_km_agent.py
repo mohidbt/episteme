@@ -96,6 +96,25 @@ def test_filter_tools_with_lit_triage_skill_filters_to_allowed_set():
     assert "highlight" not in names
 
 
+def test_paperset_tools_are_core_when_any_skill_active():
+    """Regression for G-R6-15 / #107 round 6: papersets are first-class user
+    content, so list/read/write tools must be available to the agent even when
+    a non-data-extract skill is enabled. Previously, enabling lit-triage
+    stripped browse_papersets/csv_read/csv_write_cell, so "list my papersets"
+    silently routed to list_pdfs.
+    """
+    from km_agent import _filter_tools_for_skills  # noqa: PLC0415
+    from skills import load_skills  # noqa: PLC0415
+    from tools import ALL_TOOLS  # noqa: PLC0415
+
+    loaded = load_skills(only=["lit-triage"])
+    filtered = _filter_tools_for_skills(list(ALL_TOOLS), loaded_skills=loaded)
+    names = {t.name for t in filtered}
+    assert "browse_papersets" in names
+    assert "csv_read" in names
+    assert "csv_write_cell" in names
+
+
 def test_lit_triage_keeps_create_note_hitl():
     """lit-triage SKILL.md lists create_note under require_approval.
 
