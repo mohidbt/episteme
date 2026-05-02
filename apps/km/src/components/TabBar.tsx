@@ -11,6 +11,22 @@ import {
   type ReactNode,
 } from "react";
 import { useRouter, usePathname } from "next/navigation";
+import {
+  closestCenter,
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  useSortable,
+  horizontalListSortingStrategy,
+  sortableKeyboardCoordinates,
+} from "@dnd-kit/sortable";
 import { X, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -32,6 +48,8 @@ type TabsApi = TabsState & {
   openTab: (href: string, title: string) => void;
   closeTab: (href: string) => void;
   setActive: (href: string) => void;
+  updateTabTitle: (href: string, title: string) => void;
+  reorderTabs: (activeHref: string, overHref: string) => void;
 };
 
 const Ctx = createContext<TabsApi | null>(null);
@@ -166,9 +184,42 @@ export function TabBarProvider({ children }: { children: ReactNode }) {
     [router],
   );
 
+  const updateTabTitle = useCallback((href: string, title: string) => {
+    const normalized = normalizeHref(href);
+    const nextTitle = title.trim();
+    if (!nextTitle) return;
+    setState((prev) => {
+      let changed = false;
+      const tabs = prev.tabs.map((tab) => {
+        if (tab.href !== normalized || tab.title === nextTitle) return tab;
+        changed = true;
+        return { ...tab, title: nextTitle };
+      });
+      return changed ? { ...prev, tabs } : prev;
+    });
+  }, []);
+
+  const reorderTabs = useCallback((activeHref: string, overHref: string) => {
+    setState((prev) => {
+      const oldIndex = prev.tabs.findIndex((tab) => tab.href === activeHref);
+      const newIndex = prev.tabs.findIndex((tab) => tab.href === overHref);
+      if (oldIndex === -1 || newIndex === -1 || oldIndex === newIndex) {
+        return prev;
+      }
+      return { ...prev, tabs: arrayMove(prev.tabs, oldIndex, newIndex) };
+    });
+  }, []);
+
   const value = useMemo<TabsApi>(
-    () => ({ ...state, openTab, closeTab, setActive }),
-    [state, openTab, closeTab, setActive],
+    () => ({
+      ...state,
+      openTab,
+      closeTab,
+      setActive,
+      updateTabTitle,
+      reorderTabs,
+    }),
+    [state, openTab, closeTab, setActive, updateTabTitle, reorderTabs],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
@@ -178,6 +229,22 @@ export function useTabs(): TabsApi {
   const ctx = useContext(Ctx);
   if (!ctx) throw new Error("useTabs must be used within TabBarProvider");
   return ctx;
+}
+
+export function TabTitleUpdater({
+  href,
+  title,
+}: {
+  href: string;
+  title: string;
+}) {
+  const { updateTabTitle } = useTabs();
+
+  useEffect(() => {
+    updateTabTitle(href, title);
+  }, [href, title, updateTabTitle]);
+
+  return null;
 }
 
 function titleFromHref(href: string): string {
@@ -206,62 +273,122 @@ function lastSegment(href: string): string {
 }
 
 export function TabBar() {
-  const { tabs, activeHref, setActive, closeTab, openTab } = useTabs();
+  const { tabs, activeHref, setActive, closeTab, openTab, reorderTabs } =
+    useTabs();
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
+  function onDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    reorderTabs(String(active.id), String(over.id));
+  }
+
+  return (
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      onDragEnd={onDragEnd}
+    >
+      <SortableContext
+        items={tabs.map((tab) => tab.href)}
+        strategy={horizontalListSortingStrategy}
+      >
+        <div
+          role="tablist"
+          aria-label="Open tabs"
+          data-testid="tab-bar"
+          style={{ "--tabbar-h": "52px" } as React.CSSProperties}
+          className="flex h-[var(--tabbar-h)] shrink-0 items-end gap-0 overflow-x-auto bg-[var(--bg-roof)] px-3 pt-5"
+        >
+          {tabs.map((tab) => (
+            <SortableTab
+              key={tab.href}
+              tab={tab}
+              active={tab.href === activeHref}
+              onActivate={setActive}
+              onClose={closeTab}
+            />
+          ))}
+          <button
+            type="button"
+            data-testid="tab-bar-new"
+            aria-label="New tab"
+            onClick={() => openTab(DEFAULT_HREF, DEFAULT_TITLE)}
+            className="mb-px flex h-8 w-8 items-center justify-center rounded-lg text-[var(--fg-muted)] hover:bg-[var(--bg-roof-2)] hover:text-[var(--fg)]"
+          >
+            <Plus className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      </SortableContext>
+    </DndContext>
+  );
+}
+
+function SortableTab({
+  tab,
+  active,
+  onActivate,
+  onClose,
+}: {
+  tab: Tab;
+  active: boolean;
+  onActivate: (href: string) => void;
+  onClose: (href: string) => void;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: tab.href });
+  const { role: _sortableRole, ...sortableAttributes } = attributes;
 
   return (
     <div
-      role="tablist"
-      aria-label="Open tabs"
-      data-testid="tab-bar"
-      style={{ "--tabbar-h": "52px" } as React.CSSProperties}
-      className="flex shrink-0 items-end gap-0 bg-[var(--bg-roof)] px-3 pt-5 h-[var(--tabbar-h)] overflow-x-auto"
+      ref={setNodeRef}
+      role="tab"
+      aria-selected={active}
+      data-testid="tab-bar-tab"
+      data-href={tab.href}
+      className={cn(
+        "group relative flex h-8 max-w-[280px] items-center gap-1.5 rounded-t-lg px-3 text-[12.5px]",
+        active
+          ? "z-10 -mb-px bg-background font-medium text-foreground"
+          : "text-[var(--fg-muted)] hover:bg-[var(--bg-roof-2)]",
+        isDragging && "opacity-70",
+      )}
+      style={{
+        transform: transform
+          ? `translate3d(${Math.round(transform.x)}px, ${Math.round(transform.y)}px, 0)`
+          : undefined,
+        transition,
+      }}
+      {...sortableAttributes}
+      {...listeners}
     >
-      {tabs.map((tab) => {
-        const active = tab.href === activeHref;
-        return (
-          <div
-            key={tab.href}
-            role="tab"
-            aria-selected={active}
-            data-testid="tab-bar-tab"
-            data-href={tab.href}
-            className={cn(
-              "group relative flex h-8 max-w-[280px] items-center gap-1.5 px-3 text-[12.5px] rounded-t-lg",
-              active
-                ? "bg-background text-foreground font-medium border border-[var(--roof-border)] border-b-0 -mb-px z-10"
-                : "text-[var(--fg-muted)] hover:bg-[var(--bg-roof-2)]",
-            )}
-          >
-            <button
-              type="button"
-              onClick={() => setActive(tab.href)}
-              className="min-w-0 flex-1 truncate text-left"
-              title={tab.href}
-            >
-              {tab.title}
-            </button>
-            <button
-              type="button"
-              aria-label={`Close ${tab.title}`}
-              onClick={(e) => {
-                e.stopPropagation();
-                closeTab(tab.href);
-              }}
-              className="rounded p-0.5 text-[var(--fg-muted)] opacity-0 hover:bg-[var(--bg-roof-2)] hover:text-[var(--fg)] group-hover:opacity-100"
-            >
-              <X className="h-3 w-3" />
-            </button>
-          </div>
-        );
-      })}
       <button
         type="button"
-        data-testid="tab-bar-new"
-        aria-label="New tab"
-        onClick={() => openTab(DEFAULT_HREF, DEFAULT_TITLE)}
-        className="mb-px flex h-8 w-8 items-center justify-center rounded-lg text-[var(--fg-muted)] hover:bg-[var(--bg-roof-2)] hover:text-[var(--fg)]"
+        onClick={() => onActivate(tab.href)}
+        className="min-w-0 flex-1 truncate text-left"
+        title={tab.href}
       >
-        <Plus className="h-3.5 w-3.5" />
+        {tab.title}
+      </button>
+      <button
+        type="button"
+        aria-label={`Close ${tab.title}`}
+        onClick={(e) => {
+          e.stopPropagation();
+          onClose(tab.href);
+        }}
+        className="rounded p-0.5 text-[var(--fg-muted)] opacity-0 hover:bg-[var(--bg-roof-2)] hover:text-[var(--fg)] group-hover:opacity-100"
+      >
+        <X className="h-3 w-3" />
       </button>
     </div>
   );

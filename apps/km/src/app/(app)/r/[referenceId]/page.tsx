@@ -10,6 +10,8 @@ import { splitFolderPath } from "@/lib/tree";
 import { ReferenceForm } from "@/components/ReferenceForm";
 import { ReferenceAttachToPaperButton } from "@/components/ReferenceAttachToPaperButton";
 import { ReferenceAgenticSearchButton } from "@/components/ReferenceAgenticSearchButton";
+import { TabTitleUpdater } from "@/components/TabBar";
+import { denormaliseForList, validateCslJson } from "@/lib/csl";
 
 export default async function ReferencePage({
   params,
@@ -32,6 +34,9 @@ export default async function ReferencePage({
   const attachedPaper = ref.paperId
     ? (papersInLib.find((p) => p.id === ref.paperId) ?? null)
     : null;
+  const displayTitle =
+    denormaliseForList(validateCslJson(ref.cslJson)).title.trim() ||
+    ref.citationKey;
 
   const folderSegs = splitFolderPath(ref.folderPath);
   const pillSegments: PathPillSegment[] = library
@@ -47,12 +52,13 @@ export default async function ReferencePage({
               .map((x) => encodeURIComponent(x))
               .join("/"),
         })),
-        { id: "title", label: ref.citationKey, href: null },
+        { id: "title", label: displayTitle, href: null },
       ]
     : [];
 
   return (
     <div className="mx-auto max-w-3xl p-6">
+      <TabTitleUpdater href={`/r/${ref.id}`} title={displayTitle} />
       {library && <PathPill className="mb-4" segments={pillSegments} />}
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <ReferenceAgenticSearchButton

@@ -196,6 +196,56 @@ describe("useTabs hook", () => {
     });
     expect(api!.tabs.filter((t) => t.href === "/n/foo")).toHaveLength(1);
   });
+
+  it("updateTabTitle replaces inferred detail labels with loaded titles", async () => {
+    mockPathname = "/p/paper-1";
+    const { TabBarProvider, useTabs } = await import("./TabBar");
+    let api: ReturnType<typeof useTabs> | null = null;
+    function Probe() {
+      api = useTabs();
+      return null;
+    }
+    render(
+      <TabBarProvider>
+        <Probe />
+      </TabBarProvider>,
+    );
+    expect(api!.tabs.find((t) => t.href === "/p/paper-1")?.title).toBe("Paper");
+    act(() => {
+      api!.updateTabTitle("/p/paper-1", "Attention Is All You Need");
+    });
+    expect(api!.tabs.find((t) => t.href === "/p/paper-1")?.title).toBe(
+      "Attention Is All You Need",
+    );
+  });
+
+  it("reorderTabs moves tabs in local state", async () => {
+    const { TabBarProvider, useTabs } = await import("./TabBar");
+    let api: ReturnType<typeof useTabs> | null = null;
+    function Probe() {
+      api = useTabs();
+      return null;
+    }
+    render(
+      <TabBarProvider>
+        <Probe />
+      </TabBarProvider>,
+    );
+    act(() => {
+      api!.openTab("/n/one", "One");
+      api!.openTab("/n/two", "Two");
+      api!.openTab("/n/three", "Three");
+    });
+    act(() => {
+      api!.reorderTabs("/n/three", "/n/one");
+    });
+    expect(api!.tabs.map((tab) => tab.href)).toEqual([
+      "/",
+      "/n/three",
+      "/n/one",
+      "/n/two",
+    ]);
+  });
 });
 
 describe("TabBar component", () => {

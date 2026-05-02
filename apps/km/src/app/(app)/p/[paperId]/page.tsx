@@ -2,7 +2,7 @@ import { cache } from "react";
 import { and, eq } from "drizzle-orm";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { BookMarked } from "lucide-react";
+import { BookMarked, Download } from "lucide-react";
 import { getRequiredUserId } from "@/lib/session";
 import { db } from "@/lib/db";
 import { papers } from "@episteme/db/schema";
@@ -15,6 +15,7 @@ import { PathPill, type PathPillSegment } from "@/components/PathPill";
 import { splitFolderPath } from "@/lib/tree";
 import { PaperMetadataPanel } from "@/components/PaperMetadataPanel";
 import { PaperHighlightsList } from "@/components/PaperHighlightsList";
+import { TabTitleUpdater } from "@/components/TabBar";
 
 type PaperRow = typeof papers.$inferSelect;
 
@@ -78,7 +79,8 @@ export default async function PaperPage({
     : [];
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full min-h-0 flex-col">
+      <TabTitleUpdater href={`/p/${paper.id}`} title={displayTitle} />
       <div className="px-6 pt-6">
         {library && <PathPill className="mb-4" segments={pillSegments} />}
         {firstRef && (
@@ -91,10 +93,23 @@ export default async function PaperPage({
             {firstRefYear != null && <span>· {firstRefYear}</span>}
           </Link>
         )}
-        <h1 className="font-display text-2xl leading-tight">{displayTitle}</h1>
+        <div className="flex items-start justify-between gap-4">
+          <h1 className="min-w-0 font-display text-2xl leading-tight">
+            {displayTitle}
+          </h1>
+          <Link
+            href={`/api/papers/${paper.id}/file`}
+            download={paper.filename}
+            className="inline-flex h-7 shrink-0 items-center justify-center gap-1 rounded-md border border-border bg-background px-2.5 text-[0.8rem] font-medium text-foreground whitespace-nowrap transition-colors hover:bg-muted"
+            aria-label={`Download ${displayTitle}`}
+          >
+            <Download data-icon="inline-start" />
+            Download
+          </Link>
+        </div>
       </div>
-      <div className="mt-4 grid flex-1 min-h-0 grid-cols-1 border-t border-border/60 lg:grid-cols-[minmax(0,1fr)_420px]">
-        <div className="relative min-h-[60vh] lg:min-h-0">
+      <div className="mt-4 grid min-h-0 flex-1 grid-cols-1 border-t border-border/60 lg:grid-cols-[minmax(0,1fr)_420px]">
+        <div className="relative h-full min-h-[60vh] lg:min-h-0">
           <iframe
             src={`/api/papers/${paper.id}/file`}
             title={displayTitle}
