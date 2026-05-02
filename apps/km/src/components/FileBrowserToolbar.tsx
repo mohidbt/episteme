@@ -1,7 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { LayoutGrid, List, Upload } from "lucide-react";
+import { useDroppable } from "@dnd-kit/core";
+import { cn } from "@/lib/utils";
 import { PillSwitcher } from "@/components/ui/PillSwitcher";
 import { Button } from "@/components/ui/button";
 import {
@@ -14,7 +17,6 @@ import {
 } from "@/components/ui/dialog";
 import { NewItemTrigger } from "@/components/NewItemTrigger";
 import { UnifiedDropzone } from "@/components/UnifiedDropzone";
-import { PathPill } from "@/components/PathPill";
 
 export type ViewMode = "tile" | "list";
 
@@ -43,25 +45,48 @@ export function FileBrowserToolbar({
   onEmptyTrash,
   trashCount = 0,
 }: ToolbarProps) {
+  const router = useRouter();
   const [importOpen, setImportOpen] = useState(false);
   const folderPath = folderChain.map((c) => c.name).join("/");
+  const drivePillOptions = [
+    { value: "/", id: "root", folderId: null, label: libraryName },
+    ...folderChain.map((c, i) => ({
+      value:
+        "/drive/" +
+        folderChain
+          .slice(0, i + 1)
+          .map((x) => encodeURIComponent(x.name))
+          .join("/"),
+      id: c.id,
+      folderId: c.id,
+      label: c.name,
+    })),
+  ];
+  const currentDrivePath =
+    drivePillOptions[drivePillOptions.length - 1]?.value ?? "/";
+
   return (
     <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-2">
-      <PathPill
-        segmentDropTargets
-        segments={[
-          { id: "root", label: libraryName, href: "/" },
-          ...folderChain.map((c, i) => ({
-            id: c.id,
-            label: c.name,
-            href:
-              "/drive/" +
-              folderChain
-                .slice(0, i + 1)
-                .map((x) => encodeURIComponent(x.name))
-                .join("/"),
-          })),
-        ]}
+      <PillSwitcher
+        value={currentDrivePath}
+        onValueChange={(nextPath) => {
+          if (nextPath !== currentDrivePath) router.push(nextPath);
+        }}
+        ariaLabel="Drive folder"
+        className="max-w-full min-w-0 overflow-hidden"
+        options={drivePillOptions.map((option, index) => ({
+          value: option.value,
+          ariaLabel: index === 0 ? "Drive root" : `Open ${option.label}`,
+          label: (
+            <DriveFolderPillLabel
+              id={option.id}
+              folderId={option.folderId}
+              label={option.label}
+              isRoot={index === 0}
+              isCurrent={option.value === currentDrivePath}
+            />
+          ),
+        }))}
       />
 
       <div className="flex items-center gap-2">
@@ -143,5 +168,38 @@ export function FileBrowserToolbar({
         )}
       </div>
     </div>
+  );
+}
+
+function DriveFolderPillLabel({
+  id,
+  folderId,
+  label,
+  isRoot,
+  isCurrent,
+}: {
+  id: string;
+  folderId: string | null;
+  label: string;
+  isRoot: boolean;
+  isCurrent: boolean;
+}) {
+  const { setNodeRef, isOver } = useDroppable({
+    id: `pill-drop:${id}`,
+    data: { kind: "ancestor", folderId },
+  });
+
+  return (
+    <span
+      ref={setNodeRef}
+      data-over={isOver ? "true" : undefined}
+      className={cn(
+        "block rounded-sm px-0.5 data-[over=true]:bg-primary/15 data-[over=true]:ring-1 data-[over=true]:ring-primary/60",
+        !isRoot && "max-w-[200px] truncate",
+        isCurrent && "font-medium",
+      )}
+    >
+      {label}
+    </span>
   );
 }

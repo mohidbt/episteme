@@ -17,6 +17,11 @@ describe("PillSwitcher reuse (#53)", () => {
     expect(src).toMatch(/from\s+["']@\/components\/ui\/PillSwitcher["']/);
   });
 
+  it("FileBrowserToolbar does not render the Drive folder pill with PathPill", () => {
+    const src = read("src/components/FileBrowserToolbar.tsx");
+    expect(src).not.toMatch(/from\s+["']@\/components\/PathPill["']/);
+  });
+
   it("PermissionsForm imports PillSwitcher", () => {
     const src = read("src/components/settings/PermissionsForm.tsx");
     expect(src).toMatch(/from\s+["']@\/components\/ui\/PillSwitcher["']/);
