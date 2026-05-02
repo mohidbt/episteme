@@ -33,6 +33,7 @@ export function NoteEditor({
   initialCollabToken,
   editorRef: externalEditorRef,
   transformMd,
+  onPendingSaveChange,
 }: {
   id: string;
   initialMd: string;
@@ -46,12 +47,14 @@ export function NoteEditor({
    * Optional transform applied to the editor's body markdown before it is
    * persisted. Used to re-attach frontmatter rows that live outside the
    * editor (see {@link NoteFrontmatter}).
-   */
+  */
   transformMd?: (body: string) => string;
+  onPendingSaveChange?: (pending: boolean) => void;
 }) {
   const router = useRouter();
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingMdRef = useRef<string | null>(null);
+  const lastSavedMdRef = useRef(initialMd);
   const editorHostRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<TiptapEditor | null>(null);
   const [editorInstance, setEditorInstance] = useState<TiptapEditor | null>(null);
@@ -163,9 +166,15 @@ export function NoteEditor({
 
   const flush = useCallback((): Promise<void> => {
     // When Hocuspocus is active it owns persistence — skip the PATCH path.
-    if (collabState) return Promise.resolve();
+    if (collabState) {
+      onPendingSaveChange?.(false);
+      return Promise.resolve();
+    }
     const md = pendingMdRef.current;
-    if (md == null) return Promise.resolve();
+    if (md == null) {
+      onPendingSaveChange?.(false);
+      return Promise.resolve();
+    }
     pendingMdRef.current = null;
     if (timer.current) {
       clearTimeout(timer.current);
@@ -178,20 +187,48 @@ export function NoteEditor({
       body: JSON.stringify({ contentMd: finalMd }),
       keepalive: true,
     })
-      .then(() => undefined)
+      .then(() => {
+        lastSavedMdRef.current = md;
+      })
       .catch((err) => {
         console.warn("[autosave] failed", err);
+      })
+      .finally(() => {
+        if (pendingMdRef.current === null) {
+          onPendingSaveChange?.(false);
+        }
       });
-  }, [id, collabState, transformMd]);
+  }, [id, collabState, transformMd, onPendingSaveChange]);
 
   const onChangeMd = useCallback(
     (md: string) => {
+      if (collabState) {
+        pendingMdRef.current = null;
+        onPendingSaveChange?.(false);
+        return;
+      }
+      if (md === lastSavedMdRef.current) {
+        pendingMdRef.current = null;
+        if (timer.current) clearTimeout(timer.current);
+        timer.current = null;
+        onPendingSaveChange?.(false);
+        return;
+      }
       pendingMdRef.current = md;
+      onPendingSaveChange?.(true);
       if (timer.current) clearTimeout(timer.current);
       timer.current = setTimeout(flush, 800);
     },
-    [flush],
+    [collabState, flush, onPendingSaveChange],
   );
+
+  useEffect(() => {
+    lastSavedMdRef.current = initialMd;
+    pendingMdRef.current = null;
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = null;
+    onPendingSaveChange?.(false);
+  }, [id, initialMd, onPendingSaveChange]);
 
   useEffect(() => {
     const onHide = () => {

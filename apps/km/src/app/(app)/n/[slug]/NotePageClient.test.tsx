@@ -5,8 +5,12 @@
  * Task #135 — Dynamic synced pill (Synced / Saving…).
  */
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, fireEvent, cleanup, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, cleanup, waitFor, act } from "@testing-library/react";
 import React from "react";
+
+const { lastNoteEditorProps } = vi.hoisted(() => ({
+  lastNoteEditorProps: { current: null as Record<string, unknown> | null },
+}));
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
@@ -17,11 +21,8 @@ vi.mock("next/navigation", () => ({
 // PublishDialog, DownloadButton — stub them all to keep the test focused.
 vi.mock("./NoteEditor", () => ({
   NoteEditor: (props: Record<string, unknown>) => {
-    // Expose onChangeMd so tests can simulate editor content changes
-    // to verify the synced pill state flips.
-    return (
-      <div data-testid="note-editor-stub" data-onchangemd={typeof props.onChangeMd} />
-    );
+    lastNoteEditorProps.current = props;
+    return <div data-testid="note-editor-stub" />;
   },
 }));
 vi.mock("@/components/VersionDrawer", () => ({ VersionDrawer: () => null }));
@@ -131,15 +132,19 @@ describe("NotePageClient — dynamic synced pill (#135)", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<NotePageClient {...baseProps} />);
-    // Grab the onChangeMd callback from the mocked NoteEditor's props
-    const editorStub = screen.getByTestId("note-editor-stub");
-    const onChangeMdType = editorStub.getAttribute("data-onchangemd");
-    expect(onChangeMdType).toBe("function");
+    const setPending = lastNoteEditorProps.current?.onPendingSaveChange as
+      | ((pending: boolean) => void)
+      | undefined;
+    expect(setPending).toBeDefined();
+    act(() => {
+      setPending!(true);
+    });
 
-    // NoteEditor mock doesn't expose onChangeMd directly in the DOM.
-    // We need to find it via the mock call arguments.
-    // The mock renders a div, so we need to get the props from the mock.
-    // Instead, let's use the NoteEditor mock to extract onChangeMd.
+    const pill = screen.getByTestId("synced-pill");
+    expect(pill.textContent).toContain("Saving…");
+    expect(pill.querySelector("[data-sync-status]")?.getAttribute("data-sync-status")).toBe(
+      "saving",
+    );
   });
 
   it("pill reverts to 'Synced' after pending save completes", async () => {

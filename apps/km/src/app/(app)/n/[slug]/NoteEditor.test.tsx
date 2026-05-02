@@ -92,13 +92,18 @@ import { NoteEditor } from "./NoteEditor";
 
 // ---- Helpers --------------------------------------------------------------
 
-function renderNoteEditor(props?: { userName?: string; initialCollabToken?: string | null }) {
+function renderNoteEditor(props?: {
+  userName?: string;
+  initialCollabToken?: string | null;
+  onPendingSaveChange?: (pending: boolean) => void;
+}) {
   render(
     <NoteEditor
       id="note-1"
       initialMd="# Hello"
       userName={props?.userName ?? "alice"}
       initialCollabToken={props?.initialCollabToken}
+      onPendingSaveChange={props?.onPendingSaveChange}
     />,
   );
 }
@@ -150,6 +155,31 @@ describe("NoteEditor – COLLAB_ENABLED=false (default)", () => {
         "/api/notes/note-1/content",
         expect.objectContaining({ method: "PATCH" }),
       );
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("does not mark saving or PATCH when markdown matches the saved baseline", async () => {
+    const mockFetch = vi.fn().mockResolvedValue({ ok: true } as Response);
+    const onPendingSaveChange = vi.fn();
+    vi.stubGlobal("fetch", mockFetch);
+
+    try {
+      renderNoteEditor({ onPendingSaveChange });
+
+      const onChangeMd = mockEditor.mock.calls
+        .map((args: any[]) => args[0]?.onChangeMd)
+        .find(Boolean) as ((md: string) => void) | undefined;
+
+      expect(onChangeMd).toBeDefined();
+      onPendingSaveChange.mockClear();
+      onChangeMd!("# Hello");
+      cleanup();
+      await Promise.resolve();
+
+      expect(onPendingSaveChange).toHaveBeenCalledWith(false);
+      expect(mockFetch).not.toHaveBeenCalled();
     } finally {
       vi.unstubAllGlobals();
     }

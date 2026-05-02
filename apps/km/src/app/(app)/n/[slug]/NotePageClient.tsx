@@ -72,6 +72,7 @@ export function NotePageClient({
 
   const [titleDraft, setTitleDraft] = useState(title);
   const [savingTitle, setSavingTitle] = useState(false);
+  const [contentSaving, setContentSaving] = useState(false);
   const trimmedDraft = titleDraft.trim();
   const titleDirty = trimmedDraft.length > 0 && trimmedDraft !== title;
 
@@ -114,7 +115,7 @@ export function NotePageClient({
   const editedLabel = updatedAt
     ? `Last edited ${formatRelativeTime(new Date(updatedAt))}`
     : "Synced";
-  const saving = flushRef.current !== null;
+  const saving = contentSaving;
 
   return (
     <>
@@ -189,7 +190,10 @@ export function NotePageClient({
           </>
         )}
         <span className="synced-pill" data-testid="synced-pill">
-          <span className={`inline-block size-1.5 rounded-full ${saving ? "bg-amber-500" : "bg-green-500"}`} />
+          <span
+            data-sync-status={saving ? "saving" : "synced"}
+            className={`inline-block size-1.5 rounded-full ${saving ? "bg-amber-500" : "bg-green-500"}`}
+          />
           {saving ? "Saving…" : "Synced"}
         </span>
       </div>
@@ -204,6 +208,7 @@ export function NotePageClient({
         initialCollabToken={initialCollabToken}
         editorRef={editorRef}
         transformMd={transformMd}
+        onPendingSaveChange={setContentSaving}
       />
     </>
   );
