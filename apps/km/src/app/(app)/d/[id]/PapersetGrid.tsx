@@ -102,6 +102,11 @@ export function PapersetGrid({
     onSelectionChange();
   }
 
+  function clearCellHover() {
+    setHoveredCell(null);
+    setHoverTrail([]);
+  }
+
   function onRowHeaderClick(row: number) {
     selection.clickRow(row);
     onSelectionChange();
@@ -269,7 +274,7 @@ export function PapersetGrid({
       <div
         className="relative min-h-0 flex-1 overflow-hidden rounded-lg border border-border/60"
         data-testid="paperset-grid-wrapper"
-        onMouseLeave={() => setHoveredCell(null)}
+        onPointerLeave={clearCellHover}
       >
         <div
           ref={scrollRef}
@@ -316,6 +321,7 @@ export function PapersetGrid({
                   onRowHeaderClick={() => onRowHeaderClick(rowIdx)}
                   onCellMouseDown={onCellMouseDown}
                   onCellMouseEnter={onCellMouseEnter}
+                  onCellMouseLeave={clearCellHover}
                   onCellClick={onCellClick}
                   onRemoveRow={() => removeRow(rowIdx)}
                   hoveredCell={hoveredCell}

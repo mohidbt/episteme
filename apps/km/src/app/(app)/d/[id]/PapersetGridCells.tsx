@@ -39,6 +39,7 @@ export function RowView({
   onRowHeaderClick,
   onCellMouseDown,
   onCellMouseEnter,
+  onCellMouseLeave,
   onCellClick,
   onRemoveRow,
   hoveredCell,
@@ -55,6 +56,7 @@ export function RowView({
   onRowHeaderClick: () => void;
   onCellMouseDown: (e: React.MouseEvent, row: number, col: string) => void;
   onCellMouseEnter: (row: number, col: string) => void;
+  onCellMouseLeave: () => void;
   onCellClick: (row: number, col: string) => void;
   onRemoveRow: () => void;
   hoveredCell: string | null;
@@ -96,6 +98,7 @@ export function RowView({
               groundingBlockIds={ground?.block_ids ?? []}
               onMouseDown={(e) => onCellMouseDown(e, rowIdx, col.name)}
               onMouseEnter={() => onCellMouseEnter(rowIdx, col.name)}
+              onPointerLeave={onCellMouseLeave}
               onClick={() => onCellClick(rowIdx, col.name)}
               hovered={hoveredCell === cellKey}
               hoverTrail={hoverTrailSet.has(cellKey)}
@@ -195,6 +198,7 @@ function CellView({
   groundingBlockIds,
   onMouseDown,
   onMouseEnter,
+  onPointerLeave,
   onClick,
   hovered,
   hoverTrail,
@@ -208,6 +212,7 @@ function CellView({
   groundingBlockIds: string[];
   onMouseDown: (e: React.MouseEvent) => void;
   onMouseEnter: () => void;
+  onPointerLeave: () => void;
   onClick: () => void;
   hovered: boolean;
   hoverTrail: boolean;
@@ -217,6 +222,7 @@ function CellView({
     <td
       onMouseDown={onMouseDown}
       onMouseEnter={onMouseEnter}
+      onPointerLeave={onPointerLeave}
       onClick={state.kind === "filled" ? onClick : undefined}
       className={cn(
         "relative h-9 cursor-cell border-b border-r border-border/60 px-3 py-1.5 align-middle transition-colors",
