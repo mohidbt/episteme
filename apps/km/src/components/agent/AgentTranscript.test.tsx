@@ -138,6 +138,31 @@ describe("AgentTranscript", () => {
     expect(assistant?.textContent?.startsWith("thought")).toBe(false);
   });
 
+  it("#138: strips blank rows from assistant text (between bullets and at top)", () => {
+    render(
+      <AgentTranscript
+        threadId="t-blanks"
+        initialMessages={[
+          {
+            id: "a-1",
+            role: "assistant",
+            text: "\n\n\nHere are points:\n\n- alpha\n\n- beta\n\n\n- gamma\n\n",
+          },
+        ]}
+      />,
+    );
+    const assistant = screen
+      .getAllByTestId("card-text")
+      .find((el) => el.getAttribute("data-role") === "assistant");
+    // The exact text passed to the markdown renderer must contain no
+    // double-newlines and no leading/trailing newlines — blank rows gone.
+    const rendered = assistant?.textContent ?? "";
+    expect(rendered.startsWith("Here are points")).toBe(true);
+    expect(rendered).toContain("alpha");
+    expect(rendered).toContain("beta");
+    expect(rendered).toContain("gamma");
+  });
+
   it("invokes onSendMessage override when provided (no fetch)", () => {
     const sent = vi.fn();
     render(<AgentTranscript threadId="t1" onSendMessage={sent} />);

@@ -128,10 +128,24 @@ export interface AgentTranscriptProps {
 const stripLeadingThought = (text: string): string =>
   text.replace(/^\s*thought\b[\s:,.\-]*/i, "");
 
-/** #138 — collapse consecutive blank lines so agent responses don't have
- *  empty rows between bullets or at the top. */
-const collapseBlankLines = (text: string): string =>
-  text.replace(/\n{3,}/g, "\n\n").replace(/^\n+/, "").replace(/\n+$/, "");
+/** #138 — strip empty rows from agent responses.
+ *
+ *  Prior R5 attempt (`\n{3,}` → `\n\n`) didn't work because a single blank
+ *  line (`\n\n`) still renders as an empty row: the MessageResponse wrapper
+ *  uses `whitespace-pre-wrap` so literal `\n` characters in markdown text
+ *  nodes (between list items, etc.) become visible blank rows, and markdown
+ *  treats `\n\n` between bullets as a "loose list" wrapping each `<li>` in a
+ *  `<p>` with `my-2` vertical margin. Either path → visible empty row.
+ *
+ *  Simplest fix per the user's "extremely simple solution to filter empty
+ *  rows": collapse every run of newlines down to a single `\n`. Bullets stay
+ *  separated (markdown only needs one newline), prose stays readable, and no
+ *  blank row can survive. Leading/trailing newlines are also dropped. */
+const stripBlankRows = (text: string): string =>
+  text
+    .replace(/^(?:[ \t]*\n)+/, "")
+    .replace(/(?:\n[ \t]*)+$/, "")
+    .replace(/(?:[ \t]*\n){2,}/g, "\n");
 
 /**
  * Parse a chunk of SSE text. Handles partial frames via `buffer` arg.
@@ -675,7 +689,7 @@ function TextCardView({
           <MessageResponse
             className={card.role === "assistant" ? "[&_p]:leading-snug" : undefined}
           >
-            {collapseBlankLines(card.text)}
+            {stripBlankRows(card.text)}
           </MessageResponse>
         </MessageContent>
       </Message>
