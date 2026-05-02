@@ -263,7 +263,7 @@ export const SlashCommandTypeahead = forwardRef<
             }
             onSelect({ title: cmd.title });
           }}
-          className={`w-full rounded px-2 py-1.5 text-left flex items-center gap-2 hover:bg-accent ${
+          className={`w-full rounded px-2 py-1.5 text-left flex items-center gap-2 hover:bg-accent hover:text-accent-foreground ${
             i === selected ? "bg-accent text-accent-foreground" : ""
           }`}
         >

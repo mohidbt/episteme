@@ -26,12 +26,28 @@ from langchain_core.tools import BaseTool
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.store.base import BaseStore
 
+from lib.km_http import km_get
 from skills import SkillSpec
 from skills.drive_loader import DriveSkillsLoader
 from subagents import build_researcher, build_synthesizer, build_verifier
 from tools import ALL_TOOLS
 
 logger = logging.getLogger(__name__)
+
+
+async def _fetch_personal_skills(user_id: str) -> list[dict]:
+    """Fetch user-authored personal skills from the KM API.
+
+    Returns a list of {slug, name, description, instructions} dicts.
+    On failure returns [] (non-fatal — personal skills are best-effort).
+    """
+    try:
+        resp = await km_get("/api/agents/skills/personal", user_id=user_id)
+        if isinstance(resp, dict) and isinstance(resp.get("skills"), list):
+            return [s for s in resp["skills"] if isinstance(s, dict)]
+    except Exception:  # noqa: BLE001
+        logger.warning("personal skills fetch failed for user %s", user_id)
+    return []
 
 
 # System prompt addendum that teaches the model the memory contract.
@@ -345,6 +361,29 @@ async def build_km_agent(
             f"the skill's SKILL.md from `/.episteme/agents/skills/<name>/SKILL.md`.\n\n"
             f"{bullets}"
         )
+
+    # Inject user-authored personal skills into the system prompt.
+    # Personal skills are simple (name + instructions) and don't have
+    # tools/subagents — they're inline instructions the agent follows.
+    personal = await _fetch_personal_skills(user_id)
+    if personal:
+        skill_lines = []
+        for ps in personal:
+            name = ps.get("name") or ps.get("slug") or "unnamed"
+            desc = ps.get("description") or ""
+            instr = ps.get("instructions") or ""
+            if instr:
+                skill_lines.append(f"### {name}\n{desc}\n\n{instr}" if desc else f"### {name}\n{instr}")
+            elif desc:
+                skill_lines.append(f"### {name}\n{desc}")
+        if skill_lines:
+            system_prompt += (
+                "\n\n## Personal Skills (user-authored)\n\n"
+                "The user has defined these personal skills. Follow the "
+                "instructions when the user's request matches the skill "
+                "description.\n\n"
+                + "\n\n".join(skill_lines)
+            )
 
     return create_deep_agent(
         model=model,
