@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 // G-R4-07 (#102) — Verify no Wand2/Sparkles lucide imports remain in AI icon
-// components; the glyph "※" must be used instead.
+// components; the glyph "⬡" must be used instead.
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "fs";
 import { resolve } from "path";
@@ -46,17 +46,17 @@ describe("G-R4-07 #102 — Wand2/Sparkles icon swap", () => {
       });
 
       if (file === "SlashCommandTypeahead.tsx") {
-        it('AI command uses "※" glyph instead of "✨"', () => {
+        it('AI command uses "⬡" glyph instead of "✨"', () => {
           expect(src).not.toContain('"✨"');
           // The AI icon field should use the glyph
-          expect(src).toContain("※");
+          expect(src).toContain("⬡");
         });
       }
 
       if (file !== "SlashCommandTypeahead.tsx") {
-        it("uses the ※ glyph (span or text) for the AI icon", () => {
-          // Either a <span>※</span> or the glyph appears in className context
-          expect(src).toContain("※");
+        it("uses the ⬡ glyph (span or text) for the AI icon", () => {
+          // Either a <span>⬡</span> or the glyph appears in className context
+          expect(src).toContain("⬡");
         });
       }
     });

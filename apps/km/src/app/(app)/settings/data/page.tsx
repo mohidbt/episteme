@@ -36,7 +36,7 @@ export default async function DataSettingsPage() {
             <div>
               <div className="text-sm font-medium">Import from file</div>
               <div className="text-xs text-muted-foreground">
-                Upload a .zip previously exported from Episteme, or a single .md note.
+                Upload a .zip previously exported from Episteme, or an Episteme compatible single file.
               </div>
             </div>
             <ImportControls libraryId={lib.id} folders={folders} />
