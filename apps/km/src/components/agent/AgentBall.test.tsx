@@ -22,7 +22,12 @@ vi.mock("next/navigation", () => ({
 vi.mock("./AgentTranscript", async () => {
   const React = await import("react");
   return {
-    AgentTranscript: () => {
+    AgentTranscript: (props: {
+      onPdfExtractProgress?: (progress: {
+        paperId: string;
+        stage: string;
+      } | null) => void;
+    }) => {
       const [draft, setDraft] = React.useState("");
       return (
         <div data-testid="agent-transcript-stub">
@@ -31,6 +36,25 @@ vi.mock("./AgentTranscript", async () => {
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
           />
+          <button
+            type="button"
+            data-testid="emit-pdf-progress"
+            onClick={() =>
+              props.onPdfExtractProgress?.({
+                paperId: "paper-123",
+                stage: "reading_pages",
+              })
+            }
+          >
+            emit pdf progress
+          </button>
+          <button
+            type="button"
+            data-testid="clear-pdf-progress"
+            onClick={() => props.onPdfExtractProgress?.(null)}
+          >
+            clear pdf progress
+          </button>
         </div>
       );
     },
@@ -116,6 +140,32 @@ describe("AgentBall", () => {
     fireEvent.click(screen.getByTestId("agent-ball"));
     const panel = await waitFor(() => screen.getByTestId("agent-panel"));
     expect(panel.getAttribute("data-preset")).toBe("active");
+  });
+
+  it("renders a compact PDF reading indicator when progress is reported", async () => {
+    renderBall();
+    fireEvent.click(screen.getByTestId("agent-ball"));
+    await waitFor(() => expect(screen.getByTestId("agent-panel")).toBeTruthy());
+
+    fireEvent.click(screen.getByTestId("emit-pdf-progress"));
+    const indicator = await waitFor(() =>
+      screen.getByTestId("agent-pdf-progress"),
+    );
+    expect(indicator.textContent).toContain("Reading PDF");
+    expect(indicator.textContent).toContain("reading pages");
+  });
+
+  it("hides the PDF reading indicator when progress is cleared", async () => {
+    renderBall();
+    fireEvent.click(screen.getByTestId("agent-ball"));
+    await waitFor(() => expect(screen.getByTestId("agent-panel")).toBeTruthy());
+
+    fireEvent.click(screen.getByTestId("emit-pdf-progress"));
+    await waitFor(() => expect(screen.getByTestId("agent-pdf-progress")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("clear-pdf-progress"));
+    await waitFor(() =>
+      expect(screen.queryByTestId("agent-pdf-progress")).toBeNull(),
+    );
   });
 
   it("switches to the working preset when the agent is streaming", async () => {

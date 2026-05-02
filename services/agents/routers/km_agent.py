@@ -246,15 +246,36 @@ def _extra_events(ev: dict, mapped: tuple[str, dict]) -> list[tuple[str, dict]]:
     """
     if mapped[0] != "tool_result":
         return []
-    if ev.get("name") != "write_todos":
-        return []
+    extras: list[tuple[str, dict]] = []
+
+    # Phase 1.5.1: pdf_read_text may include server-side extraction progress
+    # in tool output. Surface explicit progress frames for the UI.
     output = mapped[1].get("output")
+    if isinstance(output, dict):
+        progress = output.get("progress")
+        if isinstance(progress, list):
+            for item in progress:
+                if (
+                    isinstance(item, dict)
+                    and item.get("type") == "pdf_extract_progress"
+                    and isinstance(item.get("paper_id"), str)
+                    and isinstance(item.get("stage"), str)
+                ):
+                    extras.append(
+                        ("pdf_extract_progress", {
+                            "paper_id": item["paper_id"],
+                            "stage": item["stage"],
+                        })
+                    )
+
+    if ev.get("name") != "write_todos":
+        return extras
     if not isinstance(output, dict):
-        return []
+        return extras
     update = output.get("update")
     items = update.get("todos") if isinstance(update, dict) else None
     if not isinstance(items, list):
-        return []
+        return extras
     # Upstream Todo schema (langchain.agents.middleware.todo) has only
     # `content` + `status`; no stable id. Inject a deterministic positional
     # id so the React keys are always present (warning at AgentTranscript:264).
@@ -264,7 +285,8 @@ def _extra_events(ev: dict, mapped: tuple[str, dict]) -> list[tuple[str, dict]]:
             enriched.append({**item, "id": f"todo-{idx}"})
         else:
             enriched.append(item)
-    return [("todos", {"items": enriched})]
+    extras.append(("todos", {"items": enriched}))
+    return extras
 
 
 # ---------------------------------------------------------------------------

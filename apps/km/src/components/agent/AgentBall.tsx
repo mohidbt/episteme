@@ -76,6 +76,10 @@ export function AgentBall(_props: AgentBallProps) {
   const [prefilledSkill, setPrefilledSkill] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
+  const [pdfExtractProgress, setPdfExtractProgress] = useState<{
+    paperId: string;
+    stage: string;
+  } | null>(null);
   // Ball is rendered as a 7x7 matrix at size=4 gap=2 → 7*(4+2) - 2 = 40px.
   const BALL_PX = 40;
   const ballDrag = useDragX({
@@ -144,7 +148,13 @@ export function AgentBall(_props: AgentBallProps) {
     setThreadId(null);
     setPrefilledPrompt(null);
     setPrefilledSkill(null);
+    setPdfExtractProgress(null);
   }, [agentBall]);
+
+  const prettyStage = useMemo(() => {
+    if (!pdfExtractProgress) return null;
+    return pdfExtractProgress.stage.replace(/[_-]+/g, " ").trim();
+  }, [pdfExtractProgress]);
 
   useEffect(() => {
     if (!open || threadId) return;
@@ -269,6 +279,14 @@ export function AgentBall(_props: AgentBallProps) {
             <MatrixBadge preset={preset} size={2} gap={1} />
           </span>
           Agent
+          {prettyStage ? (
+            <span
+              data-testid="agent-pdf-progress"
+              className="inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-normal text-muted-foreground"
+            >
+              Reading PDF: {prettyStage}
+            </span>
+          ) : null}
         </div>
         <div className="flex items-center gap-1">
           <button
@@ -331,6 +349,7 @@ export function AgentBall(_props: AgentBallProps) {
             fullHeight
             initialPrompt={prefilledPrompt}
             initialSkill={prefilledSkill}
+            onPdfExtractProgress={setPdfExtractProgress}
           />
         ) : (
           <div className="p-3 text-xs text-muted-foreground">Loading…</div>

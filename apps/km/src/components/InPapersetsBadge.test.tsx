@@ -49,9 +49,9 @@ describe("InPapersetsBadge", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: /in 2 papersets/i }));
     const a = (await screen.findByRole("link", {
-      name: "x.csv",
+      name: "x",
     })) as HTMLAnchorElement;
-    const b = screen.getByRole("link", { name: "y.csv" }) as HTMLAnchorElement;
+    const b = screen.getByRole("link", { name: "y" }) as HTMLAnchorElement;
     expect(a.getAttribute("href")).toBe("/d/a");
     expect(b.getAttribute("href")).toBe("/d/b");
   });

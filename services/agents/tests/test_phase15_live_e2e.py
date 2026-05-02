@@ -16,6 +16,7 @@ import threading
 import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from unittest.mock import AsyncMock
 
 import httpx
 import pytest
@@ -128,6 +129,113 @@ def _parse_sse(text: str) -> list[dict]:
         else:
             out.append(json.loads(payload))
     return out
+
+
+def _parse_named_sse(text: str) -> list[dict]:
+    out: list[dict] = []
+    current_event = None
+    for line in text.splitlines():
+        if line.startswith("event: "):
+            current_event = line[len("event: "):]
+            continue
+        if line.startswith("data: "):
+            payload = json.loads(line[len("data: "):])
+            out.append({"event": current_event, "data": payload})
+            current_event = None
+    return out
+
+
+class _ToolFlowAgent:
+    def __init__(self):
+        self.fallback_calls = 0
+        self._seen_fallback_papers: set[str] = set()
+
+    async def astream_events(self, input_, config, version):  # noqa: ANN001, ARG002
+        _ = (config, version)
+        msg = input_["messages"][0]["content"].lower()
+        run = "run-1"
+        if "image-like" in msg or "scanned" in msg:
+            paper_id = "paper-fallback"
+            use_cache = paper_id in self._seen_fallback_papers
+            yield {
+                "event": "on_tool_start",
+                "run_id": run,
+                "name": "pdf_read_text",
+                "data": {"input": {"paper_id": paper_id}},
+            }
+            if use_cache:
+                output = {"source": "cache", "text": "cached markdown"}
+            else:
+                self.fallback_calls += 1
+                self._seen_fallback_papers.add(paper_id)
+                output = {
+                    "source": "chandra",
+                    "text": "ocr markdown",
+                    "progress": [{"type": "pdf_extract_progress", "paper_id": paper_id, "stage": "fallback_triggered"}],
+                }
+            yield {
+                "event": "on_tool_end",
+                "run_id": run,
+                "name": "pdf_read_text",
+                "data": {"output": output},
+            }
+            return
+
+        if "deep-read" in msg:
+            yield {
+                "event": "on_tool_start",
+                "run_id": run,
+                "name": "pdf_read_text",
+                "data": {"input": {"paper_id": "paper-text", "page": 1}},
+            }
+            yield {
+                "event": "on_tool_end",
+                "run_id": run,
+                "name": "pdf_read_text",
+                "data": {"output": {"source": "pdfplumber", "pages": [{"pageNumber": 1, "text": "full text"}]}},
+            }
+            return
+
+        if "table" in msg:
+            yield {
+                "event": "on_tool_start",
+                "run_id": run,
+                "name": "pdf_read_tables",
+                "data": {"input": {"paper_id": "paper-table", "page": 2}},
+            }
+            yield {
+                "event": "on_tool_end",
+                "run_id": run,
+                "name": "pdf_read_tables",
+                "data": {"output": {"tables": [{"pageNumber": 2, "rows": [["A", "1"]]}]}},
+            }
+            return
+
+        if "schema" in msg or "json" in msg:
+            yield {
+                "event": "on_tool_start",
+                "run_id": run,
+                "name": "pdf_extract_data",
+                "data": {"input": {"paper_id": "paper-struct", "schema": {"type": "object"}}},
+            }
+            yield {
+                "event": "on_tool_end",
+                "run_id": run,
+                "name": "pdf_extract_data",
+                "data": {"output": {"data": {"dose_mg": 20}}},
+            }
+            return
+
+        yield {
+            "event": "on_chat_model_stream",
+            "run_id": run,
+            "data": {"chunk": type("Chunk", (), {"content": "noop"})()},
+        }
+
+    def get_state(self, *_args, **_kwargs):
+        class _Snap:
+            tasks = []
+        return _Snap()
 
 
 def _fixture_pdf(name: str) -> str:
@@ -398,3 +506,101 @@ def test_live_pdf_to_embed_to_chat_end_to_end(live_server, monkeypatch):
     combined = "".join(e["content"] for e in token_events)
     assert "[[PDF Seeded Note]]" in combined
     assert "retrieval-augmented generation" in combined.lower()
+
+
+def test_live_km_invoke_prompt_deep_read_uses_pdf_read_text(live_server, monkeypatch):
+    agent = _ToolFlowAgent()
+    monkeypatch.setattr("routers.km_agent.build_km_agent", AsyncMock(return_value=agent))
+
+    path = "/agents/km/invoke"
+    body = json.dumps({"thread_id": "t-dr", "message": "Deep-read paper-text and summarize key claims."}).encode()
+    r = httpx.post(
+        f"{live_server}{path}",
+        content=body,
+        headers=_signed_headers("POST", path, body),
+        timeout=20,
+    )
+    assert r.status_code == 200, r.text
+    events = _parse_named_sse(r.text)
+    tool_calls = [e for e in events if e["event"] == "tool_call"]
+    assert tool_calls[0]["data"]["name"] == "pdf_read_text"
+    results = [e for e in events if e["event"] == "tool_result"]
+    assert results[0]["data"]["output"]["source"] == "pdfplumber"
+
+
+def test_live_km_invoke_prompt_table_question_uses_pdf_read_tables(live_server, monkeypatch):
+    agent = _ToolFlowAgent()
+    monkeypatch.setattr("routers.km_agent.build_km_agent", AsyncMock(return_value=agent))
+
+    path = "/agents/km/invoke"
+    body = json.dumps({"thread_id": "t-tab", "message": "What does Table 2 show in this paper?"}).encode()
+    r = httpx.post(
+        f"{live_server}{path}",
+        content=body,
+        headers=_signed_headers("POST", path, body),
+        timeout=20,
+    )
+    assert r.status_code == 200, r.text
+    events = _parse_named_sse(r.text)
+    calls = [e for e in events if e["event"] == "tool_call"]
+    assert calls[0]["data"]["name"] == "pdf_read_tables"
+
+
+def test_live_km_invoke_prompt_structured_extraction_uses_pdf_extract_data(live_server, monkeypatch):
+    agent = _ToolFlowAgent()
+    monkeypatch.setattr("routers.km_agent.build_km_agent", AsyncMock(return_value=agent))
+
+    path = "/agents/km/invoke"
+    body = json.dumps(
+        {"thread_id": "t-struct", "message": "Extract dose + endpoint as JSON schema output."}
+    ).encode()
+    r = httpx.post(
+        f"{live_server}{path}",
+        content=body,
+        headers=_signed_headers("POST", path, body),
+        timeout=20,
+    )
+    assert r.status_code == 200, r.text
+    events = _parse_named_sse(r.text)
+    calls = [e for e in events if e["event"] == "tool_call"]
+    assert calls[0]["data"]["name"] == "pdf_extract_data"
+    results = [e for e in events if e["event"] == "tool_result"]
+    assert results[0]["data"]["output"]["data"]["dose_mg"] == 20
+
+
+def test_live_km_invoke_fallback_then_cache_no_repeat_expensive_call(live_server, monkeypatch):
+    agent = _ToolFlowAgent()
+    monkeypatch.setattr("routers.km_agent.build_km_agent", AsyncMock(return_value=agent))
+
+    path = "/agents/km/invoke"
+    first = json.dumps({"thread_id": "t-fb1", "message": "Deep-read this image-like scanned PDF."}).encode()
+    r1 = httpx.post(
+        f"{live_server}{path}",
+        content=first,
+        headers=_signed_headers("POST", path, first),
+        timeout=20,
+    )
+    assert r1.status_code == 200, r1.text
+    ev1 = _parse_named_sse(r1.text)
+    tr1 = [e for e in ev1 if e["event"] == "tool_result"][0]["data"]["output"]
+    assert tr1["source"] == "chandra"
+    assert tr1["progress"][0]["type"] == "pdf_extract_progress"
+    progress_events = [e for e in ev1 if e["event"] == "pdf_extract_progress"]
+    assert progress_events, "expected explicit pdf_extract_progress SSE event"
+    assert progress_events[0]["data"] == {
+        "paper_id": "paper-fallback",
+        "stage": "fallback_triggered",
+    }
+
+    second = json.dumps({"thread_id": "t-fb2", "message": "Deep-read this image-like scanned PDF again."}).encode()
+    r2 = httpx.post(
+        f"{live_server}{path}",
+        content=second,
+        headers=_signed_headers("POST", path, second),
+        timeout=20,
+    )
+    assert r2.status_code == 200, r2.text
+    ev2 = _parse_named_sse(r2.text)
+    tr2 = [e for e in ev2 if e["event"] == "tool_result"][0]["data"]["output"]
+    assert tr2["source"] == "cache"
+    assert agent.fallback_calls == 1

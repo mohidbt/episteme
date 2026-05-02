@@ -106,6 +106,10 @@ export interface AgentTranscriptState {
   todos: TodoItem[];
   sourcesByMessage: Record<string, Citation[]>;
   pendingInterrupts: InterruptCard[];
+  pdfExtractProgress?: {
+    paperId: string;
+    stage: string;
+  };
   terminated: boolean;
   recursionStep?: number;
 }
@@ -168,6 +172,7 @@ export function agentStreamReducer(
       cards: [...state.cards, card],
       terminated: false,
       recursionStep: undefined,
+      pdfExtractProgress: undefined,
     };
   }
 
@@ -187,6 +192,7 @@ export function agentStreamReducer(
       pendingInterrupts: [],
       todos: [],
       sourcesByMessage: {},
+      pdfExtractProgress: undefined,
       terminated: false,
       recursionStep: undefined,
     };
@@ -336,6 +342,16 @@ export function agentStreamReducer(
       return { ...state, cards: [...state.cards, card] };
     }
 
+    case "pdf_extract_progress": {
+      return {
+        ...state,
+        pdfExtractProgress: {
+          paperId: event.paper_id,
+          stage: event.stage,
+        },
+      };
+    }
+
     case "error": {
       const card: ErrorCard = {
         kind: "error",
@@ -347,7 +363,7 @@ export function agentStreamReducer(
     }
 
     case "done": {
-      return { ...state, terminated: true };
+      return { ...state, terminated: true, pdfExtractProgress: undefined };
     }
 
     case "recursion_step": {

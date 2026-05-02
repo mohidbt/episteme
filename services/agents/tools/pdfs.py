@@ -4,18 +4,12 @@ The authenticated user_id is injected at runtime via ``RunnableConfig``
 (``configurable.user_id``) — never accepted from the LLM. See
 ``tools/_auth.py`` and §1.3b-E2E-3.
 
-Stubbed tools
--------------
-``extract_passages`` and ``get_page_text`` retain their function definitions
-so existing backends (``backends/pdfs_backend.py``) and skills can still
-import them, but they return a structured "tool unavailable" error and are
-no longer included in the ``TOOLS`` export. The reader app (which provided
-per-PDF semantic search and page-text extraction) is dead; KM does not yet
-expose equivalents. These will be revived when the "PDF reader revive"
-work lands.
 """
+from contextlib import asynccontextmanager
 from urllib.parse import quote_plus
 
+from deps import db as db_module
+from lib.paper_text import resolve_paper_text
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
 
@@ -29,6 +23,38 @@ _UNAVAILABLE = {
     "status": None,
     "body": "tool unavailable in this build",
 }
+
+
+@asynccontextmanager
+async def _conn_ctx():
+    pool = db_module._pool
+    assert pool is not None, "pool not initialised"
+    async with pool.acquire() as conn:
+        yield conn
+
+
+async def _pdfplumber_read_text(
+    paper_id: str,
+    page: int | None,
+    *,
+    user_id: str,
+) -> dict:
+    body: dict[str, object] = {"paperId": paper_id}
+    if page is not None:
+        body["page"] = page
+    return await km_post("/api/pdfs/read-text", body, user_id=user_id)
+
+
+async def _chandra_fallback_text(
+    paper_id: str,
+    page: int | None,
+    *,
+    user_id: str,
+) -> dict:
+    body: dict[str, object] = {"paperId": paper_id, "mode": "accurate"}
+    if page is not None:
+        body["page"] = page
+    return await km_post("/api/pdfs/read-text-fallback", body, user_id=user_id)
 
 
 @tool
@@ -89,14 +115,37 @@ async def search_pdfs(query: str, *, config: RunnableConfig) -> object:
 
 
 @tool
-async def extract_passages(
-    pdf_id: str, query: str, k: int = 5, *, config: RunnableConfig
+async def pdf_read_text(
+    paper_id: str,
+    page: int | None = None,
+    *,
+    config: RunnableConfig,
 ) -> object:
-    """[UNAVAILABLE] Per-PDF semantic passage search is not implemented in
-    the current KM build. This tool is retained as a placeholder and is
-    NOT exposed to the LLM.
+    """Read page text from a paper PDF.
+
+    Cost: cheap path by default (pdfplumber). If text quality is poor (e.g.
+    scanned pages), server-side dispatch escalates to an expensive OCR fallback.
+
+    Args:
+        paper_id: Paper UUID.
+        page: Optional 1-based page number.
     """
-    return _UNAVAILABLE
+    user_id = user_id_from_config(config)
+
+    async def _pdf_reader(pid: str, p: int | None) -> dict:
+        return await _pdfplumber_read_text(pid, p, user_id=user_id)
+
+    async def _fallback(pid: str, p: int | None) -> dict:
+        return await _chandra_fallback_text(pid, p, user_id=user_id)
+
+    async with _conn_ctx() as conn:
+        return await resolve_paper_text(
+            paper_id=paper_id,
+            conn=conn,
+            page=page,
+            pdf_reader=_pdf_reader,
+            chandra_fallback=_fallback,
+        )
 
 
 @tool
@@ -126,14 +175,75 @@ async def highlight(
 
 
 @tool
-async def get_page_text(pdf_id: str, page: int, *, config: RunnableConfig) -> object:
-    """[UNAVAILABLE] Per-page text extraction is not implemented in the
-    current KM build. This tool is retained as a placeholder and is NOT
-    exposed to the LLM.
+async def pdf_read_tables(
+    paper_id: str,
+    page: int | None = None,
+    *,
+    config: RunnableConfig,
+) -> object:
+    """Read table content from a paper PDF using table extraction.
+
+    Cost: cheap (pdfplumber-style extraction). Prefer this tool for table-only
+    questions instead of expensive schema extraction.
+
+    Args:
+        paper_id: Paper UUID.
+        page: Optional 1-based page number.
     """
+    user_id = user_id_from_config(config)
+    body: dict[str, object] = {"paperId": paper_id}
+    if page is not None:
+        body["page"] = page
+    return await km_post("/api/pdfs/read-tables", body, user_id=user_id)
+
+
+@tool
+async def pdf_extract_data(
+    paper_id: str,
+    schema: dict,
+    *,
+    config: RunnableConfig,
+) -> object:
+    """Extract structured data from a paper PDF using a JSON schema.
+
+    Cost: expensive (OCR + schema extraction). Use only when structured output
+    is required and `pdf_read_text`/`pdf_read_tables` are insufficient.
+
+    Args:
+        paper_id: Paper UUID.
+        schema: Tight JSON schema describing fields to extract.
+    """
+    user_id = user_id_from_config(config)
+    return await km_post(
+        "/api/pdfs/extract-data",
+        {"paperId": paper_id, "schema": schema},
+        user_id=user_id,
+    )
+
+
+@tool
+async def extract_passages(
+    pdf_id: str, query: str, k: int = 5, *, config: RunnableConfig
+) -> object:
+    """[UNAVAILABLE] Placeholder retained for compatibility imports."""
+    _ = (pdf_id, query, k, config)
+    return _UNAVAILABLE
+
+
+@tool
+async def get_page_text(pdf_id: str, page: int, *, config: RunnableConfig) -> object:
+    """[UNAVAILABLE] Placeholder retained for compatibility imports."""
+    _ = (pdf_id, page, config)
     return _UNAVAILABLE
 
 
 # Tools advertised to the LLM. Stubbed tools (extract_passages, get_page_text)
 # are deliberately excluded.
-TOOLS = [list_pdfs, search_pdfs, highlight]
+TOOLS = [
+    list_pdfs,
+    search_pdfs,
+    pdf_read_text,
+    pdf_read_tables,
+    pdf_extract_data,
+    highlight,
+]

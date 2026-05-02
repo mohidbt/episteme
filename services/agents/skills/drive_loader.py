@@ -40,6 +40,13 @@ class DriveSkillsLoader:
         if not specs:
             await self._seed_from_disk(backend, skills_leaf)
             specs = await self._discover_remote(backend, skills_leaf)
+        else:
+            # One-shot seed-or-update for users who were seeded before a new
+            # default skill was added (e.g. deep-read revival in 1.5.1).
+            await self._seed_missing_requested_from_disk(
+                backend, skills_leaf, requested=set(only), existing=set(specs.keys())
+            )
+            specs = await self._discover_remote(backend, skills_leaf)
 
         missing = [n for n in only if n not in specs]
         if missing:
@@ -83,6 +90,40 @@ class DriveSkillsLoader:
         if not SKILLS_ROOT.is_dir():
             return
         for child in sorted(SKILLS_ROOT.iterdir()):
+            if not child.is_dir() or child.name.startswith(("_", ".")):
+                continue
+            skill_md = child / "SKILL.md"
+            if not skill_md.is_file():
+                continue
+            folder_id = await backend.ensure_folder_chain(
+                _SKILLS_FOLDER_SEGMENTS + (child.name,)
+            )
+            await _nb.km_post(
+                "/api/notes",
+                {
+                    "libraryId": backend._library_id,  # noqa: SLF001
+                    "folderId": folder_id,
+                    "title": _SKILL_NOTE_TITLE,
+                    "contentMd": skill_md.read_text(encoding="utf-8"),
+                },
+                user_id=backend.user_id,
+            )
+
+    async def _seed_missing_requested_from_disk(
+        self,
+        backend: NotesBackend,
+        skills_leaf: str,
+        *,
+        requested: set[str],
+        existing: set[str],
+    ) -> None:
+        missing = requested - existing
+        if not missing:
+            return
+
+        for child in sorted(SKILLS_ROOT.iterdir()):
+            if child.name not in missing:
+                continue
             if not child.is_dir() or child.name.startswith(("_", ".")):
                 continue
             skill_md = child / "SKILL.md"

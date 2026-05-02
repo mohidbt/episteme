@@ -1,7 +1,7 @@
 /**
  * RED tests for agent-events.ts discriminated union (Task 7 / 1.3a).
  *
- * Type-level coverage: AGENT_EVENT_TYPES has exactly 13 members.
+ * Type-level coverage: AGENT_EVENT_TYPES has exactly 14 members.
  * Runtime coverage: switch narrows AgentEvent to every variant.
  */
 
@@ -13,8 +13,8 @@ import {
 } from "./agent-events";
 
 describe("AGENT_EVENT_TYPES", () => {
-  it("contains exactly 13 event types", () => {
-    expect(AGENT_EVENT_TYPES).toHaveLength(13);
+  it("contains exactly 14 event types", () => {
+    expect(AGENT_EVENT_TYPES).toHaveLength(14);
   });
 
   it("contains all expected event names", () => {
@@ -28,6 +28,7 @@ describe("AGENT_EVENT_TYPES", () => {
       "sources",
       "skill_load",
       "file_diff",
+      "pdf_extract_progress",
       "suggestion",
       "done",
       "error",
@@ -64,6 +65,8 @@ describe("AgentEvent discriminated union", () => {
         return `skill_load:${ev.name}`;
       case "file_diff":
         return `file_diff:${ev.note_id}`;
+      case "pdf_extract_progress":
+        return `pdf_extract_progress:${ev.paper_id}:${ev.stage}`;
       case "suggestion":
         return `suggestion:${ev.items.length}`;
       case "done":
@@ -183,6 +186,15 @@ describe("AgentEvent discriminated union", () => {
     expect(getEventLabel(ev)).toBe("suggestion:2");
   });
 
+  it("narrows pdf_extract_progress event", () => {
+    const ev: AgentEvent = {
+      type: "pdf_extract_progress",
+      paper_id: "p1",
+      stage: "reading_pages",
+    };
+    expect(getEventLabel(ev)).toBe("pdf_extract_progress:p1:reading_pages");
+  });
+
   it("narrows done event", () => {
     const ev: AgentEvent = { type: "done", thread_id: "t-123" };
     expect(getEventLabel(ev)).toBe("done:t-123");
@@ -208,6 +220,6 @@ describe("AgentEventType", () => {
   it("is assignable from each event type string", () => {
     // Type-level — just confirm runtime constant is stable
     const types: AgentEventType[] = [...AGENT_EVENT_TYPES];
-    expect(types).toHaveLength(13);
+    expect(types).toHaveLength(14);
   });
 });

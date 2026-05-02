@@ -1,7 +1,7 @@
-"""RED tests for SSE event matrix TypedDicts + format_typed helper (Task 7 / 1.3a).
+"""RED tests for SSE event matrix TypedDicts + format_typed helper.
 
 These tests drive the addition of:
-  - TypedDict classes for all 11 event types in lib/sse_events.py
+  - TypedDict classes for all event types in lib/sse_events.py
   - format_typed(event_type, payload) that validates required keys and returns SSE string
 """
 import json
@@ -128,6 +128,13 @@ def test_format_typed_done_valid():
     assert data["thread_id"] == "t-123"
 
 
+def test_format_typed_pdf_extract_progress_valid():
+    raw = format_typed("pdf_extract_progress", {"paper_id": "p1", "stage": "fallback_triggered"})
+    event_type, data = _parse_sse(raw)
+    assert event_type == "pdf_extract_progress"
+    assert data == {"paper_id": "p1", "stage": "fallback_triggered"}
+
+
 # ---------------------------------------------------------------------------
 # format_typed: invalid payloads raise ValueError
 # ---------------------------------------------------------------------------
@@ -158,17 +165,18 @@ def test_format_typed_done_missing_thread_id_raises():
 
 
 # ---------------------------------------------------------------------------
-# EventType literal coverage — all 11 types are present
+# EventType literal coverage
 # ---------------------------------------------------------------------------
 
-ALL_11: list[EventType] = [
+ALL_EVENTS: list[EventType] = [
     "text", "thinking", "tool_call", "tool_result", "interrupt",
     "todos", "sources", "skill_load", "file_diff", "suggestion", "done",
+    "error", "recursion_step", "pdf_extract_progress",
 ]
 
 
 def test_event_type_count():
-    assert len(ALL_11) == 11
+    assert len(ALL_EVENTS) == 14
 
 
 def test_all_event_types_format_with_minimal_payload():
@@ -185,8 +193,11 @@ def test_all_event_types_format_with_minimal_payload():
         "file_diff": {"note_id": "n", "before_hash": "a", "after_hash": "b", "diff": ""},
         "suggestion": {"items": []},
         "done": {"thread_id": "t"},
+        "error": {"code": "e", "message": "m", "retriable": True},
+        "recursion_step": {"step": 10},
+        "pdf_extract_progress": {"paper_id": "p1", "stage": "fallback_triggered"},
     }
-    for et in ALL_11:
+    for et in ALL_EVENTS:
         raw = format_typed(et, minimal[et])
         assert raw.startswith(f"event: {et}"), f"Bad output for {et!r}: {raw!r}"
 

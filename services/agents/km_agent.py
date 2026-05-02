@@ -100,11 +100,8 @@ csv_write_cell). Each tool's description explains
 what it does and what to pass — read the tool descriptions carefully before
 calling.
 
-**PDF full-text reading is NOT yet available in this build.** You can find
-candidate papers with `search_pdfs`, see metadata with `list_pdfs`, and add
-page-anchored highlights with `highlight`, but you cannot read a PDF's body
-text. Do not promise the user a deep summary of a paper's contents — say
-what you can and cannot do.
+If the user asks for a deep paper reading workflow, follow the `deep-read`
+skill instructions.
 
 Never use `glob`, `grep`, `ls`, or `read_file` to look for PDFs, notes, or
 papers. If you need drive content, use the dedicated tools instead."""

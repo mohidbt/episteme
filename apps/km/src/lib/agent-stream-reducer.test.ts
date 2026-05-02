@@ -337,6 +337,41 @@ describe("agentStreamReducer — recursion_step events", () => {
   });
 });
 
+describe("agentStreamReducer — pdf_extract_progress events", () => {
+  it("stores the latest pdf extract progress in side-channel state", () => {
+    const s = fold([
+      {
+        type: "pdf_extract_progress",
+        paper_id: "paper-1",
+        stage: "starting",
+      },
+      {
+        type: "pdf_extract_progress",
+        paper_id: "paper-1",
+        stage: "reading_pages",
+      },
+    ]);
+    expect(s.pdfExtractProgress).toEqual({
+      paperId: "paper-1",
+      stage: "reading_pages",
+    });
+    expect(s.cards).toHaveLength(0);
+  });
+
+  it("clears pdf extract progress on done", () => {
+    const s = fold([
+      {
+        type: "pdf_extract_progress",
+        paper_id: "paper-1",
+        stage: "starting",
+      },
+      { type: "done", thread_id: "t-1" },
+    ]);
+    expect(s.terminated).toBe(true);
+    expect(s.pdfExtractProgress).toBeUndefined();
+  });
+});
+
 describe("agentStreamReducer — done & termination", () => {
   it("done event sets terminated=true and adds no card", () => {
     const s = fold([{ type: "done", thread_id: "t1" }]);

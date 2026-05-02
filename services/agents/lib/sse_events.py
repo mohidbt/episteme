@@ -96,6 +96,11 @@ class RecursionStepEvent(TypedDict):
     step: int
 
 
+class PdfExtractProgressEvent(TypedDict):
+    paper_id: str
+    stage: str
+
+
 # ---------------------------------------------------------------------------
 # EventType literal + required-key map (drives format_typed validation)
 # ---------------------------------------------------------------------------
@@ -103,7 +108,7 @@ class RecursionStepEvent(TypedDict):
 EventType = Literal[
     "text", "thinking", "tool_call", "tool_result", "interrupt",
     "todos", "sources", "skill_load", "file_diff", "suggestion", "done",
-    "error", "recursion_step",
+    "error", "recursion_step", "pdf_extract_progress",
 ]
 
 _REQUIRED_KEYS: dict[str, frozenset[str]] = {
@@ -120,6 +125,7 @@ _REQUIRED_KEYS: dict[str, frozenset[str]] = {
     "done":       frozenset({"thread_id"}),
     "error":      frozenset({"code", "message", "retriable"}),
     "recursion_step": frozenset({"step"}),
+    "pdf_extract_progress": frozenset({"paper_id", "stage"}),
 }
 
 

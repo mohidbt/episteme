@@ -120,6 +120,7 @@ export interface AgentTranscriptProps {
         }
     >;
   }>;
+  onPdfExtractProgress?: (progress: { paperId: string; stage: string } | null) => void;
 }
 
 // G-R3-07 #78 — same regex used by the live SSE reducer (#64). Some models
@@ -200,6 +201,7 @@ export function AgentTranscript({
   initialPrompt,
   initialSkill,
   initialMessages,
+  onPdfExtractProgress,
 }: AgentTranscriptProps) {
   const [state, dispatch] = useReducer(
     agentStreamReducer,
@@ -269,6 +271,9 @@ export function AgentTranscript({
   useEffect(() => {
     agentBall?.setWorking(streaming);
   }, [streaming, agentBall]);
+  useEffect(() => {
+    onPdfExtractProgress?.(state.pdfExtractProgress ?? null);
+  }, [onPdfExtractProgress, state.pdfExtractProgress]);
   const abortRef = useRef<AbortController | null>(null);
   const initialPromptSent = useRef(false);
   const defaultSendRef = useRef<((text: string) => Promise<void>) | null>(null);
@@ -329,9 +334,10 @@ export function AgentTranscript({
         // Aborted or network — silent for MVP.
       } finally {
         setStreaming(false);
+        onPdfExtractProgress?.(null);
       }
     },
-    [threadId, pageContext, router],
+    [threadId, pageContext, router, onPdfExtractProgress],
   );
 
   // Keep ref in sync so the auto-send effect can access it without TDZ
@@ -429,9 +435,10 @@ export function AgentTranscript({
         return false;
       } finally {
         setStreaming(false);
+        onPdfExtractProgress?.(null);
       }
     },
-    [threadId, router],
+    [threadId, router, onPdfExtractProgress],
   );
 
   const handleSuggestionClick = useCallback(

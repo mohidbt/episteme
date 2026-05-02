@@ -131,6 +131,72 @@ async def test_load_skips_seed_when_skills_already_present(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_load_seeds_missing_deep_read_when_other_skills_exist(monkeypatch):
+    """If skills folder exists but deep-read is missing, loader should seed it once."""
+    from skills.drive_loader import DriveSkillsLoader  # noqa: PLC0415
+
+    posts, notes_db, folders_db = _install_fake_km(monkeypatch)
+
+    def add_folder(name: str, parent_id: str | None) -> str:
+        fid = f"folder-{name}-{len(folders_db)}"
+        folders_db[(parent_id, name)] = {"id": fid, "name": name, "parentId": parent_id}
+        return fid
+
+    ep = add_folder(".episteme", None)
+    ag = add_folder("agents", ep)
+    sk = add_folder("skills", ag)
+    lit = add_folder("lit-triage", sk)
+    notes_db.append({
+        "id": "preset-lit",
+        "libraryId": 1,
+        "folderId": lit,
+        "title": "SKILL",
+        "contentMd": (
+            "---\nname: lit-triage\ndescription: Pre-seeded.\n"
+            "tools: []\nsubagents: []\nrequire_approval: []\n---\nbody"
+        ),
+    })
+
+    specs = await DriveSkillsLoader().load(["lit-triage", "deep-read"], user_id=USER)
+    names = {s.name for s in specs}
+    assert names == {"lit-triage", "deep-read"}
+
+    seeded_notes = [b for p, b in posts if p == "/api/notes" and b.get("title") == "SKILL"]
+    assert any("name: deep-read" in (b.get("contentMd") or "") for b in seeded_notes)
+
+
+@pytest.mark.asyncio
+async def test_load_does_not_reseed_deep_read_when_already_present(monkeypatch):
+    from skills.drive_loader import DriveSkillsLoader  # noqa: PLC0415
+
+    posts, notes_db, folders_db = _install_fake_km(monkeypatch)
+
+    def add_folder(name: str, parent_id: str | None) -> str:
+        fid = f"folder-{name}-{len(folders_db)}"
+        folders_db[(parent_id, name)] = {"id": fid, "name": name, "parentId": parent_id}
+        return fid
+
+    ep = add_folder(".episteme", None)
+    ag = add_folder("agents", ep)
+    sk = add_folder("skills", ag)
+    deep = add_folder("deep-read", sk)
+    notes_db.append({
+        "id": "preset-deep",
+        "libraryId": 1,
+        "folderId": deep,
+        "title": "SKILL",
+        "contentMd": (
+            "---\nname: deep-read\ndescription: Already seeded.\n"
+            "tools: [search_pdfs]\nsubagents: []\nrequire_approval: [highlight]\n---\nbody"
+        ),
+    })
+
+    await DriveSkillsLoader().load(["deep-read"], user_id=USER)
+    note_posts = [b for p, b in posts if p == "/api/notes" and b.get("title") == "SKILL"]
+    assert note_posts == []
+
+
+@pytest.mark.asyncio
 async def test_user_edits_propagate_on_next_build(monkeypatch):
     """Mutating the SKILL note row → fresh loader picks up the edit."""
     from skills.drive_loader import DriveSkillsLoader  # noqa: PLC0415

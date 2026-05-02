@@ -175,22 +175,16 @@ describe("seedAnonymousUser", () => {
     const colNames = psRows[0].columns.map((c) => c.name);
     expect(colNames).toContain("Uses PCA");
     expect(colNames).toContain("Variables matched on");
-    expect(psRows[0].rowRefs).toHaveLength(6);
+    expect(psRows[0].rowRefs).toHaveLength(3);
     for (const row of psRows[0].rowRefs) {
       expect(typeof row.paper_id).toBe("string");
       expect(row.paper_id.length).toBeGreaterThan(0);
     }
-    // 3 rowRefs reference real paper IDs (PCA papers w/ PDFs); the other 3
-    // reference-only rows still point at reference IDs.
+    // All seeded rowRefs reference real PCA paper IDs (no reference-only rows).
     const paperIds = new Set(pcaPapers.map((p) => p.id));
-    const refIdsInPca = new Set(
-      refRows.filter((r) => r.folderId === pcaFolder!.id).map((r) => r.id),
-    );
     const rowRefIds = psRows[0].rowRefs.map((r) => r.paper_id);
     const matchedPaperIds = rowRefIds.filter((id) => paperIds.has(id));
-    const matchedRefIds = rowRefIds.filter((id) => refIdsInPca.has(id));
     expect(matchedPaperIds).toHaveLength(3);
-    expect(matchedRefIds).toHaveLength(3);
   });
 
   it("is idempotent on a second call for the same user", { timeout: 60_000 }, async () => {

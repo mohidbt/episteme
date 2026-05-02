@@ -58,6 +58,7 @@ export type AgentEvent =
       after_hash: string;
       diff: string;
     }
+  | { type: "pdf_extract_progress"; paper_id: string; stage: string }
   | { type: "suggestion"; items: string[] }
   | { type: "done"; thread_id: string }
   | { type: "error"; code: string; message: string; retriable: boolean }
@@ -73,6 +74,7 @@ export const AGENT_EVENT_TYPES = [
   "sources",
   "skill_load",
   "file_diff",
+  "pdf_extract_progress",
   "suggestion",
   "done",
   "error",

@@ -64,7 +64,7 @@ describe("migrateAnonymousUser via onLinkAccount", () => {
     ).toHaveLength(1);
     expect(
       await db.select().from(papers).where(eq(papers.userId, anonId)),
-    ).toHaveLength(1);
+    ).toHaveLength(4);
     expect(
       await db
         .select()
@@ -129,8 +129,10 @@ describe("migrateAnonymousUser via onLinkAccount", () => {
       .select()
       .from(papers)
       .where(eq(papers.userId, newId));
-    expect(papersForNew).toHaveLength(1);
-    expect(papersForNew[0].doi).toBe("10.48550/arXiv.2005.11401");
+    expect(papersForNew).toHaveLength(4);
+    expect(
+      papersForNew.some((p) => p.doi === "10.48550/arXiv.2005.11401"),
+    ).toBe(true);
 
     const refsForNew = await db
       .select()

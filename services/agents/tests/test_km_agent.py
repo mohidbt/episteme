@@ -92,7 +92,7 @@ def test_filter_tools_with_lit_triage_skill_filters_to_allowed_set():
     assert "create_note" in names
     # Tools not in lit-triage's allow-list must be excluded
     assert "make_public" not in names
-    assert "extract_passages" not in names
+    assert "pdf_read_text" not in names
     assert "highlight" not in names
 
 
@@ -133,26 +133,12 @@ def test_lit_triage_keeps_create_note_hitl():
 
 
 def test_skill_require_approval_injects_into_interrupt_on():
-    """Skill require_approval still injects HITL when listed.
-
-    Uses a synthetic SkillSpec since deep-read is parked under _deep-read
-    in this build (Phase 1.3h — body relies on stubbed PDF tools). Restore
-    a real-skill check in 1.5.1 once deep-read is revived.
-    """
-    from pathlib import Path
-
+    """deep-read require_approval should force highlight HITL."""
     from km_agent import _build_interrupt_on  # noqa: PLC0415
-    from skills import SkillSpec  # noqa: PLC0415
+    from skills import load_skills  # noqa: PLC0415
 
-    fake = SkillSpec(
-        name="fake-skill",
-        description="fixture",
-        tools=["highlight"],
-        subagents=[],
-        require_approval=["highlight"],
-        path=Path("/virtual/fake/SKILL.md"),
-    )
-    interrupt_on = _build_interrupt_on({}, loaded_skills=[fake])
+    loaded = load_skills(only=["deep-read"])
+    interrupt_on = _build_interrupt_on({}, loaded_skills=loaded)
     assert interrupt_on.get("highlight") is True
 
 
@@ -345,6 +331,23 @@ def test_subagents_for_skill_with_no_subagents_yields_none():
         path=Path("/virtual/no-subs/SKILL.md"),
     )
     assert _select_subagents([spec]) == []
+
+
+def test_subagents_for_skills_deep_read_yields_none():
+    """deep-read is an inline workflow skill, not a delegated subagent."""
+    from km_agent import _select_subagents  # noqa: PLC0415
+    from skills import load_skills  # noqa: PLC0415
+
+    loaded = load_skills(only=["deep-read"])
+    assert _select_subagents(loaded) == []
+
+
+def test_memory_prompt_mentions_deep_read_guidance_not_unavailable_fence():
+    from km_agent import _MEMORY_SYSTEM_PROMPT  # noqa: PLC0415
+
+    assert "`deep-read`" in _MEMORY_SYSTEM_PROMPT
+    assert "deep paper reading workflow" in _MEMORY_SYSTEM_PROMPT
+    assert "PDF full-text reading is NOT yet available in this build." not in _MEMORY_SYSTEM_PROMPT
 
 
 def test_subagents_empty_when_no_skills():
