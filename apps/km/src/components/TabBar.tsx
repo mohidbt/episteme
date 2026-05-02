@@ -205,6 +205,7 @@ export function TabBar() {
       role="tablist"
       aria-label="Open tabs"
       className="flex shrink-0 items-end gap-0 bg-[var(--bg-roof)] px-3 pt-5 h-[52px]"
+      style={{ "--tabbar-h": "52px" } as React.CSSProperties}
     >
       {tabs.map((tab) => {
         const active = tab.href === activeHref;
