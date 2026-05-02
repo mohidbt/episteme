@@ -84,6 +84,7 @@ export function AgentBall(_props: AgentBallProps) {
     elementHeight: BALL_PX,
     axis: "xy",
     snapY: "bottom",
+    bottomInsetRatio: 0.12,
   });
   const panelDrag = useDragX({ storageKey: "agent-convo-x", elementWidth: 400 });
   const ballRef = useRef<HTMLButtonElement | null>(null);

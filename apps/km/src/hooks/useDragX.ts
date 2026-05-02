@@ -16,6 +16,8 @@ interface UseDragXOptions {
    * (gravity). Only meaningful when axis === "xy".
    */
   snapY?: "bottom" | "none";
+  /** Bottom snap inset as a viewport-height ratio. */
+  bottomInsetRatio?: number;
 }
 
 /** Movement threshold (px) beyond which pointerDown+pointerUp counts as a drag, not a click. */
@@ -32,6 +34,7 @@ export function useDragX({
   elementHeight,
   axis = "x",
   snapY = "none",
+  bottomInsetRatio = 0,
 }: UseDragXOptions) {
   const [x, setX] = useState<number | null>(null);
 
@@ -70,12 +73,16 @@ export function useDragX({
   const clampY = useCallback(
     (next: number) => {
       if (typeof window === "undefined") return next;
-      const max = Math.max(0, window.innerHeight - (elementHeight ?? 0));
+      const bottomInset = window.innerHeight * bottomInsetRatio;
+      const max = Math.max(
+        0,
+        window.innerHeight - (elementHeight ?? 0) - bottomInset,
+      );
       if (next < 0) return 0;
       if (next > max) return max;
       return next;
     },
-    [elementHeight],
+    [bottomInsetRatio, elementHeight],
   );
 
   const onPointerDown = useCallback((e: React.PointerEvent<HTMLElement>) => {
@@ -134,11 +141,18 @@ export function useDragX({
       });
       if (axis === "xy" && snapY === "bottom") {
         if (typeof window !== "undefined") {
-          setY(Math.max(0, window.innerHeight - (elementHeight ?? 0)));
+          setY(
+            Math.max(
+              0,
+              window.innerHeight -
+                (elementHeight ?? 0) -
+                window.innerHeight * bottomInsetRatio,
+            ),
+          );
         }
       }
     },
-    [axis, elementHeight, snapY, storageKey],
+    [axis, bottomInsetRatio, elementHeight, snapY, storageKey],
   );
 
   // Re-clamp on viewport resize so the element doesn't sit off-screen.
@@ -149,14 +163,19 @@ export function useDragX({
       setY((curr) => {
         if (curr === null) return curr;
         if (snapY === "bottom") {
-          return Math.max(0, window.innerHeight - (elementHeight ?? 0));
+          return Math.max(
+            0,
+            window.innerHeight -
+              (elementHeight ?? 0) -
+              window.innerHeight * bottomInsetRatio,
+          );
         }
         return clampY(curr);
       });
     };
     window.addEventListener("resize", handler);
     return () => window.removeEventListener("resize", handler);
-  }, [clampX, clampY, elementHeight, snapY]);
+  }, [bottomInsetRatio, clampX, clampY, elementHeight, snapY]);
 
   return {
     x,
