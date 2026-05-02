@@ -83,11 +83,21 @@ export function CellGroundingChip({
 }
 
 /**
- * Extract the page number from a block ID that uses the
- * `block_<paperId>_p<page>_<idx>` convention. Returns null when no
- * genuine page anchor can be parsed — e.g. segment-only indices.
+ * Extract the page number from a block ID.
+ *
+ * Supports two formats:
+ * - New: `<paper_id>:p<page>:<order_index>`  (from read_paper)
+ * - Legacy: `block_<paperId>_p<page>_<idx>`
+ * Returns null when no genuine page anchor can be parsed.
  */
 export function blockRefPageNumber(blockId: string): number | null {
+  // New format: paper_id:p5:12
+  const newFmt = blockId.match(/:p(\d+):/);
+  if (newFmt) {
+    const n = Number.parseInt(newFmt[1], 10);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  }
+  // Legacy format: block_123_p5_0
   const m = blockId.match(/_p(\d+)_/);
   if (!m) return null;
   const n = Number.parseInt(m[1], 10);

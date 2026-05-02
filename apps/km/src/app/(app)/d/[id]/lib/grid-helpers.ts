@@ -51,10 +51,21 @@ export function deriveCellState(
 }
 
 /**
- * Block ids look like "block_<paperId>_p<page>_<idx>". Best-effort extract
- * the page number; return null if we can't parse one.
+ * Extract page hint from block IDs.
+ *
+ * Supports two formats:
+ * - New: `<paper_id>:p<page>:<order_index>`  (from read_paper)
+ * - Legacy: `block_<paperId>_p<page>_<idx>`
+ * Returns null if no page number can be parsed.
  */
 function extractPageHint(blockId: string): number | null {
+  // New format: paper_id:p5:12
+  const newFmt = blockId.match(/:p(\d+):/);
+  if (newFmt) {
+    const n = Number.parseInt(newFmt[1], 10);
+    return Number.isFinite(n) ? n : null;
+  }
+  // Legacy format: block_123_p5_0
   const m = blockId.match(/_p(\d+)_/);
   if (!m) return null;
   const n = Number.parseInt(m[1], 10);

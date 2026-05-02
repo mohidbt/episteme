@@ -129,7 +129,7 @@ def _row_to_block(row, paper_id: str, header_lookup: dict[int, str]) -> PaperBlo
             break
 
     return {
-        "block_id": f"{paper_id}:{order_index}",
+        "block_id": f"{paper_id}:p{row['page']}:{order_index}",
         "kind": kind,
         "section": section,
         "page": row["page"],
