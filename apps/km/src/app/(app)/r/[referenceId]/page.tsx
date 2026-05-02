@@ -10,7 +10,6 @@ import { splitFolderPath } from "@/lib/tree";
 import { ReferenceForm } from "@/components/ReferenceForm";
 import { ReferenceAttachToPaperButton } from "@/components/ReferenceAttachToPaperButton";
 import { ReferenceAgenticSearchButton } from "@/components/ReferenceAgenticSearchButton";
-import { DetailUploadBar } from "@/components/DetailUploadBar";
 
 export default async function ReferencePage({
   params,
@@ -78,16 +77,6 @@ export default async function ReferencePage({
           </Link>
         )}
       </div>
-      {library && (
-        <div className="mb-4">
-          <DetailUploadBar
-            kind="reference"
-            libraryId={library.id}
-            folders={allFolders}
-            defaultFolderId={ref.folderId ?? null}
-          />
-        </div>
-      )}
       <ReferenceForm reference={ref} />
     </div>
   );

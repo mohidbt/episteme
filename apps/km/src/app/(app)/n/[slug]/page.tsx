@@ -13,7 +13,6 @@ import { listAllFolders } from "@/lib/folders-server";
 import { PathPill, type PathPillSegment } from "@/components/PathPill";
 import { splitFolderPath } from "@/lib/tree";
 import { BacklinksPanel } from "@/components/BacklinksPanel";
-import { DetailUploadBar } from "@/components/DetailUploadBar";
 import { NotePageClient } from "./NotePageClient";
 import { mintCollabToken } from "@/lib/collab-token";
 import { COLLAB_ENABLED } from "@/lib/flags";
@@ -107,16 +106,6 @@ export default async function NotePage({
   return (
     <div className="mx-auto max-w-3xl p-6">
       {library && <PathPill className="mb-2 font-mono text-[11px] tracking-[0.06em] text-[var(--fg-muted)]" segments={pillSegments} />}
-      {library && (
-        <div className="mb-4">
-          <DetailUploadBar
-            kind="note"
-            libraryId={library.id}
-            folders={allFolders}
-            defaultFolderId={note.folderId ?? null}
-          />
-        </div>
-      )}
       <NotePageClient
         id={note.id}
         title={note.title}
