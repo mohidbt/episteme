@@ -170,7 +170,6 @@ export function SidebarShell({ library, tree, isAnonymous }: SidebarShellProps) 
           ) : (
             <SidebarFooter className="px-3 pb-3">
               <Button
-                nativeButton={false}
                 onClick={() => {
                   void fetch("/api/notes", {
                     method: "POST",

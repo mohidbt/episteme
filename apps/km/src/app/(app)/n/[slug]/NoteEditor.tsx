@@ -558,10 +558,18 @@ export function NoteEditor({
         };
 
         const onExit = () => {
-          try { root?.unmount(); } catch (_) { /* portal already removed by DOM mutation */ }
-          try { host?.remove(); } catch (_) { /* already detached */ }
+          // Defer unmount: Tiptap may call onExit during React's render phase
+          // (e.g. on editor teardown), and synchronously unmounting a root
+          // while React is rendering throws. Capture refs and clear the
+          // closure state immediately so onStart can recreate cleanly.
+          const r = root;
+          const h = host;
           root = null;
           host = null;
+          queueMicrotask(() => {
+            try { r?.unmount(); } catch (_) { /* portal already removed by DOM mutation */ }
+            try { h?.remove(); } catch (_) { /* already detached */ }
+          });
         };
 
         return { onStart, onUpdate, onKeyDown, onExit };

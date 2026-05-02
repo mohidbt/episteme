@@ -150,6 +150,34 @@ describe("useTabs hook", () => {
     expect(last.activeHref).toBe("/");
   });
 
+  it("closeTab on the active tab navigates to the next tab via router.push", async () => {
+    // Regression test: router.push used to be called inside the setState
+    // updater, which fires during render and triggered the React warning.
+    // Now it fires after setState — verify it still happens.
+    mockPathname = "/n/bar";
+    const { TabBarProvider, useTabs } = await import("./TabBar");
+    let api: ReturnType<typeof useTabs> | null = null;
+    function Probe() {
+      api = useTabs();
+      return null;
+    }
+    render(
+      <TabBarProvider>
+        <Probe />
+      </TabBarProvider>,
+    );
+    act(() => {
+      api!.openTab("/n/foo", "Foo");
+      api!.openTab("/n/bar", "Bar");
+    });
+    push.mockClear();
+    act(() => {
+      api!.closeTab("/n/bar");
+    });
+    // closeTab on the active tab pushes to the next remaining tab.
+    expect(push).toHaveBeenCalledTimes(1);
+  });
+
   it("openTab on existing href does not duplicate, just activates", async () => {
     const { TabBarProvider, useTabs } = await import("./TabBar");
     let api: ReturnType<typeof useTabs> | null = null;

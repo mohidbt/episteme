@@ -67,6 +67,8 @@ export function TabBarProvider({ children }: { children: ReactNode }) {
   // Initialize with the same default the server renders to avoid SSR/client
   // hydration mismatch. localStorage is read in a mount-only effect below.
   const [state, setState] = useState<TabsState>(DEFAULT_STATE);
+  const stateRef = useRef<TabsState>(DEFAULT_STATE);
+  stateRef.current = state;
   const persistedRef = useRef(false);
 
   // Hydrate from localStorage after mount (client-only).
@@ -126,25 +128,31 @@ export function TabBarProvider({ children }: { children: ReactNode }) {
   const closeTab = useCallback(
     (href: string) => {
       const normalized = normalizeHref(href);
-      setState((prev) => {
-        const idx = prev.tabs.findIndex((t) => t.href === normalized);
-        if (idx === -1) return prev;
-        const tabs = prev.tabs.filter((t) => t.href !== normalized);
-        let activeHref = prev.activeHref;
-        if (activeHref === normalized) {
-          const next = tabs[idx] ?? tabs[idx - 1] ?? null;
-          activeHref = next?.href ?? DEFAULT_HREF;
-          router.push(activeHref);
-        }
-        // Never leave zero tabs — fall back to default
-        if (tabs.length === 0) {
-          return {
-            tabs: [{ href: DEFAULT_HREF, title: DEFAULT_TITLE }],
-            activeHref: DEFAULT_HREF,
-          };
-        }
-        return { tabs, activeHref };
-      });
+      // Compute the next state from the current snapshot so we can decide
+      // whether to navigate BEFORE calling setState. Doing the navigation
+      // here (in an event-handler context) avoids triggering React's
+      // "Cannot update a component while rendering a different component"
+      // warning that fires when router.push runs inside a setState updater.
+      const prev = stateRef.current;
+      const idx = prev.tabs.findIndex((t) => t.href === normalized);
+      if (idx === -1) return;
+      const tabs = prev.tabs.filter((t) => t.href !== normalized);
+      let activeHref = prev.activeHref;
+      let pushTo: string | null = null;
+      if (activeHref === normalized) {
+        const next = tabs[idx] ?? tabs[idx - 1] ?? null;
+        activeHref = next?.href ?? DEFAULT_HREF;
+        pushTo = activeHref;
+      }
+      if (tabs.length === 0) {
+        setState({
+          tabs: [{ href: DEFAULT_HREF, title: DEFAULT_TITLE }],
+          activeHref: DEFAULT_HREF,
+        });
+      } else {
+        setState({ tabs, activeHref });
+      }
+      if (pushTo) router.push(pushTo);
     },
     [router],
   );
