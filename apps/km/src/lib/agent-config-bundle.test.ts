@@ -110,6 +110,10 @@ describe("buildBundleFromSnapshot + parseBundle — round trip", () => {
     ];
     const s = snap({ personalSkills });
     const zipBytes = await buildBundleFromSnapshot(s);
+    const zip = await JSZip.loadAsync(zipBytes);
+    await expect(zip.file(".episteme/agents/skills-personal/tone/SKILL.json")?.async("string")).resolves.toBe(personalSkills[0].json);
+    await expect(zip.file(".episteme/agents/skills-personal/voice/SKILL.json")?.async("string")).resolves.toBe(personalSkills[1].json);
+
     const parsed = await parseBundle(zipBytes);
     expect(parsed.personalSkills).toHaveLength(2);
     expect(parsed.personalSkills[0].slug).toBe("tone");

@@ -315,15 +315,15 @@ async function readSnapshot(userId: string): Promise<AgentConfigSnapshot> {
 
   // Personal skills from MinIO (SkillStore)
   const personalSkills: PersonalSkillEntry[] = [];
-  try {
-    const store = getSkillStore();
-    const manifests = await store.list(userId);
-    for (const m of manifests) {
+  const store = getSkillStore();
+  const manifests = await store.list(userId);
+  for (const m of manifests) {
+    try {
       const json = await store.read(userId, m.slug);
       personalSkills.push({ slug: m.slug, json });
+    } catch {
+      // Keep export resilient to one unreadable object, matching SkillStore.list().
     }
-  } catch {
-    // MinIO unavailable in test/dev — personal skills section stays empty.
   }
 
   return { agentConfig: cfg, skills, personalSkills, memories };
