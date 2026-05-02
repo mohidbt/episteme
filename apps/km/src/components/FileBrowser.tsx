@@ -953,10 +953,10 @@ export function FileBrowser({
           />
         ))
       ) : (
-        <Table>
+        <Table className="table-fixed">
           <TableHeader>
             <TableRow>
-              <TableHead>
+              <TableHead className="w-full min-w-0">
                 <SortHeader
                   label="Name"
                   column="title"
@@ -965,7 +965,7 @@ export function FileBrowser({
                   onClick={toggleSort}
                 />
               </TableHead>
-              <TableHead>
+              <TableHead className="w-28">
                 <SortHeader
                   label="Type"
                   column="kind"
@@ -974,7 +974,7 @@ export function FileBrowser({
                   onClick={toggleSort}
                 />
               </TableHead>
-              <TableHead>
+              <TableHead className="w-32">
                 <SortHeader
                   label="Updated"
                   column="updatedAt"

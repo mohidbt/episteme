@@ -354,12 +354,12 @@ function FileBrowserItemImpl({
           />
         }
       >
-        <TableCell className="flex items-center gap-2 font-medium">
+        <TableCell className="flex min-w-0 items-center gap-2 font-medium">
           <Icon aria-hidden className="size-4 text-muted-foreground" />
           {item.href != null ? (
             <Link
               href={item.href}
-              className="hover:underline"
+              className="min-w-0 truncate hover:underline"
               onClick={(e) => {
                 // Allow native cmd/ctrl-click to open in a new tab. For plain
                 // clicks, suppress default — the row's onClick handles open
@@ -372,7 +372,7 @@ function FileBrowserItemImpl({
               {item.title}
             </Link>
           ) : (
-            <span className="text-left">{item.title}</span>
+            <span className="min-w-0 truncate text-left">{item.title}</span>
           )}
         </TableCell>
         <TableCell>

@@ -526,7 +526,7 @@ export function ReaderClient({ documentId, title, processingStatus }: ReaderClie
   }, [pdfDoc]);
 
   return (
-    <div className="flex h-screen flex-col">
+    <div className="flex h-screen min-h-0 flex-col">
       <ReaderToolbar
         title={title}
         sidebarOpen={sidebarOpen}
@@ -559,7 +559,7 @@ export function ReaderClient({ documentId, title, processingStatus }: ReaderClie
         onToggleCase={() => setMatchCase((v) => !v)}
         onClose={() => setFindOpen(false)}
       />
-      <div className="relative flex flex-1 overflow-hidden">
+      <div className="relative flex min-h-0 flex-1 overflow-hidden">
         {(() => {
           // Build a map of sidebar-id → rendered node + dock position.
           // Each sidebar is rendered with its own DockMenu so the user can
@@ -710,7 +710,7 @@ export function ReaderClient({ documentId, title, processingStatus }: ReaderClie
                 minSize="30%"
                 defaultSize="70%"
                 data-testid="pdf-viewer-panel"
-                className="relative flex h-full overflow-hidden"
+                className="relative flex h-full min-h-0 overflow-hidden"
               >
                 <PdfViewer
                   url={url}
@@ -748,7 +748,7 @@ export function ReaderClient({ documentId, title, processingStatus }: ReaderClie
               id="reader-vertical"
               className="flex h-full w-full"
             >
-              <Panel id="reader-main-row" minSize="40%" defaultSize="70%">
+              <Panel id="reader-main-row" minSize="40%" defaultSize="70%" className="min-h-0">
                 {horizontalRow}
               </Panel>
               <Separator
