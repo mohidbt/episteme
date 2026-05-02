@@ -50,4 +50,12 @@ describe("NewConversationButton", () => {
       expect.objectContaining({ method: "POST" }),
     );
   });
+
+  it("#169 — both labels stay mounted (overlaid grid) so width does not shift on click", () => {
+    render(<NewConversationButton />);
+    const btn = screen.getByTestId("new-conversation-button");
+    // Both copies present from first render; visibility toggles, not text/text-content swap.
+    expect(btn.textContent).toContain("New conversation");
+    expect(btn.textContent).toContain("Starting…");
+  });
 });

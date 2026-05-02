@@ -216,4 +216,16 @@ describe("TabBar component", () => {
     expect(getByText("Drive")).toBeTruthy();
     expect(container.querySelector('[data-testid="tab-bar-new"]')).toBeTruthy();
   });
+
+  it("exposes --tabbar-h CSS var on the root tablist (consumed by AgentBall panel bounds)", async () => {
+    const { TabBarProvider, TabBar } = await import("./TabBar");
+    const { container } = render(
+      <TabBarProvider>
+        <TabBar />
+      </TabBarProvider>,
+    );
+    const root = container.querySelector('[data-testid="tab-bar"]') as HTMLElement;
+    expect(root).toBeTruthy();
+    expect(root.style.getPropertyValue("--tabbar-h")).toBe("52px");
+  });
 });

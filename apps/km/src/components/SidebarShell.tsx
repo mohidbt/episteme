@@ -90,6 +90,16 @@ export function SidebarShell({ library, tree, isAnonymous }: SidebarShellProps) 
 
   const width = collapsed ? COLLAPSED_WIDTH : EXPANDED_WIDTH;
 
+  // Mirror the current sidebar width onto the document root so siblings
+  // (e.g. the fixed-positioned AgentBall panel) can clamp against it.
+  React.useEffect(() => {
+    const el = document.documentElement;
+    el.style.setProperty("--sidebar-width", width);
+    return () => {
+      el.style.removeProperty("--sidebar-width");
+    };
+  }, [width]);
+
   return (
     <SidebarCollapsedContext.Provider value={collapsed}>
       <div

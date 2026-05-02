@@ -202,13 +202,18 @@ export function AgentBall(_props: AgentBallProps) {
 
   const panelPositioned = panelDrag.x !== null;
   // G-R3-05 #77 — expanded panel must not cover the sidebar or the TabBar.
-  // max-w = viewport - sidebar width; top = tabbar height.
+  // top clamps to bottom of TabBar; max-h prevents overflow above; max-w
+  // prevents overflow into the sidebar. Bottom anchor (bottom-4) keeps the
+  // panel resting just above the matrix ball.
   const panelBoundsClass = `top-[var(--tabbar-h)] max-h-[calc(100dvh-var(--tabbar-h))] max-w-[calc(100vw-var(--sidebar-width))]`;
+  // Default open size: roomy enough to be useful (≥600px tall, 480px wide on
+  // typical viewports). On small viewports the max-h/max-w clamps win.
+  const panelSizeClass = `h-[min(720px,calc(100dvh-var(--tabbar-h)-2rem))] w-[min(480px,calc(100vw-var(--sidebar-width)-2rem))]`;
   const panelLayoutClass = fullscreen
     ? `fixed inset-0 z-50 flex flex-col rounded-lg border bg-background shadow-xl`
     : panelPositioned
-      ? `fixed bottom-4 z-50 flex h-[600px] w-[400px] ${panelBoundsClass} flex-col rounded-lg border bg-background shadow-xl`
-      : `fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex h-[600px] w-[400px] ${panelBoundsClass} flex-col rounded-lg border bg-background shadow-xl`;
+      ? `fixed bottom-4 z-50 flex ${panelSizeClass} ${panelBoundsClass} flex-col rounded-lg border bg-background shadow-xl`
+      : `fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex ${panelSizeClass} ${panelBoundsClass} flex-col rounded-lg border bg-background shadow-xl`;
 
   // G-R3-05 #76 — when collapsed, animate the panel down into the matrix
   // square: scale to a 40px ball anchored at the bottom-center while keeping

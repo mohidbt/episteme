@@ -57,6 +57,12 @@
   --bg: var(--background);
   --fg: var(--foreground);
   --fg-muted: var(--muted-foreground);
+
+  /* Layout chrome — agent panel uses these to clamp its bounds.
+     SidebarShell rewrites --sidebar-width on documentElement based on
+     collapsed state; TabBar height is a fixed token. */
+  --tabbar-h: 52px;
+  --sidebar-width: 15.5rem;
 }
 
 @theme inline {
