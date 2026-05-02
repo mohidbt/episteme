@@ -11,11 +11,13 @@ never accepted from the LLM. See ``tools/_auth.py`` and §1.3b-E2E-3.
 """
 from __future__ import annotations
 
+import json
 from typing import TypedDict
 
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
 
+from lib import km_http
 from lib.km_http import km_get, km_patch
 from tools._auth import user_id_from_config
 
@@ -96,33 +98,59 @@ async def csv_write_cell(
     *,
     config: RunnableConfig,
 ) -> object:
-    """Write / enrich ONE cell of a paperset / spreadsheet / extraction table.
+    """Enrich ONE cell of a paperset / spreadsheet / extraction table.
 
     USE THIS to "fill", "enrich", "extract into", or "write" a single cell
-    of a paperset/spreadsheet/CSV. One call = one cell. Source grounding
-    (paper_id + block_ids) is REQUIRED for any non-"n/a" value.
+    of a paperset/spreadsheet/CSV. One call = one cell. The KM enrichment
+    route runs the column prompt against the row's paper and stores the result.
 
-    Server-side guards (return a clear error string on violation):
-      - ``grounding.block_ids`` MUST be non-empty for any value other
-        than the literal string ``"n/a"``.
-      - The cell must currently be empty OR contain the same ``value``
-        you are writing (idempotent retry is allowed).
-      - ``row`` must be in ``range(len(row_refs))``.
-      - ``col`` must be one of the paperset's column names.
+    ``value`` and ``grounding`` remain in the schema for backward
+    compatibility with older prompts, but user-facing calls ignore them. The
+    model must not decide and write arbitrary cell values.
 
     On success returns the literal string ``"ok"``. On KM-side 4xx/5xx
-    returns a string like ``"error: grounding_required"`` so the agent
+    returns a string like ``"error: unknown_col"`` so the agent
     can adapt — never raises into the LangGraph stream.
 
     Args:
         file_id: Paperset UUID.
         row: Zero-based row index into ``row_refs``.
         col: Column name (must match one of the paperset's columns).
-        value: Cell value. Use ``"n/a"`` if the paper does not answer.
-        grounding: ``{paper_id, block_ids}`` — block_ids is the list of
-            ``read_paper`` blocks the value was extracted from.
+        value: Ignored unless the private extraction route is performing the
+            final internal write.
+        grounding: Ignored unless the private extraction route is performing
+            the final internal write.
     """
     user_id = user_id_from_config(config)
+    configurable = config.get("configurable", {}) if isinstance(config, dict) else {}
+
+    if not configurable.get("allow_direct_csv_write"):
+        body = {"cells": [{"row_idx": row, "col_name": col}]}
+        path = f"/api/papersets/{file_id}/enrich"
+        body_bytes = json.dumps(body).encode()
+        headers = km_http._auth_headers("POST", path, body_bytes, user_id)
+        try:
+            resp = await km_http._client.post(
+                km_http._km_base_url() + path,
+                content=body_bytes,
+                headers=headers,
+            )
+        except Exception as e:  # noqa: BLE001
+            return f"error: {type(e).__name__}: {e}"
+        if not resp.is_success:
+            err = km_http._safe_response(resp)
+            body_err = err.get("body") if isinstance(err, dict) else err
+            if isinstance(body_err, dict):
+                code = str(body_err.get("error") or body_err)
+            else:
+                code = str(body_err)
+            status = err.get("status") if isinstance(err, dict) else resp.status_code
+            return f"error: {code} (status={status})"
+        # Drain the SSE body so the enrichment run completes before the tool
+        # returns. The client UI receives updates through the paperset stream.
+        await resp.aread()
+        return "ok"
+
     body = {"row": row, "col": col, "value": value, "grounding": grounding}
     resp = await km_patch(f"/api/papersets/{file_id}/cells", body, user_id=user_id)
     if _is_error(resp):

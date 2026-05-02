@@ -639,6 +639,7 @@ async def extract(req: Request, auth: InternalAuthDep):
     _reject_guest(auth["user_id"])
     body = await req.json()
     user_id = auth["user_id"]
+    ocr_key = auth.get("ocr_key", "") or ""
 
     paperset_id = body.get("paperset_id")
     cells = body.get("cells")
@@ -707,7 +708,12 @@ async def extract(req: Request, auth: InternalAuthDep):
                 async for ev in agent.astream_events(
                     {"messages": [{"role": "user", "content": prompt}]},
                     config={
-                        "configurable": {"thread_id": tid, "user_id": user_id},
+                        "configurable": {
+                            "thread_id": tid,
+                            "user_id": user_id,
+                            "ocr_key": ocr_key,
+                            "allow_direct_csv_write": True,
+                        },
                         "recursion_limit": _AGENT_RECURSION_LIMIT,
                     },
                     version="v2",
@@ -733,7 +739,7 @@ async def extract(req: Request, auth: InternalAuthDep):
                 return False
             # Normalize row/col on the filled payload (the agent might mismatch).
             await queue.put((
-                "cell_filled",
+                "cell_update",
                 {
                     "row": row,
                     "col": col,
