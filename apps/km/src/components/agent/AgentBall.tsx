@@ -204,12 +204,11 @@ export function AgentBall(_props: AgentBallProps) {
   // G-R3-05 #77 — expanded panel must not cover the sidebar or the TabBar.
   // max-w = viewport - sidebar width; top = tabbar height.
   const panelBoundsClass = `top-[var(--tabbar-h)] max-h-[calc(100dvh-var(--tabbar-h))] max-w-[calc(100vw-var(--sidebar-width))]`;
-  const panelSize = `h-[min(600px,calc(100dvh-var(--tabbar-h)-32px))] w-[400px]`;
   const panelLayoutClass = fullscreen
     ? `fixed inset-0 z-50 flex flex-col rounded-lg border bg-background shadow-xl`
     : panelPositioned
-      ? `fixed bottom-4 z-50 flex ${panelSize} ${panelBoundsClass} flex-col rounded-lg border bg-background shadow-xl`
-      : `fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex ${panelSize} ${panelBoundsClass} flex-col rounded-lg border bg-background shadow-xl`;
+      ? `fixed bottom-4 z-50 flex h-[600px] w-[400px] ${panelBoundsClass} flex-col rounded-lg border bg-background shadow-xl`
+      : `fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex h-[600px] w-[400px] ${panelBoundsClass} flex-col rounded-lg border bg-background shadow-xl`;
 
   // G-R3-05 #76 — when collapsed, animate the panel down into the matrix
   // square: scale to a 40px ball anchored at the bottom-center while keeping
