@@ -27,8 +27,10 @@ describe("PapersetTable", () => {
         folders={folders}
       />,
     );
-    expect(screen.getByText("alpha.csv")).toBeDefined();
-    expect(screen.getByText("beta.csv")).toBeDefined();
+    expect(screen.getByRole("link", { name: /^alpha$/i })).toBeDefined();
+    expect(screen.getByRole("link", { name: /^beta$/i })).toBeDefined();
+    expect(screen.queryByText("alpha.csv")).toBeNull();
+    expect(screen.queryByText("beta.csv")).toBeNull();
     // Folder column shows breadcrumb for f1
     expect(screen.getByText("Research")).toBeDefined();
   });
@@ -50,10 +52,10 @@ describe("PapersetTable", () => {
         folders={folders}
       />,
     );
-    const link1 = screen.getByText("alpha.csv").closest("a");
-    const link2 = screen.getByText("beta.csv").closest("a");
-    expect(link1?.getAttribute("href")).toBe("/d/ps1");
-    expect(link2?.getAttribute("href")).toBe("/d/ps2");
+    const link1 = screen.getByRole("link", { name: /^alpha$/i });
+    const link2 = screen.getByRole("link", { name: /^beta$/i });
+    expect(link1.getAttribute("href")).toBe("/d/ps1");
+    expect(link2.getAttribute("href")).toBe("/d/ps2");
   });
 
   it("shows column count and row count", () => {
@@ -76,7 +78,7 @@ describe("PapersetTable", () => {
         folders={folders}
       />,
     );
-    const row = screen.getByText("alpha.csv").closest("tr")!;
+    const row = screen.getByRole("link", { name: /^alpha$/i }).closest("tr")!;
     expect(within(row).getByText("3")).toBeDefined();
     expect(within(row).getByText("2")).toBeDefined();
   });
