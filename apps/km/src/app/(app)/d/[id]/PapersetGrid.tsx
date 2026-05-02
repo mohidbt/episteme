@@ -1,6 +1,6 @@
 "use client";
 
-import { useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import type { CellSelection } from "./lib/selection";
@@ -69,12 +69,36 @@ export function PapersetGrid({
 
   // #105: cell detail sheet state
   const [detailCell, setDetailCell] = useState<DetailCell | null>(null);
+  const dragStartRef = useRef<{ row: number; col: string } | null>(null);
+  const [hoveredCell, setHoveredCell] = useState<string | null>(null);
+  const [hoverTrail, setHoverTrail] = useState<string[]>([]);
+
+  useEffect(() => {
+    const stopDrag = () => {
+      dragStartRef.current = null;
+    };
+    window.addEventListener("mouseup", stopDrag);
+    return () => window.removeEventListener("mouseup", stopDrag);
+  }, []);
 
   function onCellMouseDown(e: React.MouseEvent, row: number, col: string) {
     if (e.button !== 0) return;
+    dragStartRef.current = { row, col };
     if (e.shiftKey) selection.shiftClick({ row, col });
     else if (e.metaKey || e.ctrlKey) selection.cmdClick({ row, col });
     else selection.click({ row, col });
+    onSelectionChange();
+  }
+
+  function onCellMouseEnter(row: number, col: string) {
+    const key = `${row}:${col}`;
+    setHoveredCell(key);
+    setHoverTrail((prev) => [...prev.filter((k) => k !== key), key].slice(-8));
+
+    const start = dragStartRef.current;
+    if (!start) return;
+    selection.click(start);
+    selection.shiftClick({ row, col });
     onSelectionChange();
   }
 
@@ -245,6 +269,7 @@ export function PapersetGrid({
       <div
         className="relative min-h-0 flex-1 overflow-hidden rounded-lg border border-border/60"
         data-testid="paperset-grid-wrapper"
+        onMouseLeave={() => setHoveredCell(null)}
       >
         <div
           ref={scrollRef}
@@ -290,8 +315,11 @@ export function PapersetGrid({
                   selection={selection}
                   onRowHeaderClick={() => onRowHeaderClick(rowIdx)}
                   onCellMouseDown={onCellMouseDown}
+                  onCellMouseEnter={onCellMouseEnter}
                   onCellClick={onCellClick}
                   onRemoveRow={() => removeRow(rowIdx)}
+                  hoveredCell={hoveredCell}
+                  hoverTrail={hoverTrail}
                 />
               );
             })}

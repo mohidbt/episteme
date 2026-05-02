@@ -77,6 +77,33 @@ describe("PapersetView", () => {
     });
   });
 
+  it("dragging across empty cells moves selection and paints hover trail", async () => {
+    render(<PapersetView {...baseProps} />);
+    const start = screen.getByTestId("cell-0-x");
+    const end = screen.getByTestId("cell-1-y");
+
+    fireEvent.mouseDown(start, { button: 0 });
+    fireEvent.mouseEnter(end);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("cell-0-x").getAttribute("data-selected")).toBe("true");
+      expect(screen.getByTestId("cell-0-y").getAttribute("data-selected")).toBe("true");
+      expect(screen.getByTestId("cell-1-x").getAttribute("data-selected")).toBe("true");
+      expect(screen.getByTestId("cell-1-y").getAttribute("data-selected")).toBe("true");
+      expect(end.getAttribute("data-hovered")).toBe("true");
+      expect(end.getAttribute("data-hover-trail")).toBe("true");
+    });
+
+    fireEvent.mouseEnter(screen.getByTestId("cell-0-y"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("cell-0-x").getAttribute("data-selected")).toBe("true");
+      expect(screen.getByTestId("cell-0-y").getAttribute("data-selected")).toBe("true");
+      expect(screen.getByTestId("cell-1-x").getAttribute("data-selected")).toBe("false");
+      expect(screen.getByTestId("cell-1-y").getAttribute("data-selected")).toBe("false");
+    });
+  });
+
   it("Run enrichment is disabled while a run is in progress", async () => {
     const stream = new ReadableStream<Uint8Array>({
       start(c) {

@@ -38,8 +38,11 @@ export function RowView({
   selection,
   onRowHeaderClick,
   onCellMouseDown,
+  onCellMouseEnter,
   onCellClick,
   onRemoveRow,
+  hoveredCell,
+  hoverTrail,
 }: {
   rowIdx: number;
   paper: { id: string; title: string | null; filename: string };
@@ -51,9 +54,13 @@ export function RowView({
   selection: CellSelection;
   onRowHeaderClick: () => void;
   onCellMouseDown: (e: React.MouseEvent, row: number, col: string) => void;
+  onCellMouseEnter: (row: number, col: string) => void;
   onCellClick: (row: number, col: string) => void;
   onRemoveRow: () => void;
+  hoveredCell: string | null;
+  hoverTrail: string[];
 }) {
+  const hoverTrailSet = new Set(hoverTrail);
   return (
     <ContextMenu>
       <ContextMenuTrigger render={<tr />}>
@@ -76,6 +83,7 @@ export function RowView({
             grounding: cellGrounding,
           });
           const selected = selection.has({ row: rowIdx, col: col.name });
+          const cellKey = `${rowIdx}:${col.name}`;
           const ground = cellGrounding[String(rowIdx)]?.[col.name];
           return (
             <CellView
@@ -87,7 +95,10 @@ export function RowView({
               groundingPaperId={ground?.paper_id ?? paper.id}
               groundingBlockIds={ground?.block_ids ?? []}
               onMouseDown={(e) => onCellMouseDown(e, rowIdx, col.name)}
+              onMouseEnter={() => onCellMouseEnter(rowIdx, col.name)}
               onClick={() => onCellClick(rowIdx, col.name)}
+              hovered={hoveredCell === cellKey}
+              hoverTrail={hoverTrailSet.has(cellKey)}
               testId={`cell-${rowIdx}-${col.name}`}
             />
           );
@@ -183,7 +194,10 @@ function CellView({
   groundingPaperId,
   groundingBlockIds,
   onMouseDown,
+  onMouseEnter,
   onClick,
+  hovered,
+  hoverTrail,
   testId,
 }: {
   state: ReturnType<typeof deriveCellState>;
@@ -193,20 +207,28 @@ function CellView({
   groundingPaperId: string;
   groundingBlockIds: string[];
   onMouseDown: (e: React.MouseEvent) => void;
+  onMouseEnter: () => void;
   onClick: () => void;
+  hovered: boolean;
+  hoverTrail: boolean;
   testId: string;
 }) {
   return (
     <td
       onMouseDown={onMouseDown}
+      onMouseEnter={onMouseEnter}
       onClick={state.kind === "filled" ? onClick : undefined}
       className={cn(
-        "relative h-9 cursor-cell border-b border-r border-border/60 px-3 py-1.5 align-middle",
+        "relative h-9 cursor-cell border-b border-r border-border/60 px-3 py-1.5 align-middle transition-colors",
+        hoverTrail && "bg-primary/5",
+        hovered && "bg-primary/15",
         selected && "bg-primary/10",
         selected && showRing && "ring-2 ring-inset ring-primary/70",
       )}
       data-cell-state={state.kind}
       data-selected={selected ? "true" : "false"}
+      data-hovered={hovered ? "true" : "false"}
+      data-hover-trail={hoverTrail ? "true" : "false"}
       data-col={colName}
       data-testid={testId}
     >
