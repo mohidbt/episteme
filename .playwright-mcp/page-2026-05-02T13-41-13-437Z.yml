@@ -1,0 +1,151 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - generic [ref=e3]:
+      - generic [ref=e4]:
+        - link "ε My Library" [ref=e6] [cursor=pointer]:
+          - /url: /
+          - generic [ref=e7]: ε
+          - generic [ref=e8]: My Library
+        - generic [ref=e9]:
+          - button "Drive" [ref=e12]:
+            - img [ref=e13]
+            - text: Drive
+            - img [ref=e18]
+          - generic [ref=e20]:
+            - button "Collections" [ref=e21]:
+              - img [ref=e22]
+              - generic [ref=e25]: Collections
+              - img [ref=e26]
+            - list [ref=e29]:
+              - listitem [ref=e30]:
+                - link "Papers" [ref=e31] [cursor=pointer]:
+                  - /url: /papers
+                  - img [ref=e32]
+                  - generic [ref=e35]: Papers
+              - listitem [ref=e36]:
+                - link "References" [ref=e37] [cursor=pointer]:
+                  - /url: /references
+                  - img [ref=e38]
+                  - generic [ref=e41]: References
+              - listitem [ref=e42]:
+                - link "Notes" [ref=e43] [cursor=pointer]:
+                  - /url: /notes
+                  - img [ref=e44]
+                  - generic [ref=e47]: Notes
+              - listitem [ref=e48]:
+                - link "Papersets" [ref=e49] [cursor=pointer]:
+                  - /url: /papersets
+                  - img [ref=e50]
+                  - generic [ref=e54]: Papersets
+          - generic [ref=e55]:
+            - button "Agent" [ref=e56]:
+              - img [ref=e57]
+              - generic [ref=e60]: Agent
+              - img [ref=e61]
+            - list [ref=e64]:
+              - listitem [ref=e65]:
+                - link "Convos" [ref=e66] [cursor=pointer]:
+                  - /url: /agents
+                  - img [ref=e67]
+                  - generic [ref=e70]: Convos
+          - generic [ref=e71]:
+            - button "Settings" [ref=e72]:
+              - img [ref=e73]
+              - generic [ref=e84]: Settings
+              - img [ref=e85]
+            - list [ref=e88]:
+              - listitem [ref=e89]:
+                - link "Data" [ref=e90] [cursor=pointer]:
+                  - /url: /settings/data
+                  - img [ref=e91]
+                  - generic [ref=e95]: Data
+              - listitem [ref=e96]:
+                - link "Appearance" [ref=e97] [cursor=pointer]:
+                  - /url: /settings/appearance
+                  - img [ref=e98]
+                  - generic [ref=e104]: Appearance
+              - listitem [ref=e105]:
+                - link "Agent settings" [ref=e106] [cursor=pointer]:
+                  - /url: /settings/agents
+                  - img [ref=e107]
+                  - generic [ref=e110]: Agent settings
+      - button "Collapse sidebar" [ref=e111]:
+        - img [ref=e112]
+    - generic [ref=e114]:
+      - tablist "Open tabs" [ref=e115]:
+        - tab "Drive Close Drive" [ref=e225]:
+          - button "Drive" [ref=e226]
+          - button "Close Drive" [ref=e227]:
+            - img [ref=e228]
+        - tab "Papers Close Papers" [selected] [ref=e231]:
+          - button "Papers" [ref=e232]
+          - button "Close Papers" [ref=e233]:
+            - img [ref=e234]
+        - tab "References Close References" [ref=e237]:
+          - button "References" [ref=e238]
+          - button "Close References" [ref=e239]:
+            - img [ref=e240]
+        - tab "Papersets Close Papersets" [ref=e243]:
+          - button "Papersets" [ref=e244]
+          - button "Close Papersets" [ref=e245]:
+            - img [ref=e246]
+        - tab "Trash Close Trash" [ref=e249]:
+          - button "Trash" [ref=e250]
+          - button "Close Trash" [ref=e251]:
+            - img [ref=e252]
+        - button "New tab" [ref=e116]:
+          - img [ref=e117]
+      - main [ref=e118]:
+        - generic [ref=e119]:
+          - heading "Papers" [level=1] [ref=e120]
+          - generic [ref=e122] [cursor=pointer]:
+            - button "Choose File" [ref=e123]
+            - paragraph [ref=e124]: Drop files or click to upload
+            - paragraph [ref=e125]: PDF · MD · BibTeX · Images · up to 50 MB
+          - button "Folder" [ref=e127]:
+            - text: Folder
+            - img [ref=e128]
+          - generic [ref=e130]:
+            - group "Papers view mode" [ref=e132]:
+              - button "Grid view" [pressed] [ref=e133]:
+                - img
+              - button "List view" [ref=e134]:
+                - img
+            - generic [ref=e135]:
+              - 'link "Propensity-score matching with GAN-generated observations from electronic health records: simulation study and application to the evaluation of prone positioning in COVID-19 patients under mechanical ventilation" [ref=e137] [cursor=pointer]':
+                - /url: /p/cacac279-3e68-4cf9-838b-8577204a84ca
+                - generic [ref=e140]:
+                  - generic [ref=e141]:
+                    - 'heading "Propensity-score matching with GAN-generated observations from electronic health records: simulation study and application to the evaluation of prone positioning in COVID-19 patients under mechanical ventilation" [level=3] [ref=e142]'
+                    - generic [ref=e143]: "2025"
+                  - paragraph [ref=e144]: Bertrand Bouvarel, Benjamin Glemain, Fabrice Carrat, …
+              - generic [ref=e145]:
+                - link "nash51" [ref=e146] [cursor=pointer]:
+                  - /url: /p/8e62f816-f1c7-4cd1-adaf-60e16e145de1
+                  - heading "nash51" [level=3] [ref=e151]
+                - generic [ref=e152] [cursor=pointer]: First
+              - generic [ref=e153]:
+                - link "Attention Is All You Need" [ref=e154] [cursor=pointer]:
+                  - /url: /p/3e5b4c36-085f-4154-8012-ea06ffaafccf
+                  - generic [ref=e157]:
+                    - generic [ref=e158]:
+                      - heading "Attention Is All You Need" [level=3] [ref=e159]
+                      - generic [ref=e160]: "2017"
+                    - paragraph [ref=e161]: Ashish Vaswani, Noam Shazeer, Niki Parmar, …
+                - generic [ref=e162] [cursor=pointer]: First
+              - generic [ref=e163]:
+                - link "Spontaneous switching in a protein signalling array reveals near-critical cooperativity" [ref=e164] [cursor=pointer]:
+                  - /url: /p/03b26461-50e0-4052-839b-d2ffd233e315
+                  - generic [ref=e167]:
+                    - generic [ref=e168]:
+                      - heading "Spontaneous switching in a protein signalling array reveals near-critical cooperativity" [level=3] [ref=e169]
+                      - generic [ref=e170]: "2026"
+                    - paragraph [ref=e171]: Johannes M. Keegstra
+                - generic [ref=e172] [cursor=pointer]: First
+    - button "Open agent" [ref=e345]:
+      - img "Open agent" [ref=e346]:
+        - img [ref=e347]
+  - region "Notifications alt+T"
+  - button "Open Next.js Dev Tools" [ref=e260] [cursor=pointer]:
+    - img [ref=e261]
+  - alert [ref=e264]

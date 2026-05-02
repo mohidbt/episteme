@@ -1,0 +1,117 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - generic [ref=e3]:
+      - link "My Library" [ref=e5] [cursor=pointer]:
+        - /url: /
+      - generic [ref=e6]:
+        - button "Drive" [ref=e9]:
+          - img [ref=e10]
+          - text: Drive
+          - img [ref=e15]
+        - generic [ref=e17]:
+          - generic [ref=e18]:
+            - img [ref=e19]
+            - text: Collections
+          - list [ref=e23]:
+            - listitem [ref=e24]:
+              - link "Papers" [ref=e25] [cursor=pointer]:
+                - /url: /papers
+                - img [ref=e26]
+                - generic [ref=e29]: Papers
+            - listitem [ref=e30]:
+              - link "References" [ref=e31] [cursor=pointer]:
+                - /url: /references
+                - img [ref=e32]
+                - generic [ref=e35]: References
+            - listitem [ref=e36]:
+              - link "Notes" [ref=e37] [cursor=pointer]:
+                - /url: /notes
+                - img [ref=e38]
+                - generic [ref=e41]: Notes
+            - listitem [ref=e42]:
+              - link "Data" [ref=e43] [cursor=pointer]:
+                - /url: /data
+                - img [ref=e44]
+                - generic [ref=e48]: Data
+        - generic [ref=e49]:
+          - generic [ref=e50]:
+            - img [ref=e51]
+            - text: Agent
+          - list [ref=e55]:
+            - listitem [ref=e56]:
+              - link "skills.md" [ref=e57] [cursor=pointer]:
+                - /url: /agent/skills
+                - img [ref=e58]
+                - generic [ref=e61]: skills.md
+            - listitem [ref=e62]:
+              - link "memory.md" [ref=e63] [cursor=pointer]:
+                - /url: /agent/memory
+                - img [ref=e64]
+                - generic [ref=e72]: memory.md
+            - listitem [ref=e73]:
+              - link "settings.json" [ref=e74] [cursor=pointer]:
+                - /url: /agent/settings
+                - img [ref=e75]
+                - generic [ref=e78]: settings.json
+        - generic [ref=e79]:
+          - generic [ref=e80]:
+            - img [ref=e81]
+            - text: Settings
+          - list [ref=e93]:
+            - listitem [ref=e94]:
+              - link "Data" [ref=e95] [cursor=pointer]:
+                - /url: /settings/data
+                - img [ref=e96]
+                - generic [ref=e100]: Data
+            - listitem [ref=e101]:
+              - link "Appearance" [ref=e102] [cursor=pointer]:
+                - /url: /settings/appearance
+                - img [ref=e103]
+                - generic [ref=e109]: Appearance
+            - listitem [ref=e110]:
+              - link "Permissions & MCP" [ref=e111] [cursor=pointer]:
+                - /url: /settings/agents
+                - img [ref=e112]
+                - generic [ref=e115]: Permissions & MCP
+    - main [ref=e116]:
+      - generic [ref=e278]:
+        - navigation "Breadcrumbs" [ref=e279]:
+          - link "My Library" [ref=e280] [cursor=pointer]:
+            - /url: /
+            - generic [ref=e281]: My Library
+          - img [ref=e282]
+          - generic [ref=e285]: Welcome to Episteme
+        - generic [ref=e286]:
+          - heading "Welcome to Episteme" [level=1] [ref=e287]
+          - generic [ref=e288]:
+            - button "Ask my notes" [ref=e289]:
+              - img
+            - button "Summarize" [ref=e290]:
+              - img
+            - button "Publish" [ref=e291]:
+              - img
+            - button "Versions" [ref=e292]:
+              - img
+            - button "Download" [ref=e293]:
+              - img
+              - text: Download
+        - generic [ref=e296]:
+          - heading "Welcome to Episteme" [level=1] [ref=e297]
+          - paragraph [ref=e298]: Episteme is a knowledge-management workspace for your notes, papers, and references. Everything you see on this page lives in your browser — no account required. Try editing it.
+          - paragraph [ref=e299]:
+            - text: Organise your thinking with notebooks, link notes with
+            - code [ref=e300]: "[[wikilinks]]"
+            - text: ", and annotate PDFs from the reader. The sidebar on the left is your drive; the editor in front of you is a Notion-style block editor with slash commands."
+          - paragraph [ref=e301]: When you're ready to sync across devices, sign up and your guest content will follow you.
+    - dialog "Agent" [ref=e302]:
+      - generic [ref=e303]:
+        - generic [ref=e304]:
+          - img [ref=e305]
+          - text: Agent
+        - button "Close agent" [ref=e308]:
+          - img [ref=e309]
+      - generic [ref=e313]: Loading…
+  - region "Notifications alt+T"
+  - button "Open Next.js Dev Tools" [ref=e180] [cursor=pointer]:
+    - img [ref=e181]
+  - alert [ref=e245]

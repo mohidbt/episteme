@@ -1,0 +1,125 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - generic [ref=e3]:
+      - link "My Library" [ref=e5] [cursor=pointer]:
+        - /url: /
+      - generic [ref=e6]:
+        - button "Drive" [ref=e9]:
+          - img [ref=e10]
+          - text: Drive
+          - img [ref=e15]
+        - generic [ref=e17]:
+          - generic [ref=e18]:
+            - img [ref=e19]
+            - text: Collections
+          - list [ref=e23]:
+            - listitem [ref=e24]:
+              - link "Papers" [ref=e25] [cursor=pointer]:
+                - /url: /papers
+                - img [ref=e26]
+                - generic [ref=e29]: Papers
+            - listitem [ref=e30]:
+              - link "References" [ref=e31] [cursor=pointer]:
+                - /url: /references
+                - img [ref=e32]
+                - generic [ref=e35]: References
+            - listitem [ref=e36]:
+              - link "Notes" [ref=e37] [cursor=pointer]:
+                - /url: /notes
+                - img [ref=e38]
+                - generic [ref=e41]: Notes
+            - listitem [ref=e42]:
+              - link "Data" [ref=e43] [cursor=pointer]:
+                - /url: /data
+                - img [ref=e44]
+                - generic [ref=e48]: Data
+        - generic [ref=e49]:
+          - generic [ref=e50]:
+            - img [ref=e51]
+            - text: Agent
+          - list [ref=e55]:
+            - listitem [ref=e56]:
+              - link "skills.md" [ref=e57] [cursor=pointer]:
+                - /url: /agent/skills
+                - img [ref=e58]
+                - generic [ref=e61]: skills.md
+            - listitem [ref=e62]:
+              - link "memory.md" [ref=e63] [cursor=pointer]:
+                - /url: /agent/memory
+                - img [ref=e64]
+                - generic [ref=e72]: memory.md
+            - listitem [ref=e73]:
+              - link "settings.json" [ref=e74] [cursor=pointer]:
+                - /url: /agent/settings
+                - img [ref=e75]
+                - generic [ref=e78]: settings.json
+        - generic [ref=e79]:
+          - generic [ref=e80]:
+            - img [ref=e81]
+            - text: Settings
+          - list [ref=e93]:
+            - listitem [ref=e94]:
+              - link "Data" [ref=e95] [cursor=pointer]:
+                - /url: /settings/data
+                - img [ref=e96]
+                - generic [ref=e100]: Data
+            - listitem [ref=e101]:
+              - link "Appearance" [ref=e102] [cursor=pointer]:
+                - /url: /settings/appearance
+                - img [ref=e103]
+                - generic [ref=e109]: Appearance
+            - listitem [ref=e110]:
+              - link "Permissions & MCP" [ref=e111] [cursor=pointer]:
+                - /url: /settings/agents
+                - img [ref=e112]
+                - generic [ref=e115]: Permissions & MCP
+    - main [ref=e116]:
+      - generic [ref=e118]:
+        - generic [ref=e119]:
+          - navigation "Breadcrumbs" [ref=e120]:
+            - link "My Library" [ref=e121] [cursor=pointer]:
+              - /url: /
+              - generic [ref=e122]: My Library
+          - generic [ref=e123]:
+            - group "View mode" [ref=e124]:
+              - button "Tile view" [pressed] [ref=e125]:
+                - img
+              - button "List view" [ref=e126]:
+                - img
+            - button "New" [ref=e127]:
+              - img [ref=e128]
+              - generic [ref=e129]: New
+            - button "Import" [ref=e130]:
+              - img
+              - text: Import
+        - generic [ref=e131]:
+          - button "Onboarding Apr 25, 2026" [ref=e132] [cursor=pointer]:
+            - img [ref=e134]
+            - generic [ref=e136]:
+              - generic [ref=e137]: Onboarding
+              - generic [ref=e138]: Apr 25, 2026
+          - button "E2E Note 2 Apr 25, 2026" [ref=e139] [cursor=pointer]:
+            - img [ref=e141]
+            - generic [ref=e144]:
+              - generic [ref=e145]: E2E Note 2
+              - generic [ref=e146]: Apr 25, 2026
+          - button "Welcome to Episteme Apr 25, 2026" [ref=e147] [cursor=pointer]:
+            - img [ref=e149]
+            - generic [ref=e152]:
+              - generic [ref=e153]: Welcome to Episteme
+              - generic [ref=e154]: Apr 25, 2026
+          - button "Paper notes Apr 25, 2026" [ref=e155] [cursor=pointer]:
+            - img [ref=e157]
+            - generic [ref=e160]:
+              - generic [ref=e161]: Paper notes
+              - generic [ref=e162]: Apr 25, 2026
+          - button "Try the AI Apr 25, 2026" [ref=e163] [cursor=pointer]:
+            - img [ref=e165]
+            - generic [ref=e168]:
+              - generic [ref=e169]: Try the AI
+              - generic [ref=e170]: Apr 25, 2026
+    - button "Open agent" [ref=e171]:
+      - img [ref=e172]
+  - region "Notifications alt+T"
+  - button "Open Next.js Dev Tools" [ref=e180] [cursor=pointer]:
+    - img [ref=e181]

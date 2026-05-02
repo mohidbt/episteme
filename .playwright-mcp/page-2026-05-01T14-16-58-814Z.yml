@@ -1,0 +1,125 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - generic [ref=e4]:
+      - generic [ref=e5]:
+        - link "My Library" [ref=e6] [cursor=pointer]:
+          - /url: /
+        - button "Collapse sidebar" [ref=e7]:
+          - img [ref=e8]
+      - generic [ref=e11]:
+        - button "Drive" [ref=e14]:
+          - img [ref=e15]
+          - text: Drive
+          - img [ref=e20]
+        - generic [ref=e22]:
+          - generic [ref=e23]:
+            - img [ref=e24]
+            - text: Collections
+          - list [ref=e28]:
+            - listitem [ref=e29]:
+              - link "Papers" [ref=e30] [cursor=pointer]:
+                - /url: /papers
+                - img [ref=e31]
+                - generic [ref=e34]: Papers
+            - listitem [ref=e35]:
+              - link "References" [ref=e36] [cursor=pointer]:
+                - /url: /references
+                - img [ref=e37]
+                - generic [ref=e40]: References
+            - listitem [ref=e41]:
+              - link "Notes" [ref=e42] [cursor=pointer]:
+                - /url: /notes
+                - img [ref=e43]
+                - generic [ref=e46]: Notes
+            - listitem [ref=e47]:
+              - link "Papersets" [ref=e48] [cursor=pointer]:
+                - /url: /papersets
+                - img [ref=e49]
+                - generic [ref=e53]: Papersets
+        - generic [ref=e54]:
+          - generic [ref=e55]:
+            - img [ref=e56]
+            - text: Agent
+          - list [ref=e60]:
+            - listitem [ref=e61]:
+              - link "Convos" [ref=e62] [cursor=pointer]:
+                - /url: /agents
+                - img [ref=e63]
+                - generic [ref=e66]: Convos
+        - generic [ref=e67]:
+          - generic [ref=e68]:
+            - img [ref=e69]
+            - text: Settings
+          - list [ref=e81]:
+            - listitem [ref=e82]:
+              - link "Data" [ref=e83] [cursor=pointer]:
+                - /url: /settings/data
+                - img [ref=e84]
+                - generic [ref=e88]: Data
+            - listitem [ref=e89]:
+              - link "Appearance" [ref=e90] [cursor=pointer]:
+                - /url: /settings/appearance
+                - img [ref=e91]
+                - generic [ref=e97]: Appearance
+            - listitem [ref=e98]:
+              - link "Agent Settings" [ref=e99] [cursor=pointer]:
+                - /url: /settings/agents
+                - img [ref=e100]
+                - generic [ref=e103]: Agent Settings
+    - generic [ref=e104]:
+      - tablist "Open tabs" [ref=e105]:
+        - button "New tab" [ref=e106]:
+          - img [ref=e107]
+      - main [ref=e108]:
+        - generic [ref=e110]:
+          - generic [ref=e230]:
+            - navigation "Breadcrumbs" [ref=e231]:
+              - link "My Library" [ref=e232] [cursor=pointer]:
+                - /url: /
+                - generic [ref=e233]: My Library
+            - generic [ref=e234]:
+              - group "View mode" [ref=e235]:
+                - button "Tile view" [pressed] [ref=e236]:
+                  - img
+                - button "List view" [ref=e237]:
+                  - img
+              - button "New" [ref=e238]:
+                - img [ref=e239]
+                - generic [ref=e240]: New
+              - button "Import" [ref=e241]:
+                - img
+                - text: Import
+          - generic [ref=e242]:
+            - button "Onboarding Apr 25, 2026" [ref=e243] [cursor=pointer]:
+              - img [ref=e245]
+              - generic [ref=e247]:
+                - generic [ref=e248]: Onboarding
+                - generic [ref=e249]: Apr 25, 2026
+            - button "E2E Note 2 Apr 25, 2026" [ref=e250] [cursor=pointer]:
+              - img [ref=e252]
+              - generic [ref=e255]:
+                - generic [ref=e256]: E2E Note 2
+                - generic [ref=e257]: Apr 25, 2026
+            - button "Welcome to Episteme Apr 25, 2026" [ref=e258] [cursor=pointer]:
+              - img [ref=e260]
+              - generic [ref=e263]:
+                - generic [ref=e264]: Welcome to Episteme
+                - generic [ref=e265]: Apr 25, 2026
+            - button "Paper notes Apr 25, 2026" [ref=e266] [cursor=pointer]:
+              - img [ref=e268]
+              - generic [ref=e271]:
+                - generic [ref=e272]: Paper notes
+                - generic [ref=e273]: Apr 25, 2026
+            - button "Try the AI Apr 25, 2026" [ref=e274] [cursor=pointer]:
+              - img [ref=e276]
+              - generic [ref=e279]:
+                - generic [ref=e280]: Try the AI
+                - generic [ref=e281]: Apr 25, 2026
+          - status [ref=e282]
+    - button "Open agent" [ref=e163]:
+      - img "Open agent" [ref=e164]:
+        - img [ref=e165]
+  - region "Notifications alt+T"
+  - button "Open Next.js Dev Tools" [ref=e220] [cursor=pointer]:
+    - img [ref=e221]
+  - alert [ref=e283]

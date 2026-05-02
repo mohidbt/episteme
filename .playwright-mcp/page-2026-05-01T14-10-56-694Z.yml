@@ -1,0 +1,150 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - generic [ref=e4]:
+      - generic [ref=e5]:
+        - link "My Library" [ref=e6] [cursor=pointer]:
+          - /url: /
+        - button "Collapse sidebar" [ref=e7]:
+          - img [ref=e8]
+      - generic [ref=e11]:
+        - button "Drive" [ref=e14]:
+          - img [ref=e15]
+          - text: Drive
+          - img [ref=e20]
+        - generic [ref=e22]:
+          - generic [ref=e23]:
+            - img [ref=e24]
+            - text: Collections
+          - list [ref=e28]:
+            - listitem [ref=e29]:
+              - link "Papers" [ref=e30] [cursor=pointer]:
+                - /url: /papers
+                - img [ref=e31]
+                - generic [ref=e34]: Papers
+            - listitem [ref=e35]:
+              - link "References" [ref=e36] [cursor=pointer]:
+                - /url: /references
+                - img [ref=e37]
+                - generic [ref=e40]: References
+            - listitem [ref=e41]:
+              - link "Notes" [ref=e42] [cursor=pointer]:
+                - /url: /notes
+                - img [ref=e43]
+                - generic [ref=e46]: Notes
+            - listitem [ref=e47]:
+              - link "Papersets" [ref=e48] [cursor=pointer]:
+                - /url: /papersets
+                - img [ref=e49]
+                - generic [ref=e53]: Papersets
+        - generic [ref=e54]:
+          - generic [ref=e55]:
+            - img [ref=e56]
+            - text: Agent
+          - list [ref=e60]:
+            - listitem [ref=e61]:
+              - link "Convos" [ref=e62] [cursor=pointer]:
+                - /url: /agents
+                - img [ref=e63]
+                - generic [ref=e66]: Convos
+        - generic [ref=e67]:
+          - generic [ref=e68]:
+            - img [ref=e69]
+            - text: Settings
+          - list [ref=e81]:
+            - listitem [ref=e82]:
+              - link "Data" [ref=e83] [cursor=pointer]:
+                - /url: /settings/data
+                - img [ref=e84]
+                - generic [ref=e88]: Data
+            - listitem [ref=e89]:
+              - link "Appearance" [ref=e90] [cursor=pointer]:
+                - /url: /settings/appearance
+                - img [ref=e91]
+                - generic [ref=e97]: Appearance
+            - listitem [ref=e98]:
+              - link "Agent Settings" [ref=e99] [cursor=pointer]:
+                - /url: /settings/agents
+                - img [ref=e100]
+                - generic [ref=e103]: Agent Settings
+    - generic [ref=e104]:
+      - tablist "Open tabs" [ref=e105]:
+        - tab "Drive Close Drive" [ref=e224]:
+          - button "Drive" [ref=e225]
+          - button "Close Drive" [ref=e226]:
+            - img [ref=e227]
+        - tab "Notes Close Notes" [selected] [ref=e305]:
+          - button "Notes" [ref=e306]
+          - button "Close Notes" [ref=e307]:
+            - img [ref=e308]
+        - button "New tab" [ref=e106]:
+          - img [ref=e107]
+      - main [ref=e108]:
+        - generic [ref=e410]:
+          - heading "Notes" [level=1] [ref=e411]
+          - generic [ref=e413] [cursor=pointer]:
+            - button "Choose File" [ref=e414]
+            - paragraph [ref=e415]: Drop files or click to upload
+            - paragraph [ref=e416]: PDF · MD · BibTeX · Images · up to 50 MB
+          - table [ref=e418]:
+            - rowgroup [ref=e419]:
+              - row "Title Folder Updated" [ref=e420]:
+                - columnheader "Title" [ref=e421]:
+                  - button "Title" [ref=e422]:
+                    - generic [ref=e423]: Title
+                    - img [ref=e425]
+                - columnheader "Folder" [ref=e427]:
+                  - button "Folder" [ref=e428]:
+                    - generic [ref=e429]: Folder
+                    - img [ref=e431]
+                - columnheader "Updated" [ref=e433]:
+                  - button "Updated" [ref=e434]:
+                    - generic [ref=e435]: Updated
+                    - img [ref=e437]
+            - rowgroup [ref=e439]:
+              - row "E2E Note 1 Onboarding 4/25/2026" [ref=e440]:
+                - cell "E2E Note 1" [ref=e441]:
+                  - link "E2E Note 1" [ref=e442] [cursor=pointer]:
+                    - /url: /n/e2e-note-1
+                - cell "Onboarding" [ref=e443]:
+                  - generic [ref=e444]: Onboarding
+                - cell "4/25/2026" [ref=e445]
+              - row "E2E Note 2 — 4/25/2026" [ref=e446]:
+                - cell "E2E Note 2" [ref=e447]:
+                  - link "E2E Note 2" [ref=e448] [cursor=pointer]:
+                    - /url: /n/e2e-note-2
+                - cell "—" [ref=e449]
+                - cell "4/25/2026" [ref=e450]
+              - row "Paper notes — 4/25/2026" [ref=e451]:
+                - cell "Paper notes" [ref=e452]:
+                  - link "Paper notes" [ref=e453] [cursor=pointer]:
+                    - /url: /n/paper-notes
+                - cell "—" [ref=e454]
+                - cell "4/25/2026" [ref=e455]
+              - row "Try the AI — 4/25/2026" [ref=e456]:
+                - cell "Try the AI" [ref=e457]:
+                  - link "Try the AI" [ref=e458] [cursor=pointer]:
+                    - /url: /n/try-the-ai
+                - cell "—" [ref=e459]
+                - cell "4/25/2026" [ref=e460]
+              - row "Welcome to Episteme — 4/25/2026" [ref=e461]:
+                - cell "Welcome to Episteme" [ref=e462]:
+                  - link "Welcome to Episteme" [ref=e463] [cursor=pointer]:
+                    - /url: /n/welcome-to-episteme
+                - cell "—" [ref=e464]
+                - cell "4/25/2026" [ref=e465]
+    - button "Open agent" [ref=e163]:
+      - img "Open agent" [ref=e164]:
+        - img [ref=e165]
+  - region "Notifications alt+T"
+  - generic [ref=e219] [cursor=pointer]:
+    - button "Open Next.js Dev Tools" [ref=e220]:
+      - img [ref=e221]
+    - generic [ref=e466]:
+      - button "Open issues overlay" [ref=e467]:
+        - generic [ref=e468]:
+          - generic [ref=e469]: "0"
+          - generic [ref=e470]: "1"
+        - generic [ref=e471]: Issue
+      - button "Collapse issues badge" [ref=e472]:
+        - img [ref=e473]
+  - alert [ref=e283]
