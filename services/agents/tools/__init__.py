@@ -9,6 +9,7 @@ from tools.papers import TOOLS as _PAPERS_TOOLS
 from tools.pdfs import TOOLS as _PDF_TOOLS
 from tools.publish import TOOLS as _PUBLISH_TOOLS
 from tools.revisions import TOOLS as _REVISION_TOOLS
+from tools.search import TOOLS as _SEARCH_TOOLS
 from tools.web_search import TOOLS as _WEB_SEARCH_TOOLS
 
 ALL_TOOLS: list[BaseTool] = (
@@ -20,5 +21,6 @@ ALL_TOOLS: list[BaseTool] = (
     + _PAPER_SEARCH_TOOLS
     + _PAPERS_TOOLS
     + _DATA_TOOLS
+    + _SEARCH_TOOLS
     + _WEB_SEARCH_TOOLS
 )

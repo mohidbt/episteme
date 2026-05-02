@@ -16,6 +16,7 @@ from routers import (
     km_embed,
     km_complete,
     km_chat,
+    pdf_text,
 )
 from routers import km_agent
 from routers import openrouter_catalog
@@ -96,5 +97,6 @@ app.include_router(chandra_segments.router)
 app.include_router(km_embed.router)
 app.include_router(km_complete.router)
 app.include_router(km_chat.router)
+app.include_router(pdf_text.router)
 app.include_router(km_agent.router)
 app.include_router(openrouter_catalog.router)

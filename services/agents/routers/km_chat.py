@@ -60,7 +60,7 @@ async def _retrieve(conn, *, user_id: str, query_vec: list[float]) -> list[dict[
         "SELECT ne.note_id, ne.content, "
         "(1 - (ne.embedding <=> $2::vector)) AS score, "
         "n.title, n.slug "
-        "FROM note_embeddings ne "
+        "FROM note_chunks ne "
         "JOIN notes n ON n.id = ne.note_id "
         "WHERE n.user_id = $1 AND ne.embedding IS NOT NULL "
         "ORDER BY score DESC LIMIT $3",

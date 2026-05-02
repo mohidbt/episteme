@@ -33,16 +33,13 @@ async def embed_note_chunks(
     if len(vecs) != len(body.chunks):
         raise ValueError("embedding count mismatch")
 
-    await conn.execute(
-        "DELETE FROM note_embeddings WHERE note_id = $1::uuid",
-        body.noteId,
-    )
+    await conn.execute("DELETE FROM note_chunks WHERE note_id = $1::uuid", body.noteId)
     rows = [(body.noteId, c.chunkIdx, c.content, v) for c, v in zip(body.chunks, vecs)]
     await conn.executemany(
         """
-        INSERT INTO note_embeddings (note_id, chunk_idx, content, embedding)
-        VALUES ($1::uuid, $2, $3, $4)
+        INSERT INTO note_chunks (note_id, chunk_idx, content, embedding, metadata)
+        VALUES ($1::uuid, $2, $3, $4, $5::jsonb)
         """,
-        rows,
+        [(r[0], r[1], r[2], r[3], "{}") for r in rows],
     )
     return EmbedNoteChunksResponse(inserted=len(rows))

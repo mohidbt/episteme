@@ -21,7 +21,7 @@ CFG = {"configurable": {"user_id": USER}}
 def test_all_tools_count():
     from tools import ALL_TOOLS  # noqa: PLC0415
 
-    assert len(ALL_TOOLS) == 22, f"Expected 22, got {len(ALL_TOOLS)}"
+    assert len(ALL_TOOLS) == 23, f"Expected 23, got {len(ALL_TOOLS)}"
 
 
 def test_all_tools_are_base_tool():
@@ -64,6 +64,7 @@ def test_all_tools_contains_expected_names():
         "browse_papersets",
         "csv_read",
         "csv_write_cell",
+        "search_library",
     } - {"make_public"}  # publish handled separately below
     expected.add("make_public")
     actual = {t.name for t in ALL_TOOLS}
