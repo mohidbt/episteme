@@ -203,19 +203,19 @@ function ReferencesListTable({
               className={fillingIds.has(r.id) ? "ai-filling" : undefined}
             >
               <TableCell className="font-mono text-xs">{r.citationKey}</TableCell>
-              <TableCell className="max-w-md">
+              <TableCell className={`max-w-md${r.missing.includes("title") ? " bg-red-50 dark:bg-red-950/30" : ""}`}>
                 <Link href={`/r/${r.id}`} className="line-clamp-2 hover:underline">
                   {r.title || <span className="text-muted-foreground">(untitled)</span>}
                 </Link>
               </TableCell>
-              <TableCell className="text-muted-foreground">{r.authorsText}</TableCell>
-              <TableCell className="text-right tabular-nums text-muted-foreground">
+              <TableCell className={`text-muted-foreground${r.missing.includes("authors") ? " bg-red-50 dark:bg-red-950/30" : ""}`}>{r.authorsText}</TableCell>
+              <TableCell className={`text-right tabular-nums text-muted-foreground${r.missing.includes("year") ? " bg-red-50 dark:bg-red-950/30" : ""}`}>
                 {r.year ?? ""}
               </TableCell>
-              <TableCell className="font-mono text-xs text-muted-foreground">
+              <TableCell className={`font-mono text-xs text-muted-foreground${r.missing.includes("doi") ? " bg-red-50 dark:bg-red-950/30" : ""}`}>
                 {r.doi ?? ""}
               </TableCell>
-              <TableCell className="text-muted-foreground">{r.venue}</TableCell>
+              <TableCell className={`text-muted-foreground${r.missing.includes("venue") ? " bg-red-50 dark:bg-red-950/30" : ""}`}>{r.venue}</TableCell>
               <TableCell>
                 {folders && r.folderId ? (
                   <FolderBreadcrumbBadge folderId={r.folderId} folders={folders} />

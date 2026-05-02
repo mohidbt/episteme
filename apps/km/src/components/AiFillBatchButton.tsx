@@ -119,9 +119,9 @@ export function AiFillBatchButton({ kind, rows, onFillStart, onFillEnd }: Props)
       {busy ? (
         <Loader2 aria-hidden className="size-3.5 animate-spin" />
       ) : (
-        <span aria-hidden="true" className="text-sm leading-none">※</span>
+        <span aria-hidden="true" className="text-sm leading-none">⬡</span>
       )}
-      {busy ? "Filling…" : `Fill all missing (${candidates.length})`}
+      {busy ? "Filling…" : candidates.length > 0 ? `Fill all missing (${candidates.length})` : "Fill all missing"}
     </Button>
   );
 }

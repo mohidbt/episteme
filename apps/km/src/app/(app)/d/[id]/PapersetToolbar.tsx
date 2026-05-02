@@ -59,7 +59,7 @@ export function PapersetToolbar({
         {isRunning ? (
           <Loader2 className="size-4 animate-spin" aria-hidden />
         ) : (
-          <span aria-hidden="true" className="text-sm leading-none">※</span>
+          <span aria-hidden="true" className="text-sm leading-none">⬡</span>
         )}
         Run enrichment
         <span

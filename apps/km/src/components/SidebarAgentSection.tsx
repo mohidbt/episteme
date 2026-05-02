@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Bot, MessagesSquare } from "lucide-react";
+import { MessagesSquare } from "lucide-react";
 import {
   SidebarMenuButton,
   SidebarMenuItem,

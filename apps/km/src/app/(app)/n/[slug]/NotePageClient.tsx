@@ -10,7 +10,6 @@ import {
 } from "@episteme/markdown";
 import { Check } from "lucide-react";
 import { NoteEditor } from "./NoteEditor";
-import { NoteFrontmatter } from "@/components/NoteFrontmatter";
 import { VersionDrawer } from "@/components/VersionDrawer";
 import { AskNotesPanel } from "@/components/AskNotesPanel";
 import { PublishDialog } from "@/components/PublishDialog";
@@ -63,40 +62,12 @@ export function NotePageClient({
     () => parseFrontmatter(initialMd),
     [initialMd],
   );
-  const [frontmatterRows, setFrontmatterRows] = useState<FrontmatterRow[]>(
-    initialParsed.rows,
-  );
   const rowsRef = useRef<FrontmatterRow[]>(initialParsed.rows);
-  rowsRef.current = frontmatterRows;
   const initialBody = initialParsed.body;
 
   const transformMd = useCallback(
     (body: string) => buildMarkdownWithFrontmatter(rowsRef.current, body),
     [],
-  );
-
-  const onFrontmatterChange = useCallback(
-    (next: FrontmatterRow[]) => {
-      setFrontmatterRows(next);
-      // Persist the combined markdown immediately. We can't depend on the
-      // editor's debounced autosave because the editor's body did not change
-      // — only the frontmatter prefix did.
-      const editor = editorRef.current;
-      const body =
-        editor?.storage?.markdown?.getMarkdown?.() as string | undefined;
-      const combined = buildMarkdownWithFrontmatter(
-        next,
-        body ?? initialBody,
-      );
-      void fetch(`/api/notes/${id}/content`, {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ contentMd: combined }),
-      }).catch((err) => {
-        console.warn("[frontmatter autosave] failed", err);
-      });
-    },
-    [id, initialBody],
   );
 
   const [titleDraft, setTitleDraft] = useState(title);
@@ -143,6 +114,7 @@ export function NotePageClient({
   const editedLabel = updatedAt
     ? `Last edited ${formatRelativeTime(new Date(updatedAt))}`
     : "Synced";
+  const saving = flushRef.current !== null;
 
   return (
     <>
@@ -216,16 +188,12 @@ export function NotePageClient({
             <span>{referenceCount} references</span>
           </>
         )}
-        <span className="synced-pill">
-          <span className="inline-block size-1.5 rounded-full bg-green-500" />
-          Synced
+        <span className="synced-pill" data-testid="synced-pill">
+          <span className={`inline-block size-1.5 rounded-full ${saving ? "bg-amber-500" : "bg-green-500"}`} />
+          {saving ? "Saving…" : "Synced"}
         </span>
       </div>
 
-      <NoteFrontmatter
-        rows={frontmatterRows}
-        onChange={onFrontmatterChange}
-      />
       <NoteEditor
         key={id}
         id={id}

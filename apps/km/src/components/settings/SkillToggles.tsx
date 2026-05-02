@@ -87,18 +87,6 @@ export function SkillToggles({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex justify-end">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={handleExport}
-          disabled={exporting}
-          data-testid="export-skills-button"
-        >
-          {exporting ? "Exporting..." : "Export skills"}
-        </Button>
-      </div>
       <div className="text-sm font-medium" data-testid="system-skills-heading">
         System Skills
       </div>
@@ -129,6 +117,18 @@ export function SkillToggles({
       )}
       <div className="mt-4">
         <PersonalSkills />
+      </div>
+      <div className="flex justify-end">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={handleExport}
+          disabled={exporting}
+          data-testid="export-skills-button"
+        >
+          {exporting ? "Exporting..." : "Export skills"}
+        </Button>
       </div>
     </div>
   );

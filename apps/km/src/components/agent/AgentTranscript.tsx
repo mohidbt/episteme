@@ -128,6 +128,11 @@ export interface AgentTranscriptProps {
 const stripLeadingThought = (text: string): string =>
   text.replace(/^\s*thought\b[\s:,.\-]*/i, "");
 
+/** #138 — collapse consecutive blank lines so agent responses don't have
+ *  empty rows between bullets or at the top. */
+const collapseBlankLines = (text: string): string =>
+  text.replace(/\n{3,}/g, "\n\n").replace(/^\n+/, "").replace(/\n+$/, "");
+
 /**
  * Parse a chunk of SSE text. Handles partial frames via `buffer` arg.
  * Returns parsed events + remaining un-terminated buffer.
@@ -670,7 +675,7 @@ function TextCardView({
           <MessageResponse
             className={card.role === "assistant" ? "[&_p]:leading-snug" : undefined}
           >
-            {card.text}
+            {collapseBlankLines(card.text)}
           </MessageResponse>
         </MessageContent>
       </Message>

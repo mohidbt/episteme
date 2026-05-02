@@ -21,6 +21,7 @@ export function InPapersetsBadge({
 }) {
   if (count === 0) return null;
   const label = `in ${count} ${count === 1 ? "paperset" : "papersets"}`;
+  const stripCsv = (name: string) => name.replace(/\.csv$/i, "");
   return (
     <Popover>
       <PopoverTrigger
@@ -49,7 +50,7 @@ export function InPapersetsBadge({
                 href={`/d/${p.id}`}
                 className="block rounded px-2 py-1 hover:bg-muted"
               >
-                {p.filename}
+                {stripCsv(p.filename)}
               </Link>
             </li>
           ))}

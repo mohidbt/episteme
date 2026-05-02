@@ -3,7 +3,7 @@
 // G17 — Per-row "fill missing" action.
 // Posts known fields + missing field names to /api/ai-fill, shows the preview
 // inside a confirm() dialog (one-time, no auto-apply), and on accept calls
-// the supplied PATCH path. Uses ※ glyph per G3 convention.
+// the supplied PATCH path. Uses ⬡ glyph per G3 convention.
 import { useState } from "react";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -126,7 +126,7 @@ export function AiFillButton({
       {busy ? (
         <Loader2 aria-hidden className="size-3.5 animate-spin" />
       ) : (
-        <span aria-hidden="true" className="text-sm leading-none">※</span>
+        <span aria-hidden="true" className="text-sm leading-none">⬡</span>
       )}
     </button>
   );

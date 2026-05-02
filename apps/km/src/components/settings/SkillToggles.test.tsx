@@ -66,3 +66,15 @@ describe("SkillToggles export", () => {
     expect(createUrl).toHaveBeenCalled();
   });
 });
+
+describe("SkillToggles layout (#143)", () => {
+  it("renders Export skills button after the system skills section", () => {
+    render(<SkillToggles enabledSkills={[]} onChange={() => {}} />);
+    const heading = screen.getByTestId("system-skills-heading");
+    const exportBtn = screen.getByTestId("export-skills-button");
+    // Export button should come AFTER the skills heading in DOM order
+    expect(
+      heading.compareDocumentPosition(exportBtn) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+});

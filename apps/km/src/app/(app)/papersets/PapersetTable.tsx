@@ -60,7 +60,7 @@ export function PapersetTable({
                   className="inline-flex items-center gap-2 text-foreground hover:underline"
                 >
                   <Database className="size-4 text-muted-foreground" aria-hidden />
-                  {r.filename}
+                  {r.filename.replace(/\.csv$/i, "")}
                 </Link>
               </TableCell>
               <TableCell>

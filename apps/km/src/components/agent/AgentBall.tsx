@@ -103,8 +103,10 @@ export function AgentBall(_props: AgentBallProps) {
     }
   }, [open, agentBall]);
 
+  // #146 — double-space/click on open panel COLLAPSES (preserves state),
+  // not closes/destroys. Clicking the collapsed ball re-expands.
   const toggle = useCallback(() => {
-    if (open) agentBall.close();
+    if (open) setCollapsed((c) => !c);
     else agentBall.openWithPrompt("");
   }, [open, agentBall]);
 
@@ -191,7 +193,7 @@ export function AgentBall(_props: AgentBallProps) {
         data-preset={preset}
         style={inlineStyle}
         {...ballDrag.pointerHandlers}
-        className={`${positionClass} inline-flex items-center justify-center text-foreground drop-shadow-md hover:opacity-90 transition-[opacity,transform] duration-150 ease-out touch-none select-none`}
+        className={`${positionClass} inline-flex items-center justify-center text-foreground drop-shadow-md hover:scale-105 transition-[opacity,transform] duration-150 ease-out touch-none select-none`}
       >
         <MatrixBadge preset={preset} />
       </button>
@@ -235,7 +237,7 @@ export function AgentBall(_props: AgentBallProps) {
           data-testid="agent-ball-collapsed"
           aria-label="Reopen agent"
           onClick={() => setCollapsed(false)}
-          className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 inline-flex items-center justify-center text-foreground drop-shadow-md hover:opacity-90 transition-opacity touch-none select-none"
+          className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 inline-flex items-center justify-center text-foreground drop-shadow-md hover:scale-105 transition-[opacity,transform] duration-150 ease-out touch-none select-none"
         >
           <MatrixBadge preset={preset} />
         </button>

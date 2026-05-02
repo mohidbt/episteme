@@ -33,17 +33,19 @@ export function useDragX({
   axis = "x",
   snapY = "none",
 }: UseDragXOptions) {
-  const [x, setX] = useState<number | null>(() => {
-    if (typeof window === "undefined") return null;
+  const [x, setX] = useState<number | null>(null);
+
+  // Read from localStorage after mount so first render matches server (no hydration mismatch).
+  useEffect(() => {
     try {
       const raw = window.localStorage?.getItem(storageKey);
-      if (raw == null) return null;
+      if (raw == null) return;
       const n = Number.parseInt(raw, 10);
-      return Number.isFinite(n) ? n : null;
+      if (Number.isFinite(n)) setX(n);
     } catch {
-      return null;
+      // private mode or quota
     }
-  });
+  }, [storageKey]);
   const [y, setY] = useState<number | null>(null);
 
   const draggingRef = useRef(false);

@@ -147,3 +147,26 @@ describe("ImportControls folder picker", () => {
     expect(body.get("folderId")).toBeNull();
   });
 });
+
+describe("ImportControls layout order (#141)", () => {
+  it("renders Choose file before the folder picker", () => {
+    render(<ImportControls libraryId={1} folders={FOLDERS} />);
+    const chooseBtn = screen.getByRole("button", { name: /choose file/i });
+    const picker = screen.getByTestId("import-folder-picker");
+    // Choose-file button should come before the folder picker in DOM order
+    expect(chooseBtn.compareDocumentPosition(picker) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("renders the folder picker before the Upload button", () => {
+    render(<ImportControls libraryId={1} folders={FOLDERS} />);
+    const picker = screen.getByTestId("import-folder-picker");
+    const uploadBtn = screen.getByRole("button", { name: /^upload$/i });
+    // Picker should come before Upload button in DOM order
+    expect(picker.compareDocumentPosition(uploadBtn) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("does not render an 'Import into' text label", () => {
+    render(<ImportControls libraryId={1} folders={FOLDERS} />);
+    expect(screen.queryByText("Import into")).toBeNull();
+  });
+});

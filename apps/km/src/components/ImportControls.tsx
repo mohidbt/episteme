@@ -54,14 +54,14 @@ export function ImportControls({
 
   return (
     <div className="flex flex-col items-end gap-2">
+      <input
+        ref={inputRef}
+        type="file"
+        accept=".zip,.md"
+        className="hidden"
+        onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+      />
       <div className="flex items-center gap-2 flex-wrap justify-end">
-        <input
-          ref={inputRef}
-          type="file"
-          accept=".zip,.md"
-          className="hidden"
-          onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-        />
         <button
           type="button"
           onClick={() => inputRef.current?.click()}
@@ -69,22 +69,6 @@ export function ImportControls({
         >
           Choose file…
         </button>
-        {file && (
-          <span className="text-xs text-muted-foreground truncate max-w-[12ch]">
-            {file.name}
-          </span>
-        )}
-        <button
-          type="button"
-          onClick={upload}
-          disabled={!file || uploading}
-          className="inline-flex items-center gap-2 rounded-md border border-border bg-background hover:bg-accent px-3 py-1.5 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {uploading ? "Uploading…" : "Upload"}
-        </button>
-      </div>
-      <div className="flex items-center gap-2">
-        <span className="text-xs text-muted-foreground">Import into</span>
         <FolderDestinationPicker
           folders={folders}
           value={targetFolderId}
@@ -92,6 +76,19 @@ export function ImportControls({
           triggerTestId="import-folder-picker"
         />
       </div>
+      {file && (
+        <span className="text-xs text-muted-foreground truncate max-w-[12ch]">
+          {file.name}
+        </span>
+      )}
+      <button
+        type="button"
+        onClick={upload}
+        disabled={!file || uploading}
+        className="inline-flex items-center gap-2 rounded-md border border-border bg-background hover:bg-accent px-3 py-1.5 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        {uploading ? "Uploading…" : "Upload"}
+      </button>
     </div>
   );
 }

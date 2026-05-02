@@ -185,3 +185,22 @@ describe("ConfigExportImport", () => {
     expect(screen.queryByTestId("agent-config-diff-dialog")).toBeNull();
   });
 });
+
+describe("ConfigExportImport layout (#142)", () => {
+  it("renders Export section before Import section in DOM order", () => {
+    render(<ConfigExportImport />);
+    const exportHeading = screen.getByText("Export");
+    const importHeading = screen.getByText("Import");
+    // Export heading should come before Import heading in DOM order
+    expect(
+      exportHeading.compareDocumentPosition(importHeading) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("uses vertical layout (no side-by-side flex-row on sm)", () => {
+    const { container } = render(<ConfigExportImport />);
+    const root = container.firstChild as HTMLElement;
+    // The root div should NOT have sm:flex-row
+    expect(root.className).not.toContain("sm:flex-row");
+  });
+});

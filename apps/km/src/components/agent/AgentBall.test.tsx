@@ -192,25 +192,41 @@ describe("AgentBall", () => {
     await waitFor(() => expect(countThreadCreatePosts()).toBe(2));
   });
 
-  it("#111 — double-tap Space fires same toggle as clicking the matrix square", async () => {
+  it("#111 — double-tap Space fires same handler as clicking the matrix square (opens panel)", async () => {
     renderBall();
     expect(screen.queryByTestId("agent-panel")).toBeNull();
 
-    // Double-space should open (same as clicking the ball)
+    // Double-space should open (same handler as clicking the ball)
     await act(async () => {
       fireEvent.keyDown(document, { key: " ", code: "Space" });
       fireEvent.keyDown(document, { key: " ", code: "Space" });
     });
     await waitFor(() => expect(screen.getByTestId("agent-panel")).toBeTruthy());
+  });
 
-    // Double-space again should close (toggle behavior, same as clicking the ball)
+  it("#146 — double-tap Space on open panel COLLAPSES (preserves state), not closes/destroys", async () => {
+    renderBall();
+    // Open the panel
+    fireEvent.click(screen.getByTestId("agent-ball"));
+    const panel = await waitFor(() => screen.getByTestId("agent-panel"));
+
+    // Type a draft to prove state is preserved
+    const input = (await waitFor(() =>
+      screen.getByTestId("agent-draft-input"),
+    )) as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "important draft" } });
+    expect(input.value).toBe("important draft");
+
+    // Double-space to collapse (not close)
     await act(async () => {
       fireEvent.keyDown(document, { key: " ", code: "Space" });
       fireEvent.keyDown(document, { key: " ", code: "Space" });
     });
-    await waitFor(() =>
-      expect(screen.queryByTestId("agent-panel")).toBeNull(),
-    );
+
+    // Panel should be collapsed (data-collapsed="true"), NOT removed from DOM
+    expect(panel.getAttribute("data-collapsed")).toBe("true");
+    // Transcript state must be preserved (not destroyed)
+    expect(screen.getByTestId("agent-transcript-stub")).toBeTruthy();
   });
 
   describe("G10 #37 — draggable agent ball (horizontal, bottom-pinned)", () => {
@@ -391,25 +407,28 @@ describe("AgentBall", () => {
     });
   });
 
-  describe("#91 — NO hover behavior on the matrix square", () => {
-    it("hovering does NOT change position (no parallax translate)", () => {
+  describe("#91 — simple hover shift on the matrix square", () => {
+    it("has hover:scale class for subtle hover shift effect", () => {
+      renderBall();
+      const ball = screen.getByTestId("agent-ball");
+      // The hover effect is a CSS class toggle — jsdom can't apply :hover
+      // pseudo, so we verify the class is present on the element.
+      expect(ball.className).toMatch(/hover:scale/i);
+    });
+
+    it("hover does NOT move the element's position (no parallax/translate)", () => {
       renderBall();
       const ball = screen.getByTestId("agent-ball");
       const transformBefore = ball.style.transform;
       fireEvent.mouseEnter(ball);
       fireEvent.mouseMove(ball, { clientX: 50, clientY: 50 });
-      // Transform must remain unchanged — no parallax tilt.
+      // Inline transform must remain unchanged — no parallax tilt.
       expect(ball.style.transform).toBe(transformBefore);
     });
 
-    it("no data-hovered attribute and no speedMultiplier on Matrix", () => {
+    it("no speedMultiplier on Matrix (hover is purely visual CSS)", () => {
       renderBall();
-      const ball = screen.getByTestId("agent-ball");
-      // data-hovered should not exist at all.
-      expect(ball.hasAttribute("data-hovered")).toBe(false);
-      // MatrixBadge should not receive hovered prop (no speed boost).
       const matrix = screen.getByTestId("agent-matrix-inactive");
-      // Matrix speedMultiplier defaults to 1; verify no speedMultiplier attr.
       expect(matrix.getAttribute("data-speed-multiplier")).toBeNull();
     });
   });

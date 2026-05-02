@@ -223,8 +223,8 @@ export function ConfigExportImport() {
   }
 
   return (
-    <div data-testid="agent-config-export-import" className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div className="flex flex-1 flex-col gap-2">
+    <div data-testid="agent-config-export-import" className="flex flex-col gap-6 mt-4">
+        <div className="flex flex-col gap-2">
           <h3 className="text-sm font-medium">Export</h3>
           <p className="text-xs text-muted-foreground">
             Download a .zip containing your skills, memories, and settings.
@@ -242,7 +242,7 @@ export function ConfigExportImport() {
             </Button>
           </div>
         </div>
-        <div className="flex flex-1 flex-col gap-2">
+        <div className="flex flex-col gap-2">
           <h3 className="text-sm font-medium">Import</h3>
           <p className="text-xs text-muted-foreground">
             Pick a previously-exported .zip. You will see a diff before

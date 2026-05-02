@@ -151,7 +151,7 @@ describe("AiBubbleMenu rephrase prompt bar", () => {
     expect(container.querySelector(".lucide-wand-2")).toBeNull();
     // The literal glyph appears next to the personal-skill label.
     const btn = screen.getByRole("button", { name: /personal skill/i });
-    expect(btn.textContent).toContain("※");
+    expect(btn.textContent).toContain("⬡");
   });
 
   it("rephrase pill row and prompt+Send row share a centered flex container (#67a)", () => {
