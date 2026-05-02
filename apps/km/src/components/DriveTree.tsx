@@ -20,7 +20,6 @@ import { toast } from "sonner";
 import {
   SidebarGroup,
   SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
@@ -31,6 +30,13 @@ import {
 import { useExpanded } from "@/hooks/use-expanded";
 import { buildFolderTree, type FolderNode, type TreeItem } from "@/lib/tree";
 import { isDescendantOf, type FolderRow } from "@/lib/folders";
+import { cn } from "@/lib/utils";
+import {
+  sidebarSectionContentClassName,
+  sidebarSectionGroupClassName,
+  sidebarSectionIconClassName,
+  sidebarSectionToggleClassName,
+} from "./SidebarChrome";
 import type {
   FolderRowOut,
   NoteItem,
@@ -309,26 +315,24 @@ export function DriveTree({
   const hasContent = root.children.length > 0 || root.items.length > 0;
 
   return (
-    <SidebarGroup>
-      <SidebarGroupLabel className="sidebar-section-toggle h-auto bg-transparent border-0 rounded-none px-0 py-0 text-[13px] font-semibold text-foreground [&>svg]:size-3.5 [&>svg]:text-foreground">
-        <button
-          type="button"
-          onClick={() => setDriveOpen(!driveOpen)}
-          aria-expanded={driveOpen}
-          className="flex w-full items-center gap-2 px-[10px] py-[5px] rounded-[6px] text-[13px] font-semibold text-[var(--fg)] hover:bg-[var(--bg-roof-2)] transition-colors"
-        >
-          <FolderTree aria-hidden className="size-3.5 text-foreground" />
-          Drive
-          {hasContent && (
-            <ChevronRight
-              className={`ml-auto size-3.5 text-[var(--fg-muted)] transition-transform ${driveOpen ? "rotate-90" : ""}`}
-              aria-hidden
-            />
-          )}
-        </button>
-      </SidebarGroupLabel>
+    <SidebarGroup className={sidebarSectionGroupClassName}>
+      <button
+        type="button"
+        onClick={() => setDriveOpen(!driveOpen)}
+        aria-expanded={driveOpen}
+        className={sidebarSectionToggleClassName}
+      >
+        <FolderTree aria-hidden className={sidebarSectionIconClassName} />
+        <span className="truncate flex-1 text-left">Drive</span>
+        {hasContent && (
+          <ChevronRight
+            className={`section-chevron size-3.5 text-[var(--fg-muted)] transition-transform ${driveOpen ? "rotate-90" : ""}`}
+            aria-hidden
+          />
+        )}
+      </button>
       {driveOpen && (
-        <SidebarGroupContent>
+        <SidebarGroupContent className={sidebarSectionContentClassName}>
           {mounted ? (
             <DndContext
               sensors={sensors}
@@ -350,6 +354,28 @@ export function DriveTree({
           )}
         </SidebarGroupContent>
       )}
+    </SidebarGroup>
+  );
+}
+
+export function DriveCollapsedShortcut() {
+  const pathname = usePathname();
+  return (
+    <SidebarGroup className={sidebarSectionGroupClassName}>
+      <SidebarGroupContent>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              render={<Link href="/" title="Drive" aria-label="Drive" />}
+              isActive={pathname === "/"}
+              className="gap-2 rounded-md px-2.5 py-1.5 text-sm font-normal text-[var(--fg-2)] data-[active=true]:bg-[var(--bg-roof-2)] data-[active=true]:font-medium data-[active=true]:text-[var(--fg)] hover:bg-[var(--bg-roof-2)]"
+            >
+              <FolderTree aria-hidden className="size-4" />
+              <span>Drive</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
+      </SidebarGroupContent>
     </SidebarGroup>
   );
 }
@@ -417,7 +443,12 @@ function DriveFolderRow({
         onClick={() => setOpen(!open)}
         aria-expanded={open}
         data-over={isOver ? "true" : undefined}
-        className={`${empty ? "text-muted-foreground" : ""}${isDragging ? " opacity-50" : ""} data-[over=true]:ring-1 data-[over=true]:ring-foreground/20 data-[over=true]:bg-sidebar-accent/50`}
+        className={cn(
+          "text-sm",
+          empty && "text-muted-foreground",
+          isDragging && "opacity-50",
+          "data-[over=true]:ring-1 data-[over=true]:ring-foreground/20 data-[over=true]:bg-sidebar-accent/50",
+        )}
       >
         <ChevronRight
           className={`transition-transform ${open ? "rotate-90" : ""}`}
@@ -481,7 +512,12 @@ function DriveLeafRow({ item }: { item: TreeItem }) {
           />
         }
         isActive={pathname === href}
-        className={`data-[active=true]:bg-[var(--bg-roof-2)] data-[active=true]:font-medium data-[active=true]:text-[var(--fg)]${hasTitle ? "" : " text-muted-foreground italic"}${isDragging ? " opacity-50" : ""}`}
+        className={cn(
+          "text-sm",
+          "data-[active=true]:bg-[var(--bg-roof-2)] data-[active=true]:font-medium data-[active=true]:text-[var(--fg)]",
+          !hasTitle && "text-muted-foreground italic",
+          isDragging && "opacity-50",
+        )}
       >
         <span>{itemLabel(item)}</span>
       </SidebarMenuButton>
@@ -521,7 +557,12 @@ function DriveSubLeaf({ item }: { item: TreeItem }) {
         />
       }
       isActive={pathname === href}
-      className={`data-[active=true]:bg-transparent data-[active=true]:border-l-2 data-[active=true]:border-foreground data-[active=true]:font-medium data-[active=true]:rounded-l-none data-[active=true]:pl-[calc(0.5rem-2px)]${hasTitle ? "" : " text-muted-foreground italic"}${isDragging ? " opacity-50" : ""}`}
+      className={cn(
+        "text-sm",
+        "data-[active=true]:bg-transparent data-[active=true]:border-l-2 data-[active=true]:border-foreground data-[active=true]:font-medium data-[active=true]:rounded-l-none data-[active=true]:pl-[calc(0.5rem-2px)]",
+        !hasTitle && "text-muted-foreground italic",
+        isDragging && "opacity-50",
+      )}
     >
       <span>{itemLabel(item)}</span>
     </SidebarMenuSubButton>
@@ -554,7 +595,7 @@ function TrashDroppable({
         render={<Link href={href} ref={setNodeRef} />}
         isActive={active}
         data-over={isOver ? "true" : undefined}
-        className="data-[active=true]:bg-transparent data-[active=true]:border-l-2 data-[active=true]:border-foreground data-[active=true]:font-medium data-[active=true]:rounded-l-none data-[active=true]:pl-[calc(0.5rem-2px)] data-[over=true]:ring-1 data-[over=true]:ring-foreground/20 data-[over=true]:bg-sidebar-accent/50"
+        className="text-sm data-[active=true]:bg-transparent data-[active=true]:border-l-2 data-[active=true]:border-foreground data-[active=true]:font-medium data-[active=true]:rounded-l-none data-[active=true]:pl-[calc(0.5rem-2px)] data-[over=true]:ring-1 data-[over=true]:ring-foreground/20 data-[over=true]:bg-sidebar-accent/50"
       >
         <Trash2 aria-hidden />
         <span>Trash</span>

@@ -7,7 +7,13 @@ import {
   SidebarGroupContent,
   SidebarMenu,
 } from "@/components/ui/sidebar";
+import { cn } from "@/lib/utils";
 import { useSidebarCollapsed } from "./SidebarShell";
+import {
+  sidebarSectionContentClassName,
+  sidebarSectionGroupClassName,
+  sidebarSectionToggleClassName,
+} from "./SidebarChrome";
 
 interface SidebarSectionProps {
   label: string;
@@ -28,7 +34,7 @@ export function SidebarSection({
   if (collapsed) {
     // Collapsed: just show the child items (icon-only mode via CSS)
     return (
-      <SidebarGroup>
+      <SidebarGroup className={sidebarSectionGroupClassName}>
         <SidebarGroupContent>
           <SidebarMenu>{children}</SidebarMenu>
         </SidebarGroupContent>
@@ -37,13 +43,11 @@ export function SidebarSection({
   }
 
   return (
-    <SidebarGroup>
+    <SidebarGroup className={sidebarSectionGroupClassName}>
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="sidebar-section-toggle group/section flex w-full items-center gap-2
-          px-[10px] py-[5px] text-[13px] font-semibold text-[var(--fg)]
-          hover:bg-[var(--bg-roof-2)] rounded-[6px] transition-colors"
+        className={sidebarSectionToggleClassName}
       >
         {icon}
         <span className="truncate flex-1 text-left">{label}</span>
@@ -55,7 +59,7 @@ export function SidebarSection({
         />
       </button>
       {open && (
-        <SidebarGroupContent>
+        <SidebarGroupContent className={cn(sidebarSectionContentClassName)}>
           <SidebarMenu>{children}</SidebarMenu>
         </SidebarGroupContent>
       )}

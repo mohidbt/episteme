@@ -8,6 +8,7 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import { SidebarSection } from "./SidebarSection";
+import { sidebarSectionIconClassName } from "./SidebarChrome";
 import { cn } from "@/lib/utils";
 
 const LINKS = [
@@ -22,7 +23,7 @@ export function ByTypeNav() {
   return (
     <SidebarSection
       label="Collections"
-      icon={<LayoutList className="size-3.5" aria-hidden />}
+      icon={<LayoutList className={sidebarSectionIconClassName} aria-hidden />}
     >
       {LINKS.map(({ label, href, Icon }) => (
         <SidebarMenuItem key={href}>
@@ -30,7 +31,7 @@ export function ByTypeNav() {
             render={<Link href={href} />}
             isActive={pathname === href}
             className={cn(
-              "text-[13px] font-normal text-[var(--fg-2)] gap-2 px-[10px] py-[5px] rounded-[6px]",
+              "gap-2 rounded-md px-2.5 py-1.5 text-[13px] font-normal text-[var(--fg-2)]",
               "data-[active=true]:bg-[var(--bg-roof-2)] data-[active=true]:font-medium data-[active=true]:text-[var(--fg)]",
               "hover:bg-[var(--bg-roof-2)]",
             )}

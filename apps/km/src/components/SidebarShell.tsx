@@ -11,7 +11,7 @@ import {
   SidebarHeader,
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
-import { DriveTree } from "./DriveTree";
+import { DriveCollapsedShortcut, DriveTree } from "./DriveTree";
 import { ByTypeNav } from "./ByTypeNav";
 import { SidebarAgentSection } from "./SidebarAgentSection";
 import { SidebarSettingsSection } from "./SidebarSettingsSection";
@@ -34,7 +34,8 @@ function CollapseHandle({ collapsed, toggle }: { collapsed: boolean; toggle: () 
   return (
     <button
       type="button"
-      data-testid="sidebar-collapse-handle"
+      data-testid="sidebar-collapse-toggle"
+      data-sidebar-collapse-handle="true"
       onClick={toggle}
       aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
       className="ep-sb-handle absolute right-0 top-1/2 -translate-y-1/2 z-20 h-6 w-3.5 rounded-l-md border border-[var(--roof-border)] border-r-0 bg-[var(--bg-roof)] flex items-center justify-center text-[var(--fg-muted)] hover:text-[var(--fg)] hover:bg-[var(--bg-roof-2)] transition-colors opacity-0 group-hover/sidebar-rail:opacity-100 transition-opacity"
@@ -114,7 +115,7 @@ export function SidebarShell({ library, tree, isAnonymous }: SidebarShellProps) 
         >
           {/* Workspace pill */}
           {collapsed ? (
-            <SidebarHeader className="px-0 pt-3 pb-1">
+            <SidebarHeader className="px-0 pt-5 pb-3">
               <div className="flex justify-center">
                 <Link
                   href="/"
@@ -126,7 +127,7 @@ export function SidebarShell({ library, tree, isAnonymous }: SidebarShellProps) 
               </div>
             </SidebarHeader>
           ) : (
-            <SidebarHeader className="px-2 pt-4 pb-2 flex flex-row items-center gap-2">
+            <SidebarHeader className="px-2 pt-5 pb-3 flex flex-row items-center gap-2">
               <Link
                 href="/"
                 className="flex h-9 items-center gap-2 rounded-md px-2 hover:bg-[var(--bg-roof-2)] transition-colors"
@@ -140,7 +141,7 @@ export function SidebarShell({ library, tree, isAnonymous }: SidebarShellProps) 
               </Link>
             </SidebarHeader>
           )}
-          <SidebarContent>
+          <SidebarContent className="gap-2 px-2">
             {!collapsed && (
               <DriveTree
                 libraryId={library.id}
@@ -153,6 +154,7 @@ export function SidebarShell({ library, tree, isAnonymous }: SidebarShellProps) 
                 onMutate={onMutate}
               />
             )}
+            {collapsed && <DriveCollapsedShortcut />}
             <ByTypeNav />
             <SidebarAgentSection />
             <SidebarSettingsSection />
