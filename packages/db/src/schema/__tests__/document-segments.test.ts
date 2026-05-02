@@ -31,16 +31,10 @@ describe("documentSegments schema", () => {
     expect(col?.columnType).toBe("PgSerial");
   });
 
-  it("document_id is integer not null with FK to documents", () => {
+  it("document_id is text not null (no FK)", () => {
     const col = config.columns.find((c) => c.name === "document_id");
-    expect(col?.columnType).toBe("PgInteger");
+    expect(col?.columnType).toBe("PgText");
     expect(col?.notNull).toBe(true);
-
-    const fk = config.foreignKeys.find(
-      (fk) => fk.reference().columns[0]?.name === "document_id"
-    );
-    expect(fk).toBeDefined();
-    expect(fk?.reference().foreignColumns[0]?.name).toBe("id");
   });
 
   it("page is integer not null", () => {
