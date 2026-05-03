@@ -53,7 +53,7 @@ function toUserHighlight(h: RawHighlight): UserHighlight {
  * shape and the `UserHighlight[]` shape expected by the PDF overlay in sync.
  * Re-fetches whenever `refreshKey` changes.
  */
-export function useUserHighlights(documentId: number, refreshKey: number = 0): Result {
+export function useUserHighlights(paperId: string, refreshKey: number = 0): Result {
   const [state, setState] = useState<{
     highlights: SidebarHighlight[];
     loading: boolean;
@@ -62,7 +62,7 @@ export function useUserHighlights(documentId: number, refreshKey: number = 0): R
 
   useEffect(() => {
     const controller = new AbortController();
-    fetch(`/api/documents/${documentId}/highlights`, { signal: controller.signal })
+    fetch(`/api/documents/${paperId}/highlights`, { signal: controller.signal })
       .then((res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.json();
@@ -75,7 +75,7 @@ export function useUserHighlights(documentId: number, refreshKey: number = 0): R
         setState((prev) => ({ ...prev, loading: false, error: "Failed to load highlights" }));
       });
     return () => controller.abort();
-  }, [documentId, refreshKey]);
+  }, [paperId, refreshKey]);
 
   const { highlights, loading, error } = state;
 
