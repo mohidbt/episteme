@@ -30,8 +30,10 @@ export interface ExtractionResult {
 // ---------------------------------------------------------------------------
 
 const MARKER_RE = /\[(\d{1,3})\]/g;
-const BIB_HEADER_RE = /^(references|bibliography|works cited|literature cited)\s*$/im;
-export const REF_ENTRY_START_RE = /^(?:\[(\d{1,3})\]\s+|(\d{1,3})\.\s+)/;
+// Tolerate a leading PDF line-number prefix (e.g. "609 References") that some
+// journal PDFs render on every line.
+const BIB_HEADER_RE = /^(?:\d{1,5}\s+)?(references|bibliography|works cited|literature cited|references and notes)\s*$/im;
+export const REF_ENTRY_START_RE = /^(?:\d{1,5}\s+)?(?:\[(\d{1,3})\]\s+|(\d{1,3})\.\s+)/;
 const YEAR_RE = /\b(1[9]\d{2}|20\d{2})\b/g;
 const DOI_RE = /(?:https?:\/\/doi\.org\/|doi:\s*)?(\b10\.\d{4,}\/\S+)/i;
 const URL_RE = /https?:\/\/(?!doi\.org)[^\s)>\]]+/i;
@@ -113,9 +115,15 @@ export function parseBibLines(lines: string[]): ParsedReference[] {
         current = null;
         continue;
       }
-      current = { markerIndex: idx, rawText: trimmed };
+      // Drop the leading line-number prefix and the marker token so the
+      // remaining rawText starts with author / title text rather than
+      // `"609 [1]"` artifacts left over from line-numbered PDFs.
+      const cleaned = trimmed.replace(/^(?:\d{1,5}\s+)?(?:\[\d{1,3}\]\s+|\d{1,3}\.\s+)/, "");
+      current = { markerIndex: idx, rawText: cleaned };
     } else if (current) {
-      current.rawText += " " + trimmed;
+      // Continuation lines may also be prefixed with a line number; strip it.
+      const continuation = trimmed.replace(/^\d{1,5}\s+/, "");
+      current.rawText += " " + continuation;
     }
   }
 
