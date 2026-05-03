@@ -5,11 +5,8 @@ The authenticated user_id is injected at runtime via ``RunnableConfig``
 ``tools/_auth.py`` and §1.3b-E2E-3.
 
 """
-from contextlib import asynccontextmanager
 from urllib.parse import quote_plus
 
-from deps import db as db_module
-from lib.paper_text import resolve_paper_text
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
 
@@ -23,38 +20,6 @@ _UNAVAILABLE = {
     "status": None,
     "body": "tool unavailable in this build",
 }
-
-
-@asynccontextmanager
-async def _conn_ctx():
-    pool = db_module._pool
-    assert pool is not None, "pool not initialised"
-    async with pool.acquire() as conn:
-        yield conn
-
-
-async def _pdfplumber_read_text(
-    paper_id: str,
-    page: int | None,
-    *,
-    user_id: str,
-) -> dict:
-    body: dict[str, object] = {"paperId": paper_id}
-    if page is not None:
-        body["page"] = page
-    return await km_post("/api/pdfs/read-text", body, user_id=user_id)
-
-
-async def _chandra_fallback_text(
-    paper_id: str,
-    page: int | None,
-    *,
-    user_id: str,
-) -> dict:
-    body: dict[str, object] = {"paperId": paper_id, "mode": "accurate"}
-    if page is not None:
-        body["page"] = page
-    return await km_post("/api/pdfs/read-text-fallback", body, user_id=user_id)
 
 
 @tool
@@ -117,35 +82,24 @@ async def search_pdfs(query: str, *, config: RunnableConfig) -> object:
 @tool
 async def pdf_read_text(
     paper_id: str,
-    page: int | None = None,
+    page: int,
     *,
     config: RunnableConfig,
 ) -> object:
-    """Read page text from a paper PDF.
+    """Read text from a single page of a paper PDF.
 
-    Cost: cheap path by default (pdfplumber). If text quality is poor (e.g.
-    scanned pages), server-side dispatch escalates to an expensive OCR fallback.
+    For multi-page or full-document text, use ``read_paper`` with
+    ``scope={"kind": "pages", "range": [lo, hi]}`` or ``scope={"kind": "full"}``.
 
     Args:
         paper_id: Paper UUID.
-        page: Optional 1-based page number.
+        page: 1-based page number (required).
     """
     user_id = user_id_from_config(config)
-
-    async def _pdf_reader(pid: str, p: int | None) -> dict:
-        return await _pdfplumber_read_text(pid, p, user_id=user_id)
-
-    async def _fallback(pid: str, p: int | None) -> dict:
-        return await _chandra_fallback_text(pid, p, user_id=user_id)
-
-    async with _conn_ctx() as conn:
-        return await resolve_paper_text(
-            paper_id=paper_id,
-            conn=conn,
-            page=page,
-            pdf_reader=_pdf_reader,
-            chandra_fallback=_fallback,
-        )
+    return await km_get(
+        f"/api/papers/{quote_plus(paper_id)}/pages/{page}/text",
+        user_id=user_id,
+    )
 
 
 @tool
@@ -176,49 +130,20 @@ async def highlight(
 
 @tool
 async def pdf_read_tables(
-    paper_id: str,
-    page: int | None = None,
-    *,
-    config: RunnableConfig,
+    paper_id: str, page: int | None = None, *, config: RunnableConfig
 ) -> object:
-    """Read table content from a paper PDF using table extraction.
-
-    Cost: cheap (pdfplumber-style extraction). Prefer this tool for table-only
-    questions instead of expensive schema extraction.
-
-    Args:
-        paper_id: Paper UUID.
-        page: Optional 1-based page number.
-    """
-    user_id = user_id_from_config(config)
-    body: dict[str, object] = {"paperId": paper_id}
-    if page is not None:
-        body["page"] = page
-    return await km_post("/api/pdfs/read-tables", body, user_id=user_id)
+    """[UNAVAILABLE] Use ``read_paper`` with ``scope={"kind": "blocks", "types": ["table"]}`` instead."""
+    _ = (paper_id, page, config)
+    return _UNAVAILABLE
 
 
 @tool
 async def pdf_extract_data(
-    paper_id: str,
-    schema: dict,
-    *,
-    config: RunnableConfig,
+    paper_id: str, schema: dict, *, config: RunnableConfig
 ) -> object:
-    """Extract structured data from a paper PDF using a JSON schema.
-
-    Cost: expensive (OCR + schema extraction). Use only when structured output
-    is required and `pdf_read_text`/`pdf_read_tables` are insufficient.
-
-    Args:
-        paper_id: Paper UUID.
-        schema: Tight JSON schema describing fields to extract.
-    """
-    user_id = user_id_from_config(config)
-    return await km_post(
-        "/api/pdfs/extract-data",
-        {"paperId": paper_id, "schema": schema},
-        user_id=user_id,
-    )
+    """[UNAVAILABLE] No backend route on main. Use ``read_paper`` then have the LLM extract structured fields."""
+    _ = (paper_id, schema, config)
+    return _UNAVAILABLE
 
 
 @tool
@@ -241,9 +166,8 @@ async def pdf_explain_passage(
         text: The selected passage text to explain.
     """
     user_id = user_id_from_config(config)
-    page_context = await km_post(
-        "/api/pdfs/read-text",
-        {"paperId": paper_id, "page": page},
+    page_context = await km_get(
+        f"/api/papers/{quote_plus(paper_id)}/pages/{page}/text",
         user_id=user_id,
     )
     return {
@@ -270,14 +194,12 @@ async def get_page_text(pdf_id: str, page: int, *, config: RunnableConfig) -> ob
     return _UNAVAILABLE
 
 
-# Tools advertised to the LLM. Stubbed tools (extract_passages, get_page_text)
-# are deliberately excluded.
+# Tools advertised to the LLM. Stubbed tools (pdf_read_tables, pdf_extract_data,
+# extract_passages, get_page_text) are deliberately excluded.
 TOOLS = [
     list_pdfs,
     search_pdfs,
     pdf_read_text,
-    pdf_read_tables,
-    pdf_extract_data,
     highlight,
     pdf_explain_passage,
 ]

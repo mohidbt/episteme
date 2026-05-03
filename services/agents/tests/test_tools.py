@@ -21,7 +21,7 @@ CFG = {"configurable": {"user_id": USER}}
 def test_all_tools_count():
     from tools import ALL_TOOLS  # noqa: PLC0415
 
-    assert len(ALL_TOOLS) == 26, f"Expected 26, got {len(ALL_TOOLS)}"
+    assert len(ALL_TOOLS) == 25, f"Expected 25, got {len(ALL_TOOLS)}"
 
 
 def test_all_tools_are_base_tool():
@@ -53,8 +53,7 @@ def test_all_tools_contains_expected_names():
         "list_pdfs",
         "search_pdfs",
         "pdf_read_text",
-        "pdf_read_tables",
-        "pdf_extract_data",
+        "pdf_explain_passage",
         "highlight",
         "list_libraries",
         "list_references",
@@ -80,8 +79,9 @@ def test_stubbed_tools_not_in_all_tools():
     from tools import ALL_TOOLS  # noqa: PLC0415
 
     names = {t.name for t in ALL_TOOLS}
-    for stub in ("extract_passages", "get_page_text", "diff_revision",
-                 "week_summary", "activity"):
+    for stub in ("extract_passages", "get_page_text", "pdf_read_tables",
+                 "pdf_extract_data", "diff_revision", "week_summary",
+                 "activity"):
         assert stub not in names, f"stub tool {stub!r} should not be exposed"
 
 
