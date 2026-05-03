@@ -28,7 +28,7 @@ export default async function PaperReadPage({
   if (!paper) notFound();
 
   return (
-    <div className="h-full min-h-0">
+    <div className="h-full min-h-0 overflow-hidden">
       <ReaderShell paperId={paper.id} />
     </div>
   );

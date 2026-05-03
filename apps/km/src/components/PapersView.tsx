@@ -143,7 +143,7 @@ function PapersListTable({ papers, folders }: Props) {
             return (
               <TableRow key={p.id} data-testid={`papers-row-${p.id}`}>
                 <TableCell className="max-w-md">
-                  <Link href={`/p/${p.id}`} className="line-clamp-2 hover:underline">
+                  <Link href={`/papers/${p.id}/read`} className="line-clamp-2 hover:underline">
                     {p.title || (
                       <span className="text-muted-foreground">{p.filename}</span>
                     )}

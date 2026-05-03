@@ -601,7 +601,7 @@ export function Reader({ paperId, mode = "full", className, onExplainPassage }: 
 
   return (
     <div
-      className={["flex h-screen min-h-0 flex-col", className].filter(Boolean).join(" ")}
+      className={["flex h-full min-h-0 flex-col", className].filter(Boolean).join(" ")}
       data-reader-root
       data-reader-mode={mode}
     >

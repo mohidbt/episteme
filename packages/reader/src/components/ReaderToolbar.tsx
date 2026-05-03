@@ -50,14 +50,14 @@ export function ReaderToolbar({
   }
 
   return (
-    <header className="flex h-12 items-center justify-between border-b bg-background px-4">
-      <div className="flex items-center gap-3">
+    <header className="flex h-12 shrink-0 items-center justify-between gap-4 border-b bg-background px-4">
+      <div className="flex min-w-0 flex-1 items-center gap-3">
         <Link href="/library">
           <Button variant="ghost" size="sm">Back</Button>
         </Link>
-        <span className="max-w-[300px] truncate text-sm font-medium">{title}</span>
+        <span className="min-w-0 flex-1 truncate text-sm font-medium">{title}</span>
       </div>
-      <div className="flex items-center gap-4">
+      <div className="flex shrink-0 items-center gap-4">
         <div className="flex items-center gap-2 text-sm">
           <Button
             variant="ghost"
