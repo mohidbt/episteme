@@ -15,11 +15,11 @@ describe("signRequest", () => {
       path: "/agents/embed-chunks",
       body: '{"x":1}',
       userId: "u1",
-      documentId: 42,
+      paperId: "00000000-0000-0000-0000-000000000042",
       llmKey: "sk-test",
     });
     expect(headers["X-Inhale-User-Id"]).toBe("u1");
-    expect(headers["X-Inhale-Document-Id"]).toBe("42");
+    expect(headers["X-Inhale-Paper-Id"]).toBe("00000000-0000-0000-0000-000000000042");
     expect(headers["X-Inhale-LLM-Key"]).toBe("sk-test");
     expect(headers["X-Inhale-Ts"]).toBe(ts);
 
