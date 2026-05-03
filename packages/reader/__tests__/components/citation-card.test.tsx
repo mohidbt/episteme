@@ -9,7 +9,7 @@ import { CitationCard, type CitationWithStatus } from "../../src/components/Cita
 function makeCitation(overrides: Partial<CitationWithStatus> = {}): CitationWithStatus {
   return {
     id: 1,
-    documentId: 1,
+    paperId: "00000000-0000-0000-0000-000000000001",
     markerText: "[1]",
     markerIndex: 1,
     rawText: null,

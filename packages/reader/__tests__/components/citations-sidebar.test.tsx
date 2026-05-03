@@ -29,7 +29,7 @@ vi.mock("sonner", () => ({ toast: { error: vi.fn() } }));
 function makeCitation(overrides: Partial<CitationWithStatus> = {}): CitationWithStatus {
   return {
     id: 1,
-    documentId: 1,
+    paperId: "00000000-0000-0000-0000-000000000001",
     markerText: "[1]",
     markerIndex: 1,
     rawText: null,
@@ -56,7 +56,7 @@ function makeCitation(overrides: Partial<CitationWithStatus> = {}): CitationWith
   };
 }
 
-const DOCUMENT_ID = 42;
+const PAPER_ID = "00000000-0000-0000-0000-000000000042";
 
 // ---------------------------------------------------------------------------
 // Setup
@@ -86,7 +86,7 @@ describe("CitationsSidebar — compact CitationCard rendering", () => {
     ];
     render(
       <CitationsSidebar
-        documentId={DOCUMENT_ID}
+        paperId={PAPER_ID}
         open={true}
         citations={citations}
         loading={false}
@@ -102,7 +102,7 @@ describe("CitationsSidebar — compact CitationCard rendering", () => {
   it("does not render citation cards when loading", () => {
     render(
       <CitationsSidebar
-        documentId={DOCUMENT_ID}
+        paperId={PAPER_ID}
         open={true}
         citations={[makeCitation()]}
         loading={true}
@@ -120,7 +120,7 @@ describe("CitationsSidebar — auto-enrich", () => {
     ];
     render(
       <CitationsSidebar
-        documentId={DOCUMENT_ID}
+        paperId={PAPER_ID}
         open={true}
         citations={citations}
         loading={false}
@@ -128,7 +128,7 @@ describe("CitationsSidebar — auto-enrich", () => {
     );
     await waitFor(() => {
       expect(global.fetch).toHaveBeenCalledWith(
-        `/api/documents/${DOCUMENT_ID}/citations/enrich`,
+        `/api/documents/${PAPER_ID}/citations/enrich`,
         expect.objectContaining({ method: "POST" })
       );
     });
@@ -141,7 +141,7 @@ describe("CitationsSidebar — auto-enrich", () => {
     ];
     render(
       <CitationsSidebar
-        documentId={DOCUMENT_ID}
+        paperId={PAPER_ID}
         open={true}
         citations={citations}
         loading={false}
@@ -155,7 +155,7 @@ describe("CitationsSidebar — auto-enrich", () => {
   it("does NOT POST when citations list is empty", async () => {
     render(
       <CitationsSidebar
-        documentId={DOCUMENT_ID}
+        paperId={PAPER_ID}
         open={true}
         citations={[]}
         loading={false}
@@ -170,7 +170,7 @@ describe("CitationsSidebar — auto-enrich", () => {
     const citations = [makeCitation({ semanticScholarId: null })];
     render(
       <CitationsSidebar
-        documentId={DOCUMENT_ID}
+        paperId={PAPER_ID}
         open={true}
         citations={citations}
         loading={false}
@@ -184,7 +184,7 @@ describe("CitationsSidebar — auto-enrich", () => {
     const citations = [makeCitation({ semanticScholarId: null })];
     const { rerender } = render(
       <CitationsSidebar
-        documentId={DOCUMENT_ID}
+        paperId={PAPER_ID}
         open={true}
         citations={citations}
         loading={false}
@@ -195,7 +195,7 @@ describe("CitationsSidebar — auto-enrich", () => {
     // Re-render with same citations
     rerender(
       <CitationsSidebar
-        documentId={DOCUMENT_ID}
+        paperId={PAPER_ID}
         open={true}
         citations={citations}
         loading={false}
@@ -223,7 +223,7 @@ describe("CitationsSidebar — auto-enrich", () => {
     const citations = [makeCitation({ semanticScholarId: null })];
     render(
       <CitationsSidebar
-        documentId={DOCUMENT_ID}
+        paperId={PAPER_ID}
         open={true}
         citations={citations}
         loading={false}
@@ -246,7 +246,7 @@ describe("CitationsSidebar — auto-enrich", () => {
     const citations = [makeCitation({ semanticScholarId: null })];
     render(
       <CitationsSidebar
-        documentId={DOCUMENT_ID}
+        paperId={PAPER_ID}
         open={true}
         citations={citations}
         loading={false}
@@ -258,11 +258,13 @@ describe("CitationsSidebar — auto-enrich", () => {
     expect(toast.error).toHaveBeenCalledTimes(1);
   });
 
-  it("fires enrich again when documentId changes", async () => {
+  it("fires enrich again when paperId changes", async () => {
+    const PAPER_ID_A = "00000000-0000-0000-0000-000000000001";
+    const PAPER_ID_B = "00000000-0000-0000-0000-000000000002";
     const citations = [makeCitation({ semanticScholarId: null })];
     const { rerender } = render(
       <CitationsSidebar
-        documentId={1}
+        paperId={PAPER_ID_A}
         open={true}
         citations={citations}
         loading={false}
@@ -272,7 +274,7 @@ describe("CitationsSidebar — auto-enrich", () => {
 
     rerender(
       <CitationsSidebar
-        documentId={2}
+        paperId={PAPER_ID_B}
         open={true}
         citations={citations}
         loading={false}
@@ -281,7 +283,7 @@ describe("CitationsSidebar — auto-enrich", () => {
     await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(2));
     expect(global.fetch).toHaveBeenNthCalledWith(
       2,
-      `/api/documents/2/citations/enrich`,
+      `/api/documents/${PAPER_ID_B}/citations/enrich`,
       expect.objectContaining({ method: "POST" })
     );
   });
@@ -312,7 +314,7 @@ describe("CitationsSidebar — auto-enrich", () => {
 
     const { rerender } = render(
       <CitationsSidebar
-        documentId={DOCUMENT_ID}
+        paperId={PAPER_ID}
         open={true}
         citations={citations}
         loading={false}
@@ -325,7 +327,7 @@ describe("CitationsSidebar — auto-enrich", () => {
     // Close the panel — triggers effect cleanup → controller.abort()
     rerender(
       <CitationsSidebar
-        documentId={DOCUMENT_ID}
+        paperId={PAPER_ID}
         open={false}
         citations={citations}
         loading={false}

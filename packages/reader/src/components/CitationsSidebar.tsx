@@ -9,7 +9,7 @@ import { CitationCard, type CitationWithStatus } from "./CitationCard";
 import { toast } from "sonner";
 
 interface CitationsSidebarProps {
-  documentId: number;
+  paperId: string;
   open: boolean;
   citations: CitationWithStatus[];
   loading: boolean;
@@ -17,7 +17,7 @@ interface CitationsSidebarProps {
   dockControl?: ReactNode;
 }
 
-export function CitationsSidebar({ documentId, open, citations, loading, onExtracted, dockControl }: CitationsSidebarProps) {
+export function CitationsSidebar({ paperId, open, citations, loading, onExtracted, dockControl }: CitationsSidebarProps) {
   const [extracting, setExtracting] = useState(false);
   const [enriching, setEnriching] = useState(false);
   const enrichFiredRef = useRef(false);
@@ -30,7 +30,7 @@ export function CitationsSidebar({ documentId, open, citations, loading, onExtra
   // Reset enrich gate when document changes
   useEffect(() => {
     enrichFiredRef.current = false;
-  }, [documentId]);
+  }, [paperId]);
 
   // Auto-enrich once per session open when any ref lacks semanticScholarId
   useEffect(() => {
@@ -42,7 +42,7 @@ export function CitationsSidebar({ documentId, open, citations, loading, onExtra
     const controller = new AbortController();
     setEnriching(true);
 
-    fetch(`/api/documents/${documentId}/citations/enrich`, { method: "POST", signal: controller.signal })
+    fetch(`/api/documents/${paperId}/citations/enrich`, { method: "POST", signal: controller.signal })
       .then((res) => {
         if (!res.ok) throw new Error(`enrich failed: ${res.status}`);
         return res.json();
@@ -61,17 +61,17 @@ export function CitationsSidebar({ documentId, open, citations, loading, onExtra
 
     return () => controller.abort();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, citations, documentId]);
+  }, [open, citations, paperId]);
 
   const handleExtract = useCallback(async () => {
     setExtracting(true);
     try {
-      await fetch(`/api/documents/${documentId}/citations/extract`, { method: "POST" });
+      await fetch(`/api/documents/${paperId}/citations/extract`, { method: "POST" });
       onExtracted?.();
     } finally {
       setExtracting(false);
     }
-  }, [documentId, onExtracted]);
+  }, [paperId, onExtracted]);
 
   if (!open) return null;
 
