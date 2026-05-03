@@ -584,9 +584,9 @@ export function Reader({
       id: "agent",
       dock: agentDock,
       node: (
-        <div className="flex h-full min-h-0 w-full flex-col">
-          <div className="flex h-9 items-center justify-between border-b px-3">
-            <span className="text-sm font-medium">Agent</span>
+        <div className="flex h-full w-full flex-col bg-background">
+          <div className="flex items-center justify-between gap-2 border-b px-4 py-3">
+            <h2 className="truncate text-sm font-semibold">Agent</h2>
             <DockMenu
               dock={agentDock}
               onChange={setAgentDock}
