@@ -1,23 +1,29 @@
 import { NextRequest } from "next/server";
 import { auth } from "@episteme/auth/server";
 import { getDecryptedApiKey } from "@episteme/auth/byok";
+import { papers } from "@episteme/db/schema";
+import { jsonError, requireOwned } from "@/lib/crud";
 import { signRequest } from "@/lib/agents/sign-request";
 import { streamPassthrough } from "@/lib/agents/stream-passthrough";
 
-export async function POST(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export const runtime = "nodejs";
+
+type Ctx = { params: Promise<{ id: string }> };
+type PaperRow = typeof papers.$inferSelect;
+
+export async function POST(request: NextRequest, { params }: Ctx) {
   const session = await auth.api.getSession({ headers: request.headers });
-  if (!session?.user) return new Response("Unauthorized", { status: 401 });
-  const { id } = await params;
-  const documentId = Number(id);
+  if (!session?.user) return jsonError(401, "unauthorized");
+  const { id: paperId } = await params;
+
+  const owned = await requireOwned<PaperRow>(papers, paperId, session.user.id);
+  if (!owned.ok) return jsonError(owned.status, owned.status === 404 ? "not_found" : "forbidden");
 
   let llmKey: string;
   try {
     llmKey = await getDecryptedApiKey(session.user.id);
   } catch {
-    return new Response("Add an OpenRouter key in Settings", { status: 400 });
+    return jsonError(400, "Add an OpenRouter key in Settings");
   }
 
   const bodyText = await request.text();
@@ -27,7 +33,7 @@ export async function POST(
     path,
     body: bodyText,
     userId: session.user.id,
-    documentId,
+    paperId,
     llmKey,
   });
 

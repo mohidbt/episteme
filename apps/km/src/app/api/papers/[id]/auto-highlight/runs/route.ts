@@ -1,29 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@episteme/auth/server";
-import { db } from "@episteme/db";
-import { aiHighlightRuns, documents, userHighlights } from "@episteme/db/schema";
+import { db } from "@/lib/db";
+import { aiHighlightRuns, papers, userHighlights } from "@episteme/db/schema";
 import { and, eq, desc, count, inArray } from "drizzle-orm";
+import { jsonError, requireOwned } from "@/lib/crud";
 import { isStaleRect } from "@/lib/highlight-rects";
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const session = await auth.api.getSession({ headers: request.headers });
-  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+export const runtime = "nodejs";
 
-  const { id } = await params;
-  const documentId = parseInt(id, 10);
-  if (isNaN(documentId)) return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
+type Ctx = { params: Promise<{ id: string }> };
+type PaperRow = typeof papers.$inferSelect;
+
+export async function GET(request: NextRequest, { params }: Ctx) {
+  const session = await auth.api.getSession({ headers: request.headers });
+  if (!session?.user) return jsonError(401, "unauthorized");
+
+  const { id: paperId } = await params;
+
+  const owned = await requireOwned<PaperRow>(papers, paperId, session.user.id);
+  if (!owned.ok) return jsonError(owned.status, owned.status === 404 ? "not_found" : "forbidden");
 
   try {
-    const [doc] = await db
-      .select({ id: documents.id })
-      .from(documents)
-      .where(and(eq(documents.id, documentId), eq(documents.userId, session.user.id)))
-      .limit(1);
-    if (!doc) return NextResponse.json({ error: "Not found" }, { status: 404 });
-
     const rows = await db
       .select({
         id: aiHighlightRuns.id,
@@ -38,9 +35,9 @@ export async function GET(
       .leftJoin(userHighlights, eq(userHighlights.layerId, aiHighlightRuns.id))
       .where(
         and(
-          eq(aiHighlightRuns.documentId, documentId),
-          eq(aiHighlightRuns.userId, session.user.id)
-        )
+          eq(aiHighlightRuns.paperId, paperId),
+          eq(aiHighlightRuns.userId, session.user.id),
+        ),
       )
       .groupBy(
         aiHighlightRuns.id,
@@ -48,7 +45,7 @@ export async function GET(
         aiHighlightRuns.status,
         aiHighlightRuns.summary,
         aiHighlightRuns.createdAt,
-        aiHighlightRuns.completedAt
+        aiHighlightRuns.completedAt,
       )
       .orderBy(desc(aiHighlightRuns.createdAt));
 
@@ -67,8 +64,8 @@ export async function GET(
         .where(
           and(
             eq(userHighlights.userId, session.user.id),
-            inArray(userHighlights.layerId, runIds)
-          )
+            inArray(userHighlights.layerId, runIds),
+          ),
         );
       for (const h of rectRows) {
         if (!h.layerId) continue;
@@ -86,7 +83,7 @@ export async function GET(
 
     return NextResponse.json({ runs: enriched });
   } catch (err) {
-    console.error("GET /auto-highlight/runs failed:", err);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    console.error("GET /papers/[id]/auto-highlight/runs failed:", err);
+    return jsonError(500, "internal server error");
   }
 }

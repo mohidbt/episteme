@@ -1,35 +1,31 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@episteme/auth/server";
-import { db } from "@episteme/db";
-import { aiHighlightRuns, documents } from "@episteme/db/schema";
+import { db } from "@/lib/db";
+import { aiHighlightRuns, papers } from "@episteme/db/schema";
 import { and, eq } from "drizzle-orm";
 import { getDecryptedApiKey } from "@episteme/auth/byok";
+import { jsonError, requireOwned } from "@/lib/crud";
 import { signRequest } from "@/lib/agents/sign-request";
+
+export const runtime = "nodejs";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+type Ctx = { params: Promise<{ id: string; runId: string }> };
+type PaperRow = typeof papers.$inferSelect;
+
 // Rebuild a legacy AI highlight run's rects in place. Proxies to the Python
 // agents service which re-runs pdfplumber glyph extraction. User-scoped:
-// only the document owner may rebuild.
-export async function POST(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string; runId: string }> }
-) {
+// only the paper owner may rebuild.
+export async function POST(request: NextRequest, { params }: Ctx) {
   const session = await auth.api.getSession({ headers: request.headers });
-  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!session?.user) return jsonError(401, "unauthorized");
 
-  const { id, runId } = await params;
-  const documentId = parseInt(id, 10);
-  if (isNaN(documentId) || !UUID_RE.test(runId)) {
-    return NextResponse.json({ error: "Invalid id" }, { status: 400 });
-  }
+  const { id: paperId, runId } = await params;
+  if (!UUID_RE.test(runId)) return jsonError(400, "invalid_id");
 
-  const [doc] = await db
-    .select({ id: documents.id })
-    .from(documents)
-    .where(and(eq(documents.id, documentId), eq(documents.userId, session.user.id)))
-    .limit(1);
-  if (!doc) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  const owned = await requireOwned<PaperRow>(papers, paperId, session.user.id);
+  if (!owned.ok) return jsonError(owned.status, owned.status === 404 ? "not_found" : "forbidden");
 
   const [run] = await db
     .select({ id: aiHighlightRuns.id })
@@ -37,12 +33,12 @@ export async function POST(
     .where(
       and(
         eq(aiHighlightRuns.id, runId),
-        eq(aiHighlightRuns.documentId, documentId),
-        eq(aiHighlightRuns.userId, session.user.id)
-      )
+        eq(aiHighlightRuns.paperId, paperId),
+        eq(aiHighlightRuns.userId, session.user.id),
+      ),
     )
     .limit(1);
-  if (!run) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!run) return jsonError(404, "not_found");
 
   let llmKey: string;
   try {
@@ -61,7 +57,7 @@ export async function POST(
     path,
     body,
     userId: session.user.id,
-    documentId,
+    paperId,
     llmKey,
   });
 
