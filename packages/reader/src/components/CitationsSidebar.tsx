@@ -42,7 +42,7 @@ export function CitationsSidebar({ paperId, open, citations, loading, onExtracte
     const controller = new AbortController();
     setEnriching(true);
 
-    fetch(`/api/documents/${paperId}/citations/enrich`, { method: "POST", signal: controller.signal })
+    fetch(`/api/papers/${paperId}/citations/enrich`, { method: "POST", signal: controller.signal })
       .then((res) => {
         if (!res.ok) throw new Error(`enrich failed: ${res.status}`);
         return res.json();
@@ -66,7 +66,7 @@ export function CitationsSidebar({ paperId, open, citations, loading, onExtracte
   const handleExtract = useCallback(async () => {
     setExtracting(true);
     try {
-      await fetch(`/api/documents/${paperId}/citations/extract`, { method: "POST" });
+      await fetch(`/api/papers/${paperId}/citations/extract`, { method: "POST" });
       onExtracted?.();
     } finally {
       setExtracting(false);

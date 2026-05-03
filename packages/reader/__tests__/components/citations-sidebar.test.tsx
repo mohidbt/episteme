@@ -128,7 +128,7 @@ describe("CitationsSidebar — auto-enrich", () => {
     );
     await waitFor(() => {
       expect(global.fetch).toHaveBeenCalledWith(
-        `/api/documents/${PAPER_ID}/citations/enrich`,
+        `/api/papers/${PAPER_ID}/citations/enrich`,
         expect.objectContaining({ method: "POST" })
       );
     });
@@ -283,7 +283,7 @@ describe("CitationsSidebar — auto-enrich", () => {
     await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(2));
     expect(global.fetch).toHaveBeenNthCalledWith(
       2,
-      `/api/documents/${PAPER_ID_B}/citations/enrich`,
+      `/api/papers/${PAPER_ID_B}/citations/enrich`,
       expect.objectContaining({ method: "POST" })
     );
   });
