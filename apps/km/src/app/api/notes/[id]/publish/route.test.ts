@@ -1,7 +1,10 @@
 // @vitest-environment node
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { createHmac } from "crypto";
 import { eq } from "drizzle-orm";
 import { POST } from "./route";
+
+const HMAC_SECRET = "test-notes-publish-secret";
 import { POST as POST_LIB } from "../../../libraries/route";
 import { POST as POST_NOTE } from "../../route";
 import { POST as POST_USERNAME } from "../../../users/username/route";
@@ -262,6 +265,43 @@ describe("POST /api/notes/:id/publish", () => {
     );
     expect(r2.status).toBe(409);
     expect((await r2.json()).error).toBe("slug_taken");
+  });
+
+  it("accepts HMAC-signed request from agent (make_public)", async () => {
+    await setUsername(u.cookie);
+    const noteId = await mkNote(u.cookie, `Pub HMAC ${rand()}`);
+    const slug = `hmac-${rand()}`;
+    const path = `/api/notes/${noteId}/publish`;
+    const body = JSON.stringify({ isPublic: true, publicSlug: slug });
+
+    const prevSecret = process.env.INHALE_INTERNAL_SECRET;
+    process.env.INHALE_INTERNAL_SECRET = HMAC_SECRET;
+    try {
+      const ts = String(Math.floor(Date.now() / 1000));
+      const sig = createHmac("sha256", HMAC_SECRET)
+        .update(ts + "POST" + path + body)
+        .digest("hex");
+      const r = await POST(
+        new Request(`http://localhost${path}`, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "X-Inhale-User-Id": u.id,
+            "X-Inhale-Ts": ts,
+            "X-Inhale-Sig": sig,
+          },
+          body,
+        }),
+        params({ id: noteId }),
+      );
+      expect(r.status).toBe(200);
+      const json = await r.json();
+      expect(json.isPublic).toBe(true);
+      expect(json.publicSlug).toBe(slug);
+    } finally {
+      if (prevSecret === undefined) delete process.env.INHALE_INTERNAL_SECRET;
+      else process.env.INHALE_INTERNAL_SECRET = prevSecret;
+    }
   });
 
   it("200 when same slug reused across different users", async () => {

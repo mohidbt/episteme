@@ -2,7 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { notes, user } from "@episteme/db/schema";
-import { getUserIdFromRequest } from "@/lib/auth";
+import { getAuthedUserId, MissingInternalSecretError } from "@/lib/internal-auth";
 import { jsonError } from "@/lib/crud";
 import { toSlug } from "@/lib/slug";
 
@@ -15,11 +15,22 @@ export async function POST(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const userId = await getUserIdFromRequest(req);
-  if (!userId) return jsonError(401, "unauthorized");
+  // Dual-auth: cookie session OR HMAC (used by agent `make_public` tool).
+  // Read raw body once and pass to HMAC verifier (sig covers ts+method+path+body).
+  const rawBody = await req.text();
+  let authed;
+  try { authed = await getAuthedUserId(req, rawBody); }
+  catch (e) {
+    if (e instanceof MissingInternalSecretError) return jsonError(500, "internal auth misconfigured");
+    throw e;
+  }
+  if (!authed) return jsonError(401, "unauthorized");
+  const userId = authed.userId;
   const { id } = await params;
 
-  const parsed = publishBody.safeParse(await req.json().catch(() => null));
+  let bodyJson: unknown = null;
+  try { bodyJson = JSON.parse(rawBody); } catch { /* leave null */ }
+  const parsed = publishBody.safeParse(bodyJson);
   if (!parsed.success) {
     return jsonError(400, "validation", { issues: parsed.error.issues });
   }
