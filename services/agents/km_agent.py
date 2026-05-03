@@ -194,10 +194,14 @@ _CORE_TOOL_NAMES: frozenset[str] = frozenset({
     # libraries / folders
     "list_libraries", "list_folders",
     # papers/PDFs (discovery + read-only access — action tools like `highlight`
-    # stay skill-scoped). read_paper / pdf_explain_passage power the reader
-    # side-panel agent (multi-page reads, SelectionToolbar "Explain"); without
-    # them in core, enabling any skill (e.g. deep-read) silently pruned them.
-    "list_pdfs", "search_pdfs", "read_paper", "pdf_explain_passage",
+    # stay skill-scoped). read_paper / pdf_read_text / pdf_explain_passage
+    # power the reader side-panel agent (multi-page reads, single-page reads,
+    # SelectionToolbar "Explain") and are named verbatim in the
+    # [reader-context] system prefix (see routers/km_agent.py::
+    # _build_reader_context_prefix); without them in core, enabling any skill
+    # whose tools list omits them (e.g. lit-triage) silently pruned them and
+    # the LLM hallucinated calls to a name it could not actually invoke.
+    "list_pdfs", "search_pdfs", "read_paper", "pdf_read_text", "pdf_explain_passage",
     # paper search (agentic — fetch is HITL-protected via skill require_approval).
     # NOTE: search_library is intentionally NOT core — it is cross-library RAG
     # and should be opted into per skill (see deep-read SKILL.md) rather than

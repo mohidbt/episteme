@@ -92,7 +92,6 @@ def test_filter_tools_with_lit_triage_skill_filters_to_allowed_set():
     assert "create_note" in names
     # Tools not in lit-triage's allow-list must be excluded
     assert "make_public" not in names
-    assert "pdf_read_text" not in names
     assert "highlight" not in names
 
 
@@ -136,6 +135,17 @@ def test_core_tools_include_read_paper_and_pdf_explain_passage():
     names = {t.name for t in filtered}
     assert "read_paper" in names
     assert "pdf_explain_passage" in names
+
+    # pdf_read_text is named in the [reader-context] system prefix
+    # (routers/km_agent.py::_build_reader_context_prefix); it must survive
+    # skill filtering regardless of which skill is active so the model can
+    # actually call the tool it is told to use for single-page reads.
+    # deep-read happens to allowlist it, but other skills (e.g. lit-triage)
+    # do not — promoting to CORE is what guarantees availability.
+    loaded_lt = load_skills(only=["lit-triage"])
+    filtered_lt = _filter_tools_for_skills(list(ALL_TOOLS), loaded_skills=loaded_lt)
+    names_lt = {t.name for t in filtered_lt}
+    assert "pdf_read_text" in names_lt
     # search_library must come via skill, not CORE. deep-read SKILL.md does
     # not (yet) list search_library, so the filtered set must exclude it.
     assert "search_library" not in names

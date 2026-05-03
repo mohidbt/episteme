@@ -346,8 +346,9 @@ async def invoke(req: Request, auth: InternalAuthDep):
 
     # Page context (paperId/noteId/...) — when set, propagate via configurable
     # so tools can default to the active resource and prepend a context line
-    # to the user message so the model picks tools (read_paper / search_library)
-    # scoped to the active paper.
+    # to the user message so the model picks paper-scoped tools (read_paper /
+    # pdf_read_text / pdf_explain_passage / search_pdfs / list_pdfs) — see
+    # ``_build_reader_context_prefix`` for the exact tool list named to the LLM.
     page_context = body.get("page_context") or {}
     if not isinstance(page_context, dict):
         page_context = {}
