@@ -1,16 +1,12 @@
 import { cache } from "react";
 import { and, eq } from "drizzle-orm";
 import { notFound } from "next/navigation";
-import dynamic from "next/dynamic";
 
 import { getRequiredUserId } from "@/lib/session";
 import { db } from "@/lib/db";
 import { papers } from "@episteme/db/schema";
 
-const Reader = dynamic(
-  () => import("@episteme/reader").then((m) => m.Reader),
-  { ssr: false, loading: () => <div data-reader-loading>Loading…</div> },
-);
+import { ReaderClient } from "./ReaderClient";
 
 const loadPaper = cache(async (paperId: string, userId: string) => {
   const rows = await db
@@ -33,7 +29,7 @@ export default async function PaperReadPage({
 
   return (
     <div className="h-full min-h-0">
-      <Reader paperId={paper.id} mode="full" />
+      <ReaderClient paperId={paper.id} />
     </div>
   );
 }

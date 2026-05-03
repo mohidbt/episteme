@@ -11,6 +11,7 @@ const config: NextConfig = {
     "@episteme/auth",
     "@episteme/editor",
     "@episteme/markdown",
+    "@episteme/reader",
   ],
   serverExternalPackages: ["@napi-rs/canvas", "pdfjs-dist"],
   experimental: {
