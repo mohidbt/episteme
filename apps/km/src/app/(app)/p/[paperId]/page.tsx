@@ -2,7 +2,7 @@ import { cache } from "react";
 import { and, eq } from "drizzle-orm";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { BookMarked, Download } from "lucide-react";
+import { BookMarked, BookOpen, Download } from "lucide-react";
 import { getRequiredUserId } from "@/lib/session";
 import { db } from "@/lib/db";
 import { papers } from "@episteme/db/schema";
@@ -97,15 +97,25 @@ export default async function PaperPage({
           <h1 className="min-w-0 font-display text-2xl leading-tight">
             {displayTitle}
           </h1>
-          <Link
-            href={`/api/papers/${paper.id}/file`}
-            download={paper.filename}
-            className="inline-flex h-7 shrink-0 items-center justify-center gap-1 rounded-md border border-border bg-background px-2.5 text-[0.8rem] font-medium text-foreground whitespace-nowrap transition-colors hover:bg-muted"
-            aria-label={`Download ${displayTitle}`}
-          >
-            <Download data-icon="inline-start" />
-            Download
-          </Link>
+          <div className="flex shrink-0 items-center gap-2">
+            <Link
+              href={`/papers/${paper.id}/read`}
+              className="inline-flex h-7 items-center justify-center gap-1 rounded-md border border-border bg-background px-2.5 text-[0.8rem] font-medium text-foreground whitespace-nowrap transition-colors hover:bg-muted"
+              aria-label={`Open ${displayTitle} in reader`}
+            >
+              <BookOpen data-icon="inline-start" />
+              Open in reader
+            </Link>
+            <Link
+              href={`/api/papers/${paper.id}/file`}
+              download={paper.filename}
+              className="inline-flex h-7 items-center justify-center gap-1 rounded-md border border-border bg-background px-2.5 text-[0.8rem] font-medium text-foreground whitespace-nowrap transition-colors hover:bg-muted"
+              aria-label={`Download ${displayTitle}`}
+            >
+              <Download data-icon="inline-start" />
+              Download
+            </Link>
+          </div>
         </div>
       </div>
       <div className="mt-4 grid min-h-0 flex-1 grid-cols-1 border-t border-border/60 lg:grid-cols-[minmax(0,1fr)_420px]">

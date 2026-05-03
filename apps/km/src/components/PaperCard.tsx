@@ -25,7 +25,7 @@ export function PaperCard({ id, title, filename, authors, year }: PaperCardProps
 
   return (
     <Link
-      href={`/papers/${id}/read`}
+      href={`/p/${id}`}
       className="group block focus:outline-none"
       aria-label={displayTitle}
     >
