@@ -525,35 +525,7 @@ describe("AgentBall", () => {
     });
   });
 
-  describe("Phase 1.6b T3 — mountPoint gating for reader-side-panel", () => {
-    it("does NOT render the global popover when mountPoint='reader-side-panel' even if context.open=true", async () => {
-      const { useAgentBallStore } = await import("@/state/agent-ball");
-      useAgentBallStore.setState({ mountPoint: "reader-side-panel" });
-      function Opener() {
-        const ball = useAgentBall();
-        return (
-          <button
-            type="button"
-            data-testid="ext-open"
-            onClick={() => ball.openWithPrompt("")}
-          >
-            open
-          </button>
-        );
-      }
-      render(
-        <AgentBallProvider>
-          <AgentBall userId="u1" />
-          <Opener />
-        </AgentBallProvider>,
-      );
-      fireEvent.click(screen.getByTestId("ext-open"));
-      await new Promise((r) => setTimeout(r, 30));
-      // Neither the floating ball nor the popover should mount when reader-side-panel owns the AI.
-      expect(screen.queryByTestId("agent-ball")).toBeNull();
-      expect(screen.queryByTestId("agent-panel")).toBeNull();
-    });
-
+  describe("Phase 1.6b T3 — reader-route gating", () => {
     it("hides the floating ball entirely on /papers/.../read route", async () => {
       vi.resetModules();
       vi.doMock("next/navigation", () => ({

@@ -22,7 +22,7 @@ export const useAgentBallStore = create<AgentBallState>((set) => ({
   setActiveThread: (id) => set({ activeThreadId: id }),
   openInGlobalPopover: () => set({ panelOpen: true, mountPoint: "global-popover" }),
   openInReader: () => set({ panelOpen: true, mountPoint: "reader-side-panel" }),
-  close: () => set({ panelOpen: false }),
+  close: () => set({ panelOpen: false, mountPoint: "global-popover" }),
   toggle: (mountPoint) =>
     set((s) => ({
       panelOpen: !s.panelOpen,

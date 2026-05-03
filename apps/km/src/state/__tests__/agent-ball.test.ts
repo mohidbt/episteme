@@ -30,4 +30,13 @@ describe("agent-ball store", () => {
     expect(s.activeThreadId).toBe("t1");
     expect(s.panelOpen).toBe(false);
   });
+
+  it("close resets mountPoint to global-popover so leaving reader does not strand state", () => {
+    useAgentBallStore.getState().openInReader();
+    expect(useAgentBallStore.getState().mountPoint).toBe("reader-side-panel");
+    useAgentBallStore.getState().close();
+    const s = useAgentBallStore.getState();
+    expect(s.panelOpen).toBe(false);
+    expect(s.mountPoint).toBe("global-popover");
+  });
 });

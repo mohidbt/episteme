@@ -34,4 +34,26 @@ describe("ReaderSidePanel", () => {
     fireEvent.click(screen.getByRole("button", { name: /close/i }));
     expect(onClose).toHaveBeenCalledOnce();
   });
+
+  it("calls onClose on Escape key when open", () => {
+    const onClose = vi.fn();
+    render(
+      <ReaderSidePanel isOpen onClose={onClose}>
+        <div>x</div>
+      </ReaderSidePanel>
+    );
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it("does not call onClose on Escape when closed", () => {
+    const onClose = vi.fn();
+    render(
+      <ReaderSidePanel isOpen={false} onClose={onClose}>
+        <div>x</div>
+      </ReaderSidePanel>
+    );
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(onClose).not.toHaveBeenCalled();
+  });
 });

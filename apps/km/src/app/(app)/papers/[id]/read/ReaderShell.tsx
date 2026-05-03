@@ -54,6 +54,14 @@ export function ReaderShell({ paperId }: { paperId: string }) {
     close();
   }, [close]);
 
+  // Reset store mount point on unmount (route change away from reader) so
+  // the global AgentBall on other routes does not stay hidden.
+  useEffect(() => {
+    return () => {
+      useAgentBallStore.getState().close();
+    };
+  }, []);
+
   const handleOpen = useCallback(() => {
     openInReader();
   }, [openInReader]);
