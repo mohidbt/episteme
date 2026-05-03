@@ -1,7 +1,7 @@
 import { and, asc, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { paperHighlights, papers } from "@episteme/db/schema";
-import { getUserIdFromRequest } from "@/lib/auth";
+import { getAuthedUserId, MissingInternalSecretError } from "@/lib/internal-auth";
 import { paperHighlightCreateSchema } from "@/lib/validators";
 import { jsonError, requireOwned } from "@/lib/crud";
 
@@ -10,8 +10,16 @@ export const runtime = "nodejs";
 type PaperRow = typeof papers.$inferSelect;
 
 export async function GET(req: Request) {
-  const userId = await getUserIdFromRequest(req);
-  if (!userId) return jsonError(401, "unauthorized");
+  // Dual-auth: cookie session OR HMAC. Reader UI uses cookie; agent flows
+  // (and uniform internal callers) use HMAC.
+  let authed;
+  try { authed = await getAuthedUserId(req); }
+  catch (e) {
+    if (e instanceof MissingInternalSecretError) return jsonError(500, "internal auth misconfigured");
+    throw e;
+  }
+  if (!authed) return jsonError(401, "unauthorized");
+  const userId = authed.userId;
   const url = new URL(req.url);
   const paperId = url.searchParams.get("paperId");
   if (!paperId) return jsonError(400, "validation", { message: "paperId required" });
@@ -35,9 +43,18 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const userId = await getUserIdFromRequest(req);
-  if (!userId) return jsonError(401, "unauthorized");
-  const body = await req.json().catch(() => null);
+  // Dual-auth: cookie session OR HMAC (used by agent `highlight` tool).
+  // Read raw body first so we can pass it to the HMAC verifier.
+  const rawBody = await req.text();
+  let authed;
+  try { authed = await getAuthedUserId(req, rawBody); }
+  catch (e) {
+    if (e instanceof MissingInternalSecretError) return jsonError(500, "internal auth misconfigured");
+    throw e;
+  }
+  if (!authed) return jsonError(401, "unauthorized");
+  const userId = authed.userId;
+  const body = (() => { try { return JSON.parse(rawBody); } catch { return null; } })();
   const parsed = paperHighlightCreateSchema.safeParse(body);
   if (!parsed.success) return jsonError(400, "validation", { issues: parsed.error.issues });
 

@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { createHmac } from "crypto";
 import { GET, POST } from "./route";
 import { DELETE as DEL_ID } from "./[id]/route";
 import { POST as POST_LIB } from "../libraries/route";
@@ -21,6 +22,8 @@ let otherLibraryId: number;
 let paperId: string;
 let otherPaperId: string;
 const createdPaperIds: string[] = [];
+
+const HMAC_SECRET = "test-paper-highlights-secret";
 
 async function createPaper(cookie: string, libId: number, filename = "hl.pdf") {
   const r = await POST_PAPER(
@@ -208,6 +211,70 @@ describe("paper-highlights", () => {
       params({ id: row.id }),
     );
     expect(ok.status).toBe(204);
+  });
+
+  it("POST via HMAC dual-auth succeeds (agent highlight tool)", async () => {
+    const prevSecret = process.env.INHALE_INTERNAL_SECRET;
+    process.env.INHALE_INTERNAL_SECRET = HMAC_SECRET;
+    try {
+      const path = "/api/paper-highlights";
+      const body = JSON.stringify({ paperId, page: 7, color: "amber", noteMd: "via hmac" });
+      const ts = String(Math.floor(Date.now() / 1000));
+      const sig = createHmac("sha256", HMAC_SECRET)
+        .update(ts + "POST" + path + body)
+        .digest("hex");
+      const r = await POST(
+        new Request(`http://localhost${path}`, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "X-Inhale-User-Id": u.id,
+            "X-Inhale-Ts": ts,
+            "X-Inhale-Sig": sig,
+          },
+          body,
+        }),
+      );
+      expect(r.status).toBe(201);
+      const row = await r.json();
+      expect(row.userId).toBe(u.id);
+      expect(row.paperId).toBe(paperId);
+      expect(row.page).toBe(7);
+      await DEL_ID(
+        req(`/api/paper-highlights/${row.id}`, { method: "DELETE", cookie: u.cookie }),
+        params({ id: row.id }),
+      );
+    } finally {
+      if (prevSecret === undefined) delete process.env.INHALE_INTERNAL_SECRET;
+      else process.env.INHALE_INTERNAL_SECRET = prevSecret;
+    }
+  });
+
+  it("GET via HMAC dual-auth succeeds", async () => {
+    const prevSecret = process.env.INHALE_INTERNAL_SECRET;
+    process.env.INHALE_INTERNAL_SECRET = HMAC_SECRET;
+    try {
+      const path = `/api/paper-highlights?paperId=${paperId}`;
+      const ts = String(Math.floor(Date.now() / 1000));
+      const sig = createHmac("sha256", HMAC_SECRET)
+        .update(ts + "GET" + path + "")
+        .digest("hex");
+      const r = await GET(
+        new Request(`http://localhost${path}`, {
+          headers: {
+            "X-Inhale-User-Id": u.id,
+            "X-Inhale-Ts": ts,
+            "X-Inhale-Sig": sig,
+          },
+        }),
+      );
+      expect(r.status).toBe(200);
+      const rows = await r.json();
+      expect(Array.isArray(rows)).toBe(true);
+    } finally {
+      if (prevSecret === undefined) delete process.env.INHALE_INTERNAL_SECRET;
+      else process.env.INHALE_INTERNAL_SECRET = prevSecret;
+    }
   });
 
   it("DELETE owned removes the row", async () => {
