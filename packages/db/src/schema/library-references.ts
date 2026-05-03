@@ -1,6 +1,7 @@
-import { pgTable, text, timestamp, serial, integer, index, uniqueIndex, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, serial, integer, index, uniqueIndex, jsonb, uuid } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { user } from "./auth";
+import { folders } from "./folders";
 type Author = { name: string; authorId?: string };
 
 export const libraryReferences = pgTable("library_references", {
@@ -29,8 +30,10 @@ export const libraryReferences = pgTable("library_references", {
   tldrText: text("tldr_text"),
   externalIds: jsonb("external_ids").$type<Record<string, string>>(),
   bibtex: text("bibtex"),
+  folderId: uuid("folder_id").references(() => folders.id, { onDelete: "set null" }),
 }, (table) => [
   index("library_references_user_id_idx").on(table.userId),
+  index("library_references_folder_idx").on(table.userId, table.folderId),
   // Partial unique index — enforces per-user DOI uniqueness only for rows with a DOI.
   // Enables race-free ON CONFLICT upsert in save route; rows without a DOI remain duplicable.
   uniqueIndex("library_references_user_doi_unique_idx")

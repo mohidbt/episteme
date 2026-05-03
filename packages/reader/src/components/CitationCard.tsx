@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
-import { X, Star, ExternalLink } from "lucide-react";
+import { X, Star, ExternalLink, Folder } from "lucide-react";
 import type { documentReferences } from "@episteme/db/schema";
 import type { InferSelectModel } from "drizzle-orm";
 import { toast } from "sonner";
@@ -20,12 +20,24 @@ export interface CitationWithStatus extends DocumentReference {
 
 export type CitationCardVariant = "popover" | "compact";
 
+export interface FolderOption {
+  id: string;
+  name: string;
+  /** Pre-formatted breadcrumb, e.g. "Reading / 2026 / Causal" */
+  path?: string;
+}
+
 interface CitationCardProps {
   citation: CitationWithStatus;
   rect?: { top: number; left: number };
   onDismiss?: () => void;
-  onKeep?: () => void;
-  onSaveToLibrary?: () => void;
+  /**
+   * Save the citation as a library reference. Optional folderId places it in
+   * the chosen folder; null/undefined keeps it at the library root.
+   */
+  onSaveToLibrary?: (folderId: string | null) => void;
+  /** Folders shown in the side picker. Empty → no picker rendered. */
+  folders?: FolderOption[];
   variant?: CitationCardVariant;
   headerAction?: React.ReactNode;
 }
@@ -53,14 +65,31 @@ export function CitationCard({
   citation,
   rect,
   onDismiss,
-  onKeep,
   onSaveToLibrary,
+  folders = [],
   variant = "popover",
   headerAction,
 }: CitationCardProps) {
   const cardRef = useRef<HTMLDivElement>(null);
+  const folderMenuRef = useRef<HTMLDivElement>(null);
   const [leftPos, setLeftPos] = useState<number>(rect?.left ?? 0);
   const [abstractExpanded, setAbstractExpanded] = useState(false);
+  const [folderMenuOpen, setFolderMenuOpen] = useState(false);
+
+  // Close folder menu on outside click.
+  useEffect(() => {
+    if (!folderMenuOpen) return;
+    function onDocMouseDown(e: MouseEvent) {
+      if (
+        folderMenuRef.current &&
+        !folderMenuRef.current.contains(e.target as Node)
+      ) {
+        setFolderMenuOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", onDocMouseDown);
+    return () => document.removeEventListener("mousedown", onDocMouseDown);
+  }, [folderMenuOpen]);
 
   const isPopover = variant === "popover";
 
@@ -296,31 +325,78 @@ export function CitationCard({
 
       {/* Actions */}
       <div className={`flex flex-wrap gap-2 border-t ${headerPadding}`}>
-        {/* Keep It (legacy popover behavior) */}
-        {onKeep !== undefined && (
-          <Button
-            size="sm"
-            variant={citation.keptId ? "secondary" : "default"}
-            className="flex-1 text-xs"
-            onClick={onKeep}
-            disabled={!!citation.keptId}
-            aria-label={citation.keptId ? "Already kept" : "Keep It"}
-          >
-            {citation.keptId ? "Kept ✓" : "Keep It"}
-          </Button>
-        )}
-        {/* Save to Library */}
+        {/* Save to Library — primary action with side folder picker */}
         {onSaveToLibrary !== undefined && (
-          <Button
-            size="sm"
-            variant={citation.libraryReferenceId ? "secondary" : "outline"}
-            className="flex-1 text-xs"
-            onClick={onSaveToLibrary}
-            disabled={!!citation.libraryReferenceId}
-            aria-label={citation.libraryReferenceId ? "Already in library" : "Save to Library"}
-          >
-            {citation.libraryReferenceId ? "In Library ✓" : "Save to Library"}
-          </Button>
+          <div className="relative inline-flex flex-1 isolate">
+            <Button
+              size="sm"
+              variant={citation.libraryReferenceId ? "secondary" : "default"}
+              className={
+                folders.length > 0
+                  ? "flex-1 rounded-r-none border-r-0 text-xs"
+                  : "flex-1 text-xs"
+              }
+              onClick={() => onSaveToLibrary(null)}
+              disabled={!!citation.libraryReferenceId}
+              aria-label={
+                citation.libraryReferenceId
+                  ? "Already in library"
+                  : "Save to library"
+              }
+            >
+              {citation.libraryReferenceId ? "In Library ✓" : "Save to Library"}
+            </Button>
+            {folders.length > 0 && !citation.libraryReferenceId && (
+              <div ref={folderMenuRef} className="relative">
+                <Button
+                  size="sm"
+                  variant="default"
+                  className="rounded-l-none border-l border-l-background/30 px-2"
+                  onClick={() => setFolderMenuOpen((v) => !v)}
+                  aria-label="Pick folder for save"
+                  aria-haspopup="menu"
+                  aria-expanded={folderMenuOpen}
+                >
+                  <Folder className="size-3.5" aria-hidden />
+                </Button>
+                {folderMenuOpen && (
+                  <div
+                    role="menu"
+                    className="absolute right-0 top-full z-[60] mt-1 max-h-64 w-56 overflow-y-auto rounded-md border bg-background p-1 shadow-lg"
+                  >
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setFolderMenuOpen(false);
+                        onSaveToLibrary(null);
+                      }}
+                      className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs hover:bg-muted"
+                    >
+                      <span className="flex-1 truncate">Library root</span>
+                    </button>
+                    {folders.map((f) => (
+                      <button
+                        key={f.id}
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          setFolderMenuOpen(false);
+                          onSaveToLibrary(f.id);
+                        }}
+                        className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs hover:bg-muted"
+                      >
+                        <Folder className="size-3 shrink-0 text-muted-foreground" aria-hidden />
+                        <span className="flex-1 truncate" title={f.path ?? f.name}>
+                          {f.path ?? f.name}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         )}
         {/* Copy BibTeX */}
         <Button

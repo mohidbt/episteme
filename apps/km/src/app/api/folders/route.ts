@@ -32,7 +32,11 @@ export async function GET(req: Request) {
   if (libraryIdStr) {
     libraryId = Number(libraryIdStr);
     if (!Number.isFinite(libraryId)) return jsonError(400, "validation");
-  } else if (authed.viaHmac) {
+  } else {
+    // Default to the user's lowest-id library when libraryId is omitted.
+    // Same fallback that the HMAC branch already used; extending it to the
+    // cookie path so single-library callers (e.g. reader citation card
+    // folder picker) don't have to plumb libraryId through.
     const [defaultLib] = await db
       .select({ id: libraries.id })
       .from(libraries)
@@ -41,8 +45,6 @@ export async function GET(req: Request) {
       .limit(1);
     if (!defaultLib) return jsonError(400, "no_library", { message: "user has no library" });
     libraryId = defaultLib.id;
-  } else {
-    return jsonError(400, "validation", { message: "libraryId required" });
   }
   // Verify ownership of the library.
   const [lib] = await db

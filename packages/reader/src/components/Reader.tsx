@@ -10,7 +10,7 @@ import { HighlightsSidebar } from "./HighlightsSidebar";
 import { CommentsSidebar } from "./CommentsSidebar";
 import { OutlineSidebar, type PdfOutlineItem } from "./OutlineSidebar";
 import { CitationsSidebar } from "./CitationsSidebar";
-import { CitationCard, type CitationWithStatus } from "./CitationCard";
+import { CitationCard, type CitationWithStatus, type FolderOption } from "./CitationCard";
 import { DockMenu, useSidebarDock, type Dock } from "./DockableSidebar";
 import { FindBar } from "./FindBar";
 import { PdfViewer } from "./PdfViewer";
@@ -212,6 +212,66 @@ export function Reader({
 
   const [markers, setMarkers] = useState<MarkerRect[]>([]);
   const [citationsRefreshKey, setCitationsRefreshKey] = useState(0);
+  const [folderOptions, setFolderOptions] = useState<FolderOption[]>([]);
+
+  // Folder list for the citation-card "Save to Library" picker. KM exposes
+  // /api/folders; non-fatal on failure.
+  //
+  // Filter rules (applied client-side because other /api/folders consumers
+  // may legitimately want the system folders):
+  //   - Trash and any descendants of Trash are hidden.
+  //   - The `.episteme` system folder and all of its descendants are hidden
+  //     (agents/, skills/, memories/, deep-read/, lit-triage/, …).
+  //   - Any folder whose name starts with `.` is hidden as a system folder.
+  // The remaining folders are rendered as breadcrumb paths
+  // ("Reading List / Foundations") so nested duplicates can be told apart.
+  useEffect(() => {
+    const ctl = new AbortController();
+    fetch(`/api/folders`, { signal: ctl.signal })
+      .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
+      .then((data: {
+        folders?: {
+          id: string;
+          name: string;
+          parentId: string | null;
+          isTrash: boolean;
+        }[];
+      }) => {
+        if (!Array.isArray(data?.folders)) return;
+        const byId = new Map(data.folders.map((f) => [f.id, f]));
+        const hiddenRoots = new Set<string>();
+        for (const f of data.folders) {
+          if (f.isTrash || f.name.startsWith(".")) hiddenRoots.add(f.id);
+        }
+        const isHidden = (id: string | null): boolean => {
+          let cur = id;
+          while (cur) {
+            if (hiddenRoots.has(cur)) return true;
+            const parent = byId.get(cur)?.parentId ?? null;
+            cur = parent;
+          }
+          return false;
+        };
+        const pathOf = (f: { id: string; name: string; parentId: string | null }): string => {
+          const parts: string[] = [];
+          let cur: string | null = f.id;
+          while (cur) {
+            const node = byId.get(cur);
+            if (!node) break;
+            parts.unshift(node.name);
+            cur = node.parentId;
+          }
+          return parts.join(" / ");
+        };
+        const visible = data.folders
+          .filter((f) => !isHidden(f.id))
+          .map((f) => ({ id: f.id, name: f.name, path: pathOf(f) }))
+          .sort((a, b) => a.path.localeCompare(b.path));
+        setFolderOptions(visible);
+      })
+      .catch(() => {/* non-fatal — picker just won't render */});
+    return () => ctl.abort();
+  }, []);
 
   const {
     highlights: sidebarHighlights,
@@ -243,35 +303,15 @@ export function Reader({
     []
   );
 
-  const handleKeep = useCallback(
-    async (citationId: number) => {
-      if (pendingCitationIds.current.has(citationId)) return;
-      pendingCitationIds.current.add(citationId);
-      try {
-        const res = await fetch(`/api/papers/${paperId}/citations/${citationId}/keep`, {
-          method: "POST",
-        });
-        if (res.ok) {
-          const { keptId } = (await res.json()) as { keptId: number };
-          patchCitation(citationId, { keptId });
-          toast.success("Kept");
-        } else {
-          toast.error("Failed to keep citation");
-        }
-      } finally {
-        pendingCitationIds.current.delete(citationId);
-      }
-    },
-    [paperId, patchCitation]
-  );
-
   const handleSaveToLibrary = useCallback(
-    async (citationId: number) => {
+    async (citationId: number, folderId: string | null) => {
       if (pendingCitationIds.current.has(citationId)) return;
       pendingCitationIds.current.add(citationId);
       try {
         const res = await fetch(`/api/papers/${paperId}/citations/${citationId}/save`, {
           method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(folderId ? { folderId } : {}),
         });
         if (res.ok) {
           const { keptId, libraryReferenceId } = (await res.json()) as {
@@ -752,8 +792,10 @@ export function Reader({
             citation={activeCitation}
             rect={clickPosition}
             onDismiss={dismissCitation}
-            onKeep={() => handleKeep(activeCitation.id)}
-            onSaveToLibrary={() => handleSaveToLibrary(activeCitation.id)}
+            folders={folderOptions}
+            onSaveToLibrary={(folderId) =>
+              handleSaveToLibrary(activeCitation.id, folderId)
+            }
           />
         )}
       </div>

@@ -19,6 +19,20 @@ export async function POST(request: NextRequest, { params }: Ctx) {
   const documentReferenceId = parseInt(refId, 10);
   if (isNaN(documentReferenceId)) return jsonError(400, "invalid ref id");
 
+  // Optional folderId in body — places the new library_reference into a folder.
+  let folderId: string | null = null;
+  try {
+    const text = await request.text();
+    if (text) {
+      const parsed = JSON.parse(text) as { folderId?: string | null };
+      if (typeof parsed.folderId === "string" && parsed.folderId.length > 0) {
+        folderId = parsed.folderId;
+      }
+    }
+  } catch {
+    // empty body or bad JSON → folder stays null
+  }
+
   const owned = await requireOwned<PaperRow>(papers, paperId, userId);
   if (!owned.ok) return jsonError(owned.status, owned.status === 404 ? "not_found" : "forbidden");
 
@@ -41,7 +55,7 @@ export async function POST(request: NextRequest, { params }: Ctx) {
     // (userId, doi) WHERE doi IS NOT NULL — race-free under concurrent saves.
     // Without a DOI we insert a new row (dedup isn't meaningful without a DOI).
     let libraryReferenceId: number;
-    const payload = buildLibraryReference(userId, ref);
+    const payload = { ...buildLibraryReference(userId, ref), folderId };
 
     if (ref.doi) {
       const [row] = await db
@@ -59,6 +73,7 @@ export async function POST(request: NextRequest, { params }: Ctx) {
             abstract: payload.abstract,
             venue: payload.venue,
             citationCount: payload.citationCount,
+            folderId: payload.folderId,
           },
         })
         .returning({ id: libraryReferences.id });
