@@ -146,9 +146,12 @@ def test_core_tools_include_read_paper_and_pdf_explain_passage():
     filtered_lt = _filter_tools_for_skills(list(ALL_TOOLS), loaded_skills=loaded_lt)
     names_lt = {t.name for t in filtered_lt}
     assert "pdf_read_text" in names_lt
-    # search_library must come via skill, not CORE. deep-read SKILL.md does
-    # not (yet) list search_library, so the filtered set must exclude it.
-    assert "search_library" not in names
+    # search_library must come via skill, not CORE. deep-read SKILL.md now
+    # lists search_library in its tools allowlist, so it appears in the
+    # deep-read filtered set but stays absent from lit-triage's set —
+    # confirming opt-in-via-skill rather than blanket CORE promotion.
+    assert "search_library" in names
+    assert "search_library" not in names_lt
 
 
 def test_lit_triage_keeps_create_note_hitl():

@@ -168,6 +168,32 @@ def test_load_skills_lazy_body_load(tmp_path, monkeypatch):
     assert counter["n"] == 2, f"expected cached body(), got {counter['n']} reads"
 
 
+def test_deep_read_skill_tools_list():
+    """deep-read SKILL.md must reference only wired tools.
+
+    pdf_read_tables and pdf_extract_data are UNAVAILABLE stubs in
+    services/agents/tools/pdfs.py — naming them in the skill frontmatter
+    causes the LLM to call dead tools. read_paper / pdf_explain_passage /
+    search_library are the actual deep-read surface.
+    """
+    from skills import load_skills  # noqa: PLC0415
+
+    loaded = load_skills(only=["deep-read"])
+    assert len(loaded) == 1
+    names = set(loaded[0].tools)
+    assert "pdf_read_tables" not in names
+    assert "pdf_extract_data" not in names
+    assert {
+        "read_paper",
+        "pdf_read_text",
+        "pdf_explain_passage",
+        "search_pdfs",
+        "search_library",
+        "highlight",
+        "create_note",
+    }.issubset(names)
+
+
 def test_load_skills_skips_non_skill_dirs(tmp_path, monkeypatch):
     (tmp_path / "__pycache__").mkdir()
     (tmp_path / "__pycache__" / "junk.pyc").write_text("")

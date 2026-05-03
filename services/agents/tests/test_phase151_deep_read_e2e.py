@@ -105,7 +105,20 @@ def test_phase151_debug_loaded_skills_includes_deep_read_and_new_tools():
     spec = payload[0]
     assert spec["name"] == "deep-read"
     tools = set(spec["tools"])
-    assert {"pdf_read_text", "pdf_read_tables", "pdf_extract_data", "search_pdfs", "highlight", "create_note"} <= tools
+    # pdf_read_tables / pdf_extract_data are UNAVAILABLE stubs and have been
+    # removed from the deep-read tool list. read_paper / pdf_explain_passage /
+    # search_library are the wired surface.
+    assert {
+        "read_paper",
+        "pdf_read_text",
+        "pdf_explain_passage",
+        "search_pdfs",
+        "search_library",
+        "highlight",
+        "create_note",
+    } <= tools
+    assert "pdf_read_tables" not in tools
+    assert "pdf_extract_data" not in tools
     assert "extract_passages" not in tools
     assert "get_page_text" not in tools
 
