@@ -23,6 +23,11 @@ interface SelectionToolbarProps {
   onComment?: (text: string) => void;
   onAskAi?: () => void;
   /**
+   * When provided, renders an "Explain" action that asks the KM agent to
+   * explain the current passage via the `pdf_explain_passage` tool.
+   */
+  onExplain?: () => void;
+  /**
    * Called when the user enters a long-lived sub-mode (e.g. typing a
    * comment) so the parent can snapshot the underlying selection and keep
    * this toolbar mounted even after the window selection clears.
@@ -38,7 +43,7 @@ interface SelectionToolbarProps {
   onErase?: () => void;
 }
 
-export function SelectionToolbar({ rect, onHighlight, onDismiss, onComment, onAskAi, onCommitStart, editingHighlightId, onErase }: SelectionToolbarProps) {
+export function SelectionToolbar({ rect, onHighlight, onDismiss, onComment, onAskAi, onExplain, onCommitStart, editingHighlightId, onErase }: SelectionToolbarProps) {
   const [mode, setMode] = useState<"main" | "comment">("main");
   const [commentText, setCommentText] = useState("");
 
@@ -136,6 +141,11 @@ export function SelectionToolbar({ rect, onHighlight, onDismiss, onComment, onAs
       {onAskAi && !editingHighlightId && (
         <Button variant="ghost" size="sm" onClick={onAskAi} className="text-xs">
           Ask AI
+        </Button>
+      )}
+      {onExplain && !editingHighlightId && (
+        <Button variant="ghost" size="sm" onClick={onExplain} className="text-xs">
+          Explain
         </Button>
       )}
       {onErase && (

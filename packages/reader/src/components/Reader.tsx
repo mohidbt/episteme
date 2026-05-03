@@ -34,6 +34,11 @@ export type ReaderProps = {
   paperId: string;
   mode?: ReaderMode;
   className?: string;
+  /**
+   * Optional callback invoked when the user clicks "Explain" on a text
+   * selection. The consumer (apps/km) wires this to the KM agent side panel.
+   */
+  onExplainPassage?: (args: { page: number; text: string }) => void;
 };
 
 interface MarkerRect {
@@ -113,7 +118,7 @@ function SidebarPanelFragment({
   );
 }
 
-export function Reader({ paperId, mode = "full", className }: ReaderProps) {
+export function Reader({ paperId, mode = "full", className, onExplainPassage }: ReaderProps) {
   // Paper meta (title, processingStatus)
   const [meta, setMeta] = useState<PaperMeta | null>(null);
   const [metaError, setMetaError] = useState<string | null>(null);
@@ -667,6 +672,18 @@ export function Reader({ paperId, mode = "full", className }: ReaderProps) {
             onDismiss={handleDismissSelection}
             onComment={handleComment}
             onCommitStart={handleCommitStart}
+            onExplain={
+              onExplainPassage
+                ? () => {
+                    onExplainPassage({
+                      page: toolbarSelection.pageNumber,
+                      text: toolbarSelection.text,
+                    });
+                    setActiveSelection(null);
+                    clearSelection();
+                  }
+                : undefined
+            }
           />
         )}
         {editingHighlight && (

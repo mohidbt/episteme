@@ -17,3 +17,6 @@ export { ReaderSidePanel } from "./components/ReaderSidePanel";
 export type { ReaderSidePanelProps } from "./components/ReaderSidePanel";
 
 export type { ReaderPlugin, ReaderMode } from "./plugins/types";
+
+export { useExplainPassage } from "./hooks/use-explain-passage";
+export type { UseExplainPassageOptions, ExplainPassageArgs } from "./hooks/use-explain-passage";

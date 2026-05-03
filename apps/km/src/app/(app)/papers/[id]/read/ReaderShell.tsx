@@ -66,10 +66,34 @@ export function ReaderShell({ paperId }: { paperId: string }) {
     openInReader();
   }, [openInReader]);
 
+  const handleExplainPassage = useCallback(
+    async ({ page, text }: { page: number; text: string }) => {
+      // Open the side panel synchronously so the UI reacts immediately.
+      openInReader();
+      // Ensure a thread exists before invoking — the side-panel useEffect
+      // creates one lazily, but on a first explain-click it may not exist.
+      let tid = useAgentBallStore.getState().activeThreadId;
+      if (!tid) {
+        tid = await createThread(new AbortController().signal);
+        if (tid) setActiveThread(tid);
+      }
+      if (!tid) return;
+      await fetch("/api/agents/km/invoke", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          thread_id: tid,
+          message: `Explain this passage from page ${page} of paper ${paperId}: "${text}"`,
+        }),
+      });
+    },
+    [openInReader, setActiveThread, paperId]
+  );
+
   return (
     <div className="flex h-full min-h-0">
       <div className="relative flex-1 min-w-0">
-        <Reader paperId={paperId} mode="full" />
+        <Reader paperId={paperId} mode="full" onExplainPassage={handleExplainPassage} />
         {!sidePanelOpen ? (
           <button
             type="button"
