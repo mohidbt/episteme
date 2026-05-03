@@ -62,7 +62,7 @@ export function useUserHighlights(paperId: string, refreshKey: number = 0): Resu
 
   useEffect(() => {
     const controller = new AbortController();
-    fetch(`/api/documents/${paperId}/highlights`, { signal: controller.signal })
+    fetch(`/api/user-highlights?paperId=${paperId}`, { signal: controller.signal })
       .then((res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.json();
