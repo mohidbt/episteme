@@ -28,7 +28,7 @@ type Result = {
  * Fetches document segments (section_header, figure, formula) for the reader.
  * Paragraph and table rows are filtered server-side.
  */
-export function useSegments(documentId: number): Result {
+export function useSegments(paperId: string): Result {
   const [state, setState] = useState<{
     segments: SegmentWithPayload[];
     loading: boolean;
@@ -37,7 +37,7 @@ export function useSegments(documentId: number): Result {
 
   useEffect(() => {
     const controller = new AbortController();
-    fetch(`/api/documents/${documentId}/segments`, { signal: controller.signal })
+    fetch(`/api/documents/${paperId}/segments`, { signal: controller.signal })
       .then((res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.json();
@@ -54,7 +54,7 @@ export function useSegments(documentId: number): Result {
         setState((prev) => ({ ...prev, loading: false, error: "Failed to load segments" }));
       });
     return () => controller.abort();
-  }, [documentId]);
+  }, [paperId]);
 
   return state;
 }
