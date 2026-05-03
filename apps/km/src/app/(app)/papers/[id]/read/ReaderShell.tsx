@@ -94,7 +94,12 @@ export function ReaderShell({ paperId }: { paperId: string }) {
   );
 
   const agentSlot = activeThreadId ? (
-    <AgentTranscript key={activeThreadId} threadId={activeThreadId} fullHeight />
+    <AgentTranscript
+      key={activeThreadId}
+      threadId={activeThreadId}
+      fullHeight
+      pageContext={{ paperId }}
+    />
   ) : (
     <div className="p-3 text-xs text-muted-foreground">Loading…</div>
   );

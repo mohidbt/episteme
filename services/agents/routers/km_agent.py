@@ -320,14 +320,35 @@ async def invoke(req: Request, auth: InternalAuthDep):
         permissions=permissions,
     )
 
+    # Page context (paperId/noteId/...) — when set, propagate via configurable
+    # so tools can default to the active resource and prepend a context line
+    # to the user message so the model picks tools (read_paper / search_library)
+    # scoped to the active paper.
+    page_context = body.get("page_context") or {}
+    if not isinstance(page_context, dict):
+        page_context = {}
+    active_paper_id = page_context.get("paperId") if isinstance(page_context.get("paperId"), str) else None
+    user_message = body["message"]
+    if active_paper_id:
+        user_message = (
+            f"[reader-context] You are answering inside the PDF reader for "
+            f"paper_id={active_paper_id}. Prefer tools scoped to this paper "
+            f"(e.g. read_paper(paper_id=\"{active_paper_id}\", scope=...) for "
+            f"Chandra-parsed segments, search_library(source_ids=[\"{active_paper_id}\"], kinds=[\"paper\"]) for RAG).\n\n"
+            f"{user_message}"
+        )
+
     async def gen():
         step = 0
         thread_id = body["thread_id"]
+        configurable = {"thread_id": thread_id, "user_id": user_id}
+        if active_paper_id:
+            configurable["paper_id"] = active_paper_id
         try:
             async for ev in agent.astream_events(
-                {"messages": [{"role": "user", "content": body["message"]}]},
+                {"messages": [{"role": "user", "content": user_message}]},
                 config={
-                    "configurable": {"thread_id": thread_id, "user_id": user_id},
+                    "configurable": configurable,
                     "recursion_limit": _AGENT_RECURSION_LIMIT,
                 },
                 version="v2",
