@@ -12,6 +12,7 @@ export * from "./document-references";
 export * from "./library-references";
 export * from "./kept-citations";
 export * from "./document-reference-markers";
+export * from "./ai-highlight-runs";
 export * from "./libraries";
 export * from "./folders";
 export * from "./papers";
