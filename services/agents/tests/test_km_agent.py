@@ -115,14 +115,17 @@ def test_paperset_tools_are_core_when_any_skill_active():
     assert "csv_write_cell" in names
 
 
-def test_core_tools_include_read_paper_explain_search_library():
-    """Regression: read_paper, pdf_explain_passage, and search_library are
-    real tools bound to the agent but were silently pruned by
-    _filter_tools_for_skills when any skill (e.g. deep-read) was enabled,
-    because deep-read's SKILL.md tools list omits them and they were not in
-    _CORE_TOOL_NAMES. The reader side-panel agent in /papers/[id]/read needs
-    these for multi-page reads, SelectionToolbar Explain, and cross-library
-    RAG.
+def test_core_tools_include_read_paper_and_pdf_explain_passage():
+    """Regression: read_paper and pdf_explain_passage are core tools bound to
+    the agent but were silently pruned by _filter_tools_for_skills when any
+    skill (e.g. deep-read) was enabled, because deep-read's SKILL.md tools
+    list omits them and they were not in _CORE_TOOL_NAMES. The reader
+    side-panel agent in /papers/[id]/read needs these for multi-page reads
+    and SelectionToolbar Explain.
+
+    Also locks the scoping decision that search_library is NOT core: it is
+    cross-library RAG and must be opted into via a skill's tools allowlist
+    (e.g. deep-read SKILL.md) rather than blanket-promoted to CORE.
     """
     from km_agent import _filter_tools_for_skills  # noqa: PLC0415
     from skills import load_skills  # noqa: PLC0415
@@ -133,7 +136,9 @@ def test_core_tools_include_read_paper_explain_search_library():
     names = {t.name for t in filtered}
     assert "read_paper" in names
     assert "pdf_explain_passage" in names
-    assert "search_library" in names
+    # search_library must come via skill, not CORE. deep-read SKILL.md does
+    # not (yet) list search_library, so the filtered set must exclude it.
+    assert "search_library" not in names
 
 
 def test_lit_triage_keeps_create_note_hitl():
