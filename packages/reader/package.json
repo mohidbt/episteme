@@ -1,0 +1,39 @@
+{
+  "name": "@episteme/reader",
+  "version": "0.0.1",
+  "private": true,
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@episteme/auth": "workspace:*",
+    "@episteme/db": "workspace:*",
+    "pdfjs-dist": "5.4.296",
+    "react-pdf": "^10.4.1",
+    "react-resizable-panels": "^4.10.0",
+    "zustand": "^5.0.12",
+    "lucide-react": "^1.7.0",
+    "sonner": "^2.0.7",
+    "clsx": "^2.1.1",
+    "class-variance-authority": "^0.7.1",
+    "tailwind-merge": "^3.5.0"
+  },
+  "peerDependencies": {
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "next": "16.2.2"
+  },
+  "devDependencies": {
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/dom": "^10.4.1",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "happy-dom": "^20.8.9",
+    "typescript": "^5",
+    "vitest": "^4.1.4"
+  }
+}
