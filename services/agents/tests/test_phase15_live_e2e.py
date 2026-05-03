@@ -196,36 +196,6 @@ class _ToolFlowAgent:
             }
             return
 
-        if "table" in msg:
-            yield {
-                "event": "on_tool_start",
-                "run_id": run,
-                "name": "pdf_read_tables",
-                "data": {"input": {"paper_id": "paper-table", "page": 2}},
-            }
-            yield {
-                "event": "on_tool_end",
-                "run_id": run,
-                "name": "pdf_read_tables",
-                "data": {"output": {"tables": [{"pageNumber": 2, "rows": [["A", "1"]]}]}},
-            }
-            return
-
-        if "schema" in msg or "json" in msg:
-            yield {
-                "event": "on_tool_start",
-                "run_id": run,
-                "name": "pdf_extract_data",
-                "data": {"input": {"paper_id": "paper-struct", "schema": {"type": "object"}}},
-            }
-            yield {
-                "event": "on_tool_end",
-                "run_id": run,
-                "name": "pdf_extract_data",
-                "data": {"output": {"data": {"dose_mg": 20}}},
-            }
-            return
-
         yield {
             "event": "on_chat_model_stream",
             "run_id": run,
@@ -526,46 +496,6 @@ def test_live_km_invoke_prompt_deep_read_uses_pdf_read_text(live_server, monkeyp
     assert tool_calls[0]["data"]["name"] == "pdf_read_text"
     results = [e for e in events if e["event"] == "tool_result"]
     assert results[0]["data"]["output"]["source"] == "pdfplumber"
-
-
-def test_live_km_invoke_prompt_table_question_uses_pdf_read_tables(live_server, monkeypatch):
-    agent = _ToolFlowAgent()
-    monkeypatch.setattr("routers.km_agent.build_km_agent", AsyncMock(return_value=agent))
-
-    path = "/agents/km/invoke"
-    body = json.dumps({"thread_id": "t-tab", "message": "What does Table 2 show in this paper?"}).encode()
-    r = httpx.post(
-        f"{live_server}{path}",
-        content=body,
-        headers=_signed_headers("POST", path, body),
-        timeout=20,
-    )
-    assert r.status_code == 200, r.text
-    events = _parse_named_sse(r.text)
-    calls = [e for e in events if e["event"] == "tool_call"]
-    assert calls[0]["data"]["name"] == "pdf_read_tables"
-
-
-def test_live_km_invoke_prompt_structured_extraction_uses_pdf_extract_data(live_server, monkeypatch):
-    agent = _ToolFlowAgent()
-    monkeypatch.setattr("routers.km_agent.build_km_agent", AsyncMock(return_value=agent))
-
-    path = "/agents/km/invoke"
-    body = json.dumps(
-        {"thread_id": "t-struct", "message": "Extract dose + endpoint as JSON schema output."}
-    ).encode()
-    r = httpx.post(
-        f"{live_server}{path}",
-        content=body,
-        headers=_signed_headers("POST", path, body),
-        timeout=20,
-    )
-    assert r.status_code == 200, r.text
-    events = _parse_named_sse(r.text)
-    calls = [e for e in events if e["event"] == "tool_call"]
-    assert calls[0]["data"]["name"] == "pdf_extract_data"
-    results = [e for e in events if e["event"] == "tool_result"]
-    assert results[0]["data"]["output"]["data"]["dose_mg"] == 20
 
 
 def test_live_km_invoke_fallback_then_cache_no_repeat_expensive_call(live_server, monkeypatch):

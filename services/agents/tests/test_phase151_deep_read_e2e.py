@@ -64,7 +64,7 @@ async def _deep_read_flow_events(input_, config, version):  # noqa: ARG001
         "data": {"chunk": MagicMock(content="Running deep-read workflow.")},
     }
     for idx, name in enumerate(
-        ["search_pdfs", "pdf_read_text", "pdf_read_tables", "pdf_extract_data", "highlight", "create_note"],
+        ["search_pdfs", "pdf_read_text", "read_paper", "highlight", "create_note"],
         start=1,
     ):
         yield {
@@ -105,9 +105,7 @@ def test_phase151_debug_loaded_skills_includes_deep_read_and_new_tools():
     spec = payload[0]
     assert spec["name"] == "deep-read"
     tools = set(spec["tools"])
-    # pdf_read_tables / pdf_extract_data are UNAVAILABLE stubs and have been
-    # removed from the deep-read tool list. read_paper / pdf_explain_passage /
-    # search_library are the wired surface.
+    # read_paper / pdf_explain_passage / search_library are the wired surface.
     assert {
         "read_paper",
         "pdf_read_text",
@@ -117,8 +115,6 @@ def test_phase151_debug_loaded_skills_includes_deep_read_and_new_tools():
         "highlight",
         "create_note",
     } <= tools
-    assert "pdf_read_tables" not in tools
-    assert "pdf_extract_data" not in tools
     assert "extract_passages" not in tools
     assert "get_page_text" not in tools
 
@@ -142,8 +138,7 @@ def test_phase151_invoke_prompt_routes_through_deep_read_toolchain():
     tool_calls = [e["data"]["name"] for e in events if e["event"] == "tool_call"]
     assert "search_pdfs" in tool_calls
     assert "pdf_read_text" in tool_calls
-    assert "pdf_read_tables" in tool_calls
-    assert "pdf_extract_data" in tool_calls
+    assert "read_paper" in tool_calls
     assert "highlight" in tool_calls
     assert "create_note" in tool_calls
 
