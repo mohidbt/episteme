@@ -289,6 +289,30 @@ def _extra_events(ev: dict, mapped: tuple[str, dict]) -> list[tuple[str, dict]]:
     return extras
 
 
+def _build_reader_context_prefix(active_paper_id: str) -> str:
+    """Build the `[reader-context]` system prefix for the PDF side-panel agent.
+
+    Names ONLY tools guaranteed available regardless of which skill the user
+    has enabled (see ``_CORE_TOOL_NAMES`` in ``km_agent.py``). Mentioning a
+    skill-gated tool here (e.g. ``search_library``) caused hallucination /
+    error loops when the active skill pruned that tool — the model would
+    repeatedly try to call a name it had been told to use.
+    """
+    return (
+        f"[reader-context] You are answering inside the PDF reader for "
+        f"paper_id={active_paper_id}. Prefer tools scoped to this paper:\n"
+        f"- read_paper(paper_id=\"{active_paper_id}\", scope=...) for full or "
+        f"multi-page text;\n"
+        f"- pdf_read_text(paper_id=\"{active_paper_id}\", page=N) for one page "
+        f"(page is required);\n"
+        f"- pdf_explain_passage(paper_id=\"{active_paper_id}\", page=N, "
+        f"text=\"...\") to explain a selected passage;\n"
+        f"- search_pdfs(query=\"...\") / list_pdfs() to find or list papers.\n"
+        f"Use these names verbatim. Do NOT invent tools (e.g. read_pdf) and do "
+        f"NOT call search_library — it is skill-gated and may be unavailable."
+    )
+
+
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
@@ -331,10 +355,7 @@ async def invoke(req: Request, auth: InternalAuthDep):
     user_message = body["message"]
     if active_paper_id:
         user_message = (
-            f"[reader-context] You are answering inside the PDF reader for "
-            f"paper_id={active_paper_id}. Prefer tools scoped to this paper "
-            f"(e.g. read_paper(paper_id=\"{active_paper_id}\", scope=...) for "
-            f"Chandra-parsed segments, search_library(source_ids=[\"{active_paper_id}\"], kinds=[\"paper\"]) for RAG).\n\n"
+            f"{_build_reader_context_prefix(active_paper_id)}\n\n"
             f"{user_message}"
         )
 
