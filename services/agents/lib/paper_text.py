@@ -14,7 +14,7 @@ async def _cache_markdown(conn, paper_id: str) -> str | None:
         """
         SELECT content
           FROM document_sections
-         WHERE document_id = $1
+         WHERE paper_id = $1
            AND mode = 'convert_accurate'
          ORDER BY section_index
         """,

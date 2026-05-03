@@ -11,6 +11,8 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 client = TestClient(app)
 
+PAPER_ID = "11111111-1111-1111-1111-111111111111"
+
 
 def _signed_headers(method: str, path: str):
     ts = str(int(time.time()))
@@ -21,18 +23,17 @@ def _signed_headers(method: str, path: str):
     ).hexdigest()
     return {
         "X-Inhale-User-Id": "user_1",
-        "X-Inhale-Document-Id": "1",
         "X-Inhale-LLM-Key": "sk-test",
         "X-Inhale-Ts": ts,
         "X-Inhale-Sig": sig,
     }
 
 
-def _make_row(id=1, doc_id=1, idx=0, title="Intro", content="preview", ps=1, pe=1):
+def _make_row(id=1, paper_id=PAPER_ID, idx=0, title="Intro", content="preview", ps=1, pe=1):
     """Simulate an asyncpg Record as a dict-like object."""
     created = datetime(2026, 4, 16, tzinfo=timezone.utc)
     return {
-        "id": id, "document_id": doc_id, "section_index": idx,
+        "id": id, "paper_id": paper_id, "section_index": idx,
         "title": title, "content": content, "page_start": ps, "page_end": pe,
         "created_at": created,
     }
@@ -47,13 +48,13 @@ def test_outline_returns_cached_sections():
 
     app.dependency_overrides[deps.db.get_conn] = override
     try:
-        path = "/agents/outline?documentId=1"
+        path = f"/agents/outline?paperId={PAPER_ID}"
         r = client.get(path, headers=_signed_headers("GET", path))
         assert r.status_code == 200
         data = r.json()
         assert len(data["sections"]) == 2
         s = data["sections"][0]
-        assert s["documentId"] == 1
+        assert s["paperId"] == PAPER_ID
         assert s["sectionIndex"] == 0
         assert s["title"] == "Intro"
         assert s["pageStart"] == 1
@@ -68,13 +69,13 @@ def test_outline_generates_via_llm():
     mock_conn = AsyncMock()
     # First call: fetch cached sections -> empty
     mock_conn.fetch.return_value = []
-    # Second call: fetchrow for document -> found
-    doc_row = {"file_path": "/tmp/test.pdf"}
+    # Second call: fetchrow for paper -> found
+    paper_row = {"file_path": "/tmp/test.pdf"}
     insert_row = _make_row()
 
     async def fetchrow_side_effect(query, *args):
-        if "FROM documents" in query:
-            return doc_row
+        if "FROM papers" in query:
+            return paper_row
         if "INSERT INTO document_sections" in query:
             return insert_row
         return None
@@ -97,29 +98,30 @@ def test_outline_generates_via_llm():
             patch("routers.outline.call_model", return_value=llm_response) as mock_call,
             patch("routers.outline.extract_pages", return_value=fake_pages),
         ):
-            path = "/agents/outline?documentId=1"
+            path = f"/agents/outline?paperId={PAPER_ID}"
             r = client.get(path, headers=_signed_headers("GET", path))
             assert r.status_code == 200
             data = r.json()
             assert len(data["sections"]) == 2
             mock_call.assert_called_once()
             # Verify INSERT was called twice (one per valid section)
-            assert mock_conn.fetchrow.call_count == 3  # 1 doc lookup + 2 inserts
+            assert mock_conn.fetchrow.call_count == 3  # 1 paper lookup + 2 inserts
     finally:
         app.dependency_overrides.clear()
 
 
-def test_outline_404_when_doc_not_found():
+def test_outline_404_when_paper_not_found():
     mock_conn = AsyncMock()
     mock_conn.fetch.return_value = []
-    mock_conn.fetchrow.return_value = None  # doc not found
+    mock_conn.fetchrow.return_value = None  # paper not found
 
     async def override():
         yield mock_conn
 
     app.dependency_overrides[deps.db.get_conn] = override
     try:
-        path = "/agents/outline?documentId=999"
+        missing = "22222222-2222-2222-2222-222222222222"
+        path = f"/agents/outline?paperId={missing}"
         r = client.get(path, headers=_signed_headers("GET", path))
         assert r.status_code == 404
     finally:
@@ -127,5 +129,5 @@ def test_outline_404_when_doc_not_found():
 
 
 def test_outline_unauthenticated():
-    r = client.get("/agents/outline?documentId=1")
+    r = client.get(f"/agents/outline?paperId={PAPER_ID}")
     assert r.status_code == 401

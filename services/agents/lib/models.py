@@ -3,7 +3,7 @@ from pydantic import BaseModel
 
 class SectionOut(BaseModel):
     id: int
-    documentId: int
+    paperId: str
     sectionIndex: int
     title: str | None
     content: str

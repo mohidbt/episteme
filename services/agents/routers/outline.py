@@ -21,31 +21,31 @@ class OutlineResponse(BaseModel):
 async def outline(
     auth: InternalAuthDep,
     conn: ConnDep,
-    documentId: Annotated[int, Query()],
+    paperId: Annotated[str, Query()],
 ) -> OutlineResponse:
     # 1. Check for cached sections
     rows = await conn.fetch(
         """
-        SELECT id, document_id, section_index, title, content, page_start, page_end, created_at
+        SELECT id, paper_id, section_index, title, content, page_start, page_end, created_at
         FROM document_sections
-        WHERE document_id = $1
+        WHERE paper_id = $1
         ORDER BY section_index ASC
         """,
-        documentId,
+        paperId,
     )
     if rows:
         return OutlineResponse(sections=[_row_to_section(r) for r in rows])
 
-    # 2. Get document file_path
-    doc = await conn.fetchrow(
-        "SELECT file_path FROM documents WHERE id = $1 AND user_id = $2",
-        documentId, auth["user_id"],
+    # 2. Get paper file_path
+    paper = await conn.fetchrow(
+        "SELECT file_path FROM papers WHERE id = $1 AND user_id = $2",
+        paperId, auth["user_id"],
     )
-    if not doc:
-        raise HTTPException(status_code=404, detail="Document not found")
+    if not paper:
+        raise HTTPException(status_code=404, detail="Paper not found")
 
     # 3. Extract PDF text (first 30 pages) — blocking I/O in thread
-    pages = await anyio.to_thread.run_sync(lambda: extract_pages(doc["file_path"]))
+    pages = await anyio.to_thread.run_sync(lambda: extract_pages(paper["file_path"]))
     sample = "\n\n".join(
         f"[Page {p['page_number']}]\n{p['text']}"
         for p in pages[:30]
@@ -87,11 +87,11 @@ async def outline(
     for i, s in enumerate(valid):
         row = await conn.fetchrow(
             """
-            INSERT INTO document_sections (document_id, section_index, title, content, page_start, page_end)
+            INSERT INTO document_sections (paper_id, section_index, title, content, page_start, page_end)
             VALUES ($1, $2, $3, $4, $5, $5)
-            RETURNING id, document_id, section_index, title, content, page_start, page_end, created_at
+            RETURNING id, paper_id, section_index, title, content, page_start, page_end, created_at
             """,
-            documentId, i, s["title"], s.get("preview", ""), int(s["page"]),
+            paperId, i, s["title"], s.get("preview", ""), int(s["page"]),
         )
         inserted_rows.append(row)
 
@@ -101,7 +101,7 @@ async def outline(
 def _row_to_section(row) -> SectionOut:
     return SectionOut(
         id=row["id"],
-        documentId=row["document_id"],
+        paperId=str(row["paper_id"]),
         sectionIndex=row["section_index"],
         title=row["title"],
         content=row["content"],
