@@ -95,6 +95,7 @@ export function PersonalSkills() {
       if (!res.ok) throw new Error(`http ${res.status}`);
       const body = (await res.json()) as {
         slug: string;
+        name?: string;
         description: string;
         instructions: string;
       };
