@@ -74,6 +74,7 @@ export function AgentBall(_props: AgentBallProps) {
   const agentBall = useAgentBall();
   const threadId = useAgentBallStore((s) => s.activeThreadId);
   const setThreadId = useAgentBallStore((s) => s.setActiveThread);
+  const mountPoint = useAgentBallStore((s) => s.mountPoint);
   const [prefilledPrompt, setPrefilledPrompt] = useState<string | null>(null);
   const [prefilledSkill, setPrefilledSkill] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState(false);
@@ -98,6 +99,7 @@ export function AgentBall(_props: AgentBallProps) {
   const working = agentBall.working;
   const pathname = usePathname() ?? "/";
   const pageContext = derivePageContext(pathname);
+  const onReaderRoute = /^\/papers\/[^/]+\/read(\/|$)/.test(pathname);
 
   const preset: BallPreset = working ? "working" : open ? "active" : "inactive";
 
@@ -175,6 +177,13 @@ export function AgentBall(_props: AgentBallProps) {
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [open, closePanel]);
+
+  // Phase 1.6b T3 — on reader route, the reader page provides its own trigger
+  // and side panel. Hide the global floating ball entirely there. Also, when
+  // the store has routed the mount to the reader-side-panel, do NOT render
+  // the global popover (the reader-side-panel renders the transcript instead).
+  if (onReaderRoute) return null;
+  if (mountPoint === "reader-side-panel") return null;
 
   if (!open) {
     const positionedX = ballDrag.x !== null;

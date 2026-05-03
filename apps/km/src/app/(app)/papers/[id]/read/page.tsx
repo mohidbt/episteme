@@ -6,7 +6,7 @@ import { getRequiredUserId } from "@/lib/session";
 import { db } from "@/lib/db";
 import { papers } from "@episteme/db/schema";
 
-import { ReaderClient } from "./ReaderClient";
+import { ReaderShell } from "./ReaderShell";
 
 const loadPaper = cache(async (paperId: string, userId: string) => {
   const rows = await db
@@ -29,7 +29,7 @@ export default async function PaperReadPage({
 
   return (
     <div className="h-full min-h-0">
-      <ReaderClient paperId={paper.id} />
+      <ReaderShell paperId={paper.id} />
     </div>
   );
 }
