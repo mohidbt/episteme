@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import dynamic from "next/dynamic";
 import { ReaderSidePanel } from "@episteme/reader";
 import { AgentTranscript } from "@/components/agent/AgentTranscript";
@@ -39,28 +39,48 @@ export function ReaderShell({ paperId }: { paperId: string }) {
 
   const sidePanelOpen = panelOpen && mountPoint === "reader-side-panel";
 
-  // Mirror AgentBall's pattern — when the side panel opens without a thread,
-  // create one. Cancel on unmount/close.
+  // Single in-flight thread-creation promise shared by both the side-panel
+  // open effect and the explain-passage handler — prevents racing duplicate
+  // POST /api/agent/threads when openInReader and handleExplainPassage fire
+  // back-to-back.
+  const threadCtlRef = useRef<AbortController | null>(null);
+  const threadInFlightRef = useRef<Promise<string | null> | null>(null);
+
+  const ensureThread = useCallback((): Promise<string | null> => {
+    const existing = useAgentBallStore.getState().activeThreadId;
+    if (existing) return Promise.resolve(existing);
+    if (threadInFlightRef.current) return threadInFlightRef.current;
+    threadCtlRef.current?.abort();
+    const ctl = new AbortController();
+    threadCtlRef.current = ctl;
+    const p = createThread(ctl.signal).then((id) => {
+      threadInFlightRef.current = null;
+      if (ctl.signal.aborted) return null;
+      if (id) useAgentBallStore.getState().setActiveThread(id);
+      return id;
+    });
+    threadInFlightRef.current = p;
+    return p;
+  }, []);
+
   useEffect(() => {
     if (!sidePanelOpen || activeThreadId) return;
-    const ctl = new AbortController();
-    void createThread(ctl.signal).then((id) => {
-      if (!ctl.signal.aborted && id) setActiveThread(id);
-    });
-    return () => ctl.abort();
-  }, [sidePanelOpen, activeThreadId, setActiveThread]);
+    void ensureThread();
+  }, [sidePanelOpen, activeThreadId, ensureThread]);
+
+  // Reset store mount point on unmount (route change away from reader) so
+  // the global AgentBall on other routes does not stay hidden. Also abort
+  // any in-flight thread creation.
+  useEffect(() => {
+    return () => {
+      threadCtlRef.current?.abort();
+      useAgentBallStore.getState().close();
+    };
+  }, []);
 
   const handleClose = useCallback(() => {
     close();
   }, [close]);
-
-  // Reset store mount point on unmount (route change away from reader) so
-  // the global AgentBall on other routes does not stay hidden.
-  useEffect(() => {
-    return () => {
-      useAgentBallStore.getState().close();
-    };
-  }, []);
 
   const handleOpen = useCallback(() => {
     openInReader();
@@ -68,15 +88,8 @@ export function ReaderShell({ paperId }: { paperId: string }) {
 
   const handleExplainPassage = useCallback(
     async ({ page, text }: { page: number; text: string }) => {
-      // Open the side panel synchronously so the UI reacts immediately.
       openInReader();
-      // Ensure a thread exists before invoking — the side-panel useEffect
-      // creates one lazily, but on a first explain-click it may not exist.
-      let tid = useAgentBallStore.getState().activeThreadId;
-      if (!tid) {
-        tid = await createThread(new AbortController().signal);
-        if (tid) setActiveThread(tid);
-      }
+      const tid = await ensureThread();
       if (!tid) return;
       await fetch("/api/agents/km/invoke", {
         method: "POST",
@@ -87,7 +100,7 @@ export function ReaderShell({ paperId }: { paperId: string }) {
         }),
       });
     },
-    [openInReader, setActiveThread, paperId]
+    [openInReader, ensureThread, paperId],
   );
 
   return (
