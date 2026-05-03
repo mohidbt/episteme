@@ -8,6 +8,7 @@ import { useDoubleTapSpace } from "@/hooks/useDoubleTapSpace";
 import { useDragX } from "@/hooks/useDragX";
 import { derivePageContext } from "@/lib/page-context";
 import { useAgentBall } from "./agent-ball-context";
+import { useAgentBallStore } from "@/state/agent-ball";
 import { Matrix, loader, pulse, wave } from "@/components/ui/matrix";
 
 interface AgentBallProps {
@@ -71,7 +72,8 @@ function MatrixBadge({ preset, size = 4, gap = 2 }: MatrixBadgeProps) {
 
 export function AgentBall(_props: AgentBallProps) {
   const agentBall = useAgentBall();
-  const [threadId, setThreadId] = useState<string | null>(null);
+  const threadId = useAgentBallStore((s) => s.activeThreadId);
+  const setThreadId = useAgentBallStore((s) => s.setActiveThread);
   const [prefilledPrompt, setPrefilledPrompt] = useState<string | null>(null);
   const [prefilledSkill, setPrefilledSkill] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState(false);

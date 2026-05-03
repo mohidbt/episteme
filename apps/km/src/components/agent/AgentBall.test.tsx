@@ -63,8 +63,14 @@ vi.mock("./AgentTranscript", async () => {
 
 let threadCounter = 0;
 
-beforeEach(() => {
+beforeEach(async () => {
   threadCounter = 0;
+  const { useAgentBallStore } = await import("@/state/agent-ball");
+  useAgentBallStore.setState({
+    activeThreadId: null,
+    panelOpen: false,
+    mountPoint: "global-popover",
+  });
   vi.stubGlobal(
     "fetch",
     vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
