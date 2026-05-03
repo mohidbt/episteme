@@ -19,7 +19,7 @@ vi.mock("react-pdf", () => ({
   pdfjs: { GlobalWorkerOptions: { workerSrc: "" } },
 }));
 
-vi.mock("@/hooks/use-pdf-text-selection", () => ({
+vi.mock("../../src/hooks/use-pdf-text-selection", () => ({
   usePdfTextSelection: () => {},
 }));
 
@@ -27,8 +27,8 @@ afterEach(() => cleanup());
 
 describe("PdfViewer pinch zoom", () => {
   it("ctrl+wheel up increases zoom, down decreases", async () => {
-    const { PdfViewer } = await import("../pdf-viewer");
-    const { useReaderState } = await import("@/hooks/use-reader-state");
+    const { PdfViewer } = await import("../../src/components/PdfViewer");
+    const { useReaderState } = await import("../../src/hooks/use-reader-state");
     useReaderState.setState({ zoom: 1.0 });
     const { container } = render(<PdfViewer url="about:blank" />);
     const el = container.querySelector(".overflow-auto") as HTMLElement;

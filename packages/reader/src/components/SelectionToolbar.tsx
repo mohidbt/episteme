@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Trash2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button } from "./ui/button";
 
 // Yellow is reserved for the comment overlay color so highlights and
 // comments stay visually distinct. Do not add "yellow" back here.

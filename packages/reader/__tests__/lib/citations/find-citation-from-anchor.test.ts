@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, beforeEach } from "vitest";
-import { findCitationFromAnchor } from "../find-citation-from-anchor";
+import { findCitationFromAnchor } from "../../../src/lib/citations/find-citation-from-anchor";
 
 function makeAnchor(container: HTMLElement, text: string, nested = false) {
   container.replaceChildren();

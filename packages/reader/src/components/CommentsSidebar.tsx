@@ -2,13 +2,13 @@
 
 import { useMemo, type ReactNode } from "react";
 import { Trash2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button } from "./ui/button";
 import {
   Empty,
   EmptyDescription,
   EmptyHeader,
   EmptyTitle,
-} from "@/components/ui/empty";
+} from "./ui/empty";
 
 interface Highlight {
   id: number;
@@ -88,7 +88,7 @@ export function CommentsSidebar({
           <div className="space-y-3">
             {commented.map((h) => (
               <div
-                role="button"
+                role="./ui/button"
                 tabIndex={0}
                 key={h.id}
                 onClick={() => onNavigate(h.pageNumber)}

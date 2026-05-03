@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { render } from "@testing-library/react";
-import { UserHighlightLayer, type UserHighlight } from "../user-highlight-layer";
+import { UserHighlightLayer, type UserHighlight } from "../../src/components/UserHighlightLayer";
 
 describe("UserHighlightLayer", () => {
   it("renders one overlay per rect on matching page with correct CSS position", () => {

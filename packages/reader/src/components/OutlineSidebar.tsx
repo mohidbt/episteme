@@ -1,14 +1,14 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { PageThumbnail } from "./page-thumbnail";
-import { useComputedOutline } from "@/hooks/use-computed-outline";
+import { PageThumbnail } from "./PageThumbnail";
+import { useComputedOutline } from "../hooks/use-computed-outline";
 import {
   Empty,
   EmptyDescription,
   EmptyHeader,
   EmptyTitle,
-} from "@/components/ui/empty";
+} from "./ui/empty";
 
 export interface PdfOutlineItem {
   title: string;

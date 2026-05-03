@@ -1,18 +1,20 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { ExplainSegment } from "@/components/reader/explain-marker-layer";
-import type { DocumentSegmentPayload } from "@episteme/db/schema/document-segments";
+import type { DocumentSegmentPayload } from "@episteme/db/schema";
 
-interface RawSegment {
+export interface SegmentBase {
   id: number;
   page: number;
-  kind: ExplainSegment["kind"];
-  bbox: ExplainSegment["bbox"];
+  kind: "section_header" | "figure" | "formula";
+  bbox: { x0: number; y0: number; x1: number; y1: number };
+}
+
+interface RawSegment extends SegmentBase {
   payload: DocumentSegmentPayload;
 }
 
-export interface SegmentWithPayload extends ExplainSegment {
+export interface SegmentWithPayload extends SegmentBase {
   payload: DocumentSegmentPayload;
 }
 

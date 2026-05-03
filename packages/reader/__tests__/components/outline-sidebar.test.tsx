@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, fireEvent, cleanup } from "@testing-library/react";
-import { OutlineSidebar } from "../outline-sidebar";
+import { OutlineSidebar } from "../../src/components/OutlineSidebar";
 
 describe("OutlineSidebar", () => {
   afterEach(cleanup);

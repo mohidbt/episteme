@@ -1,13 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { Button } from "./ui/button";
+import { Badge } from "./ui/badge";
 import { X, Star, ExternalLink } from "lucide-react";
 import type { documentReferences } from "@episteme/db/schema";
 import type { InferSelectModel } from "drizzle-orm";
 import { toast } from "sonner";
-import { formatBibtex } from "@/lib/citations/bibtex";
+import { formatBibtex } from "../lib/citations/bibtex";
 
 export type DocumentReference = InferSelectModel<typeof documentReferences>;
 

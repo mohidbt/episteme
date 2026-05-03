@@ -1,7 +1,7 @@
 "use client";
 
-import { useReaderState } from "@/hooks/use-reader-state";
-import { Button } from "@/components/ui/button";
+import { useReaderState } from "../hooks/use-reader-state";
+import { Button } from "./ui/button";
 
 export function ZoomControls() {
   const zoom = useReaderState((s) => s.zoom);

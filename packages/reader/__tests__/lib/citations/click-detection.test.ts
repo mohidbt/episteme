@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { findCitationMarkerAtOffset } from "../click-detection";
+import { findCitationMarkerAtOffset } from "../../../src/lib/citations/click-detection";
 
 describe("findCitationMarkerAtOffset", () => {
   it("returns markerIndex when offset is inside [n]", () => {

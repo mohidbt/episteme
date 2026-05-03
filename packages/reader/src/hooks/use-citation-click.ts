@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useEffect, useCallback, type RefObject } from "react";
-import { findCitationMarkerAtOffset } from "@/lib/citations/click-detection";
-import { findCitationFromAnchor } from "@/lib/citations/find-citation-from-anchor";
-import type { CitationWithStatus } from "@/components/reader/citation-card";
+import { findCitationMarkerAtOffset } from "../lib/citations/click-detection";
+import { findCitationFromAnchor } from "../lib/citations/find-citation-from-anchor";
+import type { CitationWithStatus } from "../components/CitationCard";
 
 interface CitationClickResult {
   activeCitation: CitationWithStatus | null;

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, act, cleanup } from "@testing-library/react";
-import { useSidebarDock, DockMenu, type Dock } from "../dockable-sidebar";
+import { useSidebarDock, DockMenu, type Dock } from "../../src/components/DockableSidebar";
 
 function installMemoryStorage() {
   const store = new Map<string, string>();

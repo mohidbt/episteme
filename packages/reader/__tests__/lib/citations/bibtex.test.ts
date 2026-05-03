@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { formatBibtex } from "../bibtex";
+import { formatBibtex } from "../../../src/lib/citations/bibtex";
 
 describe("formatBibtex", () => {
   it("full input: all fields populated → well-formed @article with correct entry key", () => {

@@ -4,11 +4,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Document, pdfjs } from "react-pdf";
 import "react-pdf/dist/Page/TextLayer.css";
 import "react-pdf/dist/Page/AnnotationLayer.css";
-import { PdfPage } from "./pdf-page";
-import type { UserHighlight } from "./user-highlight-layer";
-import type { ExplainSegment } from "./explain-marker-layer";
-import { useReaderState } from "@/hooks/use-reader-state";
-import { usePdfTextSelection } from "@/hooks/use-pdf-text-selection";
+import { PdfPage } from "./PdfPage";
+import type { UserHighlight } from "./UserHighlightLayer";
+import { useReaderState } from "../hooks/use-reader-state";
+import { usePdfTextSelection } from "../hooks/use-pdf-text-selection";
 
 // Worker must be set in the same module as Document/Page usage (react-pdf requirement)
 pdfjs.GlobalWorkerOptions.workerSrc = new URL(
@@ -40,12 +39,10 @@ interface PdfViewerProps {
   markers?: MarkerRect[];
   userHighlights?: UserHighlight[];
   hiddenLayerIds?: Set<string>;
-  segments?: ExplainSegment[];
-  onExplainClick?: (segmentId: number) => void;
   onPdfLoad?: (pdf: unknown) => void;
 }
 
-export function PdfViewer({ url, containerRef: externalRef, markers = [], userHighlights = [], hiddenLayerIds, segments, onExplainClick, onPdfLoad }: PdfViewerProps) {
+export function PdfViewer({ url, containerRef: externalRef, markers = [], userHighlights = [], hiddenLayerIds, onPdfLoad }: PdfViewerProps) {
   usePdfTextSelection();
   const [containerWidth, setContainerWidth] = useState(0);
   const [containerHeight, setContainerHeight] = useState(0);
@@ -227,8 +224,6 @@ export function PdfViewer({ url, containerRef: externalRef, markers = [], userHi
                     markers={markers.filter((m) => m.pageNumber === pageNumber)}
                     userHighlights={userHighlights.filter((h) => (h.rects ?? []).some((r) => r.page === pageNumber))}
                     hiddenLayerIds={hiddenLayerIds}
-                    segments={segments}
-                    onExplainClick={onExplainClick}
                   />
                 );
               }

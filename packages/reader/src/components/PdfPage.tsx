@@ -2,10 +2,9 @@
 
 import { memo, useState } from "react";
 import { Page } from "react-pdf";
-import { HighlightLayer } from "./highlight-layer";
-import { UserHighlightLayer, type UserHighlight } from "./user-highlight-layer";
-import { ExplainMarkerLayer, type ExplainSegment } from "./explain-marker-layer";
-import type { MarkerRect } from "./pdf-viewer";
+import { HighlightLayer } from "./HighlightLayer";
+import { UserHighlightLayer, type UserHighlight } from "./UserHighlightLayer";
+import type { MarkerRect } from "./PdfViewer";
 
 interface PdfPageProps {
   pageNumber: number;
@@ -14,8 +13,6 @@ interface PdfPageProps {
   markers?: MarkerRect[];
   userHighlights?: UserHighlight[];
   hiddenLayerIds?: Set<string>;
-  segments?: ExplainSegment[];
-  onExplainClick?: (segmentId: number) => void;
 }
 
 export const PdfPage = memo(function PdfPage({
@@ -25,8 +22,6 @@ export const PdfPage = memo(function PdfPage({
   markers = [],
   userHighlights,
   hiddenLayerIds,
-  segments,
-  onExplainClick,
 }: PdfPageProps) {
   const [naturalSize, setNaturalSize] = useState<{ width: number; height: number } | null>(null);
 
@@ -67,20 +62,6 @@ export const PdfPage = memo(function PdfPage({
           hiddenLayerIds={hiddenLayerIds}
         />
       )}
-      {naturalSize &&
-        segments &&
-        (() => {
-          const pageSegments = segments.filter((s) => s.page === pageNumber - 1);
-          return pageSegments.length > 0 ? (
-            <ExplainMarkerLayer
-              segments={pageSegments}
-              naturalWidth={naturalSize.width}
-              naturalHeight={naturalSize.height}
-              displayWidth={displayWidth}
-              onMarkerClick={onExplainClick}
-            />
-          ) : null;
-        })()}
     </div>
   );
 });

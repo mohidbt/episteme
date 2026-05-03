@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { PdfOutlineItem } from "@/components/reader/outline-sidebar";
+import type { PdfOutlineItem } from "../components/OutlineSidebar";
 
 interface PdfDocLike {
   numPages: number;

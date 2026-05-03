@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
-import { useReaderState } from "@/hooks/use-reader-state";
-import { ZoomControls } from "./zoom-controls";
+import { Button } from "./ui/button";
+import { useReaderState } from "../hooks/use-reader-state";
+import { ZoomControls } from "./ZoomControls";
 
 interface ReaderToolbarProps {
   title: string;
@@ -44,7 +44,7 @@ export function ReaderToolbar({
         className="h-2 w-full cursor-pointer border-b bg-muted/40 transition-all hover:h-12 hover:bg-background"
         onMouseEnter={() => setCollapsed(false)}
         aria-label="Expand toolbar"
-        role="button"
+        role="./ui/button"
       />
     );
   }

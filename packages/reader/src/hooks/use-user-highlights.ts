@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { UserHighlight } from "@/components/reader/user-highlight-layer";
+import type { UserHighlight } from "../components/UserHighlightLayer";
 
 interface RawHighlight {
   id: number;

@@ -1,11 +1,11 @@
 "use client";
 
 import { useState, useCallback, useEffect, useRef, type ReactNode } from "react";
-import { Button } from "@/components/ui/button";
-import { Alert, AlertTitle } from "@/components/ui/alert";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "./ui/button";
+import { Alert, AlertTitle } from "./ui/alert";
+import { Skeleton } from "./ui/skeleton";
 import { BookOpen, FileSearch, Loader2 } from "lucide-react";
-import { CitationCard, type CitationWithStatus } from "@/components/reader/citation-card";
+import { CitationCard, type CitationWithStatus } from "./CitationCard";
 import { toast } from "sonner";
 
 interface CitationsSidebarProps {

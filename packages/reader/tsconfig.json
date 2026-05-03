@@ -3,7 +3,6 @@
   "compilerOptions": {
     "jsx": "preserve",
     "outDir": "dist",
-    "rootDir": "src",
     "moduleResolution": "Bundler",
     "noEmit": true
   },

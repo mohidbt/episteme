@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, cleanup, waitFor, act } from "@testing-library/react";
-import { CitationsSidebar } from "../citations-sidebar";
-import type { CitationWithStatus } from "../citation-card";
+import { CitationsSidebar } from "../../src/components/CitationsSidebar";
+import type { CitationWithStatus } from "../../src/components/CitationCard";
 import { toast } from "sonner";
 
 // ---------------------------------------------------------------------------
@@ -9,8 +9,8 @@ import { toast } from "sonner";
 // ---------------------------------------------------------------------------
 
 // Mock CitationCard to make assertions easy
-vi.mock("../citation-card", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../citation-card")>();
+vi.mock("../../src/components/CitationCard", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../src/components/CitationCard")>();
   return {
     ...actual,
     CitationCard: ({ citation, variant }: { citation: CitationWithStatus; variant?: string }) => (
