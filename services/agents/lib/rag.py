@@ -22,7 +22,7 @@ class RetrievalResult:
     sources: list[dict]
 
 
-async def retrieve(conn, *, document_id: int, question: str, scope: str,
+async def retrieve(conn, *, paper_id: str, question: str, scope: str,
                    focus_page: int | None, selection_text: str | None, api_key: str) -> RetrievalResult:
     # Expand short paper-scoped queries for better embedding
     words = question.split()
@@ -44,9 +44,9 @@ async def retrieve(conn, *, document_id: int, question: str, scope: str,
         if focus_page is not None:
             page_rows = await conn.fetch(
                 "SELECT content FROM document_chunks "
-                "WHERE document_id = $1 AND page_start <= $2 AND page_end >= $2 "
+                "WHERE paper_id = $1 AND page_start <= $2 AND page_end >= $2 "
                 "ORDER BY chunk_index ASC",
-                document_id, focus_page,
+                paper_id, focus_page,
             )
             joined = "\n\n".join(r["content"] for r in page_rows)
             if joined:
@@ -57,9 +57,9 @@ async def retrieve(conn, *, document_id: int, question: str, scope: str,
             "SELECT id, content, page_start, page_end, "
             "(1 - (embedding <=> $2::vector)) AS score "
             "FROM document_chunks "
-            "WHERE document_id = $1 AND embedding IS NOT NULL "
+            "WHERE paper_id = $1 AND embedding IS NOT NULL "
             "ORDER BY score DESC LIMIT 4",
-            document_id, query_vec,
+            paper_id, query_vec,
         )
         supporting_chunks = [ChunkRow(r["id"], r["content"], r["page_start"], r["page_end"], float(r["score"])) for r in rows]
     else:
@@ -68,9 +68,9 @@ async def retrieve(conn, *, document_id: int, question: str, scope: str,
             "SELECT id, content, page_start, page_end, "
             "(1 - (embedding <=> $2::vector)) AS score "
             "FROM document_chunks "
-            "WHERE document_id = $1 AND embedding IS NOT NULL "
+            "WHERE paper_id = $1 AND embedding IS NOT NULL "
             "ORDER BY score DESC LIMIT 20",
-            document_id, query_vec,
+            paper_id, query_vec,
         )
         top_k = [ChunkRow(r["id"], r["content"], r["page_start"], r["page_end"], float(r["score"])) for r in rows]
 
@@ -84,10 +84,10 @@ async def retrieve(conn, *, document_id: int, question: str, scope: str,
         # Anchor text
         anchor_rows = await conn.fetch(
             "SELECT content FROM document_chunks "
-            "WHERE document_id = $1 AND page_start = ("
-            "  SELECT MIN(page_start) FROM document_chunks WHERE document_id = $1"
+            "WHERE paper_id = $1 AND page_start = ("
+            "  SELECT MIN(page_start) FROM document_chunks WHERE paper_id = $1"
             ") ORDER BY chunk_index ASC LIMIT 3",
-            document_id,
+            paper_id,
         )
         joined_anchor = "\n\n".join(r["content"] for r in anchor_rows)
         if joined_anchor:
@@ -97,8 +97,8 @@ async def retrieve(conn, *, document_id: int, question: str, scope: str,
     if not supporting_chunks:
         fallback_rows = await conn.fetch(
             "SELECT id, content, page_start, page_end FROM document_chunks "
-            "WHERE document_id = $1 ORDER BY chunk_index ASC LIMIT 6",
-            document_id,
+            "WHERE paper_id = $1 ORDER BY chunk_index ASC LIMIT 6",
+            paper_id,
         )
         supporting_chunks = [ChunkRow(r["id"], r["content"], r["page_start"], r["page_end"], 0.0) for r in fallback_rows]
 

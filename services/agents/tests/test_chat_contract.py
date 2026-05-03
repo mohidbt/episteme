@@ -22,7 +22,7 @@ def _signed_headers(method: str, path: str, body: bytes):
     ).hexdigest()
     return {
         "X-Inhale-User-Id": "user_1",
-        "X-Inhale-Document-Id": "1",
+        "X-Inhale-Paper-Id": "00000000-0000-0000-0000-000000000001",
         "X-Inhale-LLM-Key": "sk-test",
         "X-Inhale-Ts": ts,
         "X-Inhale-Sig": sig,
@@ -241,7 +241,7 @@ def test_chat_create_highlights_tool_call_inserts_run_and_finalizes():
 
     captured_ensure_run_id = {}
 
-    def fake_build_tools(conn, user_id, document_id, get_run_id, api_key, pdf_path, conn_lock=None):
+    def fake_build_tools(conn, user_id, paper_id, get_run_id, api_key, pdf_path, conn_lock=None):
         captured_ensure_run_id["fn"] = get_run_id
         return []
 
@@ -309,7 +309,7 @@ def test_chat_emits_highlight_progress_and_done_events():
 
     captured = {}
 
-    def fake_build_tools(conn, user_id, document_id, get_run_id, api_key, pdf_path, conn_lock=None):
+    def fake_build_tools(conn, user_id, paper_id, get_run_id, api_key, pdf_path, conn_lock=None):
         captured["fn"] = get_run_id
         return []
 

@@ -54,18 +54,18 @@ async def _persist_turn(conn, *, conv_id, question, viewport, assistant_content)
 @router.post("/chat")
 async def chat(body: ChatBody, auth: InternalAuthDep, conn: ConnDep):
     user_id = auth["user_id"]
-    document_id = auth["document_id"]
+    paper_id = auth["paper_id"]
     api_key = auth["llm_key"]
 
-    if not document_id:
-        raise HTTPException(status_code=400, detail="missing document_id")
+    if not paper_id:
+        raise HTTPException(status_code=400, detail="missing paper_id")
 
     # Verify document exists + belongs to user
-    doc = await conn.fetchrow(
-        "SELECT id, processing_status, file_path FROM documents WHERE id = $1 AND user_id = $2",
-        document_id, user_id,
+    paper = await conn.fetchrow(
+        "SELECT id, processing_status, file_path FROM papers WHERE id = $1 AND user_id = $2",
+        paper_id, user_id,
     )
-    if not doc:
+    if not paper:
         raise HTTPException(status_code=404, detail="Not found")
 
     question = body.question.strip()
@@ -74,8 +74,8 @@ async def chat(body: ChatBody, auth: InternalAuthDep, conn: ConnDep):
     selection_text = (body.selectionText or "").strip() or None
 
     # Processing status guard
-    if doc["processing_status"] != "ready":
-        status = doc["processing_status"]
+    if paper["processing_status"] != "ready":
+        status = paper["processing_status"]
         if status in ("pending", "processing"):
             msg = "This document is still being processed. Refresh in a minute and try again."
         elif status == "failed":
@@ -83,7 +83,7 @@ async def chat(body: ChatBody, auth: InternalAuthDep, conn: ConnDep):
         else:
             msg = "This document is not ready for chat yet."
 
-        conv_id = await upsert_conversation(conn, user_id=user_id, document_id=document_id,
+        conv_id = await upsert_conversation(conn, user_id=user_id, paper_id=paper_id,
                                             conversation_id=body.conversationId, title=question)
         await _persist_turn(conn, conv_id=conv_id, question=question,
                            viewport=body.viewportContext, assistant_content=msg)
@@ -97,7 +97,7 @@ async def chat(body: ChatBody, auth: InternalAuthDep, conn: ConnDep):
                                  headers={"Cache-Control": "no-cache", "Connection": "keep-alive"})
 
     # RAG retrieval
-    retrieval = await retrieve(conn, document_id=document_id, question=question,
+    retrieval = await retrieve(conn, paper_id=paper_id, question=question,
                                scope=scope, focus_page=focus_page,
                                selection_text=selection_text, api_key=api_key)
 
@@ -111,7 +111,7 @@ async def chat(body: ChatBody, auth: InternalAuthDep, conn: ConnDep):
 
     if not has_context:
         empty_msg = "The assistant cannot find any content from this document. It may still be processing — try again in a minute, or re-upload."
-        conv_id = await upsert_conversation(conn, user_id=user_id, document_id=document_id,
+        conv_id = await upsert_conversation(conn, user_id=user_id, paper_id=paper_id,
                                             conversation_id=body.conversationId, title=question)
         await _persist_turn(conn, conv_id=conv_id, question=question,
                            viewport=body.viewportContext, assistant_content=empty_msg)
@@ -125,7 +125,7 @@ async def chat(body: ChatBody, auth: InternalAuthDep, conn: ConnDep):
                                  headers={"Cache-Control": "no-cache", "Connection": "keep-alive"})
 
     # Main path: upsert conversation + persist user message
-    conv_id = await upsert_conversation(conn, user_id=user_id, document_id=document_id,
+    conv_id = await upsert_conversation(conn, user_id=user_id, paper_id=paper_id,
                                         conversation_id=body.conversationId, title=question)
     await insert_message(conn, conversation_id=conv_id, role="user",
                         content=question, viewport=body.viewportContext)
@@ -133,7 +133,7 @@ async def chat(body: ChatBody, auth: InternalAuthDep, conn: ConnDep):
     # Lazy highlight-run context: populated only if the agent calls create_highlights.
     hl_ctx: dict = {"run_id": None, "highlights_inserted": 0, "summary": None}
 
-    pdf_path = doc["file_path"]
+    pdf_path = paper["file_path"]
 
     # Shared lock serializes all conn usage across tools + router paths, since
     # OpenRouter may still emit parallel tool calls despite the kwarg hint and
@@ -146,15 +146,15 @@ async def chat(body: ChatBody, auth: InternalAuthDep, conn: ConnDep):
         async with chat_conn_lock:
             row = await conn.fetchrow(
                 "INSERT INTO ai_highlight_runs "
-                "(document_id, user_id, instruction, status, conversation_id, model_used) "
+                "(paper_id, user_id, instruction, status, conversation_id, model_used) "
                 "VALUES ($1, $2, $3, 'running', $4, $5) RETURNING id",
-                document_id, user_id, question, conv_id, CHAT_MODEL,
+                paper_id, user_id, question, conv_id, CHAT_MODEL,
             )
         hl_ctx["run_id"] = str(row["id"])
         return hl_ctx["run_id"]
 
     highlight_tools = build_tools(
-        conn, user_id, document_id, ensure_run_id, api_key, pdf_path,
+        conn, user_id, paper_id, ensure_run_id, api_key, pdf_path,
         conn_lock=chat_conn_lock,
     )
 

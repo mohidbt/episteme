@@ -39,7 +39,7 @@ async def test_paper_scope_dedupes_by_page():
 
     conn.fetch.side_effect = fetch_side_effect
 
-    result = await retrieve(conn, document_id=1, question="What is this about?",
+    result = await retrieve(conn, paper_id="00000000-0000-0000-0000-000000000001", question="What is this about?",
                            scope="paper", focus_page=None, selection_text=None, api_key="sk-test")
 
     # Should dedupe: 3 unique pages, not 4 rows
@@ -67,7 +67,7 @@ async def test_paper_scope_caps_at_8():
 
     conn.fetch.side_effect = fetch_side_effect
 
-    result = await retrieve(conn, document_id=1, question="summarize the paper",
+    result = await retrieve(conn, paper_id="00000000-0000-0000-0000-000000000001", question="summarize the paper",
                            scope="paper", focus_page=None, selection_text=None, api_key="sk-test")
     assert len(result.supporting_chunks) <= 8
 
@@ -90,7 +90,7 @@ async def test_selection_scope_includes_page_text():
 
     conn.fetch.side_effect = fetch_side_effect
 
-    result = await retrieve(conn, document_id=1, question="explain this",
+    result = await retrieve(conn, paper_id="00000000-0000-0000-0000-000000000001", question="explain this",
                            scope="selection", focus_page=3, selection_text="highlighted text", api_key="sk-test")
 
     assert result.page_text is not None
@@ -122,7 +122,7 @@ async def test_fallback_when_vector_empty():
 
     conn.fetch.side_effect = fetch_side_effect
 
-    result = await retrieve(conn, document_id=1, question="hello",
+    result = await retrieve(conn, paper_id="00000000-0000-0000-0000-000000000001", question="hello",
                            scope="paper", focus_page=None, selection_text=None, api_key="sk-test")
     assert len(result.supporting_chunks) == 2
     assert all(c.score == 0.0 for c in result.supporting_chunks)
