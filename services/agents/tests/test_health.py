@@ -18,7 +18,7 @@ def authed_headers(method: str = "GET", path: str = "/agents/health"):
     ts = str(int(time.time()))
     return {
         "X-Inhale-User-Id": "user_1",
-        "X-Inhale-Document-Id": "1",
+        "X-Inhale-Paper-Id": "00000000-0000-0000-0000-000000000001",
         "X-Inhale-LLM-Key": "sk-test",
         "X-Inhale-Ts": ts,
         "X-Inhale-Sig": sign(ts, method, path),

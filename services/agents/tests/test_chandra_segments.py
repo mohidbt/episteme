@@ -42,7 +42,7 @@ def _signed_headers(
     ).hexdigest()
     return {
         "X-Inhale-User-Id": "user_1",
-        "X-Inhale-Document-Id": "42",
+        "X-Inhale-Paper-Id": "00000000-0000-0000-0000-000000000042",
         "X-Inhale-OCR-Key": ocr_key,
         "X-Inhale-Ts": ts,
         "X-Inhale-Sig": sig,

@@ -28,13 +28,13 @@ PAPER_ID = "11111111-1111-1111-1111-111111111111"
 # ---------------------------------------------------------------------------
 
 # Each row is a dict mirroring the asyncpg row interface.
-def _row(order_index, kind, page, payload, document_id=PAPER_ID):
+def _row(order_index, kind, page, payload, paper_id=PAPER_ID):
     return {
         "order_index": order_index,
         "kind": kind,
         "page": page,
         "payload": json.dumps(payload),
-        "document_id": document_id,
+        "paper_id": paper_id,
     }
 
 
