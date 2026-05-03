@@ -7,9 +7,9 @@
  */
 import path from "path";
 import { test, expect, type Page, type Route, type Request as PlaywrightRequest } from "@playwright/test";
-import { signUpAndLogin } from "./helpers/auth";
+import { signUpAndLogin } from "./helpers/reader-auth";
 
-const TEST_PDF = path.resolve(__dirname, "fixtures/test_real_paper.pdf");
+const TEST_PDF = path.resolve(__dirname, "fixtures/reader-test_real_paper.pdf");
 
 // ---------------------------------------------------------------------------
 // S2 mock payloads
@@ -168,7 +168,7 @@ test.describe("Enrichment auto-fires on Citations tab open", () => {
       if (msg.text().includes("enrich effect firing")) consoleLogs.push(msg.text());
     });
 
-    await page.goto(`/reader/${docId}`);
+    await page.goto(`/papers/${docId}/read`);
     // Wait for canvas to confirm PDF loaded
     await expect(page.locator("canvas").first()).toBeVisible({ timeout: 15_000 });
 
@@ -214,7 +214,7 @@ test.describe("Single /paper/batch call", () => {
     const { getBatchCallCount } = await setupS2Mocks(page);
     const docId = await uploadAndExtractCitations(page);
 
-    await page.goto(`/reader/${docId}`);
+    await page.goto(`/papers/${docId}/read`);
     await expect(page.locator("canvas").first()).toBeVisible({ timeout: 15_000 });
     await page.getByRole("button", { name: "Citations" }).click();
 
@@ -453,7 +453,7 @@ test.describe("New enrichment columns reflected in UI", () => {
     expect(typeof enriched.influentialCitationCount).toBe("number");
 
     // Navigate to reader — open Citations sidebar and check UI elements
-    await page.goto(`/reader/${docId}`);
+    await page.goto(`/papers/${docId}/read`);
     await expect(page.locator("canvas").first()).toBeVisible({ timeout: 15_000 });
     await page.getByRole("button", { name: "Citations" }).click();
 

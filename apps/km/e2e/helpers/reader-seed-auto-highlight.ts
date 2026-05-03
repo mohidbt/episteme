@@ -1,3 +1,6 @@
+// Ported from apps/reader during inhale merger.
+// TODO: rewrite for KM auth flow (/sign-in, /sign-up) and post-merger schema (paper_id).
+
 import postgres from "postgres";
 import fs from "fs";
 import path from "path";

@@ -1,9 +1,9 @@
 import { test, expect, Page } from "@playwright/test";
-import { signUpAndLogin } from "./helpers/auth";
+import { signUpAndLogin } from "./helpers/reader-auth";
 import * as fs from "fs";
 import * as path from "path";
 
-const PDF_PATH = path.join(__dirname, "fixtures/test_real_paper.pdf");
+const PDF_PATH = path.join(__dirname, "fixtures/reader-test_real_paper.pdf");
 
 async function uploadTestPdf(page: Page, filename: string): Promise<{ id: number }> {
   const pdfBuffer = fs.readFileSync(PDF_PATH);
@@ -35,7 +35,7 @@ test.describe("Outline sidebar — Pages thumbnails + Contents tab", () => {
     try {
       await signUpAndLogin(page);
       const { id } = await uploadTestPdf(page, "test_real_paper.pdf");
-      await page.goto(`/reader/${id}`);
+      await page.goto(`/papers/${id}/read`);
 
       // Wait for first page canvas (PDF loaded).
       await expect(page.locator("canvas").first()).toBeVisible({ timeout: 15_000 });
@@ -98,7 +98,7 @@ test.describe("Outline sidebar — Pages thumbnails + Contents tab", () => {
     try {
       await signUpAndLogin(page);
       const { id } = await uploadTestPdf(page, "test_real_paper.pdf");
-      await page.goto(`/reader/${id}`);
+      await page.goto(`/papers/${id}/read`);
       await expect(page.locator("canvas").first()).toBeVisible({ timeout: 15_000 });
 
       await page.getByRole("button", { name: /outline/i }).click();

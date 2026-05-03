@@ -1,9 +1,9 @@
 import { test, expect, Page } from "@playwright/test";
-import { signUpAndLogin } from "./helpers/auth";
+import { signUpAndLogin } from "./helpers/reader-auth";
 import * as fs from "fs";
 import * as path from "path";
 
-const PDF_PATH = path.join(__dirname, "fixtures/test_real_paper.pdf");
+const PDF_PATH = path.join(__dirname, "fixtures/reader-test_real_paper.pdf");
 const FAILURES_DIR = path.join(__dirname, "__failures__");
 
 async function uploadTestPdf(page: Page, filename: string): Promise<{ id: number }> {
@@ -31,7 +31,7 @@ test.describe("Cmd+F find in document", () => {
     try {
       await signUpAndLogin(page);
       const { id } = await uploadTestPdf(page, "test_real_paper.pdf");
-      await page.goto(`/reader/${id}`);
+      await page.goto(`/papers/${id}/read`);
 
       // Wait for first page text layer to render so there is something to search.
       await expect(page.locator("canvas").first()).toBeVisible({ timeout: 15_000 });

@@ -1,9 +1,9 @@
 import { test, expect, type Page } from "@playwright/test";
-import { signUpAndLogin } from "./helpers/auth";
+import { signUpAndLogin } from "./helpers/reader-auth";
 import * as fs from "fs";
 import * as path from "path";
 
-const realPdfPath = path.join(__dirname, "fixtures/test_real_paper.pdf");
+const realPdfPath = path.join(__dirname, "fixtures/reader-test_real_paper.pdf");
 const FAILURE_DIR = path.join(__dirname, "__failures__");
 
 async function uploadRealPdf(page: Page) {
@@ -67,7 +67,7 @@ test.describe("Dockable sidebars", () => {
 
   test("Chat panel re-docks left, right, and bottom (DOM order + bbox)", async ({ page }) => {
     const { id: docId } = await uploadRealPdf(page);
-    await page.goto(`/reader/${docId}`);
+    await page.goto(`/papers/${docId}/read`);
     await expect(page.locator("canvas").first()).toBeVisible({ timeout: 15_000 });
 
     // Open the chat panel.
@@ -134,7 +134,7 @@ test.describe("Dockable sidebars", () => {
 
   test("Sidebar header stays single-line at 280px min width", async ({ page }) => {
     const { id: docId } = await uploadRealPdf(page);
-    await page.goto(`/reader/${docId}`);
+    await page.goto(`/papers/${docId}/read`);
     await expect(page.locator("canvas").first()).toBeVisible({ timeout: 15_000 });
 
     // Open chat (right-docked by default).

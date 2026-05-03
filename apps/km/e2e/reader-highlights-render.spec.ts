@@ -1,5 +1,5 @@
 import { test, expect, Page } from "@playwright/test";
-import { signUp, uniqueEmail, signUpAndLogin } from "./helpers/auth";
+import { signUp, uniqueEmail, signUpAndLogin } from "./helpers/reader-auth";
 // Truth bboxes regenerated via `python e2e/fixtures/generate-truth.py` — rerun
 // if the fixture PDF changes or pdfplumber is upgraded.
 import {
@@ -8,12 +8,12 @@ import {
   seedAutoHighlightRun,
   getUserIdByEmail,
   type Truth,
-} from "./helpers/seed-auto-highlight";
+} from "./helpers/reader-seed-auto-highlight";
 import * as fs from "fs";
 import * as path from "path";
 
-const PDF_PATH = path.join(__dirname, "fixtures/test_real_paper.pdf");
-const CHEMO_PDF_PATH = path.join(__dirname, "fixtures/chemosensory.pdf");
+const PDF_PATH = path.join(__dirname, "fixtures/reader-test_real_paper.pdf");
+const CHEMO_PDF_PATH = path.join(__dirname, "fixtures/reader-chemosensory.pdf");
 
 async function uploadTestPdf(page: Page, filename: string): Promise<{ id: number }> {
   const pdfBuffer = fs.readFileSync(PDF_PATH);
@@ -46,7 +46,7 @@ async function uploadChemosensoryPdf(page: Page): Promise<{ id: number }> {
 test("saving a highlight renders a colored overlay on the PDF", async ({ page }) => {
   await signUpAndLogin(page);
   const { id } = await uploadTestPdf(page, "test_real_paper.pdf");
-  await page.goto(`/reader/${id}`);
+  await page.goto(`/papers/${id}/read`);
 
   // Wait for the first page canvas to render
   await expect(page.locator("canvas").first()).toBeVisible({ timeout: 10_000 });
@@ -215,7 +215,7 @@ test.describe("auto-highlight rendering (Phase 2.1.2 gate)", () => {
       highlights,
     });
 
-    await page.goto(`/reader/${docId}`);
+    await page.goto(`/papers/${docId}/read`);
     await expect(page.locator("canvas").first()).toBeVisible({ timeout: 15_000 });
 
     for (const fp of [1, 2, 3, 4]) {
@@ -291,7 +291,7 @@ test.describe("auto-highlight rendering (Phase 2.1.2 gate)", () => {
       ],
     });
 
-    await page.goto(`/reader/${docId}`);
+    await page.goto(`/papers/${docId}/read`);
     await expect(page.locator("canvas").first()).toBeVisible({ timeout: 15_000 });
     await waitForPageReady(page, fp);
     const overlays = await collectOverlays(page, fp);
@@ -324,7 +324,7 @@ test.describe("auto-highlight rendering (Phase 2.1.2 gate)", () => {
       ],
     });
 
-    await page.goto(`/reader/${docId}`);
+    await page.goto(`/papers/${docId}/read`);
     await expect(page.locator("canvas").first()).toBeVisible({ timeout: 15_000 });
 
     // Rebuild button only renders when `hasStaleRects === true`. Confirm the

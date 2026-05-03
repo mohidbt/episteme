@@ -1,9 +1,9 @@
 import { test, expect } from "@playwright/test";
-import { signUpAndLogin } from "./helpers/auth";
+import { signUpAndLogin } from "./helpers/reader-auth";
 import path from "path";
 import fs from "fs";
 
-const PDF_PATH = path.join(__dirname, "fixtures/test.pdf");
+const PDF_PATH = path.join(__dirname, "fixtures/reader-test.pdf");
 
 // Upload a PDF via the API and return its document ID.
 async function uploadDocument(page: import("@playwright/test").Page): Promise<number> {

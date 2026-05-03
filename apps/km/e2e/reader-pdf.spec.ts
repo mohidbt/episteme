@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { signUpAndLogin } from "./helpers/auth";
+import { signUpAndLogin } from "./helpers/reader-auth";
 import * as fs from "fs";
 import * as path from "path";
 
@@ -9,7 +9,7 @@ test.describe("PDF Reader", () => {
   test.beforeEach(async ({ page }) => {
     await signUpAndLogin(page);
 
-    const pdfPath = path.join(__dirname, "fixtures/test.pdf");
+    const pdfPath = path.join(__dirname, "fixtures/reader-test.pdf");
     const pdfBuffer = fs.readFileSync(pdfPath);
 
     const response = await page.request.post("/api/documents/upload", {
@@ -30,8 +30,8 @@ test.describe("PDF Reader", () => {
   // --- Navigation ---
 
   test("navigates to reader page for an uploaded document", async ({ page }) => {
-    await page.goto(`/reader/${docId}`);
-    await expect(page).toHaveURL(new RegExp(`/reader/${docId}`));
+    await page.goto(`/papers/${docId}/read`);
+    await expect(page).toHaveURL(new RegExp(`/papers/${docId}/read`));
   });
 
   test("visiting a nonexistent document ID returns 404", async ({ page }) => {
@@ -41,7 +41,7 @@ test.describe("PDF Reader", () => {
   });
 
   test("Back button navigates to library", async ({ page }) => {
-    await page.goto(`/reader/${docId}`);
+    await page.goto(`/papers/${docId}/read`);
     await expect(page.locator("canvas").first()).toBeVisible({ timeout: 10_000 });
     await page.getByRole("link", { name: "Back" }).click();
     await expect(page).toHaveURL(/\/library/);
@@ -50,13 +50,13 @@ test.describe("PDF Reader", () => {
   // --- PDF Rendering ---
 
   test("PDF renders a canvas element", async ({ page }) => {
-    await page.goto(`/reader/${docId}`);
+    await page.goto(`/papers/${docId}/read`);
     const canvas = page.locator("canvas").first();
     await expect(canvas).toBeVisible({ timeout: 10_000 });
   });
 
   test("PDF text content is selectable", async ({ page }) => {
-    await page.goto(`/reader/${docId}`);
+    await page.goto(`/papers/${docId}/read`);
     await expect(page.locator("canvas").first()).toBeVisible({ timeout: 10_000 });
     const textLayer = page.locator(".react-pdf__Page__textContent");
     await expect(textLayer).toBeVisible();
@@ -65,7 +65,7 @@ test.describe("PDF Reader", () => {
 
   test("reader loads within acceptable time", async ({ page }) => {
     const start = Date.now();
-    await page.goto(`/reader/${docId}`);
+    await page.goto(`/papers/${docId}/read`);
     await expect(page.locator("canvas").first()).toBeVisible({ timeout: 10_000 });
     const elapsed = Date.now() - start;
     expect(elapsed).toBeLessThan(5000);
@@ -74,7 +74,7 @@ test.describe("PDF Reader", () => {
   // --- Toolbar & Page Navigation ---
 
   test("toolbar is visible with page count and zoom controls", async ({ page }) => {
-    await page.goto(`/reader/${docId}`);
+    await page.goto(`/papers/${docId}/read`);
     await expect(page.locator("canvas").first()).toBeVisible({ timeout: 10_000 });
 
     const pageDisplay = page.locator("header").getByText(/\d+\s*\/\s*(\d+|—)/);
@@ -85,7 +85,7 @@ test.describe("PDF Reader", () => {
   });
 
   test("page navigation shows correct count with Prev/Next disabled for single page", async ({ page }) => {
-    await page.goto(`/reader/${docId}`);
+    await page.goto(`/papers/${docId}/read`);
     await expect(page.locator("canvas").first()).toBeVisible({ timeout: 10_000 });
 
     await expect(page.locator("header").getByText("1 / 1")).toBeVisible();
@@ -96,7 +96,7 @@ test.describe("PDF Reader", () => {
   // --- Zoom ---
 
   test("zoom in button increases the zoom percentage", async ({ page }) => {
-    await page.goto(`/reader/${docId}`);
+    await page.goto(`/papers/${docId}/read`);
     await expect(page.locator("canvas").first()).toBeVisible({ timeout: 10_000 });
 
     const zoomLabel = page.locator("header").getByText(/%/);
@@ -107,7 +107,7 @@ test.describe("PDF Reader", () => {
   });
 
   test("zoom out button decreases the zoom percentage", async ({ page }) => {
-    await page.goto(`/reader/${docId}`);
+    await page.goto(`/papers/${docId}/read`);
     await expect(page.locator("canvas").first()).toBeVisible({ timeout: 10_000 });
 
     const zoomLabel = page.locator("header").getByText(/%/);
@@ -118,7 +118,7 @@ test.describe("PDF Reader", () => {
   });
 
   test("Fit button resets zoom to 100%", async ({ page }) => {
-    await page.goto(`/reader/${docId}`);
+    await page.goto(`/papers/${docId}/read`);
     await expect(page.locator("canvas").first()).toBeVisible({ timeout: 10_000 });
 
     // Zoom in first
@@ -134,7 +134,7 @@ test.describe("PDF Reader", () => {
   // --- Highlights Sidebar ---
 
   test("Highlights sidebar opens with empty state", async ({ page }) => {
-    await page.goto(`/reader/${docId}`);
+    await page.goto(`/papers/${docId}/read`);
     await expect(page.locator("canvas").first()).toBeVisible({ timeout: 10_000 });
 
     await page.getByRole("button", { name: "Highlights" }).click();
@@ -145,7 +145,7 @@ test.describe("PDF Reader", () => {
   // --- Chat Panel ---
 
   test("Chat panel opens with AI Assistant heading", async ({ page }) => {
-    await page.goto(`/reader/${docId}`);
+    await page.goto(`/papers/${docId}/read`);
     await expect(page.locator("canvas").first()).toBeVisible({ timeout: 10_000 });
 
     await page.getByRole("button", { name: "Chat" }).click();
@@ -161,7 +161,7 @@ test.describe("PDF Reader - real paper benchmark", () => {
   test.beforeEach(async ({ page }) => {
     await signUpAndLogin(page);
 
-    const pdfPath = path.join(__dirname, "fixtures/test_real_paper.pdf");
+    const pdfPath = path.join(__dirname, "fixtures/reader-test_real_paper.pdf");
     const pdfBuffer = fs.readFileSync(pdfPath);
 
     const response = await page.request.post("/api/documents/upload", {
@@ -180,7 +180,7 @@ test.describe("PDF Reader - real paper benchmark", () => {
   });
 
   test("real paper renders multiple pages", async ({ page }) => {
-    await page.goto(`/reader/${realDocId}`);
+    await page.goto(`/papers/${realDocId}/read`);
     await expect(page.locator("canvas").first()).toBeVisible({ timeout: 15_000 });
 
     // Page counter should show a total > 1
@@ -194,7 +194,7 @@ test.describe("PDF Reader - real paper benchmark", () => {
   });
 
   test("Next button advances page counter and scrolls on real paper", async ({ page }) => {
-    await page.goto(`/reader/${realDocId}`);
+    await page.goto(`/papers/${realDocId}/read`);
     await expect(page.locator("canvas").first()).toBeVisible({ timeout: 15_000 });
 
     // Wait until totalPages has loaded (counter no longer shows "—")
@@ -223,7 +223,7 @@ test.describe("PDF Reader - real paper benchmark", () => {
 
   test("real paper loads within acceptable time", async ({ page }) => {
     const start = Date.now();
-    await page.goto(`/reader/${realDocId}`);
+    await page.goto(`/papers/${realDocId}/read`);
     await expect(page.locator("canvas").first()).toBeVisible({ timeout: 10_000 });
     const elapsed = Date.now() - start;
     expect(elapsed).toBeLessThan(5000);
