@@ -30,17 +30,17 @@ router = APIRouter(prefix="/agents", tags=["auto-highlight-rebuild"])
 @router.post("/auto-highlight/runs/{run_id}/rebuild")
 async def rebuild_run(run_id: str, auth: InternalAuthDep, conn: ConnDep) -> dict:
     user_id = auth["user_id"]
-    document_id = auth["document_id"]
-    if not document_id:
-        raise HTTPException(status_code=400, detail="missing document_id")
+    paper_id = auth["paper_id"]
+    if not paper_id:
+        raise HTTPException(status_code=400, detail="missing paper_id")
 
     run = await conn.fetchrow(
-        "SELECT r.id, d.file_path FROM ai_highlight_runs r "
-        "JOIN documents d ON d.id = r.document_id "
-        "WHERE r.id = $1::uuid AND r.user_id = $2 AND r.document_id = $3",
+        "SELECT r.id, p.file_path FROM ai_highlight_runs r "
+        "JOIN papers p ON p.id = r.paper_id "
+        "WHERE r.id = $1::uuid AND r.user_id = $2 AND r.paper_id = $3",
         run_id,
         user_id,
-        document_id,
+        paper_id,
     )
     if not run:
         raise HTTPException(status_code=404, detail="Not found")

@@ -2,12 +2,12 @@ import json as _json
 from datetime import datetime, timezone
 
 
-async def upsert_conversation(conn, *, user_id, document_id, conversation_id, title):
+async def upsert_conversation(conn, *, user_id, paper_id, conversation_id, title):
     if conversation_id is not None:
         return conversation_id
     row = await conn.fetchrow(
-        "INSERT INTO agent_conversations (user_id, document_id, title) VALUES ($1, $2, $3) RETURNING id",
-        user_id, document_id, title[:80],
+        "INSERT INTO agent_conversations (user_id, paper_id, title) VALUES ($1, $2, $3) RETURNING id",
+        user_id, paper_id, title[:80],
     )
     return row["id"]
 

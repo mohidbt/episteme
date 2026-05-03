@@ -13,7 +13,7 @@ from lib.auto_highlight_tools import build_tools
 
 RUN_ID = "11111111-1111-1111-1111-111111111111"
 USER_ID = "user_1"
-DOC_ID = 42
+PAPER_ID = "00000000-0000-0000-0000-000000000042"
 PDF_PATH = str(Path(__file__).resolve().parents[3] / "apps/web/e2e/fixtures/test.pdf")
 
 
@@ -55,7 +55,7 @@ async def test_semantic_search_returns_shape_and_filters_by_document():
     conn = AsyncMock()
     conn.fetch.side_effect = fetch
 
-    tools = build_tools(conn, USER_ID, DOC_ID, _async_run_id(RUN_ID), "sk-test", PDF_PATH)
+    tools = build_tools(conn, USER_ID, PAPER_ID, _async_run_id(RUN_ID), "sk-test", PDF_PATH)
     tool = _get_tool(tools, "semantic_search")
     result = await tool.ainvoke({"query": "loss function", "top_k": 2})
 
@@ -68,8 +68,8 @@ async def test_semantic_search_returns_shape_and_filters_by_document():
         "content": "loss function defined",
         "score": 0.91,
     }
-    # document_id passed to SQL
-    assert seen_args[0][1][0] == DOC_ID
+    # paper_id passed to SQL
+    assert seen_args[0][1][0] == PAPER_ID
 
 
 @pytest.mark.asyncio
@@ -85,7 +85,7 @@ async def test_semantic_search_calls_embed_texts_with_query():
         return [[0.01] * 1536]
 
     with patch("lib.auto_highlight_tools.embed_texts", side_effect=fake_embed):
-        tools = build_tools(conn, USER_ID, DOC_ID, _async_run_id(RUN_ID), "sk-test", PDF_PATH)
+        tools = build_tools(conn, USER_ID, PAPER_ID, _async_run_id(RUN_ID), "sk-test", PDF_PATH)
         tool = _get_tool(tools, "semantic_search")
         await tool.ainvoke({"query": "regularization"})
 
@@ -95,7 +95,7 @@ async def test_semantic_search_calls_embed_texts_with_query():
 @pytest.mark.asyncio
 async def test_page_text_returns_text_and_count():
     conn = AsyncMock()
-    tools = build_tools(conn, USER_ID, DOC_ID, _async_run_id(RUN_ID), "sk-test", PDF_PATH)
+    tools = build_tools(conn, USER_ID, PAPER_ID, _async_run_id(RUN_ID), "sk-test", PDF_PATH)
     tool = _get_tool(tools, "page_text")
     result = await tool.ainvoke({"page_number": 1})
 
@@ -107,7 +107,7 @@ async def test_page_text_returns_text_and_count():
 @pytest.mark.asyncio
 async def test_page_text_out_of_range_returns_error():
     conn = AsyncMock()
-    tools = build_tools(conn, USER_ID, DOC_ID, _async_run_id(RUN_ID), "sk-test", PDF_PATH)
+    tools = build_tools(conn, USER_ID, PAPER_ID, _async_run_id(RUN_ID), "sk-test", PDF_PATH)
     tool = _get_tool(tools, "page_text")
     result = await tool.ainvoke({"page_number": 999})
     assert "error" in result
@@ -116,7 +116,7 @@ async def test_page_text_out_of_range_returns_error():
 @pytest.mark.asyncio
 async def test_locate_phrase_exact_match_finds_hits():
     conn = AsyncMock()
-    tools = build_tools(conn, USER_ID, DOC_ID, _async_run_id(RUN_ID), "sk-test", PDF_PATH)
+    tools = build_tools(conn, USER_ID, PAPER_ID, _async_run_id(RUN_ID), "sk-test", PDF_PATH)
     tool = _get_tool(tools, "locate_phrase")
     result = await tool.ainvoke({"phrase": "test document", "page_number": 1})
     assert len(result) >= 1
@@ -135,7 +135,7 @@ async def test_locate_phrase_no_hits_returns_empty():
     conn = AsyncMock()
     # ensure fuzzy off
     os.environ.pop("AUTO_HIGHLIGHT_FUZZY", None)
-    tools = build_tools(conn, USER_ID, DOC_ID, _async_run_id(RUN_ID), "sk-test", PDF_PATH)
+    tools = build_tools(conn, USER_ID, PAPER_ID, _async_run_id(RUN_ID), "sk-test", PDF_PATH)
     tool = _get_tool(tools, "locate_phrase")
     result = await tool.ainvoke(
         {"phrase": "quantum teleportation spaghetti", "page_number": 1}
@@ -146,7 +146,7 @@ async def test_locate_phrase_no_hits_returns_empty():
 @pytest.mark.asyncio
 async def test_locate_phrase_fuzzy_gated_by_env():
     conn = AsyncMock()
-    tools = build_tools(conn, USER_ID, DOC_ID, _async_run_id(RUN_ID), "sk-test", PDF_PATH)
+    tools = build_tools(conn, USER_ID, PAPER_ID, _async_run_id(RUN_ID), "sk-test", PDF_PATH)
     tool = _get_tool(tools, "locate_phrase")
 
     # Without flag: no hit
@@ -169,7 +169,7 @@ async def test_locate_phrase_caps_at_max(monkeypatch):
     conn = AsyncMock()
     # "e" appears 17 times in the fixture; cap at 3 so the limit actually bites.
     monkeypatch.setattr(auto_highlight_tools, "MAX_LOCATE_HITS", 3)
-    tools = build_tools(conn, USER_ID, DOC_ID, _async_run_id(RUN_ID), "sk-test", PDF_PATH)
+    tools = build_tools(conn, USER_ID, PAPER_ID, _async_run_id(RUN_ID), "sk-test", PDF_PATH)
     tool = _get_tool(tools, "locate_phrase")
     result = await tool.ainvoke({"phrase": "e", "page_number": 1})
     assert len(result) == 3
@@ -181,7 +181,7 @@ async def test_create_highlights_inserts_rows():
     conn.fetchval.return_value = 0  # existing count
     conn.execute.return_value = None
 
-    tools = build_tools(conn, USER_ID, DOC_ID, _async_run_id(RUN_ID), "sk-test", PDF_PATH)
+    tools = build_tools(conn, USER_ID, PAPER_ID, _async_run_id(RUN_ID), "sk-test", PDF_PATH)
     tool = _get_tool(tools, "create_highlights")
 
     matches = [
@@ -212,7 +212,7 @@ async def test_create_highlights_inserts_rows():
     # positional args: user_id, doc_id, page, text, start, end, color, source, layer_id, rects
     params = call_args[1:]
     assert USER_ID in params
-    assert DOC_ID in params
+    assert PAPER_ID in params
     assert "ai-auto" in params
     assert "amber" in params
     assert RUN_ID in params
@@ -225,7 +225,7 @@ async def test_create_highlights_caps_at_50():
     conn.fetchval.return_value = 48
     conn.execute.return_value = None
 
-    tools = build_tools(conn, USER_ID, DOC_ID, _async_run_id(RUN_ID), "sk-test", PDF_PATH)
+    tools = build_tools(conn, USER_ID, PAPER_ID, _async_run_id(RUN_ID), "sk-test", PDF_PATH)
     tool = _get_tool(tools, "create_highlights")
     matches = [
         {
@@ -256,7 +256,7 @@ async def test_get_run_id_called_once_across_multiple_create_highlights():
         call_count["n"] += 1
         return RUN_ID
 
-    tools = build_tools(conn, USER_ID, DOC_ID, get_run_id, "sk-test", PDF_PATH)
+    tools = build_tools(conn, USER_ID, PAPER_ID, get_run_id, "sk-test", PDF_PATH)
     tool = _get_tool(tools, "create_highlights")
 
     match = {
@@ -284,7 +284,7 @@ async def test_get_run_id_not_awaited_when_no_highlights_created():
         return RUN_ID
 
     # Build tools and exercise non-writing tools only.
-    tools = build_tools(conn, USER_ID, DOC_ID, get_run_id, "sk-test", PDF_PATH)
+    tools = build_tools(conn, USER_ID, PAPER_ID, get_run_id, "sk-test", PDF_PATH)
     page_text_tool = _get_tool(tools, "page_text")
     finish_tool = _get_tool(tools, "finish")
 
@@ -297,7 +297,7 @@ async def test_get_run_id_not_awaited_when_no_highlights_created():
 def test_tool_descriptions_gate_intent():
     """The two entry-point tools must tell the agent when NOT to use them."""
     conn = AsyncMock()
-    tools = build_tools(conn, USER_ID, DOC_ID, _async_run_id(RUN_ID), "sk-test", PDF_PATH)
+    tools = build_tools(conn, USER_ID, PAPER_ID, _async_run_id(RUN_ID), "sk-test", PDF_PATH)
     by_name = {t.name: t for t in tools}
     for tool_name in ("semantic_search", "create_highlights"):
         desc = by_name[tool_name].description
@@ -308,7 +308,7 @@ def test_tool_descriptions_gate_intent():
 @pytest.mark.asyncio
 async def test_finish_returns_summary():
     conn = AsyncMock()
-    tools = build_tools(conn, USER_ID, DOC_ID, _async_run_id(RUN_ID), "sk-test", PDF_PATH)
+    tools = build_tools(conn, USER_ID, PAPER_ID, _async_run_id(RUN_ID), "sk-test", PDF_PATH)
     tool = _get_tool(tools, "finish")
     result = await tool.ainvoke({"summary": "Highlighted loss function definition"})
     assert result == {"summary": "Highlighted loss function definition", "done": True}

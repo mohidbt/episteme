@@ -8,11 +8,11 @@ FRESHNESS_SECONDS = 60
 async def require_internal(
     request: Request,
     x_inhale_user_id: Annotated[str | None, Header()] = None,
-    x_inhale_document_id: Annotated[str | None, Header()] = None,
+    x_inhale_paper_id: Annotated[str | None, Header()] = None,
     # NOTE: OCR/LLM key headers are intentionally excluded from the signed HMAC payload.
     # Next.js decrypts and forwards the per-user key on each request. Replay risk is bounded
     # by FRESHNESS_SECONDS (60s). An attacker who captures a request can only reuse that key
-    # for <=60s; document_id/file_path are signed so output cannot be redirected.
+    # for <=60s; paper_id/file_path are signed so output cannot be redirected.
     x_inhale_llm_key: Annotated[str, Header()] = "",
     x_inhale_ocr_key: Annotated[str, Header()] = "",
     x_inhale_ts: Annotated[str, Header()] = "",
@@ -42,7 +42,7 @@ async def require_internal(
 
     return {
         "user_id": x_inhale_user_id,
-        "document_id": int(x_inhale_document_id) if x_inhale_document_id else None,
+        "paper_id": x_inhale_paper_id or None,
         "llm_key": x_inhale_llm_key,
         "ocr_key": x_inhale_ocr_key,
     }

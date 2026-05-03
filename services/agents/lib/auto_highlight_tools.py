@@ -63,7 +63,7 @@ TOOLBELT_SYSTEM_HINT = (
 def build_tools(
     conn,
     user_id: str,
-    document_id: int,
+    paper_id: str,
     get_run_id: Callable[[], Awaitable[str]],
     api_key: str,
     pdf_path: str,
@@ -116,9 +116,9 @@ def build_tools(
                 "SELECT id, content, page_start, page_end, "
                 "(1 - (embedding <=> $2::vector)) AS score "
                 "FROM document_chunks "
-                "WHERE document_id = $1 AND embedding IS NOT NULL "
+                "WHERE paper_id = $1 AND embedding IS NOT NULL "
                 "ORDER BY score DESC LIMIT $3",
-                document_id,
+                paper_id,
                 vecs[0],
                 top_k,
             )
@@ -234,11 +234,11 @@ def build_tools(
                 rects_json = json.dumps(m.get("rects", []))
                 await conn.execute(
                     "INSERT INTO user_highlights "
-                    "(user_id, document_id, page_number, text_content, start_offset, "
+                    "(user_id, paper_id, page_number, text_content, start_offset, "
                     "end_offset, color, source, layer_id, rects) "
                     "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::uuid, $10::jsonb)",
                     user_id,
-                    document_id,
+                    paper_id,
                     m["page_number"],
                     m["text_content"],
                     m["start_offset"],

@@ -44,16 +44,16 @@ def _sse_done() -> str:
 
 
 async def _upsert_auto_highlight_conv(
-    conn, *, user_id, document_id, conversation_id, title
+    conn, *, user_id, paper_id, conversation_id, title
 ):
     """Like upsert_conversation but forces kind='auto-highlight' on insert."""
     if conversation_id is not None:
         return conversation_id
     row = await conn.fetchrow(
-        "INSERT INTO agent_conversations (user_id, document_id, title, kind) "
+        "INSERT INTO agent_conversations (user_id, paper_id, title, kind) "
         "VALUES ($1, $2, $3, 'auto-highlight') RETURNING id",
         user_id,
-        document_id,
+        paper_id,
         (title or "")[:80],
     )
     return row["id"]
@@ -62,27 +62,27 @@ async def _upsert_auto_highlight_conv(
 @router.post("/auto-highlight")
 async def auto_highlight(body: AutoHighlightBody, auth: InternalAuthDep, conn: ConnDep):
     user_id = auth["user_id"]
-    document_id = auth["document_id"]
+    paper_id = auth["paper_id"]
     api_key = auth["llm_key"]
 
-    if not document_id:
-        raise HTTPException(status_code=400, detail="missing document_id")
+    if not paper_id:
+        raise HTTPException(status_code=400, detail="missing paper_id")
 
-    doc = await conn.fetchrow(
-        "SELECT id, file_path FROM documents WHERE id = $1 AND user_id = $2",
-        document_id,
+    paper = await conn.fetchrow(
+        "SELECT id, file_path FROM papers WHERE id = $1 AND user_id = $2",
+        paper_id,
         user_id,
     )
-    if not doc:
+    if not paper:
         raise HTTPException(status_code=404, detail="Not found")
 
     instruction = body.instruction.strip()
-    pdf_path = doc["file_path"]
+    pdf_path = paper["file_path"]
 
     conv_id = await _upsert_auto_highlight_conv(
         conn,
         user_id=user_id,
-        document_id=document_id,
+        paper_id=paper_id,
         conversation_id=body.conversationId,
         title=instruction,
     )
@@ -95,9 +95,9 @@ async def auto_highlight(body: AutoHighlightBody, auth: InternalAuthDep, conn: C
     # Create the run row; its id is the layer_id highlights will be tagged with.
     run_row = await conn.fetchrow(
         "INSERT INTO ai_highlight_runs "
-        "(document_id, user_id, instruction, status, conversation_id) "
+        "(paper_id, user_id, instruction, status, conversation_id) "
         "VALUES ($1, $2, $3, 'running', $4) RETURNING id",
-        document_id,
+        paper_id,
         user_id,
         instruction,
         conv_id,
@@ -112,7 +112,7 @@ async def auto_highlight(body: AutoHighlightBody, auth: InternalAuthDep, conn: C
 
     conn_lock = asyncio.Lock()
     tools = build_tools(
-        conn, user_id, document_id, _get_run_id, api_key, pdf_path,
+        conn, user_id, paper_id, _get_run_id, api_key, pdf_path,
         conn_lock=conn_lock,
     )
     agent = create_agent(model=model, tools=tools, system_prompt=SYSTEM_PROMPT)

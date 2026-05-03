@@ -13,7 +13,7 @@ from lib.conversations import upsert_conversation, insert_message, bump_updated_
 async def test_upsert_creates_new():
     conn = AsyncMock()
     conn.fetchrow.return_value = {"id": 42}
-    result = await upsert_conversation(conn, user_id="u1", document_id=1, conversation_id=None, title="Hello world")
+    result = await upsert_conversation(conn, user_id="u1", paper_id="00000000-0000-0000-0000-000000000001", conversation_id=None, title="Hello world")
     assert result == 42
     conn.fetchrow.assert_called_once()
     args = conn.fetchrow.call_args
@@ -23,7 +23,7 @@ async def test_upsert_creates_new():
 @pytest.mark.asyncio
 async def test_upsert_returns_existing():
     conn = AsyncMock()
-    result = await upsert_conversation(conn, user_id="u1", document_id=1, conversation_id=99, title="Ignored")
+    result = await upsert_conversation(conn, user_id="u1", paper_id="00000000-0000-0000-0000-000000000001", conversation_id=99, title="Ignored")
     assert result == 99
     conn.fetchrow.assert_not_called()
 
@@ -33,7 +33,7 @@ async def test_upsert_truncates_title():
     conn = AsyncMock()
     conn.fetchrow.return_value = {"id": 1}
     long_title = "x" * 200
-    await upsert_conversation(conn, user_id="u1", document_id=1, conversation_id=None, title=long_title)
+    await upsert_conversation(conn, user_id="u1", paper_id="00000000-0000-0000-0000-000000000001", conversation_id=None, title=long_title)
     inserted_title = conn.fetchrow.call_args[0][3]
     assert len(inserted_title) == 80
 

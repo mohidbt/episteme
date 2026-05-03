@@ -16,9 +16,10 @@ from fastapi.testclient import TestClient  # noqa: E402
 client = TestClient(app)
 
 PATH = "/agents/auto-highlight"
+PAPER_ID = "00000000-0000-0000-0000-000000000001"
 
 
-def _signed_headers(method: str, path: str, body: bytes, document_id: str | None = "1"):
+def _signed_headers(method: str, path: str, body: bytes, paper_id: str | None = PAPER_ID):
     ts = str(int(time.time()))
     sig = hmac.new(
         SECRET.encode(),
@@ -32,8 +33,8 @@ def _signed_headers(method: str, path: str, body: bytes, document_id: str | None
         "X-Inhale-Sig": sig,
         "Content-Type": "application/json",
     }
-    if document_id is not None:
-        h["X-Inhale-Document-Id"] = document_id
+    if paper_id is not None:
+        h["X-Inhale-Paper-Id"] = paper_id
     return h
 
 
@@ -49,12 +50,12 @@ def _parse_sse(text: str) -> list:
     return events
 
 
-def _mock_conn(doc_exists=True):
+def _mock_conn(paper_exists=True):
     """Mock connection supporting the route's DB calls."""
     conn = AsyncMock()
 
-    # SELECT documents -> doc row
-    doc_row = {"id": 1, "file_path": "/tmp/fake.pdf"} if doc_exists else None
+    # SELECT papers -> paper row
+    paper_row = {"id": PAPER_ID, "file_path": "/tmp/fake.pdf"} if paper_exists else None
     # INSERT agent_conversations ... RETURNING id
     conv_row = {"id": 42}
     # INSERT ai_highlight_runs ... RETURNING id
@@ -62,8 +63,8 @@ def _mock_conn(doc_exists=True):
 
     async def fetchrow(query, *args):
         q = query.strip().upper()
-        if "FROM DOCUMENTS" in q:
-            return doc_row
+        if "FROM PAPERS" in q:
+            return paper_row
         if "AGENT_CONVERSATIONS" in q and "INSERT" in q:
             return conv_row
         if "AI_HIGHLIGHT_RUNS" in q and "INSERT" in q:
@@ -82,7 +83,7 @@ def test_unauthenticated():
     assert r.status_code == 401
 
 
-def test_missing_document_id():
+def test_missing_paper_id():
     body = json.dumps({"instruction": "highlight losses"}).encode()
     mock_conn = _mock_conn()
 
@@ -94,15 +95,15 @@ def test_missing_document_id():
         r = client.post(
             PATH,
             content=body,
-            headers=_signed_headers("POST", PATH, body, document_id=None),
+            headers=_signed_headers("POST", PATH, body, paper_id=None),
         )
         assert r.status_code == 400
     finally:
         app.dependency_overrides.clear()
 
 
-def test_document_not_found():
-    mock_conn = _mock_conn(doc_exists=False)
+def test_paper_not_found():
+    mock_conn = _mock_conn(paper_exists=False)
 
     async def override():
         yield mock_conn
@@ -139,8 +140,6 @@ def test_happy_path_streams_run_progress_done():
 
     app.dependency_overrides[deps.db.get_conn] = override
 
-    # Scripted updates: model calls semantic_search, tools node runs it,
-    # model calls finish, tools node runs it (returns summary).
     updates = [
         {
             "model": {
@@ -204,7 +203,6 @@ def test_happy_path_streams_run_progress_done():
 
     try:
         with patch("routers.auto_highlight.create_agent", return_value=fake_agent):
-            # Simulate 2 highlights inserted by create_highlights during the run
             mock_conn.fetchval.return_value = 2
 
             body = json.dumps({"instruction": "highlight losses"}).encode()
@@ -215,22 +213,18 @@ def test_happy_path_streams_run_progress_done():
             assert r.headers["content-type"] == "text/event-stream; charset=utf-8"
 
             events = _parse_sse(r.text)
-            # First: run
             assert events[0]["type"] == "run"
             assert "runId" in events[0]
             assert events[0]["conversationId"] == 42
 
-            # Progress events for tool calls
             progress = [
                 e for e in events if isinstance(e, dict) and e.get("type") == "progress"
             ]
             assert len(progress) >= 1
             steps = [e["step"] for e in progress]
             assert "semantic_search" in steps
-            # _progress_detail branching: semantic_search produces "searching: ..."
             assert progress[0]["detail"].startswith("searching:")
 
-            # done
             done = [
                 e for e in events if isinstance(e, dict) and e.get("type") == "done"
             ]
@@ -238,12 +232,9 @@ def test_happy_path_streams_run_progress_done():
             assert done[0]["summary"] == "Highlighted 2 passages."
             assert done[0]["highlightsCount"] == 2
 
-            # terminator
             assert events[-1] == "[DONE]"
 
-        # Verify ai_highlight_runs row was inserted as running, then updated completed
         executes = [c.args for c in mock_conn.execute.call_args_list]
-        # look for UPDATE to 'completed'
         update_queries = [
             args[0]
             for args in executes
@@ -280,18 +271,14 @@ def test_failure_path_marks_run_failed():
             assert r.status_code == 200
 
             events = _parse_sse(r.text)
-            # run event first
             assert events[0]["type"] == "run"
-            # error event somewhere
             errs = [
                 e for e in events if isinstance(e, dict) and e.get("type") == "error"
             ]
             assert len(errs) == 1
             assert "llm exploded" in errs[0]["message"]
-            # [DONE] still terminates
             assert events[-1] == "[DONE]"
 
-        # Verify UPDATE to 'failed' happened
         executes = [c.args for c in mock_conn.execute.call_args_list]
         failed_updates = [
             args
@@ -322,13 +309,12 @@ def test_cancelled_run_marks_failed():
     fake.astream = astream
 
     async def run():
-        auth = {"user_id": "user_1", "document_id": "1", "llm_key": "sk-test"}
+        auth = {"user_id": "user_1", "paper_id": PAPER_ID, "llm_key": "sk-test"}
         body = type(
             "B", (), {"instruction": "highlight losses", "conversationId": None}
         )()
         with patch("routers.auto_highlight.create_agent", return_value=fake):
             resp = await auto_highlight(body, auth, mock_conn)
-            # Drain the streaming body; CancelledError should propagate.
             cancelled = False
             try:
                 async for _chunk in resp.body_iterator:
@@ -339,7 +325,6 @@ def test_cancelled_run_marks_failed():
 
     asyncio.run(run())
 
-    # Verify UPDATE to 'failed' happened from the CancelledError handler.
     executes = [c.args for c in mock_conn.execute.call_args_list]
     failed_updates = [
         args
