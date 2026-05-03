@@ -552,9 +552,6 @@ importers:
       clsx:
         specifier: ^2.1.1
         version: 2.1.1
-      drizzle-orm:
-        specifier: ^0.45.2
-        version: 0.45.2(@opentelemetry/api@1.9.1)(kysely@0.28.16)(postgres@3.4.9)
       lucide-react:
         specifier: ^1.7.0
         version: 1.8.0(react@19.2.4)
@@ -604,6 +601,9 @@ importers:
       '@vitejs/plugin-react':
         specifier: ^6.0.1
         version: 6.0.1(vite@8.0.9(@types/node@20.19.39)(esbuild@0.27.7)(jiti@2.6.1)(tsx@4.21.0))
+      drizzle-orm:
+        specifier: ^0.45.2
+        version: 0.45.2(@opentelemetry/api@1.9.1)(kysely@0.28.16)(postgres@3.4.9)
       happy-dom:
         specifier: ^20.8.9
         version: 20.9.0
