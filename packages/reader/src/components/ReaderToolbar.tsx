@@ -7,6 +7,7 @@ import { ZoomControls } from "./ZoomControls";
 
 interface ReaderToolbarProps {
   title: string;
+  backHref?: string;
   sidebarOpen?: boolean;
   onToggleSidebar?: () => void;
   chatOpen?: boolean;
@@ -17,10 +18,14 @@ interface ReaderToolbarProps {
   onToggleCitations?: () => void;
   commentsOpen?: boolean;
   onToggleComments?: () => void;
+  agentEnabled?: boolean;
+  agentOpen?: boolean;
+  onToggleAgent?: () => void;
 }
 
 export function ReaderToolbar({
   title,
+  backHref = "/library",
   sidebarOpen,
   onToggleSidebar,
   chatOpen,
@@ -31,6 +36,9 @@ export function ReaderToolbar({
   onToggleCitations,
   commentsOpen,
   onToggleComments,
+  agentEnabled,
+  agentOpen,
+  onToggleAgent,
 }: ReaderToolbarProps) {
   const currentPage = useReaderState((s) => s.currentPage);
   const totalPages = useReaderState((s) => s.totalPages);
@@ -52,7 +60,7 @@ export function ReaderToolbar({
   return (
     <header className="flex h-12 shrink-0 items-center justify-between gap-4 border-b bg-background px-4">
       <div className="flex min-w-0 flex-1 items-center gap-3">
-        <Link href="/library">
+        <Link href={backHref}>
           <Button variant="ghost" size="sm">Back</Button>
         </Link>
         <span className="min-w-0 flex-1 truncate text-sm font-medium">{title}</span>
@@ -117,6 +125,16 @@ export function ReaderToolbar({
             onClick={onToggleCitations}
           >
             Citations
+          </Button>
+        )}
+        {agentEnabled && onToggleAgent && (
+          <Button
+            variant={agentOpen ? "secondary" : "ghost"}
+            size="sm"
+            onClick={onToggleAgent}
+            data-testid="reader-toolbar-agent"
+          >
+            Agent
           </Button>
         )}
         <Button

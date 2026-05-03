@@ -80,7 +80,7 @@ export function CommentsSidebar({
           <Empty>
             <EmptyHeader>
               <EmptyTitle>No comments yet</EmptyTitle>
-              <EmptyDescription>Select text and click Comment.</EmptyDescription>
+              <EmptyDescription className="text-xs text-muted-foreground/70">Select text and click Comment.</EmptyDescription>
             </EmptyHeader>
           </Empty>
         )}

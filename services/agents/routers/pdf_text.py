@@ -8,6 +8,7 @@ import pdfplumber
 from pypdf import PdfReader
 
 from deps.auth import InternalAuthDep
+from lib.storage import download_to_tempfile
 
 router = APIRouter(prefix="/agents/pdf", tags=["pdf-text"])
 
@@ -25,17 +26,18 @@ class PdfAnnotationsBody(BaseModel):
 async def pdf_text(body: PdfTextBody, auth: InternalAuthDep):
     _ = auth
     try:
-        with pdfplumber.open(body.file_path) as pdf:
-            pages = []
-            if body.page is not None:
-                if body.page < 1 or body.page > len(pdf.pages):
-                    raise HTTPException(status_code=404, detail="page not found")
-                p = pdf.pages[body.page - 1]
-                pages.append({"pageNumber": body.page, "text": p.extract_text() or ""})
-            else:
-                for idx, p in enumerate(pdf.pages, start=1):
-                    pages.append({"pageNumber": idx, "text": p.extract_text() or ""})
-            return {"pages": pages}
+        async with download_to_tempfile(body.file_path) as local_path:
+            with pdfplumber.open(local_path) as pdf:
+                pages = []
+                if body.page is not None:
+                    if body.page < 1 or body.page > len(pdf.pages):
+                        raise HTTPException(status_code=404, detail="page not found")
+                    p = pdf.pages[body.page - 1]
+                    pages.append({"pageNumber": body.page, "text": p.extract_text() or ""})
+                else:
+                    for idx, p in enumerate(pdf.pages, start=1):
+                        pages.append({"pageNumber": idx, "text": p.extract_text() or ""})
+                return {"pages": pages}
     except HTTPException:
         raise
     except FileNotFoundError as exc:
@@ -57,12 +59,18 @@ def _marker_from_dest(dest: object) -> tuple[int | None, str | None]:
 async def pdf_annotations(body: PdfAnnotationsBody, auth: InternalAuthDep):
     _ = auth
     try:
-        reader = PdfReader(body.file_path)
+        async with download_to_tempfile(body.file_path) as local_path:
+            reader = PdfReader(local_path)
+            return _extract_annotations(reader)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail="file not found") from exc
+    except HTTPException:
+        raise
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
+
+def _extract_annotations(reader: PdfReader) -> dict:
     refs: dict[int, dict] = {}
     markers = []
     for page_idx, page in enumerate(reader.pages, start=1):

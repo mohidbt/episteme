@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef, type ReactNode } from "react";
 import { Group, Panel, Separator } from "react-resizable-panels";
 import { toast } from "sonner";
 
@@ -39,6 +39,14 @@ export type ReaderProps = {
    * selection. The consumer (apps/km) wires this to the KM agent side panel.
    */
   onExplainPassage?: (args: { page: number; text: string }) => void;
+  /**
+   * Optional agent side-panel slot. When provided, Reader renders an "Agent"
+   * toolbar toggle that mounts this node in the same dockable scaffold as
+   * Highlights / Comments / Outline / Citations.
+   */
+  agentSlot?: ReactNode;
+  agentOpen?: boolean;
+  onAgentOpenChange?: (open: boolean) => void;
 };
 
 interface MarkerRect {
@@ -118,7 +126,15 @@ function SidebarPanelFragment({
   );
 }
 
-export function Reader({ paperId, mode = "full", className, onExplainPassage }: ReaderProps) {
+export function Reader({
+  paperId,
+  mode = "full",
+  className,
+  onExplainPassage,
+  agentSlot,
+  agentOpen: agentOpenProp,
+  onAgentOpenChange,
+}: ReaderProps) {
   // Paper meta (title, processingStatus)
   const [meta, setMeta] = useState<PaperMeta | null>(null);
   const [metaError, setMetaError] = useState<string | null>(null);
@@ -153,6 +169,15 @@ export function Reader({ paperId, mode = "full", className, onExplainPassage }: 
   const [outlineOpen, setOutlineOpen] = useState(false);
   const [citationsOpen, setCitationsOpen] = useState(false);
   const [commentsOpen, setCommentsOpen] = useState(false);
+  const [agentOpenState, setAgentOpenState] = useState(false);
+  const agentOpen = agentOpenProp ?? agentOpenState;
+  const setAgentOpen = useCallback(
+    (open: boolean) => {
+      if (agentOpenProp === undefined) setAgentOpenState(open);
+      onAgentOpenChange?.(open);
+    },
+    [agentOpenProp, onAgentOpenChange],
+  );
   const pdfScrollRef = useRef<HTMLDivElement>(null);
   const { selection, clearSelection } = useTextSelection();
 
@@ -174,6 +199,7 @@ export function Reader({ paperId, mode = "full", className, onExplainPassage }: 
   const [outlineDock, setOutlineDock] = useSidebarDock("outline", "left");
   const [citationsDock, setCitationsDock] = useSidebarDock("citations", "right");
   const [commentsDock, setCommentsDock] = useSidebarDock("comments", "right");
+  const [agentDock, setAgentDock] = useSidebarDock("agent", "right");
 
   // Citations
   const [citations, setCitations] = useState<CitationWithStatus[]>([]);
@@ -553,6 +579,26 @@ export function Reader({ paperId, mode = "full", className, onExplainPassage }: 
     });
   }
 
+  if (agentOpen && agentSlot != null) {
+    entries.push({
+      id: "agent",
+      dock: agentDock,
+      node: (
+        <div className="flex h-full min-h-0 w-full flex-col">
+          <div className="flex h-9 items-center justify-between border-b px-3">
+            <span className="text-sm font-medium">Agent</span>
+            <DockMenu
+              dock={agentDock}
+              onChange={setAgentDock}
+              onClose={() => setAgentOpen(false)}
+            />
+          </div>
+          <div className="min-h-0 flex-1 overflow-hidden">{agentSlot}</div>
+        </div>
+      ),
+    });
+  }
+
   const leftEntries = entries.filter((e) => e.dock === "left");
   const rightEntries = entries.filter((e) => e.dock === "right");
   const bottomEntries = entries.filter((e) => e.dock === "bottom");
@@ -607,6 +653,10 @@ export function Reader({ paperId, mode = "full", className, onExplainPassage }: 
     >
       <ReaderToolbar
         title={meta?.title ?? ""}
+        backHref={`/p/${paperId}`}
+        agentEnabled={agentSlot != null}
+        agentOpen={agentOpen}
+        onToggleAgent={() => setAgentOpen(!agentOpen)}
         sidebarOpen={sidebarOpen}
         onToggleSidebar={() => setSidebarOpen((o) => !o)}
         outlineOpen={outlineOpen}

@@ -14,24 +14,24 @@ import { test, expect } from "@playwright/test";
 // DevTools MCP checklist below.
 
 test.describe("Phase 1.6b — reader AI rewire", () => {
-  test("reader AgentBall opens KM transcript side panel", async ({ page }) => {
+  test("reader toolbar Agent toggle opens KM transcript dock panel", async ({ page }) => {
     const paperId = process.env.TEST_PAPER_ID;
     test.skip(!paperId, "TEST_PAPER_ID env var required");
     await page.goto(`/papers/${paperId}/read`);
-    await page.getByTestId("reader-agent-ball").click();
-    await expect(page.locator("[data-reader-side-panel]")).toBeVisible();
-    // AgentTranscript renders once activeThreadId is populated.
-    await expect(page.locator("[data-reader-side-panel]")).toContainText(/./);
+    await page.getByTestId("reader-toolbar-agent").click();
+    await expect(page.getByTestId("panel-sidebar-agent")).toBeVisible();
+    await expect(page.getByTestId("panel-sidebar-agent")).toContainText(/./);
   });
 
   test("global AgentBall is hidden on reader route", async ({ page }) => {
     const paperId = process.env.TEST_PAPER_ID;
     test.skip(!paperId, "TEST_PAPER_ID env var required");
     await page.goto(`/papers/${paperId}/read`);
-    // Global ball uses data-testid="agent-ball"; reader-page button uses
-    // data-testid="reader-agent-ball". Only the reader-page one should mount.
+    // Global ball uses data-testid="agent-ball". Reader exposes its agent
+    // surface via the in-toolbar toggle (data-testid="reader-toolbar-agent")
+    // so the floating global ball must not appear here.
     await expect(page.getByTestId("agent-ball")).toHaveCount(0);
-    await expect(page.getByTestId("reader-agent-ball")).toBeVisible();
+    await expect(page.getByTestId("reader-toolbar-agent")).toBeVisible();
   });
 
   test("explain passage routes through pdf_explain_passage tool", async ({
@@ -61,6 +61,6 @@ test.describe("Phase 1.6b — reader AI rewire", () => {
     expect(body.thread_id).toBeTruthy();
     expect(body.message ?? "").toMatch(/Explain this passage/);
 
-    await expect(page.locator("[data-reader-side-panel]")).toBeVisible();
+    await expect(page.getByTestId("panel-sidebar-agent")).toBeVisible();
   });
 });
