@@ -25,6 +25,7 @@
     "@episteme/editor": "workspace:*",
     "@episteme/markdown": "workspace:*",
     "@episteme/notes-core": "workspace:*",
+    "@episteme/reader": "workspace:^",
     "@episteme/storage": "workspace:*",
     "@napi-rs/canvas": "^0.1.80",
     "@radix-ui/react-use-controllable-state": "^1.2.2",

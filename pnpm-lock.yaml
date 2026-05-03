@@ -50,6 +50,9 @@ importers:
       '@episteme/notes-core':
         specifier: workspace:*
         version: link:../../packages/notes-core
+      '@episteme/reader':
+        specifier: workspace:^
+        version: link:../../packages/reader
       '@episteme/storage':
         specifier: workspace:*
         version: link:../../packages/storage
