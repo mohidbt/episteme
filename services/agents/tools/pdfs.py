@@ -222,6 +222,39 @@ async def pdf_extract_data(
 
 
 @tool
+async def pdf_explain_passage(
+    paper_id: str,
+    page: int,
+    text: str,
+    *,
+    config: RunnableConfig,
+) -> object:
+    """Explain a selected passage from a paper PDF.
+
+    Fetches the surrounding page text so the agent can ground its
+    explanation in the passage's context. The agent's main LLM
+    synthesises the final explanation from the structured result.
+
+    Args:
+        paper_id: Paper UUID.
+        page: 1-based page number where the passage appears.
+        text: The selected passage text to explain.
+    """
+    user_id = user_id_from_config(config)
+    page_context = await km_post(
+        "/api/pdfs/read-text",
+        {"paperId": paper_id, "page": page},
+        user_id=user_id,
+    )
+    return {
+        "paper_id": paper_id,
+        "page": page,
+        "passage": text,
+        "page_context": page_context,
+    }
+
+
+@tool
 async def extract_passages(
     pdf_id: str, query: str, k: int = 5, *, config: RunnableConfig
 ) -> object:
@@ -246,4 +279,5 @@ TOOLS = [
     pdf_read_tables,
     pdf_extract_data,
     highlight,
+    pdf_explain_passage,
 ]
