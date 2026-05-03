@@ -193,10 +193,15 @@ _CORE_TOOL_NAMES: frozenset[str] = frozenset({
     "list_references", "get_reference",
     # libraries / folders
     "list_libraries", "list_folders",
-    # papers/PDFs (discovery only — action tools like `highlight` stay skill-scoped)
-    "list_pdfs", "search_pdfs",
-    # paper search (agentic — fetch is HITL-protected via skill require_approval)
-    "agentic_search_papers", "agentic_fetch_papers",
+    # papers/PDFs (discovery + read-only access — action tools like `highlight`
+    # stay skill-scoped). read_paper / pdf_explain_passage power the reader
+    # side-panel agent (multi-page reads, SelectionToolbar "Explain"); without
+    # them in core, enabling any skill (e.g. deep-read) silently pruned them.
+    "list_pdfs", "search_pdfs", "read_paper", "pdf_explain_passage",
+    # paper search (agentic — fetch is HITL-protected via skill require_approval).
+    # search_library is core RAG across the user's library and must remain
+    # available regardless of which skill is active.
+    "agentic_search_papers", "agentic_fetch_papers", "search_library",
     # papersets / extraction spreadsheets — list, read, and per-cell enrichment
     # are first-class user content (like notes), not gated to data-extract skill.
     # Without this, "list my papersets" silently routed to list_pdfs whenever
