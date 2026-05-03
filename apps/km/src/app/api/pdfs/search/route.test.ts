@@ -1,9 +1,12 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { createHmac } from "crypto";
 import { GET } from "./route";
 import { createTestUser, deleteTestUser, req, type TestUser } from "../../_test-utils";
 import { db } from "@/lib/db";
 import { papers, libraries } from "@episteme/db/schema";
 import { eq } from "drizzle-orm";
+
+const HMAC_SECRET = "test-pdfs-search-secret";
 
 let uA: TestUser;
 let uB: TestUser;
@@ -128,5 +131,35 @@ describe("GET /api/pdfs/search", () => {
     const body = await r.json();
     const filenames = body.results.map((row: { filename: string }) => row.filename);
     expect(filenames.some((f: string) => f.includes("bert"))).toBe(true);
+  });
+
+  it("accepts HMAC-signed request from agent", async () => {
+    const prevSecret = process.env.INHALE_INTERNAL_SECRET;
+    process.env.INHALE_INTERNAL_SECRET = HMAC_SECRET;
+    try {
+      const path = "/api/pdfs/search?q=attention";
+      const ts = String(Math.floor(Date.now() / 1000));
+      const sig = createHmac("sha256", HMAC_SECRET)
+        .update(ts + "GET" + path + "")
+        .digest("hex");
+      const r = await GET(
+        new Request(`http://localhost${path}`, {
+          headers: {
+            "X-Inhale-User-Id": uA.id,
+            "X-Inhale-Ts": ts,
+            "X-Inhale-Sig": sig,
+          },
+        }),
+      );
+      expect(r.status).toBe(200);
+      const body = await r.json();
+      const titles = body.results.map((row: { title: string }) => row.title);
+      expect(titles).toContain("Attention Is All You Need");
+      // Cross-user isolation still enforced: u_B's paper must NOT appear
+      expect(titles).not.toContain("Attention Mechanism Survey");
+    } finally {
+      if (prevSecret === undefined) delete process.env.INHALE_INTERNAL_SECRET;
+      else process.env.INHALE_INTERNAL_SECRET = prevSecret;
+    }
   });
 });
