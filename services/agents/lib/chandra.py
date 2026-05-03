@@ -9,7 +9,7 @@ duplicated docs).
 This module exposes:
   - run_chandra(file_path, api_key)        — async Datalab convert call.
   - parse_blocks(json_output)              — flatten Marker JSON to rows.
-  - insert_segments(conn, document_id, rows) — bulk INSERT into document_segments.
+  - insert_segments(conn, paper_id, rows) — bulk INSERT into document_segments.
   - ensure_parsed(paper_id, conn, ocr_key) — lazy-trigger w/ compare-and-set
                                               on papers.chandra_status.
   - ChandraParseFailed                     — raised when Chandra fails OR
@@ -144,7 +144,7 @@ async def run_chandra(file_path: str, api_key: str):
 
 async def insert_segments(
     conn,
-    document_id: str | int,
+    paper_id: str,
     rows: list[tuple[int, str, dict, dict]],
 ) -> None:
     """Bulk INSERT parsed rows into document_segments."""
@@ -153,12 +153,12 @@ async def insert_segments(
     await conn.executemany(
         """
         INSERT INTO document_segments
-          (document_id, page, kind, bbox, payload, order_index)
+          (paper_id, page, kind, bbox, payload, order_index)
         VALUES ($1, $2, $3, $4, $5, $6)
         """,
         [
             (
-                document_id,
+                paper_id,
                 page,
                 kind,
                 json.dumps(bbox),

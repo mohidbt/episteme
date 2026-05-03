@@ -61,7 +61,7 @@ router = APIRouter(prefix="/agents", tags=["chandra-segments"])
 
 
 class ChandraSegmentsBody(BaseModel):
-    document_id: int
+    paper_id: str
     file_path: str
 
 
@@ -84,13 +84,13 @@ async def chandra_segments(
             success=True, segment_count=0, page_count=0, skipped=True
         )
 
-    document_id = body.document_id
+    paper_id = body.paper_id
 
     result = await _run_chandra(body.file_path, ocr_key)
 
     if not result.success or result.json is None:
         logger.warning(
-            "Chandra convert failed for document %d: %s", document_id, result.error
+            "Chandra convert failed for paper %s: %s", paper_id, result.error
         )
         return ChandraSegmentsResponse(
             success=True, segment_count=0, page_count=result.page_count or 0
@@ -98,7 +98,7 @@ async def chandra_segments(
 
     rows = _parse_blocks(result.json)
 
-    await insert_segments(conn, document_id, rows)
+    await insert_segments(conn, paper_id, rows)
 
     return ChandraSegmentsResponse(
         success=True,

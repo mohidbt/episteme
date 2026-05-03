@@ -268,7 +268,7 @@ def test_no_ocr_key_returns_skipped():
 
     app.dependency_overrides[deps.db.get_conn] = override
     try:
-        body = json.dumps({"document_id": 42, "file_path": "/tmp/test.pdf"}).encode()
+        body = json.dumps({"paper_id": "00000000-0000-0000-0000-000000000042", "file_path": "/tmp/test.pdf"}).encode()
         headers = _signed_headers("POST", PATH, body, ocr_key="")
         # Remove the OCR key header entirely
         headers.pop("X-Inhale-OCR-Key", None)
@@ -296,7 +296,7 @@ def test_empty_ocr_key_returns_skipped():
 
     app.dependency_overrides[deps.db.get_conn] = override
     try:
-        body = json.dumps({"document_id": 42, "file_path": "/tmp/test.pdf"}).encode()
+        body = json.dumps({"paper_id": "00000000-0000-0000-0000-000000000042", "file_path": "/tmp/test.pdf"}).encode()
         r = client.post(
             PATH,
             content=body,
@@ -315,14 +315,14 @@ def test_empty_ocr_key_returns_skipped():
 
 def test_missing_sig_returns_401():
     """Request without HMAC headers → 401."""
-    body = json.dumps({"document_id": 42, "file_path": "/tmp/test.pdf"}).encode()
+    body = json.dumps({"paper_id": "00000000-0000-0000-0000-000000000042", "file_path": "/tmp/test.pdf"}).encode()
     r = client.post(PATH, content=body, headers={"Content-Type": "application/json"})
     assert r.status_code == 401
 
 
 def test_bad_sig_returns_401():
     """Correct headers but wrong signature → 401."""
-    body = json.dumps({"document_id": 42, "file_path": "/tmp/test.pdf"}).encode()
+    body = json.dumps({"paper_id": "00000000-0000-0000-0000-000000000042", "file_path": "/tmp/test.pdf"}).encode()
     headers = _signed_headers("POST", PATH, body)
     headers["X-Inhale-Sig"] = "deadbeef" * 8  # wrong sig
     r = client.post(PATH, content=body, headers=headers)
@@ -344,7 +344,7 @@ def test_happy_path_inserts_segments():
 
     app.dependency_overrides[deps.db.get_conn] = override
     try:
-        body = json.dumps({"document_id": 42, "file_path": "/tmp/test.pdf"}).encode()
+        body = json.dumps({"paper_id": "00000000-0000-0000-0000-000000000042", "file_path": "/tmp/test.pdf"}).encode()
 
         with patch(
             "routers.chandra_segments._run_chandra",
@@ -370,12 +370,12 @@ def test_happy_path_inserts_segments():
         sql, rows = call_args[0]
         assert "INSERT INTO document_segments" in sql
         # Assert exact column names to catch future column-name drift
-        assert "(document_id, page, kind, bbox, payload, order_index)" in sql
+        assert "(paper_id, page, kind, bbox, payload, order_index)" in sql
         assert len(rows) == len(EXPECTED_ROWS)
 
-        # Spot-check the first row structure: (document_id, page, kind, bbox_json, payload_json, order_index)
+        # Spot-check the first row structure: (paper_id, page, kind, bbox_json, payload_json, order_index)
         first = rows[0]
-        assert first[0] == 42          # document_id
+        assert first[0] == "00000000-0000-0000-0000-000000000042"  # paper_id
         assert first[1] == 0           # page
         assert first[2] == "section_header"
         assert json.loads(first[3]) == _n(72, 700, 540, 730)
@@ -403,7 +403,7 @@ def test_chandra_failure_returns_zero_segments():
 
     app.dependency_overrides[deps.db.get_conn] = override
     try:
-        body = json.dumps({"document_id": 42, "file_path": "/tmp/test.pdf"}).encode()
+        body = json.dumps({"paper_id": "00000000-0000-0000-0000-000000000042", "file_path": "/tmp/test.pdf"}).encode()
 
         with patch(
             "routers.chandra_segments._run_chandra",

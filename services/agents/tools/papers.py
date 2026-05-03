@@ -18,13 +18,8 @@ Runtime context required in ``RunnableConfig.configurable``:
                    kept consistent with other tools' contract).
   - ``ocr_key``  : Datalab OCR key (forwarded to ``ensure_parsed``).
 
-Note on document_id mapping:
-  ``document_segments.document_id`` is shipped as ``integer`` referencing
-  ``documents.id``. However, the existing ``ensure_parsed`` helper (1.4.x T2)
-  inserts segments using the ``papers.id`` UUID directly into that column.
-  This tool queries with ``document_id = :paper_id`` to remain coherent with
-  what's actually written. The integer/UUID FK mismatch is pre-existing
-  technical debt outside this task's scope.
+After 1.6a, ``document_segments`` is keyed on ``paper_id uuid`` referencing
+``papers.id`` directly.
 """
 from __future__ import annotations
 
@@ -148,7 +143,7 @@ async def _load_header_lookup(conn, paper_id: str) -> dict[int, str]:
         """
         SELECT order_index, payload
           FROM document_segments
-         WHERE document_id = $1
+         WHERE paper_id = $1
            AND kind = 'section_header'
          ORDER BY order_index
         """,
@@ -179,7 +174,7 @@ async def _query_sections(conn, paper_id: str, names: list[str]) -> list:
         WITH headers AS (
           SELECT order_index, payload
             FROM document_segments
-           WHERE document_id = $1
+           WHERE paper_id = $1
              AND kind = 'section_header'
         ),
         matched AS (
@@ -202,7 +197,7 @@ async def _query_sections(conn, paper_id: str, names: list[str]) -> list:
           JOIN windows w
             ON s.order_index >= w.start_oi
            AND (w.end_oi IS NULL OR s.order_index < w.end_oi)
-         WHERE s.document_id = $1
+         WHERE s.paper_id = $1
          ORDER BY s.order_index
         """,
         paper_id,
@@ -215,7 +210,7 @@ async def _query_blocks(conn, paper_id: str, types: list[str]) -> list:
         """
         SELECT order_index, kind, page, payload
           FROM document_segments
-         WHERE document_id = $1
+         WHERE paper_id = $1
            AND kind = ANY($2::text[])
          ORDER BY order_index
         """,
@@ -229,7 +224,7 @@ async def _query_pages(conn, paper_id: str, lo: int, hi: int) -> list:
         """
         SELECT order_index, kind, page, payload
           FROM document_segments
-         WHERE document_id = $1
+         WHERE paper_id = $1
            AND page BETWEEN $2 AND $3
          ORDER BY order_index
         """,
@@ -249,7 +244,7 @@ async def _query_rag_fts(conn, paper_id: str, query: str, top_k: int) -> list:
                  plainto_tsquery('english', $2)
                ) AS rank
           FROM document_segments
-         WHERE document_id = $1
+         WHERE paper_id = $1
            AND to_tsvector('english', coalesce(payload->>'text', payload->>'caption', payload->>'latex', ''))
                @@ plainto_tsquery('english', $2)
          ORDER BY rank DESC
@@ -266,7 +261,7 @@ async def _query_full(conn, paper_id: str) -> list:
         """
         SELECT order_index, kind, page, payload
           FROM document_segments
-         WHERE document_id = $1
+         WHERE paper_id = $1
          ORDER BY order_index
         """,
         paper_id,
