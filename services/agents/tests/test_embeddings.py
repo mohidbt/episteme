@@ -39,7 +39,7 @@ def test_embed_chunks_stub_mode():
     app.dependency_overrides[deps.db.get_conn] = override_get_conn
     try:
         body = json.dumps({
-            "documentId": 1,
+            "paperId": "00000000-0000-0000-0000-000000000001",
             "chunks": [
                 {"chunkIndex": 0, "content": "hello", "pageStart": 1, "pageEnd": 1, "tokenCount": 1},
                 {"chunkIndex": 1, "content": "world", "pageStart": 1, "pageEnd": 2, "tokenCount": 1},
@@ -66,7 +66,7 @@ def test_embed_chunks_rejects_empty_chunks():
 
     app.dependency_overrides[deps.db.get_conn] = override_get_conn
     try:
-        body = json.dumps({"documentId": 1, "chunks": []}).encode()
+        body = json.dumps({"paperId": "00000000-0000-0000-0000-000000000001", "chunks": []}).encode()
         r = client.post(
             "/agents/embed-chunks",
             content=body,
@@ -79,7 +79,7 @@ def test_embed_chunks_rejects_empty_chunks():
 
 def test_embed_chunks_unauthenticated():
     body = json.dumps({
-        "documentId": 1,
+        "paperId": "00000000-0000-0000-0000-000000000001",
         "chunks": [{"chunkIndex": 0, "content": "x", "pageStart": 1, "pageEnd": 1, "tokenCount": 1}],
     }).encode()
     r = client.post("/agents/embed-chunks", content=body)

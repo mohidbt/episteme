@@ -17,7 +17,7 @@ class Chunk(BaseModel):
 
 
 class EmbedChunksBody(BaseModel):
-    documentId: int
+    paperId: str
     chunks: Annotated[list[Chunk], Field(min_length=1, max_length=512)]
 
 
@@ -36,13 +36,13 @@ async def embed_chunks(
         raise ValueError("embedding count mismatch")
 
     rows = [
-        (body.documentId, c.chunkIndex, c.content, c.pageStart, c.pageEnd, c.tokenCount, v)
+        (body.paperId, c.chunkIndex, c.content, c.pageStart, c.pageEnd, c.tokenCount, v)
         for c, v in zip(body.chunks, vecs)
     ]
     await conn.executemany(
         """
         INSERT INTO document_chunks
-          (document_id, chunk_index, content, page_start, page_end, token_count, embedding)
+          (paper_id, chunk_index, content, page_start, page_end, token_count, embedding)
         VALUES ($1,$2,$3,$4,$5,$6,$7)
         """,
         rows,
