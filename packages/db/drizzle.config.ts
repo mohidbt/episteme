@@ -1,7 +1,7 @@
 import { defineConfig } from "drizzle-kit";
 import { config } from "dotenv";
 
-config({ path: "../../apps/reader/.env.local" });
+config({ path: "../../apps/km/.env" });
 
 export default defineConfig({
   dialect: "postgresql",
