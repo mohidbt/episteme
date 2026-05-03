@@ -14,7 +14,7 @@ describe("documentSegments schema", () => {
     expect(colNames).toEqual(
       expect.arrayContaining([
         "id",
-        "document_id",
+        "paper_id",
         "page",
         "kind",
         "bbox",
@@ -31,10 +31,16 @@ describe("documentSegments schema", () => {
     expect(col?.columnType).toBe("PgSerial");
   });
 
-  it("document_id is text not null (no FK)", () => {
-    const col = config.columns.find((c) => c.name === "document_id");
-    expect(col?.columnType).toBe("PgText");
+  it("paper_id is uuid not null with FK to papers", () => {
+    const col = config.columns.find((c) => c.name === "paper_id");
+    expect(col?.columnType).toBe("PgUUID");
     expect(col?.notNull).toBe(true);
+    const fk = config.foreignKeys.find(
+      (fk) => fk.reference().columns[0]?.name === "paper_id"
+    );
+    expect(fk).toBeDefined();
+    expect(fk?.reference().foreignColumns[0]?.name).toBe("id");
+    expect(fk?.onDelete).toBe("cascade");
   });
 
   it("page is integer not null", () => {
@@ -79,13 +85,13 @@ describe("documentSegments schema", () => {
     expect(col?.hasDefault).toBe(true);
   });
 
-  it("has index on (document_id, page)", () => {
+  it("has index on (paper_id, page)", () => {
     const idx = config.indexes.find(
-      (i) => i.config.name === "document_segments_document_page_idx"
+      (i) => i.config.name === "document_segments_paper_page_idx"
     );
     expect(idx).toBeDefined();
     const cols = idx?.config.columns.map((c) => ("name" in c ? c.name : undefined));
-    expect(cols).toEqual(["document_id", "page"]);
+    expect(cols).toEqual(["paper_id", "page"]);
   });
 
   it("exports DocumentSegmentBbox type", () => {

@@ -1,12 +1,12 @@
-import { pgTable, text, timestamp, serial, integer, index, jsonb } from "drizzle-orm/pg-core";
-import { documents } from "./documents";
+import { pgTable, text, timestamp, serial, integer, uuid, index, jsonb } from "drizzle-orm/pg-core";
+import { papers } from "./papers";
 type Author = { name: string; authorId?: string };
 
 export const documentReferences = pgTable("document_references", {
   id: serial("id").primaryKey(),
-  documentId: integer("document_id")
+  paperId: uuid("paper_id")
     .notNull()
-    .references(() => documents.id, { onDelete: "cascade" }),
+    .references(() => papers.id, { onDelete: "cascade" }),
   markerText: text("marker_text").notNull(),
   markerIndex: integer("marker_index").notNull(),
   rawText: text("raw_text"),
@@ -28,5 +28,5 @@ export const documentReferences = pgTable("document_references", {
   externalIds: jsonb("external_ids").$type<Record<string, string>>(),
   bibtex: text("bibtex"),
 }, (table) => [
-  index("document_references_document_id_idx").on(table.documentId),
+  index("document_references_paper_id_idx").on(table.paperId),
 ]);

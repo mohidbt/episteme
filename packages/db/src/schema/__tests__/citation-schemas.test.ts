@@ -15,7 +15,7 @@ describe("documentReferences schema", () => {
   it("has all expected columns", () => {
     const colNames = config.columns.map((c) => c.name);
     expect(colNames).toContain("id");
-    expect(colNames).toContain("document_id");
+    expect(colNames).toContain("paper_id");
     expect(colNames).toContain("marker_text");
     expect(colNames).toContain("marker_index");
     expect(colNames).toContain("raw_text");
@@ -37,9 +37,10 @@ describe("documentReferences schema", () => {
     expect(idCol?.primary).toBe(true);
   });
 
-  it("document_id is not null", () => {
-    const col = config.columns.find((c) => c.name === "document_id");
+  it("paper_id is not null", () => {
+    const col = config.columns.find((c) => c.name === "paper_id");
     expect(col?.notNull).toBe(true);
+    expect(col?.columnType).toBe("PgUUID");
   });
 
   it("marker_text is not null", () => {
@@ -58,17 +59,18 @@ describe("documentReferences schema", () => {
     expect(col?.hasDefault).toBe(true);
   });
 
-  it("has index on document_id", () => {
+  it("has index on paper_id", () => {
     const idxNames = config.indexes.map((i) => i.config.name);
-    expect(idxNames).toContain("document_references_document_id_idx");
+    expect(idxNames).toContain("document_references_paper_id_idx");
   });
 
-  it("document_id has foreign key to documents", () => {
+  it("paper_id has foreign key to papers", () => {
     const fk = config.foreignKeys.find(
-      (fk) => fk.reference().columns[0]?.name === "document_id"
+      (fk) => fk.reference().columns[0]?.name === "paper_id"
     );
     expect(fk).toBeDefined();
     expect(fk?.reference().foreignColumns[0]?.name).toBe("id");
+    expect(fk?.onDelete).toBe("cascade");
   });
 });
 

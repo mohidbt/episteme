@@ -169,6 +169,13 @@
       "when": 1777683600000,
       "tag": "0023_phase_1_5_chunk_tables",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1777687200000,
+      "tag": "0024_inhale_merger",
+      "breakpoints": true
     }
   ]
 }

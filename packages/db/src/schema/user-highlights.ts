@@ -1,6 +1,6 @@
 import { pgTable, text, timestamp, serial, integer, pgEnum, index, uuid, jsonb } from "drizzle-orm/pg-core";
 import { user } from "./auth";
-import { documents } from "./documents";
+import { papers } from "./papers";
 
 export const highlightColorEnum = pgEnum("highlight_color", [
   "yellow",
@@ -18,9 +18,9 @@ export const userHighlights = pgTable("user_highlights", {
   userId: text("user_id")
     .notNull()
     .references(() => user.id, { onDelete: "cascade" }),
-  documentId: integer("document_id")
+  paperId: uuid("paper_id")
     .notNull()
-    .references(() => documents.id, { onDelete: "cascade" }),
+    .references(() => papers.id, { onDelete: "cascade" }),
   pageNumber: integer("page_number").notNull(),
   textContent: text("text_content").notNull(),
   startOffset: integer("start_offset").notNull(),
@@ -38,6 +38,6 @@ export const userHighlights = pgTable("user_highlights", {
     .$onUpdate(() => new Date()),
 },
 (table) => [
-  index("user_highlights_user_document_idx").on(table.userId, table.documentId),
+  index("user_highlights_user_paper_idx").on(table.userId, table.paperId),
   index("user_highlights_layer_idx").on(table.layerId),
 ]);

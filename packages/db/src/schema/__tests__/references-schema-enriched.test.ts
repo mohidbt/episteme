@@ -108,7 +108,8 @@ describeDb("DB round-trip: documentReferences enriched columns", () => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let client: any;
   let insertedRefId: number;
-  let insertedDocId: number;
+  let insertedPaperId: string;
+  let insertedLibraryId: number;
 
   beforeAll(async () => {
     const postgres = await import("postgres");
@@ -126,18 +127,25 @@ describeDb("DB round-trip: documentReferences enriched columns", () => {
       ON CONFLICT (id) DO NOTHING
     `;
 
-    // Create test document
-    const [doc] = await client`
-      INSERT INTO documents (user_id, title, filename, file_path, file_size_bytes, processing_status)
-      VALUES (${TEST_USER_ID}, 'Test Doc Enriched', 'test-enriched.pdf', '/dev/null', 0, 'pending')
+    // Create test library and paper (papers requires a library)
+    const [lib] = await client`
+      INSERT INTO libraries (user_id, name)
+      VALUES (${TEST_USER_ID}, 'Test Lib Enriched')
       RETURNING id
     `;
-    insertedDocId = doc.id;
+    insertedLibraryId = lib.id;
+
+    const [paper] = await client`
+      INSERT INTO papers (library_id, user_id, filename)
+      VALUES (${insertedLibraryId}, ${TEST_USER_ID}, 'test-enriched.pdf')
+      RETURNING id
+    `;
+    insertedPaperId = paper.id;
 
     const [row] = await db
       .insert(schema.documentReferences)
       .values({
-        documentId: insertedDocId,
+        paperId: insertedPaperId,
         markerText: "[1]",
         markerIndex: 0,
         authors: [{ name: "Alice", authorId: "a-123" }, { name: "Bob" }],
@@ -157,8 +165,11 @@ describeDb("DB round-trip: documentReferences enriched columns", () => {
       if (insertedRefId) {
         await client`DELETE FROM document_references WHERE id = ${insertedRefId}`;
       }
-      if (insertedDocId) {
-        await client`DELETE FROM documents WHERE id = ${insertedDocId}`;
+      if (insertedPaperId) {
+        await client`DELETE FROM papers WHERE id = ${insertedPaperId}`;
+      }
+      if (insertedLibraryId) {
+        await client`DELETE FROM libraries WHERE id = ${insertedLibraryId}`;
       }
       await client`DELETE FROM "user" WHERE id = ${TEST_USER_ID}`;
       await client.end();
