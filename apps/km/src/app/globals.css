@@ -236,13 +236,16 @@
     animation: tile-enter 180ms ease-out both;
   }
 
-  /* RG1 #67 — Chrome-default-style light blue text selection. */
+  /* RG1 #67 — Chrome-default-style light blue text selection. Alpha kept low
+     so PDF reader text-layer selections (where glyphs are rendered on the
+     canvas underneath a transparent text layer) stay readable through the
+     selection overlay. */
   ::selection {
-    background-color: rgba(174, 213, 255, 0.99);
+    background-color: rgba(174, 213, 255, 0.4);
     color: inherit;
   }
   ::-moz-selection {
-    background-color: rgba(174, 213, 255, 0.99);
+    background-color: rgba(174, 213, 255, 0.4);
     color: inherit;
   }
 
