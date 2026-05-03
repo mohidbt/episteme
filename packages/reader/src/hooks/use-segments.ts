@@ -37,7 +37,7 @@ export function useSegments(paperId: string): Result {
 
   useEffect(() => {
     const controller = new AbortController();
-    fetch(`/api/documents/${paperId}/segments`, { signal: controller.signal })
+    fetch(`/api/papers/${paperId}/pdf-sections`, { signal: controller.signal })
       .then((res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.json();

@@ -9,6 +9,6 @@ pdfjs.GlobalWorkerOptions.workerSrc = new URL(
 ).toString();
 
 export function usePdfDocument(paperId: string) {
-  const url = `/api/documents/${paperId}/file`;
+  const url = `/api/papers/${paperId}/file`;
   return { url };
 }
