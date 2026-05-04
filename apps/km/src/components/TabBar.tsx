@@ -252,6 +252,7 @@ function titleFromHref(href: string): string {
   if (href.startsWith("/drive/")) return lastSegment(href);
   if (href.startsWith("/papers/folder/")) return lastSegment(href);
   if (href.startsWith("/papersets")) return "Papersets";
+  if (/^\/papers\/[^/]+\/read(\/|$)/.test(href)) return "Reader";
   if (href.startsWith("/papers")) return "Papers";
   if (href.startsWith("/references/folder/")) return lastSegment(href);
   if (href.startsWith("/references")) return "References";

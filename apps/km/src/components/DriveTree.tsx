@@ -343,7 +343,7 @@ export function DriveTree({
               {tree}
               <DragOverlay>
                 {activeDrag ? (
-                  <div className="pointer-events-none rounded-md bg-sidebar-accent/80 px-2 py-1 text-sm text-sidebar-foreground ring-1 ring-foreground/20 shadow-sm">
+                  <div className="pointer-events-none rounded-md bg-sidebar-accent/80 px-2 py-1 text-[13px] text-sidebar-foreground ring-1 ring-foreground/20 shadow-sm">
                     {activeDrag.label}
                   </div>
                 ) : null}
@@ -368,7 +368,7 @@ export function DriveCollapsedShortcut() {
             <SidebarMenuButton
               render={<Link href="/" title="Drive" aria-label="Drive" />}
               isActive={pathname === "/"}
-              className="gap-2 rounded-md px-2.5 py-1.5 text-sm font-normal text-[var(--fg-2)] data-[active=true]:bg-[var(--bg-roof-2)] data-[active=true]:font-medium data-[active=true]:text-[var(--fg)] hover:bg-[var(--bg-roof-2)]"
+              className="gap-2 rounded-md px-2.5 py-1.5 text-[13px] font-normal text-[var(--fg-2)] data-[active=true]:bg-[var(--bg-roof-2)] data-[active=true]:font-medium data-[active=true]:text-[var(--fg)] hover:bg-[var(--bg-roof-2)]"
             >
               <FolderTree aria-hidden className="size-4" />
               <span>Drive</span>
@@ -444,7 +444,7 @@ function DriveFolderRow({
         aria-expanded={open}
         data-over={isOver ? "true" : undefined}
         className={cn(
-          "text-sm",
+          "text-[13px]",
           empty && "text-muted-foreground",
           isDragging && "opacity-50",
           "data-[over=true]:ring-1 data-[over=true]:ring-foreground/20 data-[over=true]:bg-sidebar-accent/50",
@@ -513,7 +513,7 @@ function DriveLeafRow({ item }: { item: TreeItem }) {
         }
         isActive={pathname === href}
         className={cn(
-          "text-sm",
+          "text-[13px]",
           "data-[active=true]:bg-[var(--bg-roof-2)] data-[active=true]:font-medium data-[active=true]:text-[var(--fg)]",
           !hasTitle && "text-muted-foreground italic",
           isDragging && "opacity-50",
@@ -558,7 +558,7 @@ function DriveSubLeaf({ item }: { item: TreeItem }) {
       }
       isActive={pathname === href}
       className={cn(
-        "text-sm",
+        "text-[13px]",
         "data-[active=true]:bg-transparent data-[active=true]:border-l-2 data-[active=true]:border-foreground data-[active=true]:font-medium data-[active=true]:rounded-l-none data-[active=true]:pl-[calc(0.5rem-2px)]",
         !hasTitle && "text-muted-foreground italic",
         isDragging && "opacity-50",
@@ -595,7 +595,7 @@ function TrashDroppable({
         render={<Link href={href} ref={setNodeRef} />}
         isActive={active}
         data-over={isOver ? "true" : undefined}
-        className="text-sm data-[active=true]:bg-transparent data-[active=true]:border-l-2 data-[active=true]:border-foreground data-[active=true]:font-medium data-[active=true]:rounded-l-none data-[active=true]:pl-[calc(0.5rem-2px)] data-[over=true]:ring-1 data-[over=true]:ring-foreground/20 data-[over=true]:bg-sidebar-accent/50"
+        className="text-[13px] data-[active=true]:bg-transparent data-[active=true]:border-l-2 data-[active=true]:border-foreground data-[active=true]:font-medium data-[active=true]:rounded-l-none data-[active=true]:pl-[calc(0.5rem-2px)] data-[over=true]:ring-1 data-[over=true]:ring-foreground/20 data-[over=true]:bg-sidebar-accent/50"
       >
         <Trash2 aria-hidden />
         <span>Trash</span>

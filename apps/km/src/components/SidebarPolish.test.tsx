@@ -172,7 +172,7 @@ describe("#161: Drive title styling", () => {
 // ── #162: Drive items font size ────────────────────────────────────────────
 
 describe("#162: Drive items font size", () => {
-  it("Drive leaf items use text-sm sizing", () => {
+  it("Drive leaf items match peer sidebar list item sizing", () => {
     const tree = baseTree({
       papers: [
         { id: "p1", title: "Test Paper", folderId: null },
@@ -183,8 +183,7 @@ describe("#162: Drive items font size", () => {
     fireEvent.click(screen.getByRole("button", { name: /drive/i }));
 
     const paperButton = screen.getByRole("button", { name: /test paper/i });
-    expect(paperButton.className).toContain("text-sm");
-    expect(paperButton.className).not.toContain("text-[13px]");
+    expect(paperButton.className).toContain("text-[13px]");
   });
 });
 

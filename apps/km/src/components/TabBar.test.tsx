@@ -219,6 +219,22 @@ describe("useTabs hook", () => {
     );
   });
 
+  it("infers '/papers/:id/read' tabs as Reader before title hydration", async () => {
+    mockPathname = "/papers/p-123/read";
+    const { TabBarProvider, useTabs } = await import("./TabBar");
+    let api: ReturnType<typeof useTabs> | null = null;
+    function Probe() {
+      api = useTabs();
+      return null;
+    }
+    render(
+      <TabBarProvider>
+        <Probe />
+      </TabBarProvider>,
+    );
+    expect(api!.tabs.find((t) => t.href === "/papers/p-123/read")?.title).toBe("Reader");
+  });
+
   it("reorderTabs moves tabs in local state", async () => {
     const { TabBarProvider, useTabs } = await import("./TabBar");
     let api: ReturnType<typeof useTabs> | null = null;
