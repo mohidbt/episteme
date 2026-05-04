@@ -113,6 +113,10 @@ export async function upsertThreadOnInvoke(
         status: "running",
         lastMessageAt: now,
         updatedAt: now,
+        // Backfill title on first invoke when the row was pre-created with a
+        // null title (NewConversationButton / AgentBall ensureThreadId path).
+        // COALESCE keeps any user-set title untouched.
+        title: sql`COALESCE(${agentThreads.title}, EXCLUDED.title)`,
       },
     })
     .returning();
