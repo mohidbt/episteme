@@ -1,0 +1,29 @@
+{
+  "version": "2026-05-04",
+  "scenarios": [
+    {
+      "id": "lit_triage_roundup",
+      "skill": "lit-triage",
+      "prompt": "Run a lit triage for this week and draft an inbox note with must-read, skim, and skip sections.",
+      "expected_tools_any": ["search_notes", "list_references"],
+      "expected_interrupt_tool": "create_note",
+      "must_include_text": ["## Must read", "## Skim", "## Skip"]
+    },
+    {
+      "id": "deep_read_pdf_summary",
+      "skill": "deep-read",
+      "prompt": "Deep read paper 11111111-1111-1111-1111-111111111111 and create a cited summary note with page anchors.",
+      "expected_tools_all": ["search_pdfs", "read_paper", "pdf_read_text", "highlight", "create_note"],
+      "expected_interrupt_tool": "highlight",
+      "must_include_text": ["[[pdf:11111111-1111-1111-1111-111111111111#p"]
+    },
+    {
+      "id": "synthesis_scratch_first",
+      "skill": "synthesis",
+      "prompt": "Synthesize predictive coding from my notes and draft to scratch first with citations on every claim.",
+      "expected_tools_all": ["search_notes", "read_note", "write_file"],
+      "must_not_call_tools": ["create_note"],
+      "must_include_text": ["/scratch/predictive-coding.md", "⚠ unsupported"]
+    }
+  ]
+}
