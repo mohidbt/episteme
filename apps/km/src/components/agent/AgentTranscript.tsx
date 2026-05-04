@@ -38,6 +38,11 @@ import {
   MessageResponse,
 } from "@/components/ai-elements/message";
 import {
+  InlineCitation,
+  InlineCitationCard,
+  InlineCitationCardTrigger,
+} from "@/components/ai-elements/inline-citation";
+import {
   Reasoning,
   ReasoningTrigger,
   ReasoningContent,
@@ -91,6 +96,7 @@ export interface AgentTranscriptProps {
   fullHeight?: boolean;
   pageContext?: PageContext;
   onSendMessage?: (text: string) => void;
+  onBeforeSendMessage?: (text: string) => void | Promise<void>;
   /** If provided, auto-send this prompt on mount (first render only). */
   initialPrompt?: string | null;
   /** If provided, auto-enable this skill for the first invoke. */
@@ -198,6 +204,7 @@ export function AgentTranscript({
   fullHeight = false,
   pageContext,
   onSendMessage,
+  onBeforeSendMessage,
   initialPrompt,
   initialSkill,
   initialMessages,
@@ -282,6 +289,7 @@ export function AgentTranscript({
 
   const defaultSend = useCallback(
     async (text: string) => {
+      await onBeforeSendMessage?.(text);
       abortRef.current?.abort();
       const controller = new AbortController();
       abortRef.current = controller;
@@ -337,7 +345,7 @@ export function AgentTranscript({
         onPdfExtractProgress?.(null);
       }
     },
-    [threadId, pageContext, router, onPdfExtractProgress],
+    [threadId, pageContext, router, onPdfExtractProgress, onBeforeSendMessage],
   );
 
   // Keep ref in sync so the auto-send effect can access it without TDZ
@@ -456,6 +464,20 @@ export function AgentTranscript({
     return out;
   }, [state.sourcesByMessage]);
 
+  const handleCitationClick = useCallback(
+    (citation: Citation) => {
+      const paperId = citation.paperId ?? citation.paper_id;
+      if (!paperId) return;
+      const page = citation.page && citation.page > 0 ? citation.page : 1;
+      const bbox = citation.bbox
+        ? `${citation.bbox.x0},${citation.bbox.y0},${citation.bbox.x1},${citation.bbox.y1}`
+        : null;
+      const hl = bbox ? `&hl=${encodeURIComponent(bbox)}` : "";
+      router.push(`/p/${paperId}?p=${page}${hl}`);
+    },
+    [router],
+  );
+
   return (
     <div
       className={`flex flex-col ${fullHeight ? "h-full" : "h-[520px]"}`}
@@ -477,6 +499,8 @@ export function AgentTranscript({
                 threadId={threadId}
                 onDecision={sendDecision}
                 onForkSubmit={handleForkSubmit}
+                citationsByMessage={state.sourcesByMessage}
+                onCitationClick={handleCitationClick}
               />
             ))
           )}
@@ -593,6 +617,8 @@ interface CardViewProps {
   threadId: string;
   onDecision: (cardId: string, type: "approve" | "reject") => Promise<boolean>;
   onForkSubmit: (messageId: string, editedText: string) => void;
+  citationsByMessage: Record<string, Citation[]>;
+  onCitationClick: (citation: Citation) => void;
 }
 
 function CardView({
@@ -602,10 +628,19 @@ function CardView({
   threadId,
   onDecision,
   onForkSubmit,
+  citationsByMessage,
+  onCitationClick,
 }: CardViewProps) {
   switch (card.kind) {
     case "text":
-      return <TextCardView card={card} onForkSubmit={onForkSubmit} />;
+      return (
+        <TextCardView
+          card={card}
+          onForkSubmit={onForkSubmit}
+          citations={card.role === "assistant" ? citationsByMessage[card.id] ?? [] : []}
+          onCitationClick={onCitationClick}
+        />
+      );
     case "thinking":
       return <ThinkingCardView card={card} streaming={streaming} />;
     case "tool":
@@ -631,9 +666,13 @@ function CardView({
 function TextCardView({
   card,
   onForkSubmit,
+  citations,
+  onCitationClick,
 }: {
   card: TextCardData;
   onForkSubmit: (messageId: string, editedText: string) => void;
+  citations: Citation[];
+  onCitationClick: (citation: Citation) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(card.text);
@@ -700,6 +739,24 @@ function TextCardView({
           </MessageResponse>
         </MessageContent>
       </Message>
+      {card.role === "assistant" && citations.length > 0 ? (
+        <div className="mt-1 flex flex-wrap gap-2">
+          {citations.map((citation, idx) => {
+            const chunkId = citation.chunkId ?? citation.chunk_id ?? `citation-${idx}`;
+            return (
+              <InlineCitation key={`${chunkId}-${idx}`}>
+                <InlineCitationCard>
+                  <InlineCitationCardTrigger
+                    data-testid={`inline-citation-pill-${chunkId}`}
+                    sources={[citation.url ?? "https://example.com"]}
+                    onClick={() => onCitationClick(citation)}
+                  />
+                </InlineCitationCard>
+              </InlineCitation>
+            );
+          })}
+        </div>
+      ) : null}
       {isUser ? (
         <button
           type="button"

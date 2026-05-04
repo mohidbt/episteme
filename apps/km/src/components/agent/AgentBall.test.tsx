@@ -450,7 +450,7 @@ describe("AgentBall", () => {
       // without pinning it exactly to the viewport floor.
       expect(ball.style.top).toMatch(/^\d+px$/);
       const top = parseInt(ball.style.top, 10);
-      expect(top).toBe(664);
+      expect(top).toBe(684);
     });
 
     it("persists x to localStorage but not y", () => {

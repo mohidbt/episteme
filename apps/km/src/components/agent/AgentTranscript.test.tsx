@@ -11,7 +11,7 @@ import {
 vi.mock("next/navigation", () => ({
   useRouter: () => ({
     refresh: vi.fn(),
-    push: vi.fn(),
+    push: mockRouterPush,
     replace: vi.fn(),
     back: vi.fn(),
     forward: vi.fn(),
@@ -19,6 +19,8 @@ vi.mock("next/navigation", () => ({
   }),
   usePathname: () => "/",
 }));
+
+const mockRouterPush = vi.fn();
 
 import { AgentTranscript } from "./AgentTranscript";
 import type { AgentEvent } from "@/lib/agent-events";
@@ -48,6 +50,7 @@ function streamResponse(events: AgentEvent[]): Response {
 
 beforeEach(() => {
   vi.stubGlobal("fetch", vi.fn());
+  mockRouterPush.mockReset();
 });
 
 afterEach(() => {
@@ -228,6 +231,109 @@ describe("AgentTranscript", () => {
       "/api/agents/km/invoke",
       expect.objectContaining({ method: "POST" }),
     );
+  });
+
+  it("agent message with 2 chunk refs renders 2 InlineCitation pills", async () => {
+    const events: AgentEvent[] = [
+      {
+        type: "text",
+        id: "msg-cite-1",
+        delta: "Answer with two refs [c1] and [c2].",
+        citations: [
+          {
+            chunk_id: "c1",
+            paper_id: "paper-1",
+            page: 4,
+            bbox: { x0: 12, y0: 20, x1: 44, y1: 66 },
+            snippet: "First snippet",
+          },
+          {
+            chunk_id: "c2",
+            paper_id: "paper-1",
+            page: 8,
+            bbox: { x0: 5, y0: 10, x1: 20, y1: 30 },
+            snippet: "Second snippet",
+          },
+        ],
+      },
+      { type: "done", thread_id: "t1" },
+    ];
+    (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+      streamResponse(events),
+    );
+
+    render(<AgentTranscript threadId="t1" />);
+    const ta = screen.getByLabelText("Message agent") as HTMLTextAreaElement;
+    fireEvent.change(ta, { target: { value: "go" } });
+    fireEvent.click(screen.getByRole("button", { name: /send/i }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("inline-citation-pill-c1")).toBeTruthy();
+      expect(screen.getByTestId("inline-citation-pill-c2")).toBeTruthy();
+    });
+  });
+
+  it("clicking citation pill navigates to paper page+bbox", async () => {
+    const events: AgentEvent[] = [
+      {
+        type: "text",
+        id: "msg-cite-2",
+        delta: "One ref [c1].",
+        citations: [
+          {
+            chunk_id: "c1",
+            paper_id: "paper-9",
+            page: 3,
+            bbox: { x0: 1, y0: 2, x1: 3, y1: 4 },
+            snippet: "Snippet",
+          },
+        ],
+      },
+      { type: "done", thread_id: "t1" },
+    ];
+    (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+      streamResponse(events),
+    );
+
+    render(<AgentTranscript threadId="t1" />);
+    const ta = screen.getByLabelText("Message agent") as HTMLTextAreaElement;
+    fireEvent.change(ta, { target: { value: "go" } });
+    fireEvent.click(screen.getByRole("button", { name: /send/i }));
+
+    const pill = await screen.findByTestId("inline-citation-pill-c1");
+    fireEvent.click(pill);
+    expect(mockRouterPush).toHaveBeenCalledWith("/p/paper-9?p=3&hl=1%2C2%2C3%2C4");
+  });
+
+  it("renders Task tool label as Subagent in tool header", () => {
+    render(
+      <AgentTranscript
+        threadId="t-task-label"
+        initialMessages={[
+          {
+            id: "a-1",
+            role: "assistant",
+            text: "",
+            parts: [
+              {
+                type: "tool-call",
+                id: "tc-task",
+                name: "Task",
+                args: { description: "delegate research" },
+              },
+              {
+                type: "tool-result",
+                id: "tc-task",
+                output: { ok: true },
+              },
+            ],
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getByText("Subagent")).toBeTruthy();
+    expect(screen.queryByText("Task")).toBeNull();
   });
 
   it("renders all expected card types from deep-read fixture stream", async () => {

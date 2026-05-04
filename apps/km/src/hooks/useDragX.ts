@@ -20,6 +20,16 @@ interface UseDragXOptions {
   bottomInsetRatio?: number;
 }
 
+export function computeBottomSnapTop(
+  viewportHeight: number,
+  elementHeight: number | undefined,
+  bottomInsetRatio: number,
+): number {
+  const bottomInset = viewportHeight * bottomInsetRatio;
+  const halfHeight = (elementHeight ?? 0) / 2;
+  return Math.max(0, viewportHeight - bottomInset - halfHeight);
+}
+
 /** Movement threshold (px) beyond which pointerDown+pointerUp counts as a drag, not a click. */
 const DRAG_THRESHOLD = 4;
 
@@ -141,14 +151,7 @@ export function useDragX({
       });
       if (axis === "xy" && snapY === "bottom") {
         if (typeof window !== "undefined") {
-          setY(
-            Math.max(
-              0,
-              window.innerHeight -
-                (elementHeight ?? 0) -
-                window.innerHeight * bottomInsetRatio,
-            ),
-          );
+          setY(computeBottomSnapTop(window.innerHeight, elementHeight, bottomInsetRatio));
         }
       }
     },
@@ -163,11 +166,10 @@ export function useDragX({
       setY((curr) => {
         if (curr === null) return curr;
         if (snapY === "bottom") {
-          return Math.max(
-            0,
-            window.innerHeight -
-              (elementHeight ?? 0) -
-              window.innerHeight * bottomInsetRatio,
+          return computeBottomSnapTop(
+            window.innerHeight,
+            elementHeight,
+            bottomInsetRatio,
           );
         }
         return clampY(curr);

@@ -18,6 +18,19 @@ interface AgentBallProps {
 
 type BallPreset = "inactive" | "active" | "working";
 
+const UUID_PREFIX_TITLE_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}:.+$/i;
+
+export function isUuidPrefixedThreadTitle(title: string | null | undefined): boolean {
+  return !!title && UUID_PREFIX_TITLE_RE.test(title.trim());
+}
+
+export function deriveThreadTitleFromPrompt(prompt: string, maxLen = 60): string | null {
+  const collapsed = prompt.replace(/\s+/g, " ").trim();
+  if (!collapsed) return null;
+  return collapsed.slice(0, maxLen);
+}
+
 async function ensureThreadId(signal: AbortSignal): Promise<string | null> {
   try {
     const created = await fetch("/api/agent/threads", {
@@ -94,6 +107,8 @@ export function AgentBall(_props: AgentBallProps) {
   });
   const panelDrag = useDragX({ storageKey: "agent-convo-x", elementWidth: 400 });
   const ballRef = useRef<HTMLButtonElement | null>(null);
+  const newThreadIdsRef = useRef<Set<string>>(new Set());
+  const firstMessageSeenRef = useRef<Set<string>>(new Set());
   const open = agentBall.open;
   const working = agentBall.working;
   const pathname = usePathname() ?? "/";
@@ -139,6 +154,7 @@ export function AgentBall(_props: AgentBallProps) {
       const data = (await res.json()) as { thread?: { threadId: string } };
       const id = data.thread?.threadId;
       if (id) {
+        newThreadIdsRef.current.add(id);
         setThreadId(id);
       }
     } catch {
@@ -163,10 +179,45 @@ export function AgentBall(_props: AgentBallProps) {
     if (!open || threadId) return;
     const ctl = new AbortController();
     void ensureThreadId(ctl.signal).then((id) => {
-      if (!ctl.signal.aborted && id) setThreadId(id);
+      if (!ctl.signal.aborted && id) {
+        newThreadIdsRef.current.add(id);
+        setThreadId(id);
+      }
     });
     return () => ctl.abort();
   }, [open, threadId]);
+
+  const maybeRenameThreadFromFirstPrompt = useCallback(
+    async (text: string) => {
+      const id = threadId;
+      if (!id) return;
+      if (firstMessageSeenRef.current.has(id)) return;
+      firstMessageSeenRef.current.add(id);
+      if (!newThreadIdsRef.current.has(id)) return;
+      try {
+        const getRes = await fetch(`/api/agent/threads/${id}`, {
+          cache: "no-store",
+          credentials: "include",
+        });
+        if (!getRes.ok) return;
+        const data = (await getRes.json()) as {
+          thread?: { title?: string | null };
+        };
+        if (!isUuidPrefixedThreadTitle(data.thread?.title)) return;
+        const title = deriveThreadTitleFromPrompt(text, 60);
+        if (!title) return;
+        await fetch(`/api/agent/threads/${id}`, {
+          method: "PATCH",
+          credentials: "include",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ title }),
+        });
+      } catch {
+        // ignore rename failures; message send continues
+      }
+    },
+    [threadId],
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -211,7 +262,7 @@ export function AgentBall(_props: AgentBallProps) {
         data-preset={preset}
         style={inlineStyle}
         {...ballDrag.pointerHandlers}
-        className={`${positionClass} inline-flex items-center justify-center text-foreground drop-shadow-md hover:scale-105 transition-[opacity,transform] duration-150 ease-out touch-none select-none`}
+        className={`${positionClass} inline-flex items-center justify-center rounded-xl text-foreground drop-shadow-md hover:scale-105 transition-[opacity,transform] duration-150 ease-out touch-none select-none`}
       >
         <MatrixBadge preset={preset} />
       </button>
@@ -258,11 +309,25 @@ export function AgentBall(_props: AgentBallProps) {
     <>
       {collapsed && !fullscreen ? (
         <button
+          ref={ballRef}
           type="button"
           data-testid="agent-ball-collapsed"
           aria-label="Reopen agent"
           onClick={() => setCollapsed(false)}
-          className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 inline-flex items-center justify-center text-foreground drop-shadow-md hover:scale-105 transition-[opacity,transform] duration-150 ease-out touch-none select-none"
+          style={{
+            ...(ballDrag.x !== null ? { left: `${ballDrag.x}px` } : {}),
+            ...(ballDrag.y !== null ? { top: `${ballDrag.y}px` } : {}),
+          }}
+          {...ballDrag.pointerHandlers}
+          className={`${
+            ballDrag.x !== null
+              ? ballDrag.y !== null
+                ? "fixed z-50"
+                : "fixed bottom-4 z-50"
+              : ballDrag.y !== null
+                ? "fixed left-1/2 -translate-x-1/2 z-50"
+                : "fixed bottom-4 left-1/2 -translate-x-1/2 z-50"
+          } inline-flex items-center justify-center rounded-xl text-foreground drop-shadow-md hover:scale-105 transition-[opacity,transform] duration-200 ease-out touch-none select-none animate-in fade-in-0 zoom-in-95`}
         >
           <MatrixBadge preset={preset} />
         </button>
@@ -356,6 +421,7 @@ export function AgentBall(_props: AgentBallProps) {
             fullHeight
             initialPrompt={prefilledPrompt}
             initialSkill={prefilledSkill}
+            onBeforeSendMessage={maybeRenameThreadFromFirstPrompt}
             onPdfExtractProgress={setPdfExtractProgress}
           />
         ) : (
