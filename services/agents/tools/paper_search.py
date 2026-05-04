@@ -17,6 +17,7 @@ from tools.search_backends import PaperResult, SemanticScholarSearch
 from tools.search_backends.semantic_scholar import S2Error
 
 logger = logging.getLogger(__name__)
+_SEMANTIC_SCHOLAR_SEARCH_URL = "https://api.semanticscholar.org/graph/v1/paper/search"
 
 
 def _candidate_dict(result: PaperResult, rank: int) -> dict:
@@ -241,6 +242,38 @@ async def agentic_fetch_papers(
     }
 
 
+@tool
+async def search_papers_online(query: str) -> list[dict]:
+    """Search Semantic Scholar and return up to 5 online paper candidates."""
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(
+            _SEMANTIC_SCHOLAR_SEARCH_URL,
+            params={
+                "query": query,
+                "limit": 5,
+                "fields": "title,authors,year,abstract,paperId,url",
+            },
+        )
+        resp.raise_for_status()
+        payload = resp.json()
+
+    out: list[dict] = []
+    for row in payload.get("data", [])[:5]:
+        abstract = row.get("abstract") or ""
+        authors = row.get("authors") or []
+        out.append(
+            {
+                "title": row.get("title"),
+                "authors": [a.get("name") for a in authors if isinstance(a, dict) and a.get("name")],
+                "year": row.get("year"),
+                "abstract": abstract[:300],
+                "paperId": row.get("paperId"),
+                "url": row.get("url"),
+            }
+        )
+    return out
+
+
 agentic_fetch_papers.metadata = {"require_approval": True}
 
-TOOLS = [agentic_search_papers, agentic_fetch_papers]
+TOOLS = [agentic_search_papers, agentic_fetch_papers, search_papers_online]

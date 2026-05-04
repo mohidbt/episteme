@@ -68,6 +68,22 @@ def test_parse_blocks_regression():
     }
 
 
+@pytest.mark.asyncio
+async def test_run_chandra_uses_balanced_mode():
+    """run_chandra calls ConvertOptions with mode='balanced'."""
+    mock_client = AsyncMock()
+    mock_client.__aenter__.return_value = mock_client
+    mock_client.__aexit__.return_value = None
+    mock_client.convert.return_value = {"ok": True}
+
+    with patch("datalab_sdk.AsyncDatalabClient", return_value=mock_client), patch(
+        "datalab_sdk.ConvertOptions"
+    ) as mock_convert_options:
+        await chandra_lib.run_chandra("/tmp/p.pdf", "ck-test")
+
+    mock_convert_options.assert_called_once_with(output_format="json", mode="balanced")
+
+
 # ---------------------------------------------------------------------------
 # ensure_parsed — mock conn fixture.
 # ---------------------------------------------------------------------------

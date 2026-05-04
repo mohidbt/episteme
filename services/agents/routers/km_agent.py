@@ -230,6 +230,43 @@ def _extract_error_message(e: Exception) -> str:
     return str(e)
 
 
+def _extract_rag_citations_from_tool_result(ev: dict, mapped: tuple[str, dict]) -> list[dict]:
+    """Extract normalized citations from read_paper(kind='rag') tool output."""
+    if mapped[0] != "tool_result":
+        return []
+    if ev.get("name") != "read_paper":
+        return []
+    output = mapped[1].get("output")
+    if not isinstance(output, dict):
+        return []
+    paper_id = output.get("paper_id")
+    if not isinstance(paper_id, str) or not paper_id:
+        return []
+    blocks = output.get("blocks")
+    if not isinstance(blocks, list):
+        return []
+    citations: list[dict] = []
+    for block in blocks:
+        if not isinstance(block, dict):
+            continue
+        chunk_id = block.get("block_id")
+        page = block.get("page")
+        if not isinstance(chunk_id, str):
+            continue
+        citation: dict = {
+            "chunk_id": chunk_id,
+            "paper_id": paper_id,
+            "snippet": (block.get("text") or "")[:280] if isinstance(block.get("text"), str) else "",
+        }
+        if isinstance(page, int):
+            citation["page"] = page
+        bbox = block.get("bbox")
+        if isinstance(bbox, dict):
+            citation["bbox"] = bbox
+        citations.append(citation)
+    return citations
+
+
 def _extra_events(ev: dict, mapped: tuple[str, dict]) -> list[tuple[str, dict]]:
     """Derive piggyback SSE events from a primary mapped event.
 
@@ -392,6 +429,7 @@ async def invoke(req: Request, auth: InternalAuthDep):
     async def gen():
         step = 0
         thread_id = body["thread_id"]
+        pending_citations: list[dict] = []
         configurable = _build_configurable(
             thread_id=thread_id,
             user_id=user_id,
@@ -417,7 +455,20 @@ async def invoke(req: Request, auth: InternalAuthDep):
                         yield format_typed("recursion_step", {"step": step})
                 mapped = _map_event(ev)
                 if mapped:
-                    yield format_typed(mapped[0], mapped[1])
+                    extracted = _extract_rag_citations_from_tool_result(ev, mapped)
+                    if extracted:
+                        pending_citations = extracted
+                    if mapped[0] == "text" and pending_citations:
+                        payload = dict(mapped[1])
+                        payload["citations"] = pending_citations
+                        yield format_typed(mapped[0], payload)
+                        yield format_typed("sources", {
+                            "message_id": payload["id"],
+                            "citations": pending_citations,
+                        })
+                        pending_citations = []
+                    else:
+                        yield format_typed(mapped[0], mapped[1])
                     for extra in _extra_events(ev, mapped):
                         yield format_typed(extra[0], extra[1])
             for ev_type, payload in _flush_pending_interrupts(agent, thread_id):

@@ -137,7 +137,7 @@ async def run_chandra(file_path: str, api_key: str):
     async with AsyncDatalabClient(api_key=api_key) as chandra:
         return await chandra.convert(
             file_path=file_path,
-            options=ConvertOptions(output_format="json", mode="accurate"),
+            options=ConvertOptions(output_format="json", mode="balanced"),
             max_polls=120,
         )
 

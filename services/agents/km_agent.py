@@ -206,7 +206,7 @@ _CORE_TOOL_NAMES: frozenset[str] = frozenset({
     # NOTE: search_library is intentionally NOT core — it is cross-library RAG
     # and should be opted into per skill (see deep-read SKILL.md) rather than
     # blanket-promoted across every skill context.
-    "agentic_search_papers", "agentic_fetch_papers",
+    "agentic_search_papers", "agentic_fetch_papers", "search_papers_online",
     # papersets / extraction spreadsheets — list, read, and per-cell enrichment
     # are first-class user content (like notes), not gated to data-extract skill.
     # Without this, "list my papersets" silently routed to list_pdfs whenever

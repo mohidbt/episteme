@@ -57,9 +57,12 @@ class TodosEvent(TypedDict):
 
 class Citation(TypedDict):
     chunk_id: str
+    paper_id: NotRequired[str]
     title: NotRequired[str]
     url: NotRequired[str]
     page: NotRequired[int]
+    snippet: NotRequired[str]
+    bbox: NotRequired[dict[str, float] | None]
 
 
 class SourcesEvent(TypedDict):

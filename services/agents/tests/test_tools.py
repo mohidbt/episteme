@@ -21,7 +21,7 @@ CFG = {"configurable": {"user_id": USER}}
 def test_all_tools_count():
     from tools import ALL_TOOLS  # noqa: PLC0415
 
-    assert len(ALL_TOOLS) == 25, f"Expected 25, got {len(ALL_TOOLS)}"
+    assert len(ALL_TOOLS) == 26, f"Expected 26, got {len(ALL_TOOLS)}"
 
 
 def test_all_tools_are_base_tool():
@@ -61,6 +61,7 @@ def test_all_tools_contains_expected_names():
         "make_public",
         "agentic_search_papers",
         "agentic_fetch_papers",
+        "search_papers_online",
         "web_search",
         "read_paper",
         "browse_papersets",

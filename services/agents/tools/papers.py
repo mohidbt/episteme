@@ -59,6 +59,7 @@ class PaperBlock(TypedDict):
     section: str | None
     page: int
     text: str
+    bbox: dict[str, float] | None
 
 
 class PaperSlice(TypedDict):
@@ -133,6 +134,7 @@ def _row_to_block(row, paper_id: str, header_lookup: dict[int, str]) -> PaperBlo
         "section": section,
         "page": row["page"],
         "text": text,
+        "bbox": row.get("bbox"),
     }
 
 
@@ -196,7 +198,7 @@ async def _query_sections(conn, paper_id: str, names: list[str]) -> list:
                    WHERE h.order_index > m.start_oi) AS end_oi
             FROM matched m
         )
-        SELECT s.order_index, s.kind, s.page, s.payload
+        SELECT s.order_index, s.kind, s.page, s.bbox, s.payload
           FROM document_segments s
           JOIN windows w
             ON s.order_index >= w.start_oi
@@ -212,7 +214,7 @@ async def _query_sections(conn, paper_id: str, names: list[str]) -> list:
 async def _query_blocks(conn, paper_id: str, types: list[str]) -> list:
     return await conn.fetch(
         """
-        SELECT order_index, kind, page, payload
+        SELECT order_index, kind, page, bbox, payload
           FROM document_segments
          WHERE paper_id = $1
            AND kind = ANY($2::text[])
@@ -226,7 +228,7 @@ async def _query_blocks(conn, paper_id: str, types: list[str]) -> list:
 async def _query_pages(conn, paper_id: str, lo: int, hi: int) -> list:
     return await conn.fetch(
         """
-        SELECT order_index, kind, page, payload
+        SELECT order_index, kind, page, bbox, payload
           FROM document_segments
          WHERE paper_id = $1
            AND page BETWEEN $2 AND $3
@@ -242,7 +244,7 @@ async def _query_rag_fts(conn, paper_id: str, query: str, top_k: int) -> list:
     # TODO(1.5): vector path — query paper_embeddings if rows exist.
     return await conn.fetch(
         """
-        SELECT order_index, kind, page, payload,
+        SELECT order_index, kind, page, bbox, payload,
                ts_rank(
                  to_tsvector('english', coalesce(payload->>'text', payload->>'caption', payload->>'latex', '')),
                  plainto_tsquery('english', $2)
@@ -263,7 +265,7 @@ async def _query_rag_fts(conn, paper_id: str, query: str, top_k: int) -> list:
 async def _query_full(conn, paper_id: str) -> list:
     return await conn.fetch(
         """
-        SELECT order_index, kind, page, payload
+        SELECT order_index, kind, page, bbox, payload
           FROM document_segments
          WHERE paper_id = $1
          ORDER BY order_index

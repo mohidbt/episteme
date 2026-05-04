@@ -2,11 +2,12 @@
 from __future__ import annotations
 
 import json
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from tools.paper_search import agentic_fetch_papers, agentic_search_papers
+from tools.paper_search import search_papers_online
 
 
 # -- Fixtures ----------------------------------------------------------------
@@ -244,6 +245,50 @@ async def test_fetch_download_failure():
 
 
 # -- Helper ------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_search_papers_online_parses_semantic_scholar_response():
+    response_payload = {
+        "data": [
+            {
+                "title": "Paper A",
+                "authors": [{"name": "Alice"}, {"name": "Bob"}],
+                "year": 2023,
+                "abstract": "x" * 500,
+                "paperId": "pid-a",
+                "url": "https://www.semanticscholar.org/paper/pid-a",
+            },
+            {
+                "title": "Paper B",
+                "authors": [],
+                "year": 2021,
+                "abstract": None,
+                "paperId": "pid-b",
+                "url": "https://www.semanticscholar.org/paper/pid-b",
+            },
+        ]
+    }
+
+    mock_resp = MagicMock()
+    mock_resp.json.return_value = response_payload
+    mock_resp.raise_for_status.return_value = None
+
+    mock_client = AsyncMock()
+    mock_client.__aenter__.return_value = mock_client
+    mock_client.__aexit__.return_value = None
+    mock_client.get.return_value = mock_resp
+
+    with patch("tools.paper_search.httpx.AsyncClient", return_value=mock_client):
+        result = await search_papers_online.ainvoke({"query": "transformers"})
+
+    assert isinstance(result, list)
+    assert len(result) == 2
+    assert set(result[0].keys()) == {"title", "authors", "year", "abstract", "paperId", "url"}
+    assert result[0]["authors"] == ["Alice", "Bob"]
+    assert len(result[0]["abstract"]) == 300
+    assert result[1]["authors"] == []
+    assert result[1]["abstract"] == ""
 
 
 def _s2_to_paper_result(s2_data: dict, confidence: str = "medium"):
