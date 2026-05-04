@@ -112,6 +112,7 @@ export interface AgentTranscriptState {
   };
   terminated: boolean;
   recursionStep?: number;
+  recursionLimit?: number;
 }
 
 export const initialAgentTranscriptState: AgentTranscriptState = {
@@ -373,7 +374,11 @@ export function agentStreamReducer(
     }
 
     case "recursion_step": {
-      return { ...state, recursionStep: event.step };
+      return {
+        ...state,
+        recursionStep: event.step,
+        recursionLimit: event.limit ?? state.recursionLimit,
+      };
     }
 
     default: {

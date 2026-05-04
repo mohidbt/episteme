@@ -67,7 +67,7 @@ export type AgentEvent =
   | { type: "suggestion"; items: string[] }
   | { type: "done"; thread_id: string }
   | { type: "error"; code: string; message: string; retriable: boolean }
-  | { type: "recursion_step"; step: number };
+  | { type: "recursion_step"; step: number; limit?: number };
 
 export const AGENT_EVENT_TYPES = [
   "text",

@@ -574,7 +574,7 @@ export function AgentTranscript({
                   data-testid="recursion-step"
                   className="text-xs text-muted-foreground"
                 >
-                  step {state.recursionStep} / 100
+                  step {state.recursionStep} / {state.recursionLimit ?? 100}
                 </span>
               ) : null}
             </div>

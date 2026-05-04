@@ -43,7 +43,10 @@ _AGENT_RECURSION_LIMIT = 100
 # overcounts vs LangGraph's internal super-step counter — Deep Agents nest
 # subgraphs — but it's a stable, observable signal: a doubling/tripling
 # pattern means subagents are looping, which is exactly what we want to see.
-_RECURSION_STEP_INTERVAL = 10
+# UI sub-counter: emit every step so the indicator advances visibly. We log
+# at a coarser interval to keep server logs readable.
+_RECURSION_STEP_INTERVAL = 1
+_RECURSION_LOG_INTERVAL = 10
 
 _GUEST_FORBIDDEN = {"error": "guests cannot use agents", "code": "guest_forbidden"}
 
@@ -481,12 +484,16 @@ async def invoke(req: Request, auth: InternalAuthDep):
             ):
                 if ev.get("event") == "on_chain_end":
                     step += 1
-                    if step % _RECURSION_STEP_INTERVAL == 0:
+                    if step % _RECURSION_LOG_INTERVAL == 0:
                         logger.info(
                             "agent recursion step=%d thread_id=%s",
                             step, thread_id,
                         )
-                        yield format_typed("recursion_step", {"step": step})
+                    if step % _RECURSION_STEP_INTERVAL == 0:
+                        yield format_typed(
+                            "recursion_step",
+                            {"step": step, "limit": _AGENT_RECURSION_LIMIT},
+                        )
                 mapped = _map_event(ev)
                 if mapped:
                     extracted = _extract_rag_citations_from_tool_result(ev, mapped)
@@ -602,12 +609,16 @@ async def resume(req: Request, auth: InternalAuthDep):
             ):
                 if ev.get("event") == "on_chain_end":
                     step += 1
-                    if step % _RECURSION_STEP_INTERVAL == 0:
+                    if step % _RECURSION_LOG_INTERVAL == 0:
                         logger.info(
                             "agent recursion step=%d thread_id=%s",
                             step, thread_id,
                         )
-                        yield format_typed("recursion_step", {"step": step})
+                    if step % _RECURSION_STEP_INTERVAL == 0:
+                        yield format_typed(
+                            "recursion_step",
+                            {"step": step, "limit": _AGENT_RECURSION_LIMIT},
+                        )
                 mapped = _map_event(ev)
                 if mapped:
                     yield format_typed(mapped[0], mapped[1])
