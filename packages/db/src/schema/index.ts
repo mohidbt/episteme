@@ -31,3 +31,6 @@ export * from "./user-preferences";
 export * from "./agent-threads";
 export * from "./openrouter-catalog";
 export * from "./papersets";
+export * from "./semantic-edges";
+export * from "./reference-embeddings";
+export * from "./pending-recompute";
