@@ -249,42 +249,44 @@ async def test_fetch_download_failure():
 
 @pytest.mark.asyncio
 async def test_search_papers_online_parses_semantic_scholar_response():
-    response_payload = {
-        "data": [
-            {
-                "title": "Paper A",
-                "authors": [{"name": "Alice"}, {"name": "Bob"}],
-                "year": 2023,
-                "abstract": "x" * 500,
-                "paperId": "pid-a",
-                "url": "https://www.semanticscholar.org/paper/pid-a",
-            },
-            {
-                "title": "Paper B",
-                "authors": [],
-                "year": 2021,
-                "abstract": None,
-                "paperId": "pid-b",
-                "url": "https://www.semanticscholar.org/paper/pid-b",
-            },
-        ]
-    }
+    from tools.search_backends.semantic_scholar import PaperResult
 
-    mock_resp = MagicMock()
-    mock_resp.json.return_value = response_payload
-    mock_resp.raise_for_status.return_value = None
+    fake_results = [
+        PaperResult(
+            paper_id="pid-a",
+            title="Paper A",
+            authors=["Alice", "Bob"],
+            year=2023,
+            venue=None,
+            doi=None,
+            open_access_pdf_url="https://www.semanticscholar.org/paper/pid-a",
+            citation_count=None,
+            abstract_snippet="x" * 500,
+            match_confidence="medium",
+        ),
+        PaperResult(
+            paper_id="pid-b",
+            title="Paper B",
+            authors=[],
+            year=2021,
+            venue=None,
+            doi=None,
+            open_access_pdf_url="https://www.semanticscholar.org/paper/pid-b",
+            citation_count=None,
+            abstract_snippet="",
+            match_confidence="medium",
+        ),
+    ]
 
-    mock_client = AsyncMock()
-    mock_client.__aenter__.return_value = mock_client
-    mock_client.__aexit__.return_value = None
-    mock_client.get.return_value = mock_resp
-
-    with patch("tools.paper_search.httpx.AsyncClient", return_value=mock_client):
+    with patch(
+        "tools.paper_search.SemanticScholarSearch.search_by_query",
+        new=AsyncMock(return_value=fake_results),
+    ):
         result = await search_papers_online.ainvoke({"query": "transformers"})
 
     assert isinstance(result, list)
     assert len(result) == 2
-    assert set(result[0].keys()) == {"title", "authors", "year", "abstract", "paperId", "url"}
+    assert set(result[0].keys()) == {"title", "authors", "year", "abstract", "paperId", "doi", "url"}
     assert result[0]["authors"] == ["Alice", "Bob"]
     assert len(result[0]["abstract"]) == 300
     assert result[1]["authors"] == []

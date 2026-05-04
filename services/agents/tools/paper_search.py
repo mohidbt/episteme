@@ -17,7 +17,6 @@ from tools.search_backends import PaperResult, SemanticScholarSearch
 from tools.search_backends.semantic_scholar import S2Error
 
 logger = logging.getLogger(__name__)
-_SEMANTIC_SCHOLAR_SEARCH_URL = "https://api.semanticscholar.org/graph/v1/paper/search"
 
 
 def _candidate_dict(result: PaperResult, rank: int) -> dict:
@@ -62,7 +61,24 @@ async def agentic_search_papers(
     ref = await km_get(f"/api/references/{reference_id}", user_id=user_id)
 
     if isinstance(ref, dict) and ref.get("error"):
-        return {"found": False, "suggestion": "Reference not found"}
+        status = ref.get("status")
+        if status == 404:
+            suggestion = (
+                f"Reference {reference_id} not found in your library. "
+                "Verify the reference_id (use list_references), or call this "
+                "tool with a different reference."
+            )
+        elif status in (401, 403):
+            suggestion = (
+                f"Not authorized to read reference {reference_id} "
+                f"(status {status}). It may belong to a different account."
+            )
+        else:
+            suggestion = (
+                f"Reference lookup failed (status {status}). "
+                f"KM body: {ref.get('body')!r}"
+            )
+        return {"found": False, "suggestion": suggestion, "status": status}
 
     csl = ref.get("cslJson") or {}
     logger.debug("ref keys=%s csl keys=%s", list(ref.keys()), list(csl.keys()) if csl else [])
@@ -243,32 +259,38 @@ async def agentic_fetch_papers(
 
 
 @tool
-async def search_papers_online(query: str) -> list[dict]:
-    """Search Semantic Scholar and return up to 5 online paper candidates."""
-    async with httpx.AsyncClient() as client:
-        resp = await client.get(
-            _SEMANTIC_SCHOLAR_SEARCH_URL,
-            params={
-                "query": query,
-                "limit": 5,
-                "fields": "title,authors,year,abstract,paperId,url",
-            },
-        )
-        resp.raise_for_status()
-        payload = resp.json()
+async def search_papers_online(query: str) -> object:
+    """Search Semantic Scholar and return up to 5 online paper candidates.
+
+    Routes through the shared SemanticScholarSearch backend, which throttles
+    requests and retries on 429 with exponential backoff (3s/6s/12s). On
+    persistent failure returns a structured error so the agent can adapt.
+    """
+    backend = SemanticScholarSearch()
+    try:
+        results = await backend.search_by_query(query, limit=5)
+    except S2Error as exc:
+        return {
+            "error": True,
+            "status": exc.status,
+            "message": (
+                f"Semantic Scholar API error (status {exc.status}). "
+                "Service may be rate-limiting; try again in a minute."
+            ),
+        }
 
     out: list[dict] = []
-    for row in payload.get("data", [])[:5]:
-        abstract = row.get("abstract") or ""
-        authors = row.get("authors") or []
+    for r in results[:5]:
+        snippet = r.abstract_snippet or ""
         out.append(
             {
-                "title": row.get("title"),
-                "authors": [a.get("name") for a in authors if isinstance(a, dict) and a.get("name")],
-                "year": row.get("year"),
-                "abstract": abstract[:300],
-                "paperId": row.get("paperId"),
-                "url": row.get("url"),
+                "title": r.title,
+                "authors": r.authors or [],
+                "year": r.year,
+                "abstract": snippet[:300],
+                "paperId": r.paper_id,
+                "doi": r.doi,
+                "url": r.open_access_pdf_url,
             }
         )
     return out
