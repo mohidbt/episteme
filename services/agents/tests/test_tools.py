@@ -294,21 +294,50 @@ async def test_search_pdfs_calls_km_get():
 @pytest.mark.asyncio
 async def test_highlight_calls_km_post():
     from tools.pdfs import highlight  # noqa: PLC0415
+    from deps import db as db_module  # noqa: PLC0415
 
     assert isinstance(highlight, BaseTool)
 
+    class _Conn:
+        async def fetch(self, *_args, **_kwargs):
+            return [{"page": 0, "bbox": {"x0": 10, "y0": 20, "x1": 30, "y1": 40}, "order_index": 7}]
+
+    class _Acquire:
+        async def __aenter__(self):
+            return _Conn()
+
+        async def __aexit__(self, *_exc):
+            return False
+
+    class _Pool:
+        def acquire(self):
+            return _Acquire()
+
     with patch("tools.pdfs.km_post", new_callable=AsyncMock) as mock_post:
+        prev_pool = db_module._pool
+        db_module._pool = _Pool()
         mock_post.return_value = {"id": "hl1"}
-        await highlight.ainvoke(
-            {"pdf_id": "pdf1", "page": 3, "note": "important"}, config=CFG
-        )
+        try:
+            await highlight.ainvoke(
+                {
+                    "pdf_id": "pdf1",
+                    "block_ids": ["pdf1:p0:7"],
+                    "note": "important",
+                    "color": "yellow",
+                },
+                config=CFG,
+            )
+        finally:
+            db_module._pool = prev_pool
 
     call_args = mock_post.call_args
     assert call_args.args[0] == "/api/paper-highlights"
     body = call_args.args[1]
     assert body["paperId"] == "pdf1"
-    assert body["page"] == 3
+    assert body["page"] == 1
+    assert body["bbox"][0]["page"] == 1
     assert body["noteMd"] == "important"
+    assert body["color"] == "yellow"
     assert call_args.kwargs["user_id"] == USER
 
 

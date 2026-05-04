@@ -242,7 +242,7 @@ async def _query_pages(conn, paper_id: str, lo: int, hi: int) -> list:
 
 async def _query_rag_fts(conn, paper_id: str, query: str, top_k: int) -> list:
     # TODO(1.5): vector path — query paper_embeddings if rows exist.
-    return await conn.fetch(
+    rows = await conn.fetch(
         """
         SELECT order_index, kind, page, bbox, payload,
                ts_rank(
@@ -258,6 +258,40 @@ async def _query_rag_fts(conn, paper_id: str, query: str, top_k: int) -> list:
         """,
         paper_id,
         query,
+        top_k,
+    )
+    if rows:
+        return rows
+
+    # Fallback: permissive tokenized substring match. This avoids total
+    # retrieval failure when strict FTS tokenization/stemming misses domain
+    # terms and keeps tool output useful for follow-up highlight calls.
+    terms = [t.strip() for t in query.split() if len(t.strip()) >= 3]
+    if not terms:
+        return []
+    patterns = [f"%{t}%" for t in terms[:12]]
+    return await conn.fetch(
+        """
+        SELECT order_index, kind, page, bbox, payload,
+               (
+                 SELECT count(*)
+                   FROM unnest($2::text[]) p
+                  WHERE coalesce(payload->>'text', payload->>'caption', payload->>'latex', '')
+                        ILIKE p
+               ) AS rank
+          FROM document_segments
+         WHERE paper_id = $1
+           AND EXISTS (
+             SELECT 1
+               FROM unnest($2::text[]) p
+              WHERE coalesce(payload->>'text', payload->>'caption', payload->>'latex', '')
+                    ILIKE p
+           )
+         ORDER BY rank DESC, order_index
+         LIMIT $3
+        """,
+        paper_id,
+        patterns,
         top_k,
     )
 

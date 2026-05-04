@@ -175,19 +175,22 @@ async def highlight(
     bbox_list: list[dict] = []
     page_for_payload: int | None = None
     for row in rows:
+        # document_segments.page is stored 0-based; KM highlight API expects
+        # 1-based positive page numbers.
+        page_1 = int(row["page"]) + 1
         bbox_raw = row["bbox"]
         bbox = json.loads(bbox_raw) if isinstance(bbox_raw, str) else bbox_raw
         if not bbox:
             continue
         bbox_list.append({
-            "page": row["page"],
+            "page": page_1,
             "x0": float(bbox["x0"]),
             "y0": float(bbox["y0"]),
             "x1": float(bbox["x1"]),
             "y1": float(bbox["y1"]),
         })
         if page_for_payload is None:
-            page_for_payload = row["page"]
+            page_for_payload = page_1
     if not bbox_list or page_for_payload is None:
         return {"error": True, "message": "matched blocks have no bbox data"}
 

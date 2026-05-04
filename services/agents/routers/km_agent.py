@@ -371,6 +371,9 @@ def _build_reader_context_prefix(active_paper_id: str) -> str:
         f"- pdf_explain_passage(paper_id=\"{active_paper_id}\", page=N, "
         f"text=\"...\") to explain a selected passage;\n"
         f"- search_pdfs(query=\"...\") / list_pdfs() to find or list papers.\n"
+        f"If read_paper(scope.kind=\"rag\") returns zero blocks, do not stop: "
+        f"immediately retry with a simpler query, then fall back to "
+        f"read_paper(scope.kind=\"full\") and continue.\n"
         f"Use these names verbatim. Do NOT invent tools (e.g. read_pdf) and do "
         f"NOT call search_library — it is skill-gated and may be unavailable."
     )
@@ -397,6 +400,11 @@ def _build_configurable(
     if active_paper_id:
         configurable["paper_id"] = active_paper_id
     ocr_key = auth.get("ocr_key") if isinstance(auth, dict) else None
+    if not ocr_key and isinstance(auth, dict):
+        # Defensive fallback: older callers may only send llm_key. read_paper
+        # still requires configurable.ocr_key, and current Next.js routes
+        # already mirror this llm->ocr fallback on the outbound hop.
+        ocr_key = auth.get("llm_key")
     if ocr_key:
         configurable["ocr_key"] = ocr_key
     llm_key = auth.get("llm_key") if isinstance(auth, dict) else None

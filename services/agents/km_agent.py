@@ -169,6 +169,7 @@ def _build_interrupt_on(
         interrupt_on, "external_send", approval_rules.get("external_send"), default="require"
     )
     _apply_rule(interrupt_on, "create_note", approval_rules.get("write_note"), default="auto")
+    _apply_rule(interrupt_on, "highlight", approval_rules.get("highlight"), default="require")
 
     # Per-skill require_approval — a skill being active forces HITL on its
     # listed tools regardless of approval_rules / tool metadata.
@@ -183,8 +184,7 @@ def _build_interrupt_on(
 # enabled. Skills curate ADDITIONAL skill-specific tools (highlights, MCPs,
 # extractors) on top of these. Without core discovery tools, basic asks ("list
 # my notes", "find the X paper", "what libraries do I have") silently fail
-# when any skill is toggled on. Action tools that should remain skill-scoped
-# (highlight, etc.) are deliberately excluded.
+# when any skill is toggled on.
 _CORE_TOOL_NAMES: frozenset[str] = frozenset({
     # notes
     "list_notes", "search_notes", "read_note", "create_note", "update_note",
@@ -193,8 +193,7 @@ _CORE_TOOL_NAMES: frozenset[str] = frozenset({
     "list_references", "get_reference",
     # libraries / folders
     "list_libraries", "list_folders",
-    # papers/PDFs (discovery + read-only access — action tools like `highlight`
-    # stay skill-scoped). read_paper / pdf_read_text / pdf_explain_passage
+    # papers/PDFs (discovery + reader actions). read_paper / pdf_read_text / pdf_explain_passage
     # power the reader side-panel agent (multi-page reads, single-page reads,
     # SelectionToolbar "Explain") and are named verbatim in the
     # [reader-context] system prefix (see routers/km_agent.py::
@@ -202,6 +201,9 @@ _CORE_TOOL_NAMES: frozenset[str] = frozenset({
     # whose tools list omits them (e.g. lit-triage) silently pruned them and
     # the LLM hallucinated calls to a name it could not actually invoke.
     "list_pdfs", "search_pdfs", "read_paper", "pdf_read_text", "pdf_explain_passage",
+    # reader annotation action — kept core so highlighting remains available
+    # regardless of the currently enabled skill set.
+    "highlight",
     # paper search (agentic — fetch is HITL-protected via skill require_approval).
     # NOTE: search_library is intentionally NOT core — it is cross-library RAG
     # and should be opted into per skill (see deep-read SKILL.md) rather than

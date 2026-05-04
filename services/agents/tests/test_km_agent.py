@@ -92,7 +92,7 @@ def test_filter_tools_with_lit_triage_skill_filters_to_allowed_set():
     assert "create_note" in names
     # Tools not in lit-triage's allow-list must be excluded
     assert "make_public" not in names
-    assert "highlight" not in names
+    assert "highlight" in names
 
 
 def test_paperset_tools_are_core_when_any_skill_active():

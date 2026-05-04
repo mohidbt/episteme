@@ -14,6 +14,30 @@ export interface PaperHighlightRow {
   createdAt: string;
 }
 
+function normalizePageIndex(row: PaperHighlightRow): PaperHighlightRow {
+  const isZeroBased =
+    row.page === 0 ||
+    (Array.isArray(row.bbox) &&
+      row.bbox.some((v) => {
+        if (!v || typeof v !== "object") return false;
+        const p = Number((v as Record<string, unknown>).page);
+        return Number.isFinite(p) && p === 0;
+      }));
+  if (!isZeroBased) return row;
+  const bump = (v: unknown): unknown => {
+    if (!v || typeof v !== "object") return v;
+    const o = v as Record<string, unknown>;
+    const p = Number(o.page);
+    if (!Number.isFinite(p)) return v;
+    return { ...o, page: p + 1 };
+  };
+  return {
+    ...row,
+    page: row.page + 1,
+    bbox: Array.isArray(row.bbox) ? row.bbox.map(bump) : bump(row.bbox),
+  };
+}
+
 type Result = {
   highlights: PaperHighlightRow[];
   userHighlights: UserHighlight[];
@@ -67,7 +91,11 @@ export function usePaperHighlights(paperId: string, refreshKey: number = 0): Res
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const rows = (await res.json()) as PaperHighlightRow[];
         if (cancelled) return;
-        setState({ highlights: rows ?? [], loading: false, error: null });
+        setState({
+          highlights: (rows ?? []).map(normalizePageIndex),
+          loading: false,
+          error: null,
+        });
       } catch (err) {
         if (cancelled) return;
         if (err instanceof Error && err.name === "AbortError") return;

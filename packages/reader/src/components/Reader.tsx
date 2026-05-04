@@ -191,7 +191,7 @@ export function Reader({
   type ActiveSelection = NonNullable<typeof selection>;
   const [activeSelection, setActiveSelection] = useState<ActiveSelection | null>(null);
   const [editingHighlight, setEditingHighlight] = useState<{
-    id: number;
+    id: number | string;
     rect: { top: number; left: number; width: number; height: number };
   } | null>(null);
 
@@ -440,9 +440,13 @@ export function Reader({
   }, [selection]);
 
   const deleteHighlight = useCallback(
-    async (id: number): Promise<boolean> => {
+    async (id: number | string): Promise<boolean> => {
       try {
-        const res = await fetch(`/api/user-highlights/${id}`, { method: "DELETE" });
+        const path =
+          typeof id === "number"
+            ? `/api/user-highlights/${id}`
+            : `/api/paper-highlights/${id}`;
+        const res = await fetch(path, { method: "DELETE" });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         setRefreshKey((k) => k + 1);
         return true;
@@ -462,7 +466,7 @@ export function Reader({
   }, [deleteHighlight, editingHighlight]);
 
   const handleSidebarDelete = useCallback(
-    (id: number) => {
+    (id: number | string) => {
       void deleteHighlight(id);
     },
     [deleteHighlight]
@@ -477,8 +481,11 @@ export function Reader({
       const hEl = target?.closest<HTMLElement>("[data-highlight-id]");
       if (!hEl) return;
       const idAttr = hEl.getAttribute("data-highlight-id");
-      const id = idAttr ? parseInt(idAttr, 10) : NaN;
-      if (!Number.isFinite(id)) return;
+      if (!idAttr) return;
+      const parsed = Number.parseInt(idAttr, 10);
+      const id: number | string = Number.isFinite(parsed) && String(parsed) === idAttr
+        ? parsed
+        : idAttr;
       e.stopPropagation();
       const domRect = hEl.getBoundingClientRect();
       setEditingHighlight({

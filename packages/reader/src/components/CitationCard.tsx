@@ -232,9 +232,9 @@ export function CitationCard({
         {authors.length > 0 && (
           <p className="text-xs text-muted-foreground line-clamp-2">
             {authors.map((author, i) => {
+              const key = `${author.name}-${i}`;
               const authorEl = author.authorId ? (
                 <a
-                  key={author.name}
                   href={`https://www.semanticscholar.org/author/${author.authorId}`}
                   target="_blank"
                   rel="noopener noreferrer"
@@ -243,11 +243,13 @@ export function CitationCard({
                   {author.name}
                 </a>
               ) : (
-                <span key={author.name}>{author.name}</span>
+                <span>{author.name}</span>
               );
               return i < authors.length - 1 ? (
-                <span key={`${author.name}-wrap`}>{authorEl}{", "}</span>
-              ) : authorEl;
+                <span key={key}>{authorEl}{", "}</span>
+              ) : (
+                <span key={key}>{authorEl}</span>
+              );
             })}
           </p>
         )}

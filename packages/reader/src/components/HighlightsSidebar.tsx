@@ -40,7 +40,7 @@ interface HighlightsSidebarProps {
   loading: boolean;
   error: string | null;
   onAskAi?: (text: string, pageNumber: number) => void;
-  onDelete?: (highlightId: number) => void;
+  onDelete?: (highlightId: number | string) => void;
   onNavigateHighlight?: (highlightId: number | string) => void;
   dockControl?: ReactNode;
 }
@@ -143,7 +143,7 @@ export function HighlightsSidebar({
                         Ask AI
                       </Button>
                     )}
-                    {onDelete && typeof h.id === "number" && (
+                    {onDelete && (
                       <Button
                         variant="ghost"
                         size="sm"

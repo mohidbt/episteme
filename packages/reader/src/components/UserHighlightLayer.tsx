@@ -43,20 +43,36 @@ export function UserHighlightLayer({ highlights, pageNumber, naturalWidth, natur
         (h.rects ?? [])
           .filter((r) => r.page === pageNumber)
           .map((r, idx) => (
+            (() => {
+              const isNormalized =
+                [r.x0, r.y0, r.x1, r.y1].every((v) => Number.isFinite(v) && v >= 0 && v <= 1);
+              const top = isNormalized
+                ? r.y0 * naturalHeight * scale
+                : (naturalHeight - r.y1) * scale;
+              const left = isNormalized ? r.x0 * naturalWidth * scale : r.x0 * scale;
+              const width = isNormalized
+                ? (r.x1 - r.x0) * naturalWidth * scale
+                : (r.x1 - r.x0) * scale;
+              const height = isNormalized
+                ? (r.y1 - r.y0) * naturalHeight * scale
+                : (r.y1 - r.y0) * scale;
+              return (
             <div
               key={`${h.id}-${idx}`}
               data-highlight-id={h.id}
               className="absolute rounded-sm"
               style={{
-                top:    (naturalHeight - r.y1) * scale,
-                left:   r.x0 * scale,
-                width:  (r.x1 - r.x0) * scale,
-                height: (r.y1 - r.y0) * scale,
+                top,
+                left,
+                width,
+                height,
                 background: COLOR_BG[h.color],
                 pointerEvents: "auto",
                 cursor: "pointer",
               }}
             />
+              );
+            })()
           ))
       )}
     </div>
