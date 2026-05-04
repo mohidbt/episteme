@@ -103,7 +103,8 @@ export function AgentBall(_props: AgentBallProps) {
     elementHeight: BALL_PX,
     axis: "xy",
     snapY: "bottom",
-    bottomInsetRatio: 0.12,
+    // Align ball's bottom with the agent panel's bottom edge (Tailwind `bottom-4` = 16px).
+    bottomInsetPx: 16,
   });
   const panelDrag = useDragX({ storageKey: "agent-convo-x", elementWidth: 400 });
   const ballRef = useRef<HTMLButtonElement | null>(null);

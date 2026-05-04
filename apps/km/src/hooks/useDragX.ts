@@ -16,18 +16,17 @@ interface UseDragXOptions {
    * (gravity). Only meaningful when axis === "xy".
    */
   snapY?: "bottom" | "none";
-  /** Bottom snap inset as a viewport-height ratio. */
-  bottomInsetRatio?: number;
+  /** Bottom snap inset in pixels — element bottom rests this far above viewport floor. */
+  bottomInsetPx?: number;
 }
 
 export function computeBottomSnapTop(
   viewportHeight: number,
   elementHeight: number | undefined,
-  bottomInsetRatio: number,
+  bottomInsetPx: number,
 ): number {
-  const bottomInset = viewportHeight * bottomInsetRatio;
-  const halfHeight = (elementHeight ?? 0) / 2;
-  return Math.max(0, viewportHeight - bottomInset - halfHeight);
+  const eh = elementHeight ?? 0;
+  return Math.max(0, viewportHeight - eh - bottomInsetPx);
 }
 
 /** Movement threshold (px) beyond which pointerDown+pointerUp counts as a drag, not a click. */
@@ -44,7 +43,7 @@ export function useDragX({
   elementHeight,
   axis = "x",
   snapY = "none",
-  bottomInsetRatio = 0,
+  bottomInsetPx = 0,
 }: UseDragXOptions) {
   const [x, setX] = useState<number | null>(null);
 
@@ -83,16 +82,15 @@ export function useDragX({
   const clampY = useCallback(
     (next: number) => {
       if (typeof window === "undefined") return next;
-      const bottomInset = window.innerHeight * bottomInsetRatio;
       const max = Math.max(
         0,
-        window.innerHeight - (elementHeight ?? 0) - bottomInset,
+        window.innerHeight - (elementHeight ?? 0) - bottomInsetPx,
       );
       if (next < 0) return 0;
       if (next > max) return max;
       return next;
     },
-    [bottomInsetRatio, elementHeight],
+    [bottomInsetPx, elementHeight],
   );
 
   const onPointerDown = useCallback((e: React.PointerEvent<HTMLElement>) => {
@@ -151,11 +149,11 @@ export function useDragX({
       });
       if (axis === "xy" && snapY === "bottom") {
         if (typeof window !== "undefined") {
-          setY(computeBottomSnapTop(window.innerHeight, elementHeight, bottomInsetRatio));
+          setY(computeBottomSnapTop(window.innerHeight, elementHeight, bottomInsetPx));
         }
       }
     },
-    [axis, bottomInsetRatio, elementHeight, snapY, storageKey],
+    [axis, bottomInsetPx, elementHeight, snapY, storageKey],
   );
 
   // Re-clamp on viewport resize so the element doesn't sit off-screen.
@@ -169,7 +167,7 @@ export function useDragX({
           return computeBottomSnapTop(
             window.innerHeight,
             elementHeight,
-            bottomInsetRatio,
+            bottomInsetPx,
           );
         }
         return clampY(curr);
@@ -177,7 +175,7 @@ export function useDragX({
     };
     window.addEventListener("resize", handler);
     return () => window.removeEventListener("resize", handler);
-  }, [bottomInsetRatio, clampX, clampY, elementHeight, snapY]);
+  }, [bottomInsetPx, clampX, clampY, elementHeight, snapY]);
 
   return {
     x,
