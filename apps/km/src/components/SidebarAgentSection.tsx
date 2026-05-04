@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { MessagesSquare } from "lucide-react";
+import { Hexagon, MessagesSquare } from "lucide-react";
 import {
   SidebarMenuButton,
   SidebarMenuItem,
@@ -20,7 +20,7 @@ export function SidebarAgentSection() {
   return (
     <SidebarSection
       label="Agent"
-      icon={<span className={sidebarSectionIconClassName} aria-hidden>⬡</span>}
+      icon={<Hexagon className={sidebarSectionIconClassName} aria-hidden />}
     >
       {AGENT_ROWS.map(({ label, href, Icon }) => (
         <SidebarMenuItem key={href}>

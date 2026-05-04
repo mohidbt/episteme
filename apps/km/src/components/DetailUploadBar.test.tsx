@@ -53,6 +53,11 @@ function dropFile(input: HTMLInputElement, file: File) {
   input.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
+function dropFiles(input: HTMLInputElement, files: File[]) {
+  Object.defineProperty(input, "files", { value: files, configurable: true });
+  input.dispatchEvent(new Event("change", { bubbles: true }));
+}
+
 function mockFetchOk(extra?: (url: string, init?: RequestInit) => Response | null) {
   vi.stubGlobal(
     "fetch",
@@ -196,6 +201,33 @@ describe("DetailUploadBar", () => {
     const form = (noteCall![1] as RequestInit).body as FormData;
     expect(form.get("folderId")).toBe("folder-a");
     expect(form.get("libraryId")).toBe("2");
+  });
+
+  it("note kind accepts multi-file selection and uploads each file", async () => {
+    mockFetchOk();
+    render(
+      <DetailUploadBar
+        kind="note"
+        libraryId={2}
+        folders={FOLDERS}
+        defaultFolderId="folder-a"
+      />,
+    );
+
+    const input = screen.getByTestId("detail-upload-input") as HTMLInputElement;
+    const fileA = new File(["# alpha"], "alpha.md", { type: "text/markdown" });
+    const fileB = new File(["# beta"], "beta.md", { type: "text/markdown" });
+    await act(async () => {
+      dropFiles(input, [fileA, fileB]);
+    });
+
+    await waitFor(() => {
+      const fetchMock = vi.mocked(globalThis.fetch);
+      const noteCalls = fetchMock.mock.calls.filter(
+        (c) => String(c[0]) === "/api/notes/from-file",
+      );
+      expect(noteCalls.length).toBe(2);
+    });
   });
 
   it("reference kind posts to /api/references/import for .ris", async () => {

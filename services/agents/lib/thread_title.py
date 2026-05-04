@@ -9,7 +9,7 @@ a future endpoint or call OpenRouter directly. See task #9 plan.
 """
 from lib.openrouter_client import call_model
 
-DEFAULT_MODEL = "google/gemma-4-26b-a4b-it"
+DEFAULT_MODEL = "openai/gpt-5.4-nano"
 MAX_TITLE_LEN = 60
 MAX_INPUT_LEN = 500
 

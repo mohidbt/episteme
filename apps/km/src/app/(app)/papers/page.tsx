@@ -51,7 +51,7 @@ export default async function PapersPage({
         folders={allFolders}
         defaultFolderId={folderFilter}
       />
-      <div className="mb-4 flex items-center gap-3">
+      <div className="mb-4 mt-4 flex items-center gap-3">
         <FolderFilterDropdown
           folders={allFolders}
           activeFolderId={folderFilter}

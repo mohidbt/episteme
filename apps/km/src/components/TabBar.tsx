@@ -263,6 +263,7 @@ function titleFromHref(href: string): string {
   if (href.startsWith("/r/")) return "Reference";
   if (href.startsWith("/tags")) return lastSegment(href) || "Tags";
   if (href.startsWith("/agents")) return "Agent";
+  if (href.startsWith("/graph")) return "Graph";
   if (href.startsWith("/settings")) return "Settings";
   if (href.startsWith("/trash")) return "Trash";
   return lastSegment(href) || href;

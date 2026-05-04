@@ -21,7 +21,7 @@ import { PermissionsForm } from "./PermissionsForm";
 const initial = {
   enabledSkills: [] as string[],
   attachedMcps: [] as Array<{ name: string; account?: string }>,
-  modelPreference: "google/gemma-4-26b-a4b-it",
+  modelPreference: "openai/gpt-5.4-nano",
   approvalRules: {} as Record<string, "auto" | "require" | "never">,
   permissions: { web_search: false } as Record<string, boolean>,
 };
@@ -33,7 +33,7 @@ beforeEach(() => {
       return new Response(
         JSON.stringify({
           models: [
-            { id: "google/gemma-4-26b-a4b-it", name: "Gemma 4 Free" },
+            { id: "openai/gpt-5.4-nano", name: "GPT-5.4 nano" },
             { id: "anthropic/claude-opus-4-7", name: "Claude Opus 4.7" },
           ],
           fetched_at: null,

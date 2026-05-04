@@ -298,7 +298,7 @@ def test_invoke_free_model_rate_limit_uses_friendly_message():
     # Force the cached config for user_1 to a free model.
     config_cache._CACHE["user_1"] = {
         **config_cache._DEFAULTS,
-        "modelPreference": "google/gemma-4-26b-a4b-it",
+        "modelPreference": "openai/gpt-5.4-nano",
     }
 
     response = httpx.Response(
@@ -351,7 +351,7 @@ def test_invoke_paid_model_rate_limit_still_uses_extracted_message():
 
     config_cache._CACHE["user_1"] = {
         **config_cache._DEFAULTS,
-        "modelPreference": "openai/gpt-5-nano",
+        "modelPreference": "openai/gpt-5.4-nano",
     }
 
     raw_msg = "Provider returned 429 for paid model"
@@ -396,7 +396,7 @@ def test_invoke_uses_model_preference_from_body_over_cache():
 
     config_cache._CACHE["user_1"] = {
         **config_cache._DEFAULTS,
-        "modelPreference": "google/gemma-4-26b-a4b-it",
+        "modelPreference": "openai/gpt-5.4-nano",
     }
 
     captured: dict = {}
@@ -412,7 +412,7 @@ def test_invoke_uses_model_preference_from_body_over_cache():
     body = json.dumps({
         "thread_id": "t1",
         "message": "hi",
-        "model_preference": "openai/gpt-5-nano",
+        "model_preference": "openai/gpt-5.4-nano",
     }).encode()
 
     try:
@@ -427,7 +427,7 @@ def test_invoke_uses_model_preference_from_body_over_cache():
         config_cache._CACHE.clear()
 
     assert r.status_code == 200
-    assert captured.get("model_id") == "openai/gpt-5-nano"
+    assert captured.get("model_id") == "openai/gpt-5.4-nano"
 
 
 def test_invoke_uses_enabled_skills_from_body_over_cache():
@@ -485,7 +485,7 @@ def test_invoke_emits_rate_limited_error_on_openai_rate_limit():
     # get a friendlier override — covered by a separate test).
     config_cache._CACHE["user_1"] = {
         **config_cache._DEFAULTS,
-        "modelPreference": "openai/gpt-5-nano",
+        "modelPreference": "openai/gpt-5.4-nano",
     }
 
     raw_msg = "Provider returned 429: rate-limited by upstream"

@@ -3715,7 +3715,7 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "default": "'google/gemma-4-26b-a4b-it'"
+          "default": "'openai/gpt-5.4-nano'"
         },
         "approval_rules": {
           "name": "approval_rules",

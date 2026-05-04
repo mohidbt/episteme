@@ -1,5 +1,7 @@
 import { notFound } from "next/navigation";
 import { eq, inArray } from "drizzle-orm";
+import Link from "next/link";
+import { Download } from "lucide-react";
 import { db } from "@/lib/db";
 import { papersets, papers } from "@episteme/db/schema";
 import { getRequiredUserId } from "@/lib/session";
@@ -64,7 +66,20 @@ export default async function PapersetPage({
           folderChain={folderChain}
           filename={ps.filename}
         />
-        <h1 className="font-display text-2xl leading-tight">{ps.filename}</h1>
+        <div className="flex items-start justify-between gap-4">
+          <h1 className="min-w-0 font-display text-2xl leading-tight">{ps.filename}</h1>
+          <div className="flex shrink-0 items-center gap-2">
+            <Link
+              href={`/api/papersets/${ps.id}/file`}
+              download={ps.filename}
+              className="inline-flex h-7 items-center justify-center gap-1 rounded-md border border-border bg-background px-2.5 text-[0.8rem] font-medium text-foreground whitespace-nowrap transition-colors hover:bg-muted"
+              aria-label={`Download ${ps.filename}`}
+            >
+              <Download className="h-3 w-3" data-icon="inline-start" />
+              Download
+            </Link>
+          </div>
+        </div>
       </div>
       <PapersetView
         id={ps.id}

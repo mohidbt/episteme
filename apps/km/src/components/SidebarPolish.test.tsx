@@ -206,3 +206,14 @@ describe("#154/#156: Collapsed sidebar details", () => {
     expect(convos?.querySelector("svg")).toBeTruthy();
   });
 });
+
+describe("Agent section icon polish", () => {
+  it("renders an SVG icon for the Agent section title", () => {
+    const { container } = renderShell(baseTree());
+    const agentToggle = screen.getByRole("button", { name: /agent/i });
+    const svg = agentToggle.querySelector("svg");
+    expect(svg).toBeTruthy();
+    expect(agentToggle.textContent).not.toContain("⬡");
+    expect(container.querySelectorAll("svg").length).toBeGreaterThan(0);
+  });
+});

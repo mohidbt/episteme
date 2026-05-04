@@ -233,7 +233,7 @@ export function DetailUploadBar({
   const { getRootProps, getInputProps, isDragActive, open } = useDropzone({
     onDrop,
     accept: ACCEPT_BY_KIND[kind],
-    multiple: kind !== "note", // a note detail uploads one note at a time
+    multiple: true,
     noClick: true,
     noKeyboard: true,
   });

@@ -5,6 +5,7 @@ import ForceGraph2D from 'react-force-graph-2d'
 import { Badge } from '@/components/ui/badge'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import type { GraphPayload, EdgeKind, NodeKind } from '@/lib/graph/types'
+import { formatGraphKindLabel } from '@/lib/graph/labels'
 
 type CanvasNode = {
   id: string
@@ -190,7 +191,7 @@ export default function GraphCanvas({ payload }: { payload: GraphPayload }) {
           {selectedLink && detail ? (
             <div className="space-y-4 p-4 pt-0 text-sm">
               <Badge variant="outline" className={edgeKindBadgeClass(selectedLink.kind)}>
-                {selectedLink.kind}
+                {formatGraphKindLabel(selectedLink.kind)}
               </Badge>
               {selectedLink.weight != null ? <p className="text-muted-foreground">Weight: {selectedLink.weight}</p> : null}
 

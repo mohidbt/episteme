@@ -8,6 +8,7 @@ import { POST as POST_FINALIZE } from "../finalize/route";
 import { GET as GET_FILE } from "./route";
 import { POST as POST_LIB } from "../../../libraries/route";
 import {
+  createAnonTestUser,
   createTestUser,
   deleteTestUser,
   params,
@@ -25,7 +26,9 @@ const SAMPLE_PDF_PATH = path.join(
 
 let u: TestUser;
 let other: TestUser;
+let anon: TestUser;
 let libraryId: number;
+let anonLibraryId: number;
 let sampleBytes: Buffer;
 const createdPaperIds: string[] = [];
 
@@ -33,6 +36,7 @@ beforeAll(async () => {
   await ensureMinIOReady();
   u = await createTestUser();
   other = await createTestUser();
+  anon = await createAnonTestUser();
   const r = await POST_LIB(
     req("/api/libraries", {
       method: "POST",
@@ -41,6 +45,14 @@ beforeAll(async () => {
     }),
   );
   libraryId = (await r.json()).id;
+  const anonLib = await POST_LIB(
+    req("/api/libraries", {
+      method: "POST",
+      cookie: anon.cookie,
+      body: JSON.stringify({ name: "Anon File Lib" }),
+    }),
+  );
+  anonLibraryId = (await anonLib.json()).id;
   sampleBytes = await readFile(SAMPLE_PDF_PATH);
 }, 60_000);
 
@@ -51,6 +63,7 @@ afterAll(async () => {
   }
   await deleteTestUser(u.id);
   await deleteTestUser(other.id);
+  await deleteTestUser(anon.id);
 });
 
 async function initAndUpload(): Promise<string> {
@@ -76,6 +89,32 @@ async function initAndUpload(): Promise<string> {
     headers: { "content-type": "application/pdf" },
   });
   if (!put.ok) throw new Error(`PUT failed: ${put.status}`);
+  return paperId;
+}
+
+async function initAndUploadAnon(): Promise<string> {
+  const r = await POST_PAPER(
+    req("/api/papers", {
+      method: "POST",
+      cookie: anon.cookie,
+      body: JSON.stringify({
+        libraryId: anonLibraryId,
+        filename: "anon-sample.pdf",
+        contentType: "application/pdf",
+        sizeBytes: sampleBytes.length,
+      }),
+    }),
+  );
+  if (r.status !== 201) throw new Error(`anon init failed: ${r.status}`);
+  const body = await r.json();
+  const paperId: string = body.paperId;
+  createdPaperIds.push(paperId);
+  const put = await fetch(body.uploadUrl, {
+    method: "PUT",
+    body: new Uint8Array(sampleBytes),
+    headers: { "content-type": "application/pdf" },
+  });
+  if (!put.ok) throw new Error(`anon PUT failed: ${put.status}`);
   return paperId;
 }
 
@@ -112,32 +151,60 @@ describe("GET /api/papers/:id/file", () => {
     );
   });
 
-  it(
-    "302 to presigned URL → fetch returns uploaded bytes",
-    async () => {
-      const paperId = await initAndUpload();
-      const r = await GET_FILE(
-        req(`/api/papers/${paperId}/file`, { cookie: u.cookie }),
-        params({ id: paperId }),
-      );
-      expect(r.status).toBe(302);
-      const loc = r.headers.get("location");
-      expect(loc).toBeTruthy();
-      const locUrl = new URL(loc!);
-      expect(locUrl.searchParams.get("X-Amz-Signature")).toBeTruthy();
-      expect(locUrl.pathname.endsWith(`/${paperId}/source.pdf`)).toBe(true);
+  it("200 streams PDF bytes from storage", async () => {
+    const paperId = await initAndUpload();
+    const r = await GET_FILE(
+      req(`/api/papers/${paperId}/file`, { cookie: u.cookie }),
+      params({ id: paperId }),
+    );
+    expect(r.status).toBe(200);
+    expect(r.headers.get("location")).toBeNull();
+    expect(r.headers.get("cache-control")).toBe("private, no-store");
 
-      // Follow the redirect manually and verify bytes match.
-      const fetched = await fetch(loc!);
-      expect(fetched.status).toBe(200);
-      const bytes = new Uint8Array(await fetched.arrayBuffer());
-      expect(bytes.length).toBe(sampleBytes.length);
+    const bytes = new Uint8Array(await r.arrayBuffer());
+    expect(bytes.length).toBe(sampleBytes.length);
 
-      await DEL_PAPER(
-        req(`/api/papers/${paperId}`, { method: "DELETE", cookie: u.cookie }),
-        params({ id: paperId }),
-      );
-    },
-    30_000,
-  );
+    await DEL_PAPER(
+      req(`/api/papers/${paperId}`, { method: "DELETE", cookie: u.cookie }),
+      params({ id: paperId }),
+    );
+  }, 30_000);
+
+  it("forwards byte-range requests for PDF.js", async () => {
+    const paperId = await initAndUpload();
+    const r = await GET_FILE(
+      req(`/api/papers/${paperId}/file`, {
+        cookie: u.cookie,
+        headers: { range: "bytes=0-255" },
+      }),
+      params({ id: paperId }),
+    );
+    expect(r.status).toBe(206);
+    expect(r.headers.get("content-range")).toMatch(/^bytes 0-255\/\d+$/);
+    expect(r.headers.get("accept-ranges")).toBe("bytes");
+    const bytes = new Uint8Array(await r.arrayBuffer());
+    expect(bytes.length).toBe(256);
+
+    await DEL_PAPER(
+      req(`/api/papers/${paperId}`, { method: "DELETE", cookie: u.cookie }),
+      params({ id: paperId }),
+    );
+  }, 30_000);
+
+  it("200 for anonymous user's own paper", async () => {
+    const paperId = await initAndUploadAnon();
+    const r = await GET_FILE(
+      req(`/api/papers/${paperId}/file`, { cookie: anon.cookie }),
+      params({ id: paperId }),
+    );
+    expect(r.status).toBe(200);
+    expect(r.headers.get("content-type")).toContain("application/pdf");
+    const bytes = new Uint8Array(await r.arrayBuffer());
+    expect(bytes.length).toBe(sampleBytes.length);
+
+    await DEL_PAPER(
+      req(`/api/papers/${paperId}`, { method: "DELETE", cookie: anon.cookie }),
+      params({ id: paperId }),
+    );
+  }, 30_000);
 });

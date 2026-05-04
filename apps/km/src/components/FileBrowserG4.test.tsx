@@ -189,4 +189,22 @@ describe("G4 #25 — Drive nav pill reuses ToggleGroup-style pill component", ()
     const pill = container.querySelector("[data-slot='nav-pill']");
     expect(pill).toBeTruthy();
   });
+
+  it("Drive pill label avoids nested font-weight overrides on the current segment", () => {
+    render(
+      <FileBrowser
+        libraryId={1}
+        libraryName="Default"
+        folderId={"f1"}
+        folderChain={[{ id: "f1", name: "Research" }]}
+        contents={allKindsContents}
+        folders={folders}
+      />,
+    );
+
+    const currentPill = screen.getByRole("button", { name: "Open Research" });
+    const current = currentPill.querySelector("span");
+    expect(current).toBeTruthy();
+    expect(current!.className).not.toContain("font-medium");
+  });
 });

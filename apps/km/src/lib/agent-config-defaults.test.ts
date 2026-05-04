@@ -17,13 +17,13 @@ describe("getDefaultAgentModel", () => {
     expect(getDefaultAgentModel()).toBe("test/foo");
   });
 
-  it("falls back to google/gemma-4-26b-a4b-it when env unset", () => {
+  it("falls back to openai/gpt-5.4-nano when env unset", () => {
     delete process.env[ENV_KEY];
-    expect(getDefaultAgentModel()).toBe("google/gemma-4-26b-a4b-it");
+    expect(getDefaultAgentModel()).toBe("openai/gpt-5.4-nano");
   });
 
   it("trims surrounding whitespace and falls back if empty", () => {
     process.env[ENV_KEY] = "   ";
-    expect(getDefaultAgentModel()).toBe("google/gemma-4-26b-a4b-it");
+    expect(getDefaultAgentModel()).toBe("openai/gpt-5.4-nano");
   });
 });

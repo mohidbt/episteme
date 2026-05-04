@@ -7,7 +7,6 @@ import { listAllFolders } from "@/lib/folders-server";
 import { resolveChain } from "@/lib/folders";
 import { ReferencesView } from "@/components/ReferencesView";
 import { ReferenceDoiInput } from "@/components/ReferenceDoiInput";
-import { ReferenceImportButton } from "@/components/ReferenceImportButton";
 import { FolderFilterDropdown } from "@/components/FolderFilterDropdown";
 import { DetailUploadBar } from "@/components/DetailUploadBar";
 
@@ -53,14 +52,8 @@ export default async function ReferencesPage({
         folders={allFolders}
         defaultFolderId={folderFilter}
       />
-      <div className="mb-6 flex flex-col gap-3">
+      <div className="mb-6 mt-4 flex flex-col gap-3">
         <ReferenceDoiInput libraryId={library.id} folderPath="" />
-        <div className="flex items-center gap-2">
-          <ReferenceImportButton libraryId={library.id} folderPath="" />
-          <p className="text-xs text-muted-foreground">
-            Bulk-import a BibTeX, RIS, or CSL-JSON file.
-          </p>
-        </div>
       </div>
       <div className="mb-4 flex items-center gap-3">
         <FolderFilterDropdown

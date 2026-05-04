@@ -73,7 +73,7 @@ describe("agentStreamReducer — text events", () => {
     expect((s.cards[1] as TextCard).text).toBe("second");
   });
 
-  // #64 — some models (e.g. google/gemma-4-26b-a4b-it) occasionally leak the
+  // #64 — some models (e.g. openai/gpt-5.4-nano) occasionally leak the
   // literal token "thought" as the first word of the assistant reply.
   it("strips a leading 'thought' word from the assistant text card", () => {
     const s = fold([

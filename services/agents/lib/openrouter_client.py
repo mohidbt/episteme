@@ -7,7 +7,7 @@ EMBED_URL = "https://openrouter.ai/api/v1/embeddings"
 EMBED_DIM = 1536
 
 OPENROUTER_BASE = "https://openrouter.ai/api/v1"
-CHAT_MODEL = "openai/gpt-4o-mini"
+CHAT_MODEL = "openai/gpt-5.4-nano"
 
 
 async def call_model(

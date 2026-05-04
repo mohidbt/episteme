@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BookMarked, FileText, LayoutList, Network, NotebookPen } from "lucide-react";
+import { BookMarked, FileText, LayoutList, Network, NotebookPen, Table2 } from "lucide-react";
 import {
   SidebarMenuButton,
   SidebarMenuItem,
@@ -16,7 +16,7 @@ const LINKS = [
   { label: "References", href: "/references", Icon: BookMarked },
   { label: "Notes", href: "/notes", Icon: NotebookPen },
   { label: "Graph", href: "/graph", Icon: Network },
-  { label: "Papersets", href: "/papersets", Icon: null },
+  { label: "Papersets", href: "/papersets", Icon: Table2 },
 ] as const;
 
 export function ByTypeNav() {
@@ -37,11 +37,7 @@ export function ByTypeNav() {
               "hover:bg-[var(--bg-roof-2)]",
             )}
           >
-            {label === "Papersets" ? (
-              <span aria-hidden className="size-4">⬡</span>
-            ) : (
-              <Icon aria-hidden className="size-4" />
-            )}
+            <Icon aria-hidden className="size-4" />
             <span>{label}</span>
           </SidebarMenuButton>
         </SidebarMenuItem>

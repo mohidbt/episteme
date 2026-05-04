@@ -30,12 +30,14 @@ export default async function NotesPage() {
       <h1 className="mb-4 font-display text-3xl leading-none tracking-tight">
         Notes
       </h1>
-      <DetailUploadBar
-        kind="note"
-        libraryId={library.id}
-        folders={allFolders}
-        defaultFolderId={null}
-      />
+      <div className="mb-4">
+        <DetailUploadBar
+          kind="note"
+          libraryId={library.id}
+          folders={allFolders}
+          defaultFolderId={null}
+        />
+      </div>
       {rows.length === 0 ? (
         <div className="flex flex-1 items-center justify-center p-10">
           <div className="text-center">

@@ -10,7 +10,7 @@
 //
 // Existing rows are intentionally untouched; this only governs new inserts.
 
-const FALLBACK_MODEL = "google/gemma-4-26b-a4b-it";
+const FALLBACK_MODEL = "openai/gpt-5.4-nano";
 
 export function getDefaultAgentModel(): string {
   const v = process.env.DEFAULT_AGENT_MODEL;

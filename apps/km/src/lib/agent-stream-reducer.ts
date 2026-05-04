@@ -22,7 +22,7 @@
 
 import type { AgentEvent, Citation } from "./agent-events";
 
-// #64 — some models (e.g. google/gemma-4-26b-a4b-it) leak a literal "thought"
+// #64 — some models (e.g. openai/gpt-5.4-nano) leak a literal "thought"
 // token as the first word of an assistant reply. Strip it once at the start.
 // Idempotent: regex only matches the leading prefix, so re-applying is a no-op.
 const stripLeadingThought = (text: string): string =>

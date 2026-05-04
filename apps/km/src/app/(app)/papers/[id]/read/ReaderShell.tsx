@@ -7,7 +7,7 @@ import { useAgentBallStore } from "@/state/agent-ball";
 
 const Reader = dynamic(
   () => import("@episteme/reader").then((m) => m.Reader),
-  { ssr: false, loading: () => <div data-reader-loading>Loading…</div> },
+  { ssr: false, loading: () => <div data-reader-loading /> },
 );
 
 async function createThread(signal: AbortSignal): Promise<string | null> {

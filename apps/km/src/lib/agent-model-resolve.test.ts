@@ -95,7 +95,7 @@ describe("resolveAgentModel", () => {
   });
 
   it("DEFAULT_MODEL value matches 1.3a migration default", () => {
-    expect(DEFAULT_MODEL).toBe("google/gemma-4-26b-a4b-it");
+    expect(DEFAULT_MODEL).toBe("openai/gpt-5.4-nano");
   });
 
   it("returns userPreference exactly when set and others null", () => {

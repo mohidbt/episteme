@@ -74,7 +74,7 @@ describe("POST /api/ai-fill", () => {
     const [url, init] = fetchMock.mock.calls[0]!;
     expect(String(url)).toContain("openrouter.ai");
     const sentBody = JSON.parse((init as RequestInit).body as string);
-    expect(sentBody.model).toBe("google/gemma-4-26b-a4b-it");
+    expect(sentBody.model).toBe("openai/gpt-5.4-nano");
     expect((init as RequestInit).headers).toMatchObject({
       Authorization: "Bearer sk-key",
     });

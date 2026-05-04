@@ -18,7 +18,7 @@ GUEST_USER_ID = "guest"
 _DEFAULTS = {
     "enabledSkills": [],
     "attachedMcps": [],
-    "modelPreference": "google/gemma-4-26b-a4b-it",
+    "modelPreference": "openai/gpt-5.4-nano",
     "approvalRules": {
         "publish": "require",
         "external_send": "require",

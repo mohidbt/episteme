@@ -196,7 +196,6 @@ function DriveFolderPillLabel({
       className={cn(
         "block rounded-sm px-0.5 data-[over=true]:bg-primary/15 data-[over=true]:ring-1 data-[over=true]:ring-primary/60",
         !isRoot && "max-w-[200px] truncate",
-        isCurrent && "font-medium",
       )}
     >
       {label}

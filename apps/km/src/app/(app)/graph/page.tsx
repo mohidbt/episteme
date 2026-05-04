@@ -12,6 +12,7 @@ import { db } from '@episteme/db/client'
 import { sql } from 'drizzle-orm'
 import { rowsOf } from '@/lib/db/rows'
 import type { GraphPayload } from '@/lib/graph/types'
+import { formatGraphKindLabel } from '@/lib/graph/labels'
 
 const CAP = Number.parseInt(process.env.GRAPH_PAPER_CAP_V1 ?? '2000', 10)
 
@@ -70,19 +71,19 @@ export default async function GraphPage() {
       <div className="sticky top-0 z-10 border-b border-border bg-background/80 px-6 py-3 backdrop-blur">
         <div className="flex items-center justify-between gap-4">
           <div>
-            <h1 className="text-lg font-semibold">Knowledge graph</h1>
+            <h1 className="text-lg font-semibold">Knowledge Graph</h1>
             <p className="text-sm text-muted-foreground">
               {payload.nodes.length} nodes · {payload.edges.length} edges
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-mono text-muted-foreground">
-            <span className="inline-flex items-center gap-1"><Dot color="#3b82f6" />paper</span>
-            <span className="inline-flex items-center gap-1"><Dot color="#22c55e" />note</span>
-            <span className="inline-flex items-center gap-1"><Dot color="#f59e0b" />reference</span>
-            <span className="inline-flex items-center gap-1"><LineSample color="#3b82f6" />paper_is_ref</span>
-            <span className="inline-flex items-center gap-1"><LineSample color="#22c55e" />wiki_link</span>
-            <span className="inline-flex items-center gap-1"><LineSample color="#a1a1aa" dashed />shared_tag</span>
-            <span className="inline-flex items-center gap-1"><LineSample color="#a78bfa" />semantic_sim</span>
+            <span className="inline-flex items-center gap-1"><Dot color="#3b82f6" />{formatGraphKindLabel("paper")}</span>
+            <span className="inline-flex items-center gap-1"><Dot color="#22c55e" />{formatGraphKindLabel("note")}</span>
+            <span className="inline-flex items-center gap-1"><Dot color="#f59e0b" />{formatGraphKindLabel("reference")}</span>
+            <span className="inline-flex items-center gap-1"><LineSample color="#3b82f6" />{formatGraphKindLabel("paper_is_ref")}</span>
+            <span className="inline-flex items-center gap-1"><LineSample color="#22c55e" />{formatGraphKindLabel("wiki_link")}</span>
+            <span className="inline-flex items-center gap-1"><LineSample color="#a1a1aa" dashed />{formatGraphKindLabel("shared_tag")}</span>
+            <span className="inline-flex items-center gap-1"><LineSample color="#a78bfa" />{formatGraphKindLabel("semantic_sim")}</span>
           </div>
         </div>
       </div>

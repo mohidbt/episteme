@@ -24,7 +24,7 @@ class TestConfigCache:
         cfg = load_user_config("unknown-user")
         assert cfg["enabledSkills"] == []
         assert cfg["attachedMcps"] == []
-        assert cfg["modelPreference"] == "google/gemma-4-26b-a4b-it"
+        assert cfg["modelPreference"] == "openai/gpt-5.4-nano"
         assert cfg["approvalRules"]["publish"] == "require"
         assert cfg["approvalRules"]["external_send"] == "require"
         assert cfg["approvalRules"]["write_note"] == "auto"
@@ -42,7 +42,7 @@ class TestConfigCache:
 
         save_user_config("u1", {"modelPreference": "openai/gpt-4o"})
         cfg_u2 = load_user_config("u2")
-        assert cfg_u2["modelPreference"] == "google/gemma-4-26b-a4b-it"
+        assert cfg_u2["modelPreference"] == "openai/gpt-5.4-nano"
 
     def test_repeated_save_replaces_value(self):
         from lib.config_cache import load_user_config, save_user_config  # noqa: PLC0415

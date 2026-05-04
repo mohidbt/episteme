@@ -10,7 +10,7 @@ import {
   mapOpenRouterStatus,
 } from "@/lib/openrouter-errors";
 
-const MODEL = "google/gemma-4-26b-a4b-it";
+const MODEL = "openai/gpt-5.4-nano";
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 
 const bodySchema = z.object({
