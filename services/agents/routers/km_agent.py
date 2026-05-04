@@ -313,6 +313,35 @@ def _build_reader_context_prefix(active_paper_id: str) -> str:
     )
 
 
+def _build_configurable(
+    *,
+    thread_id: str,
+    user_id: str,
+    auth: dict,
+    active_paper_id: str | None,
+) -> dict:
+    """Build the ``configurable`` dict for ``RunnableConfig``.
+
+    Tools (read_paper, pdf_read_text, pdf_explain_passage) read
+    ``configurable.ocr_key`` via
+    ``services/agents/tools/papers.py:_ocr_key_from_config`` and will fail
+    fast if it's missing. The HMAC ``auth`` dict from
+    ``deps.auth.require_internal`` carries the per-user OCR/LLM keys —
+    propagate them here so every agent run has the runtime context tools
+    need.
+    """
+    configurable: dict = {"thread_id": thread_id, "user_id": user_id}
+    if active_paper_id:
+        configurable["paper_id"] = active_paper_id
+    ocr_key = auth.get("ocr_key") if isinstance(auth, dict) else None
+    if ocr_key:
+        configurable["ocr_key"] = ocr_key
+    llm_key = auth.get("llm_key") if isinstance(auth, dict) else None
+    if llm_key:
+        configurable["llm_key"] = llm_key
+    return configurable
+
+
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
@@ -363,9 +392,12 @@ async def invoke(req: Request, auth: InternalAuthDep):
     async def gen():
         step = 0
         thread_id = body["thread_id"]
-        configurable = {"thread_id": thread_id, "user_id": user_id}
-        if active_paper_id:
-            configurable["paper_id"] = active_paper_id
+        configurable = _build_configurable(
+            thread_id=thread_id,
+            user_id=user_id,
+            auth=auth,
+            active_paper_id=active_paper_id,
+        )
         try:
             async for ev in agent.astream_events(
                 {"messages": [{"role": "user", "content": user_message}]},
@@ -468,11 +500,17 @@ async def resume(req: Request, auth: InternalAuthDep):
     async def gen():
         step = 0
         thread_id = body["thread_id"]
+        configurable = _build_configurable(
+            thread_id=thread_id,
+            user_id=user_id,
+            auth=auth,
+            active_paper_id=None,
+        )
         try:
             async for ev in agent.astream_events(
                 Command(resume=resume_payload),
                 config={
-                    "configurable": {"thread_id": thread_id, "user_id": user_id},
+                    "configurable": configurable,
                     "recursion_limit": _AGENT_RECURSION_LIMIT,
                 },
                 version="v2",
