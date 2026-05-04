@@ -14,6 +14,7 @@ enough for legitimate runs while still bounding pathological loops
 (§1.3b-E2E-fix-2).
 """
 import asyncio
+import json
 import logging
 
 import openai
@@ -232,12 +233,37 @@ def _extract_error_message(e: Exception) -> str:
 
 def _extract_rag_citations_from_tool_result(ev: dict, mapped: tuple[str, dict]) -> list[dict]:
     """Extract normalized citations from read_paper(kind='rag') tool output."""
+    def _as_dict(value: object) -> dict | None:
+        if isinstance(value, dict):
+            return value
+        if isinstance(value, str):
+            try:
+                parsed = json.loads(value)
+            except Exception:  # noqa: BLE001
+                return None
+            return parsed if isinstance(parsed, dict) else None
+        # Some tool runtimes return content-block arrays. Pull the first text/json
+        # payload and recurse so citation extraction survives shape drift.
+        if isinstance(value, list):
+            for item in value:
+                if isinstance(item, dict):
+                    for key in ("text", "content", "json"):
+                        candidate = item.get(key)
+                        parsed = _as_dict(candidate)
+                        if parsed is not None:
+                            return parsed
+                else:
+                    parsed = _as_dict(item)
+                    if parsed is not None:
+                        return parsed
+        return None
+
     if mapped[0] != "tool_result":
         return []
     if ev.get("name") != "read_paper":
         return []
-    output = mapped[1].get("output")
-    if not isinstance(output, dict):
+    output = _as_dict(mapped[1].get("output"))
+    if output is None:
         return []
     paper_id = output.get("paper_id")
     if not isinstance(paper_id, str) or not paper_id:
@@ -336,8 +362,8 @@ def _build_reader_context_prefix(active_paper_id: str) -> str:
     repeatedly try to call a name it had been told to use.
     """
     return (
-        f"[reader-context] You are answering inside the PDF reader for "
-        f"paper_id={active_paper_id}. Prefer tools scoped to this paper:\n"
+        f"[reader-context] You are answering inside the PDF reader for the "
+        f"currently open paper. Prefer tools scoped to this paper:\n"
         f"- read_paper(paper_id=\"{active_paper_id}\", scope=...) for full or "
         f"multi-page text;\n"
         f"- pdf_read_text(paper_id=\"{active_paper_id}\", page=N) for one page "
@@ -346,7 +372,11 @@ def _build_reader_context_prefix(active_paper_id: str) -> str:
         f"text=\"...\") to explain a selected passage;\n"
         f"- search_pdfs(query=\"...\") / list_pdfs() to find or list papers.\n"
         f"Use these names verbatim. Do NOT invent tools (e.g. read_pdf) and do "
-        f"NOT call search_library — it is skill-gated and may be unavailable."
+        f"NOT call search_library — it is skill-gated and may be unavailable.\n"
+        f"NEVER mention paper_id, UUIDs, or any internal identifier in replies "
+        f"to the user. Refer to the paper by its title or as \"this paper\". "
+        f"Greet briefly without restating context (e.g. \"Hi — what would you "
+        f"like to dig into?\")."
     )
 
 
