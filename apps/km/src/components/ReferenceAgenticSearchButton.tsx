@@ -24,7 +24,7 @@ export function ReferenceAgenticSearchButton({ referenceId, citationKey }: Props
       }
     >
       <span aria-hidden="true" className="text-sm leading-none">⬡</span>
-      🪄 Agentic PDF Search
+      Agentic PDF Search
     </Button>
   );
 }

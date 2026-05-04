@@ -1,5 +1,5 @@
 import "./globals.css";
-import type { ReactNode } from "react";
+import type { Metadata, ReactNode } from "react";
 import { Geist_Mono, Outfit, Philosopher } from "next/font/google";
 import { fraunces, jetbrainsMono } from "./fonts";
 import { Toaster } from "@/components/ui/sonner";
@@ -22,7 +22,15 @@ const philosopher = Philosopher({
   style: ["normal", "italic"],
 });
 
-export const metadata = { title: "Episteme KM", description: "Knowledge manager" };
+export const metadata: Metadata = {
+  title: "Episteme",
+  description: "Knowledge manager",
+  icons: {
+    icon: [{ url: "/icon.svg", type: "image/svg+xml" }],
+    shortcut: ["/icon.svg"],
+    apple: [{ url: "/icon.svg", type: "image/svg+xml" }],
+  },
+};
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (

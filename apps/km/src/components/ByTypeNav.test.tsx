@@ -42,6 +42,7 @@ describe("ByTypeNav", () => {
     renderNav();
     const link = screen.getByRole("link", { name: /papersets/i }) as HTMLAnchorElement;
     expect(link.getAttribute("href")).toBe("/papersets");
+    expect(link.textContent).toContain("⬡");
   });
 
   it("renders Papers, References, Notes, Papersets links", () => {

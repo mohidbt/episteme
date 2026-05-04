@@ -108,6 +108,8 @@ describe("Sidebar", () => {
 
   it("G-R3-07 #86: agent nav row label reads 'Convos'", () => {
     const { container } = renderShell(baseTree());
+    const agentSectionToggle = screen.getByRole("button", { name: /^agent$/i });
+    expect(agentSectionToggle.textContent).toContain("⬡");
     const link = container.querySelector(
       'a[href="/agents"]',
     ) as HTMLAnchorElement | null;
