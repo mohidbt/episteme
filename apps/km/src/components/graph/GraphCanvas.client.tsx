@@ -128,6 +128,7 @@ export default function GraphCanvas({ payload }: { payload: GraphPayload }) {
         graphData={graphData}
         width={size.width}
         height={size.height}
+        nodeId="fgId"
         nodeColor={(n: unknown) => COLORS[(n as CanvasNode).kind]}
         nodeVal={(n: unknown) => 1 + (degreeMap.get((n as CanvasNode).fgId) ?? 0) * 0.5}
         nodeLabel={(n: unknown) => (n as CanvasNode).label}
@@ -143,6 +144,8 @@ export default function GraphCanvas({ payload }: { payload: GraphPayload }) {
           const link = linkObj as CanvasLink & { source: { x: number; y: number }; target: { x: number; y: number } }
           const style = STYLE[link.kind]
           if (!link.source || !link.target) return
+          if (typeof link.source === 'string' || typeof link.target === 'string') return
+          if (typeof link.source.x !== 'number' || typeof link.target.x !== 'number') return
           ctx.save()
           ctx.globalAlpha = style.opacity
           ctx.strokeStyle = style.color
