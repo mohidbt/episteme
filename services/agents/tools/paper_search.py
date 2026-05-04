@@ -6,6 +6,7 @@ Fetch downloads the PDF, stores it via KM, and links it to the reference.
 from __future__ import annotations
 
 import logging
+import re
 
 import httpx
 from langchain_core.runnables import RunnableConfig
@@ -17,6 +18,52 @@ from tools.search_backends import PaperResult, SemanticScholarSearch
 from tools.search_backends.semantic_scholar import S2Error
 
 logger = logging.getLogger(__name__)
+
+
+_ARXIV_DOI_RE = re.compile(r"^10\.48550/arXiv\.(?P<id>[\w./-]+)$", re.IGNORECASE)
+
+
+def _arxiv_id_from_doi(doi: str) -> str | None:
+    """Return arXiv id when `doi` is the canonical arXiv DOI form, else None."""
+    if not doi:
+        return None
+    m = _ARXIV_DOI_RE.match(doi.strip())
+    return m.group("id") if m else None
+
+
+def _arxiv_candidate(arxiv_id: str, csl: dict) -> PaperResult:
+    """Build a PaperResult straight from the reference's arXiv DOI — no S2 needed.
+
+    Used when Semantic Scholar is unreachable (rate-limited) but the reference
+    already carries enough metadata to construct a direct arXiv PDF URL.
+    """
+    authors_csl = csl.get("author") or []
+    authors: list[str] = []
+    for a in authors_csl:
+        if isinstance(a, dict):
+            name = " ".join(filter(None, [a.get("given"), a.get("family")])).strip() or a.get("name")
+            if name:
+                authors.append(name)
+        elif isinstance(a, str):
+            authors.append(a)
+    year = None
+    try:
+        year = str(csl["issued"]["date-parts"][0][0])
+    except (KeyError, IndexError, TypeError):
+        pass
+    return PaperResult(
+        paper_id=f"arXiv:{arxiv_id}",
+        title=csl.get("title") or f"arXiv:{arxiv_id}",
+        authors=authors,
+        year=year,
+        venue="arXiv",
+        doi=csl.get("DOI"),
+        open_access_pdf_url=f"https://arxiv.org/pdf/{arxiv_id}.pdf",
+        citation_count=None,
+        abstract_snippet=(csl.get("abstract") or "")[:280] or None,
+        match_confidence="exact",
+        external_ids={"ArXiv": arxiv_id},
+    )
 
 
 def _candidate_dict(result: PaperResult, rank: int) -> dict:
@@ -97,6 +144,24 @@ async def agentic_search_papers(
         return {"found": False, "suggestion": "Add a title or DOI to this reference"}
 
     backend = SemanticScholarSearch()
+
+    # arXiv shortcut: an arXiv DOI maps to a deterministic PDF URL, so we can
+    # build a candidate without hitting Semantic Scholar at all. This survives
+    # S2 rate limiting and is the right answer for any 10.48550/arXiv.* DOI.
+    arxiv_id = _arxiv_id_from_doi(doi) if doi else None
+    if arxiv_id:
+        result = _arxiv_candidate(arxiv_id, csl)
+        return {
+            "found": True,
+            "candidates": [_candidate_dict(result, rank=1)],
+            "reference_context": {
+                "id": reference_id,
+                "title": title,
+                "authors": authors,
+                "year": year,
+                "doi": doi,
+            },
+        }
 
     # DOI path: exact lookup
     if doi:
