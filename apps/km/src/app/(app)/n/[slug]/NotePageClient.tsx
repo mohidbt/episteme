@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { ResolvedLinksMap, TiptapEditor } from "@episteme/editor";
 import {
@@ -73,6 +73,10 @@ export function NotePageClient({
   const [titleDraft, setTitleDraft] = useState(title);
   const [savingTitle, setSavingTitle] = useState(false);
   const [contentSaving, setContentSaving] = useState(false);
+  const [lastEditedAt, setLastEditedAt] = useState<Date | null>(
+    updatedAt ? new Date(updatedAt) : null,
+  );
+  const prevSavingRef = useRef(false);
   const trimmedDraft = titleDraft.trim();
   const titleDirty = trimmedDraft.length > 0 && trimmedDraft !== title;
 
@@ -112,8 +116,19 @@ export function NotePageClient({
     router.refresh();
   }, [router]);
 
-  const editedLabel = updatedAt
-    ? `Last edited ${formatRelativeTime(new Date(updatedAt))}`
+  useEffect(() => {
+    if (contentSaving) {
+      prevSavingRef.current = true;
+      return;
+    }
+    if (prevSavingRef.current) {
+      setLastEditedAt(new Date());
+      prevSavingRef.current = false;
+    }
+  }, [contentSaving]);
+
+  const editedLabel = lastEditedAt
+    ? `Last edited ${formatRelativeTime(lastEditedAt)}`
     : "Synced";
   const saving = contentSaving;
 

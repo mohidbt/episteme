@@ -160,4 +160,27 @@ describe("NotePageClient — dynamic synced pill (#135)", () => {
     const pill = screen.getByTestId("synced-pill");
     expect(pill.textContent).toContain("Synced");
   });
+
+  it("updates 'Last edited' after a save finishes without reload", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-05-04T10:00:00.000Z"));
+    render(<NotePageClient {...baseProps} updatedAt="2026-05-04T08:00:00.000Z" />);
+
+    expect(screen.getByText(/Last edited 2h ago/i)).toBeTruthy();
+
+    const setPending = lastNoteEditorProps.current?.onPendingSaveChange as
+      | ((pending: boolean) => void)
+      | undefined;
+    expect(setPending).toBeDefined();
+
+    act(() => {
+      setPending!(true);
+    });
+    act(() => {
+      setPending!(false);
+    });
+
+    expect(screen.getByText(/Last edited just now/i)).toBeTruthy();
+    vi.useRealTimers();
+  });
 });

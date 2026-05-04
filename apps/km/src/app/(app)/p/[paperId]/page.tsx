@@ -11,8 +11,7 @@ import { getReferencesForPaper } from "@/lib/references-server";
 import { papersetCountForPaper, papersetsForPaper } from "@/lib/papersets-server";
 import { listAllFolders } from "@/lib/folders-server";
 import { denormaliseForList, validateCslJson } from "@/lib/csl";
-import { PathPill, type PathPillSegment } from "@/components/PathPill";
-import { splitFolderPath } from "@/lib/tree";
+import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { PaperMetadataPanel } from "@/components/PaperMetadataPanel";
 import { PaperHighlightsList } from "@/components/PaperHighlightsList";
 import { TabTitleUpdater } from "@/components/TabBar";
@@ -60,29 +59,18 @@ export default async function PaperPage({
   const firstRef = refs[0];
   const firstRefYear = firstRef ? refYear(firstRef.cslJson) : null;
 
-  const folderSegs = splitFolderPath(paper.folderPath);
-  const pillSegments: PathPillSegment[] = library
-    ? [
-        { id: "root", label: library.name, href: "/" },
-        ...folderSegs.map((name, i) => ({
-          id: `folder-${i}`,
-          label: name,
-          href:
-            "/drive/" +
-            folderSegs
-              .slice(0, i + 1)
-              .map((x) => encodeURIComponent(x))
-              .join("/"),
-        })),
-        { id: "title", label: displayTitle, href: null },
-      ]
-    : [];
-
   return (
     <div className="flex h-full min-h-0 flex-col">
       <TabTitleUpdater href={`/p/${paper.id}`} title={displayTitle} />
       <div className="px-6 pt-6">
-        {library && <PathPill className="mb-4" segments={pillSegments} />}
+        {library && (
+          <Breadcrumbs
+            libraryName={library.name}
+            section="papers"
+            folderPath={paper.folderPath}
+            title={displayTitle}
+          />
+        )}
         {firstRef && (
           <Link
             href={`/r/${firstRef.id}`}
@@ -103,7 +91,7 @@ export default async function PaperPage({
               className="inline-flex h-7 items-center justify-center gap-1 rounded-md border border-border bg-background px-2.5 text-[0.8rem] font-medium text-foreground whitespace-nowrap transition-colors hover:bg-muted"
               aria-label={`Open ${displayTitle} in reader`}
             >
-              <BookOpen data-icon="inline-start" />
+              <BookOpen className="h-3 w-3" data-icon="inline-start" />
               Open in reader
             </Link>
             <Link
@@ -112,7 +100,7 @@ export default async function PaperPage({
               className="inline-flex h-7 items-center justify-center gap-1 rounded-md border border-border bg-background px-2.5 text-[0.8rem] font-medium text-foreground whitespace-nowrap transition-colors hover:bg-muted"
               aria-label={`Download ${displayTitle}`}
             >
-              <Download data-icon="inline-start" />
+              <Download className="h-3 w-3" data-icon="inline-start" />
               Download
             </Link>
           </div>
