@@ -11,14 +11,19 @@
  */
 
 export interface Citation {
-  chunk_id: string;
+  chunkId?: string;
+  paperId?: string;
+  chunk_id?: string;
+  paper_id?: string;
   title?: string;
   url?: string;
   page?: number;
+  snippet?: string;
+  bbox?: { x0: number; y0: number; x1: number; y1: number } | null;
 }
 
 export type AgentEvent =
-  | { type: "text"; id: string; delta: string }
+  | { type: "text"; id: string; delta: string; citations?: Array<Citation> }
   | { type: "thinking"; id: string; step_id?: string; delta: string }
   | {
       type: "tool_call";

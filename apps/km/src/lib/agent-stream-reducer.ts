@@ -207,6 +207,12 @@ export function agentStreamReducer(
 
   switch (event.type) {
     case "text": {
+      const nextSources = event.citations
+        ? {
+            ...state.sourcesByMessage,
+            [event.id]: event.citations.slice(),
+          }
+        : state.sourcesByMessage;
       const idx = state.cards.findIndex(
         (c) => c.kind === "text" && c.id === event.id,
       );
@@ -220,7 +226,7 @@ export function agentStreamReducer(
         };
         const out = state.cards.slice();
         out[idx] = merged;
-        return { ...state, cards: out };
+        return { ...state, cards: out, sourcesByMessage: nextSources };
       }
       const card: TextCard = {
         kind: "text",
@@ -228,7 +234,7 @@ export function agentStreamReducer(
         role: "assistant",
         text: stripLeadingThought(event.delta),
       };
-      return { ...state, cards: [...state.cards, card] };
+      return { ...state, cards: [...state.cards, card], sourcesByMessage: nextSources };
     }
 
     case "thinking": {

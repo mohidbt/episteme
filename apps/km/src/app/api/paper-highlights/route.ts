@@ -2,7 +2,7 @@ import { and, asc, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { paperHighlights, papers } from "@episteme/db/schema";
 import { getAuthedUserId, MissingInternalSecretError } from "@/lib/internal-auth";
-import { paperHighlightCreateSchema } from "@/lib/validators";
+import { paperHighlightCreateManySchema } from "@/lib/validators";
 import { jsonError, requireOwned } from "@/lib/crud";
 
 export const runtime = "nodejs";
@@ -55,22 +55,28 @@ export async function POST(req: Request) {
   if (!authed) return jsonError(401, "unauthorized");
   const userId = authed.userId;
   const body = (() => { try { return JSON.parse(rawBody); } catch { return null; } })();
-  const parsed = paperHighlightCreateSchema.safeParse(body);
+  const parsed = paperHighlightCreateManySchema.safeParse(body);
   if (!parsed.success) return jsonError(400, "validation", { issues: parsed.error.issues });
-
-  const owned = await requireOwned<PaperRow>(papers, parsed.data.paperId, userId);
+  const items = Array.isArray(parsed.data) ? parsed.data : [parsed.data];
+  const owned = await requireOwned<PaperRow>(papers, items[0].paperId, userId);
   if (!owned.ok) return jsonError(owned.status, owned.status === 404 ? "not_found" : "forbidden");
-
-  const [row] = await db
+  if (items.some((it) => it.paperId !== items[0].paperId)) {
+    return jsonError(400, "validation", { message: "all highlights must target the same paperId" });
+  }
+  const rows = await db
     .insert(paperHighlights)
-    .values({
-      paperId: parsed.data.paperId,
-      userId,
-      page: parsed.data.page,
-      bbox: (parsed.data.bbox ?? null) as typeof paperHighlights.$inferInsert["bbox"],
-      color: parsed.data.color ?? null,
-      noteMd: parsed.data.noteMd ?? null,
-    })
+    .values(
+      items.map((it) => ({
+        paperId: it.paperId,
+        userId,
+        page: it.page,
+        bbox: (it.bbox ?? null) as typeof paperHighlights.$inferInsert["bbox"],
+        runId: it.runId ?? null,
+        toolCallId: it.toolCallId ?? null,
+        color: it.color ?? null,
+        noteMd: it.noteMd ?? null,
+      })),
+    )
     .returning();
-  return Response.json(row, { status: 201 });
+  return Response.json(Array.isArray(parsed.data) ? rows : rows[0], { status: 201 });
 }

@@ -162,7 +162,11 @@ export function usePdfFind(_pdfDocument: unknown) {
         if (created.length > 0) all.push(...created);
       });
       matchesRef.current = all;
-      if (all.length > 0) setCurrent(0, true);
+      if (all.length > 0) {
+        // Keep selection state, but avoid auto-scroll on every apply/re-apply.
+        // Mutation-driven re-applies can otherwise keep pulling the viewport.
+        setCurrent(0, false);
+      }
     },
     [markSpan, removeAllMarks, setCurrent]
   );

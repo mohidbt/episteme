@@ -10,6 +10,8 @@ export const paperHighlights = pgTable(
     userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
     page: integer("page").notNull(),
     bbox: jsonb("bbox"),
+    runId: text("run_id"),
+    toolCallId: text("tool_call_id"),
     color: text("color"),
     noteMd: text("note_md"),
     createdAt: timestamp("created_at").defaultNow().notNull(),

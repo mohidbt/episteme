@@ -1,7 +1,7 @@
 "use client";
 
 export interface UserHighlight {
-  id: number;
+  id: number | string;
   color: "yellow" | "green" | "blue" | "pink" | "orange" | "amber";
   source: "user" | "ai-auto";
   layerId: string | null;

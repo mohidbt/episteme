@@ -21,6 +21,7 @@ import { useTextSelection } from "../hooks/use-text-selection";
 import { useReaderState } from "../hooks/use-reader-state";
 import { useCitationClick } from "../hooks/use-citation-click";
 import { useUserHighlights } from "../hooks/use-user-highlights";
+import { usePaperHighlights } from "../hooks/use-paper-highlights";
 import type { ReaderMode } from "../plugins/types";
 
 type DocProcessingStatus = "pending" | "processing" | "ready" | "failed";
@@ -58,6 +59,12 @@ interface MarkerRect {
   y0: number;
   x1: number;
   y1: number;
+}
+interface AutoHighlightRun {
+  id: string;
+  instruction: string;
+  summary: string | null;
+  highlightCount: number;
 }
 
 /**
@@ -213,6 +220,8 @@ export function Reader({
   const [markers, setMarkers] = useState<MarkerRect[]>([]);
   const [citationsRefreshKey, setCitationsRefreshKey] = useState(0);
   const [folderOptions, setFolderOptions] = useState<FolderOption[]>([]);
+  const [autoRuns, setAutoRuns] = useState<AutoHighlightRun[]>([]);
+  const [focusHighlightId, setFocusHighlightId] = useState<number | string | null>(null);
 
   // Folder list for the citation-card "Save to Library" picker. KM exposes
   // /api/folders; non-fatal on failure.
@@ -279,6 +288,27 @@ export function Reader({
     loading: highlightsLoading,
     error: highlightsError,
   } = useUserHighlights(paperId, refreshKey);
+  const {
+    highlights: paperHighlights,
+    userHighlights: aiHighlights,
+    loading: aiHighlightsLoading,
+    error: aiHighlightsError,
+  } = usePaperHighlights(paperId, refreshKey);
+  const combinedUserHighlights = [...userHighlights, ...aiHighlights];
+  const aiSidebarHighlights = paperHighlights.map((h) => ({
+    id: h.id,
+    pageNumber: h.page,
+    textContent: h.noteMd ?? "AI highlight",
+    color: "amber",
+    note: h.noteMd,
+    comment: null,
+    createdAt: h.createdAt,
+    source: "ai-auto" as const,
+    runId: h.runId ?? null,
+    toolCallId: h.toolCallId ?? null,
+    rects: aiHighlights.find((x) => x.id === h.id)?.rects ?? null,
+  }));
+  const mergedSidebarHighlights = [...aiSidebarHighlights, ...sidebarHighlights.map((h) => ({ ...h, source: h.source ?? "user" as const }))];
 
   useEffect(() => {
     setCitationsLoading(true);
@@ -295,6 +325,13 @@ export function Reader({
       .then((data: { markers: MarkerRect[] }) => setMarkers(data.markers))
       .catch(() => {/* non-fatal */});
   }, [paperId, citationsRefreshKey]);
+
+  useEffect(() => {
+    fetch(`/api/papers/${paperId}/auto-highlight/runs`)
+      .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
+      .then((data: { runs?: AutoHighlightRun[] }) => setAutoRuns(data.runs ?? []))
+      .catch(() => setAutoRuns([]));
+  }, [paperId, refreshKey]);
 
   const patchCitation = useCallback(
     (citationId: number, patch: Partial<CitationWithStatus>) => {
@@ -481,6 +518,26 @@ export function Reader({
     return () => window.removeEventListener("keydown", onKey);
   }, [clearSelection]);
 
+  useEffect(() => {
+    const onJump = (ev: Event) => {
+      const detail = (ev as CustomEvent<{ page?: number }>).detail;
+      if (detail?.page) useReaderState.getState().setScrollTargetPage(detail.page);
+    };
+    window.addEventListener("episteme:reader-jump", onJump as EventListener);
+    return () => window.removeEventListener("episteme:reader-jump", onJump as EventListener);
+  }, []);
+
+  useEffect(() => {
+    if (!focusHighlightId) return;
+    const target = mergedSidebarHighlights.find((h) => h.id === focusHighlightId);
+    const page = target?.rects?.[0]?.page ?? target?.pageNumber;
+    if (page) useReaderState.getState().setScrollTargetPage(page);
+    requestAnimationFrame(() => {
+      const el = document.querySelector<HTMLElement>(`[data-highlight-id="${focusHighlightId}"]`);
+      el?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+  }, [focusHighlightId, mergedSidebarHighlights]);
+
   // Extract native PDF outline (bookmarks) when pdfDoc loads.
   useEffect(() => {
     if (!pdfDoc) return;
@@ -537,9 +594,11 @@ export function Reader({
       node: (
         <HighlightsSidebar
           open={sidebarOpen}
-          highlights={sidebarHighlights}
-          loading={highlightsLoading}
-          error={highlightsError}
+          highlights={mergedSidebarHighlights}
+          runs={autoRuns}
+          loading={highlightsLoading || aiHighlightsLoading}
+          error={highlightsError ?? aiHighlightsError}
+          onNavigateHighlight={(id) => setFocusHighlightId(id)}
           dockControl={
             <DockMenu
               dock={highlightsDock}
@@ -667,7 +726,7 @@ export function Reader({
           url={url}
           containerRef={pdfScrollRef}
           markers={markers}
-          userHighlights={userHighlights}
+          userHighlights={combinedUserHighlights}
           onPdfLoad={setPdfDoc}
         />
       </Panel>
@@ -718,7 +777,10 @@ export function Reader({
         onNext={find.next}
         onPrev={find.prev}
         onToggleCase={() => setMatchCase((v) => !v)}
-        onClose={() => setFindOpen(false)}
+        onClose={() => {
+          find.search("", { matchCase });
+          setFindOpen(false);
+        }}
       />
       <div className="relative flex min-h-0 flex-1 overflow-hidden">
         {bottomEntries.length === 0 ? (
