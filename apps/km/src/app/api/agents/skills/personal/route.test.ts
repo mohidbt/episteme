@@ -1,11 +1,15 @@
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@/lib/auth", () => ({
-  getSessionInfo: vi.fn(),
-}));
+vi.mock("@/lib/internal-auth", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/internal-auth")>("@/lib/internal-auth");
+  return {
+    ...actual,
+    getAuthedUserId: vi.fn(),
+  };
+});
 
-import { getSessionInfo } from "@/lib/auth";
+import { getAuthedUserId } from "@/lib/internal-auth";
 import {
   __resetSkillStoreForTests,
   type SkillStore,
@@ -51,7 +55,7 @@ function makeFakeStore(): SkillStore & { dump: () => Map<string, string> } {
 }
 
 beforeEach(() => {
-  vi.mocked(getSessionInfo).mockResolvedValue({ userId: "u1", isAnonymous: false });
+  vi.mocked(getAuthedUserId).mockResolvedValue({ userId: "u1", viaHmac: false });
 });
 
 afterEach(() => {
@@ -61,7 +65,7 @@ afterEach(() => {
 
 describe("GET/POST /api/agents/skills/personal", () => {
   it("GET 401 when unauthenticated", async () => {
-    vi.mocked(getSessionInfo).mockResolvedValue(null);
+    vi.mocked(getAuthedUserId).mockResolvedValue(null);
     __resetSkillStoreForTests(makeFakeStore());
     const { GET } = await import("./route");
     const res = await GET(new Request("http://localhost/api/agents/skills/personal"));
@@ -110,7 +114,7 @@ describe("GET/POST /api/agents/skills/personal", () => {
   });
 
   it("POST 401 when unauthenticated", async () => {
-    vi.mocked(getSessionInfo).mockResolvedValue(null);
+    vi.mocked(getAuthedUserId).mockResolvedValue(null);
     __resetSkillStoreForTests(makeFakeStore());
     const { POST } = await import("./route");
     const res = await POST(
@@ -120,5 +124,34 @@ describe("GET/POST /api/agents/skills/personal", () => {
       }),
     );
     expect(res.status).toBe(401);
+  });
+
+  it("GET accepts HMAC-signed agent request", async () => {
+    const { createHmac } = await import("crypto");
+    const SECRET = "test-secret-abc";
+    process.env.INHALE_INTERNAL_SECRET = SECRET;
+    const ts = String(Math.floor(Date.now() / 1000));
+    const path = "/api/agents/skills/personal";
+    const sig = createHmac("sha256", SECRET).update(ts + "GET" + path + "").digest("hex");
+
+    // HMAC path bypasses cookie session — getAuthedUserId is real for this assertion.
+    vi.mocked(getAuthedUserId).mockImplementation(async (req) => {
+      if (req.headers.get("x-inhale-sig")) return { userId: "agent-u1", viaHmac: true };
+      return null;
+    });
+
+    __resetSkillStoreForTests(makeFakeStore());
+    const { GET } = await import("./route");
+    const res = await GET(
+      new Request(`http://localhost${path}`, {
+        headers: {
+          "X-Inhale-User-Id": "agent-u1",
+          "X-Inhale-Ts": ts,
+          "X-Inhale-Sig": sig,
+        },
+      }),
+    );
+    expect(res.status).toBe(200);
+    delete process.env.INHALE_INTERNAL_SECRET;
   });
 });
