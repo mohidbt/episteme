@@ -81,14 +81,14 @@ describe("GET /api/graph", () => {
     expect(edgesPaperIsRef).toHaveBeenCalledWith("u1");
     expect(edgesWikiLink).toHaveBeenCalledWith("u1");
     expect(edgesSharedTag).toHaveBeenCalledWith("u1");
-    expect(edgesSemanticSim).toHaveBeenCalledWith("u1");
+    expect(edgesSemanticSim).toHaveBeenCalledWith("u1", 20);
 
     expect(body.nodes).toEqual([{ id: "n1" }, { id: "n2" }]);
     expect(body.capped).toEqual({
-      paperIsRef: { kept: 5000, total: 5002 },
-      wikiLink: { kept: 5000, total: 5001 },
-      sharedTag: { kept: 3, total: 3 },
-      semanticSim: { kept: 3, total: 3 },
+      paper_is_ref: { kept: 5000, total: 5002 },
+      wiki_link: { kept: 5000, total: 5001 },
+      shared_tag: { kept: 3, total: 3 },
+      semantic_sim: { kept: 3, total: 3 },
     });
 
     expect(body.edges).toHaveLength(5000 + 5000 + 3 + 3);

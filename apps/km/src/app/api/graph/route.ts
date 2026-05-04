@@ -27,7 +27,7 @@ export async function GET(req: Request) {
     edgesPaperIsRef(userId),
     edgesWikiLink(userId),
     edgesSharedTag(userId),
-    edgesSemanticSim(userId),
+    edgesSemanticSim(userId, CAP_PER_SRC_DST),
   ]);
 
   const keptRef = eRef.slice(0, QUOTA_PAPER_IS_REF);
@@ -42,10 +42,10 @@ export async function GET(req: Request) {
     nodes,
     edges: [...det, ...sem],
     capped: {
-      paperIsRef: { kept: keptRef.length, total: eRef.length },
-      wikiLink: { kept: keptWiki.length, total: eWiki.length },
-      sharedTag: { kept: keptTag.length, total: eTag.length },
-      semanticSim: { kept: keptSem.length, total: eSem.length },
+      paper_is_ref: { kept: keptRef.length, total: eRef.length },
+      wiki_link: { kept: keptWiki.length, total: eWiki.length },
+      shared_tag: { kept: keptTag.length, total: eTag.length },
+      semantic_sim: { kept: keptSem.length, total: eSem.length },
     },
   });
 }
