@@ -46,6 +46,16 @@ function mockPaperFound(found: boolean) {
   } as never);
 }
 
+function mockPaperWithoutStorageUrl() {
+  vi.mocked(db.select).mockReturnValueOnce({
+    from: () => ({
+      where: () => ({
+        limit: async () => [{ id: PAPER_ID, userId: "u1", storageUrl: null }],
+      }),
+    }),
+  } as never);
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   process.env.INHALE_INTERNAL_SECRET = SECRET;
@@ -99,5 +109,20 @@ describe("GET /api/papers/[id]/pages/[n]/text", () => {
     });
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ pageNumber: 2, text: "second" });
+  });
+
+  it("falls back to derived source key when storageUrl is missing", async () => {
+    mockPaperWithoutStorageUrl();
+    vi.mocked(extractPdfPages).mockResolvedValue([{ pageNumber: 1, text: "first" }]);
+
+    const res = await GET(hmacReq(`/api/papers/${PAPER_ID}/pages/1/text`), {
+      params: Promise.resolve({ id: PAPER_ID, n: "1" }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(extractPdfPages).toHaveBeenCalledWith(
+      `${PAPER_ID}/source.pdf`,
+      expect.any(Object),
+    );
   });
 });

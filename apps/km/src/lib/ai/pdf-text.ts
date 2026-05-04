@@ -35,6 +35,9 @@ export async function extractPdfPages(
   filePath: string,
   context: AgentPdfRequestContext,
 ): Promise<ExtractedPage[]> {
+  const agentsUrl = process.env.AGENTS_URL;
+  if (!agentsUrl) throw new Error("[pdf-text] AGENTS_URL missing");
+
   const path = "/agents/pdf/text";
   const body = JSON.stringify({ file_path: filePath });
   const { headers } = signRequest({
@@ -46,7 +49,7 @@ export async function extractPdfPages(
     llmKey: context.llmKey ?? "",
   });
 
-  const res = await fetch(`${process.env.AGENTS_URL}${path}`, {
+  const res = await fetch(`${agentsUrl}${path}`, {
     method: "POST",
     headers: { ...headers, "Content-Type": "application/json" },
     body,

@@ -643,6 +643,8 @@ export function Reader({
           citations={citations}
           loading={citationsLoading}
           onExtracted={() => setCitationsRefreshKey((k) => k + 1)}
+          onSaveToLibrary={handleSaveToLibrary}
+          folders={folderOptions}
           dockControl={
             <DockMenu
               dock={citationsDock}

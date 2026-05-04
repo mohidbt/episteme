@@ -13,6 +13,8 @@ vi.mock("@/lib/citations/annotation-extractor", () => ({
 
 import { auth } from "@episteme/auth";
 import { db } from "@/lib/db";
+import { extractPdfPages } from "@/lib/ai/pdf-text";
+import { extractAnnotationMarkers } from "@/lib/citations/annotation-extractor";
 import { POST } from "./route";
 
 const PAPER_ID = "00000000-0000-0000-0000-000000000001";
@@ -38,7 +40,7 @@ describe("POST /api/papers/[id]/citations/extract", () => {
     expect(res.status).toBe(404);
   });
 
-  it("422 when paper has no storageUrl", async () => {
+  it("falls back to derived source key when paper storageUrl is missing", async () => {
     vi.mocked(auth.api.getSession).mockResolvedValue({ user: { id: "u1" } } as never);
     vi.mocked(db.select).mockReturnValueOnce({
       from: () => ({
@@ -47,7 +49,43 @@ describe("POST /api/papers/[id]/citations/extract", () => {
         }),
       }),
     } as never);
+    vi.mocked(extractAnnotationMarkers).mockRejectedValueOnce(
+      new Error("[annotation-extractor] AGENTS_URL missing"),
+    );
+    vi.mocked(extractPdfPages).mockRejectedValueOnce(
+      new Error("[pdf-text] AGENTS_URL missing"),
+    );
     const res = await POST(buildReq(), routeParams);
-    expect(res.status).toBe(422);
+    expect(res.status).toBe(200);
+    expect(extractAnnotationMarkers).toHaveBeenCalledWith(
+      `${PAPER_ID}/source.pdf`,
+      expect.any(Object),
+    );
+    expect(await res.json()).toMatchObject({ unavailable: true });
+  });
+
+  it("returns empty successful payload when upstream extraction dependency is unavailable", async () => {
+    vi.mocked(auth.api.getSession).mockResolvedValue({ user: { id: "u1" } } as never);
+    vi.mocked(db.select).mockReturnValueOnce({
+      from: () => ({
+        where: () => ({
+          limit: async () => [{ id: PAPER_ID, userId: "u1", storageUrl: "/tmp/paper.pdf" }],
+        }),
+      }),
+    } as never);
+    vi.mocked(extractAnnotationMarkers).mockRejectedValueOnce(
+      new Error("[annotation-extractor] AGENTS_URL missing"),
+    );
+    vi.mocked(extractPdfPages).mockRejectedValueOnce(
+      new Error("[pdf-text] AGENTS_URL missing"),
+    );
+
+    const res = await POST(buildReq(), routeParams);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      references: [],
+      unavailable: true,
+      stats: { extractionMethod: "unavailable" },
+    });
   });
 });

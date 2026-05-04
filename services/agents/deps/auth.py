@@ -20,7 +20,9 @@ async def require_internal(
 ) -> dict:
     if not x_inhale_user_id:
         raise HTTPException(status_code=401, detail="missing user id")
-    secret = os.environ["INHALE_INTERNAL_SECRET"]
+    secret = os.environ.get("INHALE_INTERNAL_SECRET")
+    if not secret:
+        raise HTTPException(status_code=503, detail="internal auth unavailable")
     try:
         ts_int = int(x_inhale_ts)
     except ValueError:

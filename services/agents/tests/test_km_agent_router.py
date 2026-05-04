@@ -6,7 +6,13 @@ been pruned by an active skill. In particular ``search_library`` is
 skill-gated (see deep-read SKILL.md) and was a known source of
 hallucination / error loops when mentioned here.
 """
-from routers.km_agent import _build_configurable, _build_reader_context_prefix
+import json
+
+from routers.km_agent import (
+    _build_configurable,
+    _build_reader_context_prefix,
+    _extract_rag_citations_from_tool_result,
+)
 
 
 def test_reader_context_prefix_names_core_tools():
@@ -81,3 +87,34 @@ def test_build_configurable_omits_empty_keys():
     )
     assert "ocr_key" not in cfg
     assert "llm_key" not in cfg
+
+
+def test_extract_rag_citations_accepts_json_string_tool_output():
+    ev = {"name": "read_paper"}
+    payload = {
+        "paper_id": "p-1",
+        "blocks": [{"block_id": "p-1:7", "page": 7, "text": "snippet"}],
+    }
+    mapped = ("tool_result", {"output": json.dumps(payload)})
+    citations = _extract_rag_citations_from_tool_result(ev, mapped)
+    assert citations == [{
+        "chunk_id": "p-1:7",
+        "paper_id": "p-1",
+        "page": 7,
+        "snippet": "snippet",
+    }]
+
+
+def test_extract_rag_citations_accepts_content_block_list_tool_output():
+    ev = {"name": "read_paper"}
+    payload = {
+        "paper_id": "p-2",
+        "blocks": [{"block_id": "p-2:3", "text": "x"}],
+    }
+    mapped = ("tool_result", {"output": [{"type": "text", "text": json.dumps(payload)}]})
+    citations = _extract_rag_citations_from_tool_result(ev, mapped)
+    assert citations == [{
+        "chunk_id": "p-2:3",
+        "paper_id": "p-2",
+        "snippet": "x",
+    }]

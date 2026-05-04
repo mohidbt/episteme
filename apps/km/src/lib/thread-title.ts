@@ -22,3 +22,15 @@ export function deriveThreadTitle(message: string, maxLen = 50): string | null {
   const cut = lastSpace > 20 ? budget.slice(0, lastSpace) : budget;
   return `${cut.trimEnd()}…`;
 }
+
+/**
+ * Matches legacy placeholder titles that accidentally leaked UUID-ish content
+ * instead of a human title. We treat these as missing and re-derive.
+ */
+export function isUuidLikeThreadTitle(title: string | null | undefined): boolean {
+  if (!title) return false;
+  const t = title.trim();
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(:.+)?$/i.test(
+    t,
+  );
+}

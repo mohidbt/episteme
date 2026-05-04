@@ -68,6 +68,9 @@ export async function extractAnnotationMarkers(
   filePath: string,
   context: AgentPdfRequestContext,
 ): Promise<AnnotationExtractionResult> {
+  const agentsUrl = process.env.AGENTS_URL;
+  if (!agentsUrl) throw new Error("[annotation-extractor] AGENTS_URL missing");
+
   const path = "/agents/pdf/annotations";
   const body = JSON.stringify({ file_path: filePath });
   const { headers } = signRequest({
@@ -79,7 +82,7 @@ export async function extractAnnotationMarkers(
     llmKey: context.llmKey ?? "",
   });
 
-  const res = await fetch(`${process.env.AGENTS_URL}${path}`, {
+  const res = await fetch(`${agentsUrl}${path}`, {
     method: "POST",
     headers: { ...headers, "Content-Type": "application/json" },
     body,

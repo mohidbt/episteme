@@ -5,6 +5,7 @@ import {
   screen,
   cleanup,
   act,
+  within,
 } from "@testing-library/react";
 import { ThreadList } from "./ThreadList";
 import type { AgentThreadRow } from "@/lib/threads";
@@ -77,7 +78,7 @@ describe("ThreadList", () => {
     const rows = screen.getAllByTestId("thread-row");
     expect(rows.length).toBe(2);
     expect(screen.getByText("Hello")).toBeTruthy();
-    expect(screen.getByText(/Conversation #t-2-zzzz/)).toBeTruthy();
+    expect(within(rows[1]).getByText("New conversation")).toBeTruthy();
   });
 
   it("renders status chips matching status enum", () => {
@@ -130,5 +131,65 @@ describe("ThreadList", () => {
       vi.advanceTimersByTime(15000);
     });
     expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("repairs missing/uuid-like titles from first user prompt", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url === "/api/agents/km/state/t-legacy") {
+          return new Response(
+            JSON.stringify({
+              messages: [
+                { role: "user", text: "Please summarize attention is all you need in plain terms" },
+              ],
+            }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          );
+        }
+        if (url === "/api/agent/threads/t-legacy" && init?.method === "PATCH") {
+          return new Response(JSON.stringify({ thread: { threadId: "t-legacy", title: "Please summarize attention is all you need in plain terms" } }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        }
+        if (url === "/api/agent/threads") {
+          return new Response(JSON.stringify({ threads: [] }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        }
+        return new Response("{}", { status: 200, headers: { "content-type": "application/json" } });
+      }) as unknown as typeof fetch,
+    );
+
+    render(
+      <ThreadList
+        initialThreads={[
+          makeThread({
+            threadId: "t-legacy",
+            title: "123e4567-e89b-12d3-a456-426614174000:t-legacy",
+          }),
+        ]}
+      />,
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/agents/km/state/t-legacy",
+      expect.objectContaining({ cache: "no-store" }),
+    );
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/agent/threads/t-legacy",
+      expect.objectContaining({ method: "PATCH" }),
+    );
+    expect(
+      screen.getByText(/Please summarize attention is all you need in plain terms/i),
+    ).toBeTruthy();
   });
 });

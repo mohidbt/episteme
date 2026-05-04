@@ -5,7 +5,7 @@ import { Button } from "./ui/button";
 import { Alert, AlertTitle } from "./ui/alert";
 import { Skeleton } from "./ui/skeleton";
 import { BookOpen, FileSearch, Loader2 } from "lucide-react";
-import { CitationCard, type CitationWithStatus } from "./CitationCard";
+import { CitationCard, type CitationWithStatus, type FolderOption } from "./CitationCard";
 import { toast } from "sonner";
 
 interface CitationsSidebarProps {
@@ -14,10 +14,21 @@ interface CitationsSidebarProps {
   citations: CitationWithStatus[];
   loading: boolean;
   onExtracted?: () => void;
+  onSaveToLibrary?: (citationId: number, folderId: string | null) => void;
+  folders?: FolderOption[];
   dockControl?: ReactNode;
 }
 
-export function CitationsSidebar({ paperId, open, citations, loading, onExtracted, dockControl }: CitationsSidebarProps) {
+export function CitationsSidebar({
+  paperId,
+  open,
+  citations,
+  loading,
+  onExtracted,
+  onSaveToLibrary,
+  folders = [],
+  dockControl,
+}: CitationsSidebarProps) {
   const [extracting, setExtracting] = useState(false);
   const [enriching, setEnriching] = useState(false);
   const enrichFiredRef = useRef(false);
@@ -42,7 +53,11 @@ export function CitationsSidebar({ paperId, open, citations, loading, onExtracte
     const controller = new AbortController();
     setEnriching(true);
 
-    fetch(`/api/papers/${paperId}/citations/enrich`, { method: "POST", signal: controller.signal })
+    fetch(`/api/papers/${paperId}/citations/enrich`, {
+      method: "POST",
+      signal: controller.signal,
+      credentials: "include",
+    })
       .then((res) => {
         if (!res.ok) throw new Error(`enrich failed: ${res.status}`);
         return res.json();
@@ -66,8 +81,21 @@ export function CitationsSidebar({ paperId, open, citations, loading, onExtracte
   const handleExtract = useCallback(async () => {
     setExtracting(true);
     try {
-      await fetch(`/api/papers/${paperId}/citations/extract`, { method: "POST" });
+      const res = await fetch(`/api/papers/${paperId}/citations/extract`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!res.ok) {
+        if (res.status === 503) {
+          toast.error("Citation extraction is temporarily unavailable.");
+          return;
+        }
+        throw new Error(`extract failed: ${res.status}`);
+      }
       onExtracted?.();
+    } catch (err) {
+      console.error("[citations-sidebar] extract error", err);
+      toast.error("Extraction failed. Please try again.");
     } finally {
       setExtracting(false);
     }
@@ -123,7 +151,13 @@ export function CitationsSidebar({ paperId, open, citations, loading, onExtracte
         {!loading && citations.length > 0 && (
           <div className="flex flex-col gap-2">
             {citations.map((c) => (
-              <CitationCard key={c.id} citation={c} variant="compact" />
+              <CitationCard
+                key={c.id}
+                citation={c}
+                variant="compact"
+                onSaveToLibrary={onSaveToLibrary ? (folderId) => onSaveToLibrary(c.id, folderId) : undefined}
+                folders={folders}
+              />
             ))}
           </div>
         )}

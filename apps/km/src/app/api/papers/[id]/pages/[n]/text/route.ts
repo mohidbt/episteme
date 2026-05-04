@@ -8,6 +8,7 @@ import { papers } from "@episteme/db/schema";
 import { getAuthedUserId, MissingInternalSecretError } from "@episteme/auth/internal";
 import { jsonError, requireOwned } from "@/lib/crud";
 import { extractPdfPages } from "@/lib/ai/pdf-text";
+import { paperSourceKey } from "@/lib/storage";
 
 export const runtime = "nodejs";
 
@@ -35,11 +36,11 @@ export async function GET(request: NextRequest, { params }: Ctx) {
   const owned = await requireOwned<PaperRow>(papers, id, userId);
   if (!owned.ok) return jsonError(owned.status, owned.status === 404 ? "not_found" : "forbidden");
   const paper = owned.row;
-  if (!paper.storageUrl) return jsonError(404, "source_missing");
+  const sourceLocator = paper.storageUrl ?? paperSourceKey(id);
 
   let pages;
   try {
-    pages = await extractPdfPages(paper.storageUrl, {
+    pages = await extractPdfPages(sourceLocator, {
       userId,
       paperId: id,
       llmKey: request.headers.get("x-inhale-llm-key") ?? "",

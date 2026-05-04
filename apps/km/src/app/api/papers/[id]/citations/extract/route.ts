@@ -8,11 +8,23 @@ import { extractPdfPages } from "@/lib/ai/pdf-text";
 import { extractCitations } from "@/lib/citations/parser";
 import { extractAnnotationMarkers } from "@/lib/citations/annotation-extractor";
 import { authorStringToJson } from "@/lib/citations/author-utils";
+import { paperSourceKey } from "@/lib/storage";
 
 export const runtime = "nodejs";
 
 type Ctx = { params: Promise<{ id: string }> };
 type PaperRow = typeof papers.$inferSelect;
+
+function isUpstreamDependencyError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  return (
+    err.message.includes("AGENTS_URL missing") ||
+    err.message.includes("INHALE_INTERNAL_SECRET missing") ||
+    err.message.includes("[pdf-text] agents request failed") ||
+    err.message.includes("[annotation-extractor] agents request failed") ||
+    err.message.includes("fetch failed")
+  );
+}
 
 export async function POST(request: NextRequest, { params }: Ctx) {
   const userId = await getUserIdFromRequest(request);
@@ -23,7 +35,7 @@ export async function POST(request: NextRequest, { params }: Ctx) {
   const owned = await requireOwned<PaperRow>(papers, paperId, userId);
   if (!owned.ok) return jsonError(owned.status, owned.status === 404 ? "not_found" : "forbidden");
   const paper = owned.row;
-  if (!paper.storageUrl) return jsonError(422, "source_missing");
+  const sourceLocator = paper.storageUrl ?? paperSourceKey(paperId);
 
   try {
     let annRefs: Awaited<ReturnType<typeof extractAnnotationMarkers>>["references"] = [];
@@ -31,7 +43,7 @@ export async function POST(request: NextRequest, { params }: Ctx) {
     let usedAnnotations = false;
 
     try {
-      const annResult = await extractAnnotationMarkers(paper.storageUrl, {
+      const annResult = await extractAnnotationMarkers(sourceLocator, {
         userId,
         paperId,
         llmKey: "",
@@ -103,7 +115,7 @@ export async function POST(request: NextRequest, { params }: Ctx) {
         markersInserted = markerRows.length;
       }
     } else {
-      const pages = await extractPdfPages(paper.storageUrl, {
+      const pages = await extractPdfPages(sourceLocator, {
         userId,
         paperId,
         llmKey: "",
@@ -158,6 +170,22 @@ export async function POST(request: NextRequest, { params }: Ctx) {
     );
   } catch (err) {
     console.error("[citations/extract] failed for paper", paperId, err);
+    if (isUpstreamDependencyError(err)) {
+      return NextResponse.json(
+        {
+          references: [],
+          stats: {
+            markersFound: 0,
+            referencesExtracted: 0,
+            referencesInserted: 0,
+            markersInserted: 0,
+            extractionMethod: "unavailable",
+          },
+          unavailable: true,
+        },
+        { status: 200 },
+      );
+    }
     return jsonError(500, "internal server error");
   }
 }

@@ -362,8 +362,8 @@ def _build_reader_context_prefix(active_paper_id: str) -> str:
     repeatedly try to call a name it had been told to use.
     """
     return (
-        f"[reader-context] You are answering inside the PDF reader for the "
-        f"currently open paper. Prefer tools scoped to this paper:\n"
+        f"[reader-context] You are answering inside the PDF reader for "
+        f"paper_id={active_paper_id}. Prefer tools scoped to this paper:\n"
         f"- read_paper(paper_id=\"{active_paper_id}\", scope=...) for full or "
         f"multi-page text;\n"
         f"- pdf_read_text(paper_id=\"{active_paper_id}\", page=N) for one page "
@@ -372,11 +372,7 @@ def _build_reader_context_prefix(active_paper_id: str) -> str:
         f"text=\"...\") to explain a selected passage;\n"
         f"- search_pdfs(query=\"...\") / list_pdfs() to find or list papers.\n"
         f"Use these names verbatim. Do NOT invent tools (e.g. read_pdf) and do "
-        f"NOT call search_library — it is skill-gated and may be unavailable.\n"
-        f"NEVER mention paper_id, UUIDs, or any internal identifier in replies "
-        f"to the user. Refer to the paper by its title or as \"this paper\". "
-        f"Greet briefly without restating context (e.g. \"Hi — what would you "
-        f"like to dig into?\")."
+        f"NOT call search_library — it is skill-gated and may be unavailable."
     )
 
 

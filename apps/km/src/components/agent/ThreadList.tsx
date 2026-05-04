@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { NewConversationButton } from "./NewConversationButton";
 import type { AgentThreadRow, AgentThreadStatus } from "@/lib/threads";
+import { deriveThreadTitle, isUuidLikeThreadTitle } from "@/lib/thread-title";
 
 export interface ThreadListProps {
   initialThreads: AgentThreadRow[];
@@ -71,8 +72,8 @@ function reviveThread(t: ThreadJson | AgentThreadRow): AgentThreadRow {
 }
 
 function threadTitle(t: AgentThreadRow): string {
-  if (t.title && t.title.trim()) return t.title;
-  return `Conversation #${t.threadId.slice(0, 8)}`;
+  if (t.title && t.title.trim() && !isUuidLikeThreadTitle(t.title)) return t.title;
+  return "New conversation";
 }
 
 function lastActivity(t: AgentThreadRow): string {
@@ -88,6 +89,7 @@ export function ThreadList({ initialThreads }: ThreadListProps) {
   const router = useRouter();
   const [threads, setThreads] = useState<AgentThreadRow[]>(initialThreads);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const titleRepairSeenRef = useRef<Set<string>>(new Set());
 
   const refresh = useCallback(async () => {
     try {
@@ -151,6 +153,48 @@ export function ThreadList({ initialThreads }: ThreadListProps) {
       window.removeEventListener("focus", onFocus);
     };
   }, [refresh]);
+
+  useEffect(() => {
+    const candidates = threads.filter(
+      (t) => (!t.title || !t.title.trim() || isUuidLikeThreadTitle(t.title)) && !titleRepairSeenRef.current.has(t.threadId),
+    );
+    if (candidates.length === 0) return;
+
+    for (const t of candidates) {
+      titleRepairSeenRef.current.add(t.threadId);
+      void (async () => {
+        try {
+          const stateRes = await fetch(`/api/agents/km/state/${t.threadId}`, {
+            cache: "no-store",
+          });
+          if (!stateRes.ok) return;
+          const state = (await stateRes.json()) as {
+            messages?: Array<{ role?: string; text?: string }>;
+          };
+          const firstUserText = state.messages?.find(
+            (m) => m?.role === "user" && typeof m.text === "string" && m.text.trim().length > 0,
+          )?.text;
+          const nextTitle = firstUserText ? deriveThreadTitle(firstUserText, 60) : null;
+          if (!nextTitle) return;
+
+          const patchRes = await fetch(`/api/agent/threads/${t.threadId}`, {
+            method: "PATCH",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ title: nextTitle }),
+          });
+          if (!patchRes.ok) return;
+
+          setThreads((prev) =>
+            prev.map((row) =>
+              row.threadId === t.threadId ? { ...row, title: nextTitle } : row,
+            ),
+          );
+        } catch {
+          // Non-fatal; keep UI functional and retry on future reload.
+        }
+      })();
+    }
+  }, [threads]);
 
   if (threads.length === 0) {
     return (

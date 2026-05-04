@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { deriveThreadTitle } from "./thread-title";
+import { deriveThreadTitle, isUuidLikeThreadTitle } from "./thread-title";
 
 describe("deriveThreadTitle (Task #41)", () => {
   it("returns null for empty / whitespace-only input", () => {
@@ -33,5 +33,16 @@ describe("deriveThreadTitle (Task #41)", () => {
   it("hard-cuts when there is no whitespace in the budget", () => {
     const out = deriveThreadTitle("a".repeat(100), 50);
     expect(out).toBe(`${"a".repeat(50)}…`);
+  });
+
+  it("detects UUID-like placeholder titles", () => {
+    expect(
+      isUuidLikeThreadTitle("123e4567-e89b-12d3-a456-426614174000:thread-1"),
+    ).toBe(true);
+    expect(
+      isUuidLikeThreadTitle("123e4567-e89b-12d3-a456-426614174000"),
+    ).toBe(true);
+    expect(isUuidLikeThreadTitle("Summarize this paper")).toBe(false);
+    expect(isUuidLikeThreadTitle(null)).toBe(false);
   });
 });

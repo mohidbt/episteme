@@ -41,7 +41,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     >
       <body className="min-h-full">
         {children}
-        <Toaster richColors position="bottom-right" />
+        <Toaster position="bottom-right" />
         <SpeedInsights />
       </body>
     </html>

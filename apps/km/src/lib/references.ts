@@ -40,6 +40,7 @@ export function isUniqueViolation(err: unknown): boolean {
 type InsertValues = {
   libraryId: number;
   folderPath: string;
+  folderId?: string | null;
   citationKey: string;
   cslJson: unknown;
   paperId?: string | null;

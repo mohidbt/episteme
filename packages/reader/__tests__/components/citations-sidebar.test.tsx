@@ -13,8 +13,22 @@ vi.mock("../../src/components/CitationCard", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../src/components/CitationCard")>();
   return {
     ...actual,
-    CitationCard: ({ citation, variant }: { citation: CitationWithStatus; variant?: string }) => (
-      <div data-testid="citation-card" data-variant={variant} data-citation-id={citation.id} />
+    CitationCard: ({
+      citation,
+      variant,
+      onSaveToLibrary,
+    }: {
+      citation: CitationWithStatus;
+      variant?: string;
+      onSaveToLibrary?: (folderId: string | null) => void;
+    }) => (
+      <div data-testid="citation-card" data-variant={variant} data-citation-id={citation.id}>
+        {onSaveToLibrary && (
+          <button type="button" data-testid={`save-${citation.id}`} onClick={() => onSaveToLibrary(null)}>
+            Save to Library
+          </button>
+        )}
+      </div>
     ),
   };
 });
@@ -110,6 +124,26 @@ describe("CitationsSidebar — compact CitationCard rendering", () => {
     );
     expect(screen.queryAllByTestId("citation-card")).toHaveLength(0);
   });
+
+  it("passes save-to-library callback to compact cards", async () => {
+    const onSaveToLibrary = vi.fn();
+    const citations = [makeCitation({ id: 11 })];
+    render(
+      <CitationsSidebar
+        paperId={PAPER_ID}
+        open={true}
+        citations={citations}
+        loading={false}
+        onSaveToLibrary={onSaveToLibrary}
+      />
+    );
+
+    const btn = screen.getByTestId("save-11");
+    await act(async () => {
+      btn.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(onSaveToLibrary).toHaveBeenCalledWith(11, null);
+  });
 });
 
 describe("CitationsSidebar — auto-enrich", () => {
@@ -129,7 +163,7 @@ describe("CitationsSidebar — auto-enrich", () => {
     await waitFor(() => {
       expect(global.fetch).toHaveBeenCalledWith(
         `/api/papers/${PAPER_ID}/citations/enrich`,
-        expect.objectContaining({ method: "POST" })
+        expect.objectContaining({ method: "POST", credentials: "include" })
       );
     });
   });
@@ -338,5 +372,36 @@ describe("CitationsSidebar — auto-enrich", () => {
     // Wait for abort to propagate then confirm onExtracted not called
     await new Promise((r) => setTimeout(r, 50));
     expect(onExtracted).not.toHaveBeenCalled();
+  });
+});
+
+describe("CitationsSidebar — extract button", () => {
+  it("shows unavailable toast and does not call onExtracted when extract returns 503", async () => {
+    global.fetch = vi.fn().mockResolvedValue({ ok: false, status: 503 });
+    const onExtracted = vi.fn();
+
+    render(
+      <CitationsSidebar
+        paperId={PAPER_ID}
+        open={true}
+        citations={[]}
+        loading={false}
+        onExtracted={onExtracted}
+      />
+    );
+
+    const btn = screen.getByRole("button", { name: /extract citations/i });
+    await act(async () => {
+      btn.click();
+    });
+
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith("Citation extraction is temporarily unavailable.");
+    });
+    expect(onExtracted).not.toHaveBeenCalled();
+    expect(global.fetch).toHaveBeenCalledWith(
+      `/api/papers/${PAPER_ID}/citations/extract`,
+      expect.objectContaining({ method: "POST", credentials: "include" }),
+    );
   });
 });
