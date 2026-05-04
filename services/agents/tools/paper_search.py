@@ -225,7 +225,7 @@ async def agentic_search_papers(
 async def agentic_fetch_papers(
     reference_id: str,
     paper_url: str,
-    paper_metadata: dict,
+    paper_metadata: dict | None = None,
     *,
     config: RunnableConfig,
 ) -> object:
@@ -236,6 +236,10 @@ async def agentic_fetch_papers(
     Downloads PDF from paper_url (the open_access_pdf_url field), stores in S3,
     creates a papers row, and links the reference to the paper.
     Requires user approval (HITL interrupt) before executing.
+
+    `paper_metadata` is optional. When omitted, the tool falls back to the
+    reference's own CSL JSON for title/authors/year/doi — so a typical call
+    only needs `reference_id` + `paper_url`.
     """
     user_id = user_id_from_config(config)
     ref = await km_get(f"/api/references/{reference_id}", user_id=user_id)
@@ -255,7 +259,15 @@ async def agentic_fetch_papers(
             "existing_paper_id": existing_paper_id,
         }
 
-    doi = paper_metadata.get("doi")
+    # Fall back to the reference's CSL for metadata so the agent can call this
+    # tool with just (reference_id, paper_url) and not get a validator failure.
+    csl = ref.get("cslJson") or {}
+    if paper_metadata is None:
+        paper_metadata = {
+            "title": csl.get("title"),
+            "doi": csl.get("DOI"),
+        }
+    doi = paper_metadata.get("doi") or csl.get("DOI")
 
     # Download PDF
     pdf_bytes: bytes | None = None
@@ -271,7 +283,7 @@ async def agentic_fetch_papers(
                 if attempt == 1:
                     return {"success": False, "error": f"PDF download failed: {exc}"}
 
-    title = paper_metadata.get("title", "Untitled")
+    title = paper_metadata.get("title") or csl.get("title") or "Untitled"
     slug = "".join(c if c.isalnum() or c in " -" else "" for c in title).strip()
     slug = slug.replace(" ", "-")[:80]
 
