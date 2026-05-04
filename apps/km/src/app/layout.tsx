@@ -1,5 +1,6 @@
 import "./globals.css";
-import type { Metadata, ReactNode } from "react";
+import type { ReactNode } from "react";
+import type { Metadata } from "next";
 import { Geist_Mono, Outfit, Philosopher } from "next/font/google";
 import { fraunces, jetbrainsMono } from "./fonts";
 import { Toaster } from "@/components/ui/sonner";
