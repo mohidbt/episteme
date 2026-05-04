@@ -36,8 +36,12 @@ export async function GET(req: Request, { params }: Ctx) {
   }
 
   const headers = new Headers();
-  const contentType = upstream.headers.get("content-type");
-  if (contentType) headers.set("content-type", contentType);
+  // Force application/pdf — MinIO sometimes returns octet-stream when the
+  // uploader (e.g. agent fetch tool) didn't set a Content-Type header on PUT,
+  // and the browser then offers the object as a download instead of rendering.
+  headers.set("content-type", "application/pdf");
+  // inline (not attachment) keeps the browser's built-in viewer in the route.
+  headers.set("content-disposition", `inline; filename="${id}.pdf"`);
   const contentLength = upstream.headers.get("content-length");
   if (contentLength) headers.set("content-length", contentLength);
   const acceptRanges = upstream.headers.get("accept-ranges");

@@ -305,12 +305,18 @@ async def agentic_fetch_papers(
     paper_id = create_resp.get("id") or create_resp.get("paperId")
     presigned_url = create_resp.get("presignedUrl") or create_resp.get("uploadUrl")
 
-    # Upload PDF to S3
+    # Upload PDF to S3. Setting Content-Type matters: MinIO stores whatever
+    # the client sends, and a missing/octet-stream content-type makes browsers
+    # download the PDF instead of rendering it inline through /api/papers/:id/file.
     if presigned_url and pdf_bytes:
         async with httpx.AsyncClient() as client:
             for attempt in range(2):
                 try:
-                    put_resp = await client.put(presigned_url, content=pdf_bytes)
+                    put_resp = await client.put(
+                        presigned_url,
+                        content=pdf_bytes,
+                        headers={"Content-Type": "application/pdf"},
+                    )
                     put_resp.raise_for_status()
                     break
                 except (httpx.HTTPStatusError, httpx.RequestError) as exc:
