@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BookMarked, FileText, LayoutList, NotebookPen } from "lucide-react";
+import { BookMarked, FileText, LayoutList, Network, NotebookPen } from "lucide-react";
 import {
   SidebarMenuButton,
   SidebarMenuItem,
@@ -15,6 +15,7 @@ const LINKS = [
   { label: "Papers", href: "/papers", Icon: FileText },
   { label: "References", href: "/references", Icon: BookMarked },
   { label: "Notes", href: "/notes", Icon: NotebookPen },
+  { label: "Graph", href: "/graph", Icon: Network },
   { label: "Papersets", href: "/papersets", Icon: null },
 ] as const;
 
