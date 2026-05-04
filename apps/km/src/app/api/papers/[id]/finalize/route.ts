@@ -1,7 +1,7 @@
 import { eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { papers } from "@episteme/db/schema";
-import { getUserIdFromRequest } from "@/lib/auth";
+import { getAuthedUserId, MissingInternalSecretError } from "@/lib/internal-auth";
 import { jsonError, requireOwned } from "@/lib/crud";
 import { storage, paperSourceKey, paperCoverKey } from "@/lib/storage";
 import {
@@ -21,8 +21,17 @@ type PaperRow = typeof papers.$inferSelect;
 const MAX_PDF_BYTES = 50 * 1024 * 1024;
 
 export async function POST(req: Request, { params }: Ctx) {
-  const userId = await getUserIdFromRequest(req);
-  if (!userId) return jsonError(401, "unauthorized");
+  // Dual-auth: cookie session OR HMAC (agentic_fetch_papers calls this after
+  // upload). Pass rawBody so HMAC verifier signs over what the caller signed.
+  const rawBody = await req.text();
+  let authed;
+  try { authed = await getAuthedUserId(req, rawBody); }
+  catch (e) {
+    if (e instanceof MissingInternalSecretError) return jsonError(500, "internal auth misconfigured");
+    throw e;
+  }
+  if (!authed) return jsonError(401, "unauthorized");
+  const userId = authed.userId;
   const { id } = await params;
 
   const res = await requireOwned<PaperRow>(papers, id, userId);

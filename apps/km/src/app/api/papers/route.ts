@@ -1,7 +1,6 @@
 import { and, desc, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { papers, libraries } from "@episteme/db/schema";
-import { getUserIdFromRequest } from "@/lib/auth";
 import { getAuthedUserId, MissingInternalSecretError } from "@/lib/internal-auth";
 import { paperUploadInitSchema } from "@/lib/validators";
 import { jsonError, requireOwned } from "@/lib/crud";
@@ -39,9 +38,18 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const userId = await getUserIdFromRequest(req);
-  if (!userId) return jsonError(401, "unauthorized");
-  const body = await req.json().catch(() => null);
+  // Dual-auth: cookie session OR HMAC (for agent tools like agentic_fetch_papers).
+  // Read raw body first so the HMAC verifier can sign over it.
+  const rawBody = await req.text();
+  let authed;
+  try { authed = await getAuthedUserId(req, rawBody); }
+  catch (e) {
+    if (e instanceof MissingInternalSecretError) return jsonError(500, "internal auth misconfigured");
+    throw e;
+  }
+  if (!authed) return jsonError(401, "unauthorized");
+  const userId = authed.userId;
+  const body = (() => { try { return JSON.parse(rawBody); } catch { return null; } })();
   const parsed = paperUploadInitSchema.safeParse(body);
   if (!parsed.success) return jsonError(400, "validation", { issues: parsed.error.issues });
   const lib = await requireOwned<any>(libraries, parsed.data.libraryId, userId);
