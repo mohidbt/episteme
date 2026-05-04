@@ -58,14 +58,16 @@ describe("/agents/[id] page", () => {
 
     const page = (await AgentThreadPage({
       params: Promise.resolve({ id: "thread-abc" }),
-    })) as unknown as { props: { children: { props: Record<string, unknown> } } };
+    })) as unknown as { props: { children: Array<{ props: Record<string, unknown> }> } };
 
-    // The rendered tree is <div><AgentTranscript .../></div>; pull props off the child.
-    const transcriptProps = page.props.children.props;
+    // The rendered tree is <div><TabTitleUpdater .../><AgentTranscript .../></div>.
+    const transcriptProps = page.props.children[1]?.props;
     expect(transcriptProps.threadId).toBe("thread-abc");
     expect(transcriptProps.initialMessages).toEqual(messages);
 
     expect(getThreadMessages).toHaveBeenCalledWith("u1", "thread-abc");
+    expect(JSON.stringify(page)).toContain("/agents/thread-abc");
+    expect(JSON.stringify(page)).toContain("Thread");
   });
 
   it("fetches thread + messages concurrently (Promise.all, not sequential)", async () => {

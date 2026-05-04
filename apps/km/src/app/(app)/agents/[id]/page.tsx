@@ -3,6 +3,7 @@ import { getRequiredUserId } from "@/lib/session";
 import { getThread } from "@/lib/threads";
 import { getThreadMessages } from "@/lib/agents/get-thread-messages";
 import { AgentTranscript } from "@/components/agent/AgentTranscript";
+import { TabTitleUpdater } from "@/components/TabBar";
 
 interface ThreadPageProps {
   params: Promise<{ id: string }>;
@@ -24,6 +25,7 @@ export default async function AgentThreadPage({ params }: ThreadPageProps) {
 
   return (
     <div className="h-full">
+      <TabTitleUpdater href={`/agents/${thread.threadId}`} title={thread.title?.trim() || "Thread"} />
       <AgentTranscript
         fullHeight
         threadId={thread.threadId}
