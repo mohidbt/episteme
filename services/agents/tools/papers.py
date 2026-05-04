@@ -44,7 +44,11 @@ class PaperScope(TypedDict, total=False):
     kind: Literal["sections", "blocks", "pages", "rag", "full"]
     names: list[str] | None
     types: list[str] | None
-    range: tuple[int, int] | None
+    # `tuple[int, int] | None` produces an `anyOf` whose array branch lacks
+    # `items`, which strict OpenAI-style validators (e.g. OpenRouter Azure
+    # provider) reject as `array schema missing items`. Use `list[int]` with
+    # a 2-element convention (rng[0]=lo, rng[1]=hi).
+    range: list[int] | None
     query: str | None
     top_k: int | None
 

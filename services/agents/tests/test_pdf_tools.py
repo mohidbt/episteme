@@ -38,3 +38,26 @@ async def test_pdf_extract_data_is_unavailable():
         {"paper_id": "p77", "schema": {"type": "object"}}, config=CFG
     )
     assert out == {"error": True, "status": None, "body": "tool unavailable in this build"}
+
+
+@pytest.mark.asyncio
+async def test_read_paper_schema_array_branches_have_items():
+    """Regression: strict OpenAI-style validators (OpenRouter Azure) reject
+    `anyOf` array branches missing `items`. PaperScope.range used to be
+    `tuple[int, int] | None`, generating `{type: array}` without items."""
+    from tools.papers import read_paper
+
+    schema = read_paper.args_schema.model_json_schema() if hasattr(read_paper, "args_schema") and read_paper.args_schema else read_paper.tool_call_schema.model_json_schema()
+
+    def _walk(node, path=""):
+        if isinstance(node, dict):
+            if node.get("type") == "array" and "items" not in node:
+                yield path
+            for k, v in node.items():
+                yield from _walk(v, f"{path}.{k}")
+        elif isinstance(node, list):
+            for i, v in enumerate(node):
+                yield from _walk(v, f"{path}[{i}]")
+
+    bad = list(_walk(schema))
+    assert not bad, f"array schemas missing 'items' at: {bad}"
