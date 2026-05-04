@@ -7,6 +7,7 @@ vi.mock("@/lib/auth", () => ({
 
 vi.mock("@episteme/auth/byok", () => ({
   getDecryptedApiKey: vi.fn(),
+  getDecryptedChandraKey: vi.fn().mockResolvedValue(null),
 }));
 
 vi.mock("@/lib/agents/sign-request", () => ({
@@ -219,6 +220,29 @@ describe("POST /api/agents/km/invoke", () => {
     expect(row.status).toBe("running");
     expect(row.skill).toBe("lit-triage");
     expect(row.lastMessageAt).toBeInstanceOf(Date);
+  });
+
+  it("derives thread title from first user message on first invoke", async () => {
+    const tid = freshThreadId();
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(streamFromString("data: hello\n\n"), { status: 200 }),
+    );
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const r = await POST(
+      req("/api/agents/km/invoke", {
+        method: "POST",
+        cookie: "session=x",
+        body: JSON.stringify({
+          thread_id: tid,
+          message: "Summarize this paper about protein folding dynamics in detail",
+        }),
+      }),
+    );
+    await consumeBody(r);
+
+    const row = (await getThread(testUser.id, tid)) as AgentThreadRow;
+    expect(row.title).toBe("Summarize this paper about protein folding…");
   });
 
   it("updates an existing thread without clobbering title", async () => {

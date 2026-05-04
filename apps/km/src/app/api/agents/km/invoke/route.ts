@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { eq } from "drizzle-orm";
-import { getDecryptedApiKey } from "@episteme/auth/byok";
+import { getDecryptedApiKey, getDecryptedChandraKey } from "@episteme/auth/byok";
 import { getSessionInfo } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { agentConfigs } from "@episteme/db/schema";
@@ -31,6 +31,11 @@ export async function POST(req: Request) {
   } catch {
     return Response.json({ error: OPENROUTER_KEY_MISSING }, { status: 400 });
   }
+  // OCR key is optional — read_paper / pdf_explain_passage / chandra-backed
+  // tools require it to call Datalab. Fall back to the LLM key when no
+  // separate Chandra key is set so existing single-key BYOK setups still
+  // power the OCR path.
+  const ocrKey: string = (await getDecryptedChandraKey(session.userId)) ?? llmKey;
 
   const bodyText = await req.text();
   let body: z.infer<typeof InvokeBody>;
@@ -112,6 +117,7 @@ export async function POST(req: Request) {
     body: upstreamBody,
     userId,
     llmKey,
+    ocrKey,
   });
 
   const upstream = await fetch(`${process.env.AGENTS_URL}${path}`, {
