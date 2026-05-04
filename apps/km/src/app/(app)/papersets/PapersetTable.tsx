@@ -22,6 +22,11 @@ interface PapersetTableRow {
   updatedAt: Date | string | number;
 }
 
+function displayPapersetName(filename: string): string {
+  const trimmed = filename.trim();
+  return trimmed.replace(/\.csv$/i, "");
+}
+
 export function PapersetTable({
   rows,
   folders,
@@ -60,7 +65,7 @@ export function PapersetTable({
                   className="inline-flex items-center gap-2 text-foreground hover:underline"
                 >
                   <Database className="size-4 text-muted-foreground" aria-hidden />
-                  {r.filename.replace(/\.csv$/i, "")}
+                  {displayPapersetName(r.filename)}
                 </Link>
               </TableCell>
               <TableCell>

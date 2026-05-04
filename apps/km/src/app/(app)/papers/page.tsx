@@ -6,8 +6,8 @@ import { listAllPapers } from "@/lib/papers-server";
 import { listAllFolders } from "@/lib/folders-server";
 import { resolveChain } from "@/lib/folders";
 import { PapersView } from "@/components/PapersView";
-import { UnifiedDropzone } from "@/components/UnifiedDropzone";
 import { FolderFilterDropdown } from "@/components/FolderFilterDropdown";
+import { DetailUploadBar } from "@/components/DetailUploadBar";
 
 export default async function PapersPage({
   searchParams,
@@ -45,7 +45,12 @@ export default async function PapersPage({
       <h1 className="mb-4 font-display text-3xl leading-none tracking-tight">
         Papers
       </h1>
-      <UnifiedDropzone libraryId={library.id} folderPath="" />
+      <DetailUploadBar
+        kind="paper"
+        libraryId={library.id}
+        folders={allFolders}
+        defaultFolderId={folderFilter}
+      />
       <div className="mb-4 flex items-center gap-3">
         <FolderFilterDropdown
           folders={allFolders}

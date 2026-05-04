@@ -82,4 +82,17 @@ describe("PapersetTable", () => {
     expect(within(row).getByText("3")).toBeDefined();
     expect(within(row).getByText("2")).toBeDefined();
   });
+
+  it("trims filename before removing trailing .csv", () => {
+    render(
+      <PapersetTable
+        rows={[
+          { ...baseRow, id: "ps1", filename: "  mixed.CSV  ", folderId: null },
+        ]}
+        folders={folders}
+      />,
+    );
+    expect(screen.getByRole("link", { name: /^mixed$/i })).toBeDefined();
+    expect(screen.queryByRole("link", { name: /csv/i })).toBeNull();
+  });
 });

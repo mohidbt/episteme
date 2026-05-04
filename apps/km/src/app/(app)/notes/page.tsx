@@ -5,7 +5,7 @@ import { listNotes } from "@/lib/notes-server";
 import { listAllFolders } from "@/lib/folders-server";
 import { resolveChain } from "@/lib/folders";
 import NotesTable from "@/components/NotesTable";
-import { UnifiedDropzone } from "@/components/UnifiedDropzone";
+import { DetailUploadBar } from "@/components/DetailUploadBar";
 
 export default async function NotesPage() {
   const userId = await getRequiredUserId();
@@ -30,7 +30,12 @@ export default async function NotesPage() {
       <h1 className="mb-4 font-display text-3xl leading-none tracking-tight">
         Notes
       </h1>
-      <UnifiedDropzone libraryId={library.id} folderPath="" />
+      <DetailUploadBar
+        kind="note"
+        libraryId={library.id}
+        folders={allFolders}
+        defaultFolderId={null}
+      />
       {rows.length === 0 ? (
         <div className="flex flex-1 items-center justify-center p-10">
           <div className="text-center">

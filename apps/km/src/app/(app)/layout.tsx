@@ -21,7 +21,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
           <div className="flex-1 min-w-0 h-full flex flex-col overflow-hidden bg-[var(--bg-roof)]">
             <TabBar />
             <main
-              className="flex-1 min-w-0 overflow-y-auto bg-background rounded-tl-xl border-l border-t border-[var(--roof-border)]"
+              className="flex-1 min-w-0 overflow-y-auto bg-background rounded-tl-xl border-l border-[var(--roof-border)]"
               data-prose-font={prefs.font}
               data-prose-ruled={prefs.ruledLines ? "true" : "false"}
             >
