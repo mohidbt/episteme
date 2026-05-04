@@ -136,9 +136,27 @@ def main() -> int:
         try:
             tools, ends, text = invoke(prompt, **opts)
             in_interrupt = f'"tool": "{expected}"' in text  # interrupt payload includes tool name
-            ok = (expected in tools) or in_interrupt
+            tool_fired = (expected in tools) or in_interrupt
+            # Tool-end errors for the expected tool count as RED — fired but
+            # downstream returned an error (schema rejection, ocr_key missing,
+            # 4xx/5xx from KM, etc.). HITL interrupts are not tool_end errors.
+            expected_errors = [
+                e for e in ends
+                if e.get("name") == expected and (
+                    e.get("error") is True
+                    or (isinstance(e.get("output"), dict) and e["output"].get("error") is True)
+                    or (isinstance(e.get("output"), str) and "Error" in e["output"][:100])
+                )
+            ]
+            stream_errors = [e for e in (text.split("[ERRORS]")[1:2]) if e.strip()]
+            tool_ok = tool_fired and not expected_errors and not stream_errors
+            ok = tool_ok
             status = "GREEN" if ok else "RED"
             detail = f"tools={tools[:5]} text={text[:200]!r}"
+            if expected_errors:
+                detail += f" tool_end_errors={len(expected_errors)}"
+            if stream_errors:
+                detail += " stream_error=yes"
             print(f"[{status}] {label}  expected={expected}  {detail}", flush=True)
             if ok:
                 pass_count += 1
