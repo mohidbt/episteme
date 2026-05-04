@@ -3,6 +3,7 @@ import path from "node:path";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
+  assets,
   folders,
   libraries,
   notes,
@@ -11,10 +12,11 @@ import {
   references_,
   TRASH_FOLDER_NAME,
 } from "@episteme/db/schema";
-import { storage, paperSourceKey, paperCoverKey } from "@/lib/storage";
+import { storage, paperSourceKey, paperCoverKey, assetSourceKey } from "@/lib/storage";
 import { resolveNoteSlug } from "@/lib/crud";
 import { deriveCitationKey, validateCslJson, type CslItem } from "@/lib/csl";
 import { extractCover } from "@/lib/pdf-extract";
+import { rebuildLinks } from "@episteme/notes-core";
 
 const SEED_DIR = "public/seed";
 const WELCOME_NOTE_FILE = "welcome-note.md";
@@ -50,6 +52,53 @@ const SEED_REFERENCES = [
 const READING_LIST_FOLDER = "Reading List";
 const FOUNDATIONS_FOLDER = "Foundations";
 const PCA_FOLDER = "PSM";
+const BIO_FOLDER = "Bio";
+
+const BIO_REFERENCE_FILE = "bio-fungi.csl.json";
+const BIO_PAPER1 = {
+  filename: "fungi.pdf",
+  title: "A travelling-wave strategy for plant–fungal trade",
+  authors: [
+    "Loreto Oyarte Galvez",
+    "Corentin Bisot",
+    "Philippe Bourrianne",
+    "Howard A. Stone",
+    "E. Toby Kiers",
+    "Thomas S. Shimizu",
+  ],
+  year: 2025,
+  doi: "10.1038/s41586-025-08614-x",
+} as const;
+const BIO_PAPER2 = {
+  filename: "spontaneous.pdf",
+  title:
+    "Spontaneous switching in a protein signalling array reveals near-critical cooperativity",
+  authors: ["Johannes M. Keegstra"],
+  year: 2026,
+  doi: "10.1038/s41567-025-03158-3",
+} as const;
+const BIO_NOTE_FUNGAL_TITLE = "Fungal";
+const BIO_NOTE_ECOLI_TITLE = "EColi";
+const BIO_NOTE_FUNGAL_MD = `# Fungal chemotaxis — scratchpad
+
+#chemotaxis
+
+- Mycorrhizal hyphae forage as a self-regulating **travelling wave** — growing tips pull an expanding mycelium, density self-tuned by fusion. See [[pdf:fungi.pdf]].
+- Tip steering is a slow integration of chemical gradients (sugars, phosphate, host root exudates) — way longer timescales than bacterial chemotaxis.
+- No flagellum, no run-and-tumble: directionality emerges from differential growth + branch reinforcement.
+- Open question: is the "wave" really a chemotactic response or a network-level optimisation that *looks* chemotactic from outside?
+- Compare with EColi run-and-tumble (see [[EColi]]) — totally different mechanism, similar functional outcome (find the resource).
+`;
+const BIO_NOTE_ECOLI_MD = `# E. coli chemotaxis — scratchpad
+
+#chemotaxis
+
+- Run-and-tumble: ~1s straight runs, brief tumbles, biased by recent ligand history.
+- CheA → CheY-P binds FliM → CW rotation → tumble. CheR/CheB methylation = adaptation, gives the cell a memory of ~3s.
+- **Logarithmic sensing** — response depends on fold-change in ligand, not absolute conc. Weber's law for bacteria.
+- Receptor clusters at the pole are cooperative; spontaneous switching of the array is near-critical — see [[pdf:spontaneous.pdf]].
+- Contrast with hyphal foraging in [[Fungal]]: same goal (climb gradient), wildly different machinery + timescale.
+`;
 
 // Real PCA references (Principal Component Analysis canon). Citation keys are
 // derived automatically; no fabrication — every entry below has a verifiable
@@ -140,8 +189,8 @@ const SEED_PCA_PAPERSET_ROWS = [
     "Variables matched on": "n-dimensional point coordinates",
   },
   {
-    "Uses PCA": "Yes, primary statistical method",
-    "Variables matched on": "psychometric test scores",
+    "Uses PCA": "",
+    "Variables matched on": "",
   },
   {
     "Uses PCA": "Yes, comprehensive treatment (book)",
@@ -209,7 +258,7 @@ export async function seedAnonymousUser(userId: string): Promise<void> {
     await db.delete(libraries).where(eq(libraries.userId, userId));
   }
 
-  const { lib, foundationsFolder, pcaFolder } = await db.transaction(async (tx) => {
+  const { lib, foundationsFolder, pcaFolder, bioFolder } = await db.transaction(async (tx) => {
     const [created] = await tx
       .insert(libraries)
       .values({ userId, name: "My Library" })
@@ -248,7 +297,16 @@ export async function seedAnonymousUser(userId: string): Promise<void> {
         name: PCA_FOLDER,
       })
       .returning();
-    return { lib: created, foundationsFolder: foundations, pcaFolder: pca };
+    const [bio] = await tx
+      .insert(folders)
+      .values({
+        libraryId: created.id,
+        userId,
+        parentId: null,
+        name: BIO_FOLDER,
+      })
+      .returning();
+    return { lib: created, foundationsFolder: foundations, pcaFolder: pca, bioFolder: bio };
   });
 
   const noteMdPath = path.join(process.cwd(), SEED_DIR, WELCOME_NOTE_FILE);
@@ -404,4 +462,111 @@ export async function seedAnonymousUser(userId: string): Promise<void> {
     runningCells: [],
     content: dummyPapersetCsv(rowLabels),
   });
+
+  // Bio folder — chemotaxis demo: 2 papers + 1 RIS-derived reference (linked to
+  // paper1) + 2 cross-linked notes with #chemotaxis tags.
+  const bioPapers: Record<"fungi" | "spontaneous", { id: string }> = {
+    fungi: { id: "" },
+    spontaneous: { id: "" },
+  };
+  for (const [key, meta] of [
+    ["fungi", BIO_PAPER1] as const,
+    ["spontaneous", BIO_PAPER2] as const,
+  ]) {
+    const pdfFsPath = path.join(process.cwd(), SEED_DIR, meta.filename);
+    const buf = await fs.readFile(pdfFsPath);
+    const [inserted] = await db
+      .insert(papers)
+      .values({
+        libraryId: lib.id,
+        userId,
+        folderPath: BIO_FOLDER,
+        folderId: bioFolder.id,
+        filename: meta.filename,
+        title: meta.title,
+        authors: [...meta.authors],
+        year: meta.year,
+        doi: meta.doi,
+      })
+      .returning();
+    await storage.uploadObject(
+      paperSourceKey(inserted.id),
+      buf,
+      "application/pdf",
+    );
+    try {
+      const cover = await extractCover(new Uint8Array(buf));
+      await storage.uploadObject(paperCoverKey(inserted.id), cover, "image/png");
+    } catch (err) {
+      console.warn(`seed: cover extraction failed for bio paper ${inserted.id}`, err);
+    }
+    bioPapers[key] = { id: inserted.id };
+  }
+
+  // Reference: same publication as fungi.pdf — paperId links the two.
+  const bioCslRaw = JSON.parse(
+    await fs.readFile(path.join(process.cwd(), SEED_DIR, BIO_REFERENCE_FILE), "utf8"),
+  ) as CslItem;
+  const bioCsl = validateCslJson(bioCslRaw);
+  const bioCitationKey = deriveCitationKey(bioCsl);
+  await db.insert(references_).values({
+    libraryId: lib.id,
+    userId,
+    folderPath: BIO_FOLDER,
+    folderId: bioFolder.id,
+    citationKey: bioCitationKey,
+    cslJson: bioCsl,
+    paperId: bioPapers.fungi.id,
+  });
+
+  // Notes — insert Fungal first (EColi links to Fungal by title via [[Fungal]]).
+  const fungalSlug = await resolveNoteSlug(userId, BIO_NOTE_FUNGAL_TITLE);
+  const [fungalNote] = await db
+    .insert(notes)
+    .values({
+      libraryId: lib.id,
+      userId,
+      folderPath: BIO_FOLDER,
+      folderId: bioFolder.id,
+      title: BIO_NOTE_FUNGAL_TITLE,
+      slug: fungalSlug,
+      contentMd: BIO_NOTE_FUNGAL_MD,
+    })
+    .returning();
+  const ecoliSlug = await resolveNoteSlug(userId, BIO_NOTE_ECOLI_TITLE);
+  const [ecoliNote] = await db
+    .insert(notes)
+    .values({
+      libraryId: lib.id,
+      userId,
+      folderPath: BIO_FOLDER,
+      folderId: bioFolder.id,
+      title: BIO_NOTE_ECOLI_TITLE,
+      slug: ecoliSlug,
+      contentMd: BIO_NOTE_ECOLI_MD,
+    })
+    .returning();
+
+  await rebuildLinks(fungalNote.id, BIO_NOTE_FUNGAL_MD, userId);
+  await rebuildLinks(ecoliNote.id, BIO_NOTE_ECOLI_MD, userId);
+
+  // Root-folder image asset: "Context Matters" demo image.
+  const IMG_FILE = "context-matters.jpeg";
+  try {
+    const imgBuf = await fs.readFile(path.join(process.cwd(), SEED_DIR, IMG_FILE));
+    const [imgAsset] = await db
+      .insert(assets)
+      .values({
+        libraryId: lib.id,
+        userId,
+        folderId: null,
+        filename: IMG_FILE,
+        mimeType: "image/jpeg",
+        sizeBytes: imgBuf.byteLength,
+      })
+      .returning();
+    await storage.uploadObject(assetSourceKey(imgAsset.id), imgBuf, "image/jpeg");
+  } catch (err) {
+    console.warn("seed: context-matters image asset failed", err);
+  }
 }

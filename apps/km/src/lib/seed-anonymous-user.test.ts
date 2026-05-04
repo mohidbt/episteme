@@ -85,20 +85,21 @@ describe("seedAnonymousUser", () => {
       .select()
       .from(notes)
       .where(eq(notes.userId, userId));
-    expect(noteRows).toHaveLength(1);
-    expect(noteRows[0].title).toBe("Welcome to Episteme");
-    expect(noteRows[0].contentMd).toContain("# Welcome to Episteme");
+    expect(noteRows).toHaveLength(3);
+    const welcomeNote = noteRows.find((n) => n.title === "Welcome to Episteme");
+    expect(welcomeNote).toBeDefined();
+    expect(welcomeNote!.contentMd).toContain("# Welcome to Episteme");
     // Markdown cheatsheet sentence is included so guests can discover syntax.
-    expect(noteRows[0].contentMd).toContain("**bold**");
-    expect(noteRows[0].contentMd).toContain("*italic*");
-    expect(noteRows[0].contentMd).toContain("`code`");
+    expect(welcomeNote!.contentMd).toContain("**bold**");
+    expect(welcomeNote!.contentMd).toContain("*italic*");
+    expect(welcomeNote!.contentMd).toContain("`code`");
 
     const paperRows = await db
       .select()
       .from(papers)
       .where(eq(papers.userId, userId));
     // 1 RAG seed paper at root + 3 PCA folder PDFs.
-    expect(paperRows).toHaveLength(4);
+    expect(paperRows).toHaveLength(6);
     const ragPaper = paperRows.find((p) => p.filename === "2005.11401.pdf");
     expect(ragPaper).toBeDefined();
     expect(ragPaper!.doi).toBe("10.48550/arXiv.2005.11401");
@@ -138,7 +139,7 @@ describe("seedAnonymousUser", () => {
       .from(references_)
       .where(eq(references_.userId, userId));
     // 5 original demo refs + 6 PCA references seeded into a "PCA" folder.
-    expect(refRows).toHaveLength(11);
+    expect(refRows).toHaveLength(12);
     const dois = refRows.map((r) => (r.cslJson as CslItem).DOI).sort();
     expect(dois).toContain("10.1038/s41586-021-03819-2");
     expect(dois).toContain("10.48550/arXiv.1706.03762");
@@ -203,19 +204,19 @@ describe("seedAnonymousUser", () => {
       .select()
       .from(notes)
       .where(eq(notes.userId, userId));
-    expect(noteRows).toHaveLength(1);
+    expect(noteRows).toHaveLength(3);
 
     const paperRows = await db
       .select()
       .from(papers)
       .where(eq(papers.userId, userId));
-    expect(paperRows).toHaveLength(4);
+    expect(paperRows).toHaveLength(6);
 
     const refRows = await db
       .select()
       .from(references_)
       .where(eq(references_.userId, userId));
-    expect(refRows).toHaveLength(11);
+    expect(refRows).toHaveLength(12);
   });
 
   it("recovers from a partial seed (orphan library, no other rows)", { timeout: 60_000 }, async () => {
@@ -235,18 +236,18 @@ describe("seedAnonymousUser", () => {
       .select()
       .from(notes)
       .where(eq(notes.userId, userId));
-    expect(noteRows).toHaveLength(1);
+    expect(noteRows).toHaveLength(3);
 
     const paperRows = await db
       .select()
       .from(papers)
       .where(eq(papers.userId, userId));
-    expect(paperRows).toHaveLength(4);
+    expect(paperRows).toHaveLength(6);
 
     const refRows = await db
       .select()
       .from(references_)
       .where(eq(references_.userId, userId));
-    expect(refRows).toHaveLength(11);
+    expect(refRows).toHaveLength(12);
   });
 });
