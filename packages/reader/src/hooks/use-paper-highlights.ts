@@ -56,20 +56,49 @@ export function usePaperHighlights(paperId: string, refreshKey: number = 0): Res
   }>({ highlights: [], loading: true, error: null });
 
   useEffect(() => {
+    let cancelled = false;
     const controller = new AbortController();
-    fetch(`/api/paper-highlights?paperId=${paperId}`, { signal: controller.signal })
-      .then((res) => {
+
+    const load = async (initial: boolean) => {
+      try {
+        const res = await fetch(`/api/paper-highlights?paperId=${paperId}`, {
+          signal: controller.signal,
+        });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return res.json();
-      })
-      .then((rows: PaperHighlightRow[]) => {
+        const rows = (await res.json()) as PaperHighlightRow[];
+        if (cancelled) return;
         setState({ highlights: rows ?? [], loading: false, error: null });
-      })
-      .catch((err: unknown) => {
+      } catch (err) {
+        if (cancelled) return;
         if (err instanceof Error && err.name === "AbortError") return;
-        setState((prev) => ({ ...prev, loading: false, error: "Failed to load AI highlights" }));
-      });
-    return () => controller.abort();
+        // Only flag an error on the first load; later poll failures are silent
+        // so a transient network blip doesn't blank out existing rows.
+        if (initial) {
+          setState((prev) => ({ ...prev, loading: false, error: "Failed to load AI highlights" }));
+        }
+      }
+    };
+
+    void load(true);
+    // Live-refresh: agent-created highlights need to appear without a manual
+    // page reload. Poll every 4s while the tab is visible.
+    const interval = setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+      void load(false);
+    }, 4000);
+    const onFocus = () => void load(false);
+    if (typeof window !== "undefined") {
+      window.addEventListener("focus", onFocus);
+    }
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+      clearInterval(interval);
+      if (typeof window !== "undefined") {
+        window.removeEventListener("focus", onFocus);
+      }
+    };
   }, [paperId, refreshKey]);
 
   return {

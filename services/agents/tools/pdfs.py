@@ -5,6 +5,7 @@ The authenticated user_id is injected at runtime via ``RunnableConfig``
 ``tools/_auth.py`` and §1.3b-E2E-3.
 
 """
+import json
 from urllib.parse import quote_plus
 
 from langchain_core.runnables import RunnableConfig
@@ -105,22 +106,96 @@ async def pdf_read_text(
 @tool
 async def highlight(
     pdf_id: str,
-    page: int,
+    block_ids: list[str],
     note: str | None = None,
     color: str | None = None,
     *,
     config: RunnableConfig,
 ) -> object:
-    """Create a highlight annotation on a PDF page.
+    """Create a highlight annotation on a PDF, anchored to one or more blocks.
+
+    Pass `block_ids` returned by `read_paper` — the tool resolves each block
+    to its page/bbox via document_segments and persists a single highlight
+    spanning all blocks. The reader UI will draw a visible rectangle for each
+    block on the matching page.
 
     Args:
         pdf_id: Paper UUID.
-        page: 1-based page number.
-        note: Optional Markdown note attached to the highlight.
-        color: Optional color string (e.g. "yellow").
+        block_ids: Block IDs from `read_paper` (format: ``{paper_id}:p{page}:{order_index}``).
+            All block_ids must reference the same `pdf_id`.
+        note: Optional Markdown commentary attached to the highlight.
+        color: Optional color string (e.g. "yellow", "amber").
     """
     user_id = user_id_from_config(config)
-    body: dict = {"paperId": pdf_id, "page": page}
+    if not block_ids:
+        return {"error": True, "message": "block_ids must contain at least one entry"}
+
+    # Parse block_ids → list of (page, order_index). Block id shape from
+    # tools/papers.py: f"{paper_id}:p{page}:{order_index}".
+    order_indexes: list[int] = []
+    for bid in block_ids:
+        try:
+            paper_part, page_part, oi_part = bid.split(":")
+        except ValueError:
+            return {"error": True, "message": f"malformed block_id: {bid!r}"}
+        if paper_part != pdf_id:
+            return {
+                "error": True,
+                "message": f"block_id {bid!r} does not belong to pdf_id {pdf_id!r}",
+            }
+        if not page_part.startswith("p"):
+            return {"error": True, "message": f"malformed block_id: {bid!r}"}
+        try:
+            order_indexes.append(int(oi_part))
+        except ValueError:
+            return {"error": True, "message": f"malformed block_id: {bid!r}"}
+
+    from deps import db as db_module
+    pool = db_module._pool
+    if pool is None:
+        return {"error": True, "message": "db pool not initialized"}
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT page, bbox, order_index
+              FROM document_segments
+             WHERE paper_id = $1
+               AND order_index = ANY($2::int[])
+             ORDER BY order_index
+            """,
+            pdf_id,
+            order_indexes,
+        )
+    if not rows:
+        return {
+            "error": True,
+            "message": "no document_segments found for given block_ids — paper may not be parsed yet",
+        }
+
+    bbox_list: list[dict] = []
+    page_for_payload: int | None = None
+    for row in rows:
+        bbox_raw = row["bbox"]
+        bbox = json.loads(bbox_raw) if isinstance(bbox_raw, str) else bbox_raw
+        if not bbox:
+            continue
+        bbox_list.append({
+            "page": row["page"],
+            "x0": float(bbox["x0"]),
+            "y0": float(bbox["y0"]),
+            "x1": float(bbox["x1"]),
+            "y1": float(bbox["y1"]),
+        })
+        if page_for_payload is None:
+            page_for_payload = row["page"]
+    if not bbox_list or page_for_payload is None:
+        return {"error": True, "message": "matched blocks have no bbox data"}
+
+    body: dict = {
+        "paperId": pdf_id,
+        "page": page_for_payload,
+        "bbox": bbox_list,
+    }
     if note is not None:
         body["noteMd"] = note
     if color is not None:
