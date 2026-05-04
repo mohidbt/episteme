@@ -141,19 +141,22 @@ export default function GraphCanvas({ payload }: { payload: GraphPayload }) {
         linkLineDash={(l: unknown) => STYLE[(l as CanvasLink).kind].dash ?? []}
         linkCanvasObjectMode={() => 'replace'}
         linkCanvasObject={(linkObj: unknown, ctx: CanvasRenderingContext2D, globalScale: number) => {
-          const link = linkObj as CanvasLink & { source: { x: number; y: number }; target: { x: number; y: number } }
+          const link = linkObj as CanvasLink
+          const src = link.source as unknown as { x?: number; y?: number } | string | null | undefined
+          const dst = link.target as unknown as { x?: number; y?: number } | string | null | undefined
+          if (!src || !dst) return
+          if (typeof src === 'string' || typeof dst === 'string') return
+          if (typeof src.x !== 'number' || typeof src.y !== 'number') return
+          if (typeof dst.x !== 'number' || typeof dst.y !== 'number') return
           const style = STYLE[link.kind]
-          if (!link.source || !link.target) return
-          if (typeof link.source === 'string' || typeof link.target === 'string') return
-          if (typeof link.source.x !== 'number' || typeof link.target.x !== 'number') return
           ctx.save()
           ctx.globalAlpha = style.opacity
           ctx.strokeStyle = style.color
           ctx.lineWidth = (style.widthMul * (link.kind === 'semantic_sim' ? Math.max(0.4, link.weight ?? 1) : 1)) / Math.sqrt(globalScale)
           ctx.setLineDash(style.dash ?? [])
           ctx.beginPath()
-          ctx.moveTo(link.source.x, link.source.y)
-          ctx.lineTo(link.target.x, link.target.y)
+          ctx.moveTo(src.x, src.y)
+          ctx.lineTo(dst.x, dst.y)
           ctx.stroke()
           ctx.restore()
         }}
