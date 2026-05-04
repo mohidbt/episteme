@@ -91,8 +91,8 @@ export function PermissionsForm({ initial }: { initial: PermissionsFormState }) 
           options={[
             { value: "skills", label: "Skills", testId: "perm-section-skills" },
             { value: "mcps", label: "MCPs", testId: "perm-section-mcps" },
-            { value: "rules", label: "Rules", testId: "perm-section-rules" },
-            { value: "permissions", label: "Permissions", testId: "perm-section-permissions" },
+            { value: "rules", label: "Permissions", testId: "perm-section-rules" },
+            { value: "permissions", label: "Tools", testId: "perm-section-permissions" },
             { value: "export", label: "Export", testId: "perm-section-export" },
           ]}
         />

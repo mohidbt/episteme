@@ -55,12 +55,12 @@ afterEach(() => {
 });
 
 describe("PermissionsForm", () => {
-  it("renders four section pills (Skills, MCPs, Rules, Permissions)", () => {
+  it("renders section pills with Round-7 taxonomy labels", () => {
     render(<PermissionsForm initial={initial} />);
     expect(screen.getByTestId("perm-section-skills")).toBeTruthy();
     expect(screen.getByTestId("perm-section-mcps")).toBeTruthy();
-    expect(screen.getByTestId("perm-section-rules")).toBeTruthy();
-    expect(screen.getByTestId("perm-section-permissions")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Permissions" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Tools" })).toBeTruthy();
   });
 
   it("renders web_search permission toggle defaulted to off", async () => {
