@@ -22,6 +22,22 @@ export interface CreateAuthOpts {
   onAnonymousLink?: (anonUserId: string, newUserId: string) => Promise<void>;
 }
 
+function resolveTrustedOrigins(): string[] {
+  const origins = new Set<string>();
+  const add = (url: string | undefined) => {
+    if (!url) return;
+    origins.add(url.startsWith("http") ? url : `https://${url}`);
+  };
+  add(process.env.BETTER_AUTH_URL);
+  add(process.env.NEXT_PUBLIC_APP_URL);
+  add(process.env.VERCEL_URL);
+  add(process.env.VERCEL_BRANCH_URL);
+  add(process.env.VERCEL_PROJECT_PRODUCTION_URL);
+  origins.add("http://localhost:3000");
+  origins.add("http://localhost:3001");
+  return Array.from(origins);
+}
+
 export function createAuth(opts: CreateAuthOpts = {}) {
   return betterAuth({
     database: drizzleAdapter(db, {
@@ -33,6 +49,7 @@ export function createAuth(opts: CreateAuthOpts = {}) {
         verification: schema.verification,
       },
     }),
+    trustedOrigins: resolveTrustedOrigins(),
     emailAndPassword: {
       enabled: true,
     },
