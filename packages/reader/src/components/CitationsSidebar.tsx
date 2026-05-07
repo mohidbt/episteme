@@ -86,11 +86,15 @@ export function CitationsSidebar({
         credentials: "include",
       });
       if (!res.ok) {
-        if (res.status === 503) {
-          toast.error("Citation extraction is temporarily unavailable.");
-          return;
-        }
         throw new Error(`extract failed: ${res.status}`);
+      }
+      // The route degrades to 200 + { unavailable: true } when the upstream
+      // PDF/agents service is unreachable. Surface that to the user instead
+      // of silently calling onExtracted with an empty result.
+      const data = (await res.json().catch(() => ({}))) as { unavailable?: boolean };
+      if (data?.unavailable) {
+        toast.error("Citation extraction service is unavailable. Please try again later.");
+        return;
       }
       onExtracted?.();
     } catch (err) {
