@@ -376,8 +376,12 @@ describe("CitationsSidebar — auto-enrich", () => {
 });
 
 describe("CitationsSidebar — extract button", () => {
-  it("shows unavailable toast and does not call onExtracted when extract returns 503", async () => {
-    global.fetch = vi.fn().mockResolvedValue({ ok: false, status: 503 });
+  it("shows unavailable toast and does not call onExtracted when extract returns 200 + unavailable:true", async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ references: [], unavailable: true }),
+    });
     const onExtracted = vi.fn();
 
     render(
@@ -396,12 +400,66 @@ describe("CitationsSidebar — extract button", () => {
     });
 
     await waitFor(() => {
-      expect(toast.error).toHaveBeenCalledWith("Citation extraction is temporarily unavailable.");
+      expect(toast.error).toHaveBeenCalledWith(
+        "Citation extraction service is unavailable. Please try again later.",
+      );
     });
     expect(onExtracted).not.toHaveBeenCalled();
     expect(global.fetch).toHaveBeenCalledWith(
       `/api/papers/${PAPER_ID}/citations/extract`,
       expect.objectContaining({ method: "POST", credentials: "include" }),
     );
+  });
+
+  it("shows generic error toast when extract returns non-2xx", async () => {
+    global.fetch = vi.fn().mockResolvedValue({ ok: false, status: 500 });
+    const onExtracted = vi.fn();
+
+    render(
+      <CitationsSidebar
+        paperId={PAPER_ID}
+        open={true}
+        citations={[]}
+        loading={false}
+        onExtracted={onExtracted}
+      />
+    );
+
+    const btn = screen.getByRole("button", { name: /extract citations/i });
+    await act(async () => {
+      btn.click();
+    });
+
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith("Extraction failed. Please try again.");
+    });
+    expect(onExtracted).not.toHaveBeenCalled();
+  });
+
+  it("calls onExtracted on successful 200 with no unavailable flag", async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ references: [], stats: { extractionMethod: "text-regex" } }),
+    });
+    const onExtracted = vi.fn();
+
+    render(
+      <CitationsSidebar
+        paperId={PAPER_ID}
+        open={true}
+        citations={[]}
+        loading={false}
+        onExtracted={onExtracted}
+      />
+    );
+
+    const btn = screen.getByRole("button", { name: /extract citations/i });
+    await act(async () => {
+      btn.click();
+    });
+
+    await waitFor(() => expect(onExtracted).toHaveBeenCalledTimes(1));
+    expect(toast.error).not.toHaveBeenCalled();
   });
 });
