@@ -16,7 +16,8 @@
     "test:watch": "vitest",
     "migrate": "drizzle-kit migrate",
     "generate": "drizzle-kit generate",
-    "studio": "drizzle-kit studio"
+    "studio": "drizzle-kit studio",
+    "predeploy-check": "tsx scripts/predeploy-check.ts"
   },
   "dependencies": {
     "drizzle-orm": "^0.45.2",
