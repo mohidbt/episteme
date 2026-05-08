@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getDecryptedApiKey } from "@episteme/auth/byok";
 import { db } from "@/lib/db";
 import { papers, documentReferences, documentReferenceMarkers } from "@episteme/db/schema";
 import { eq } from "drizzle-orm";
@@ -36,6 +37,12 @@ export async function POST(request: NextRequest, { params }: Ctx) {
   if (!owned.ok) return jsonError(owned.status, owned.status === 404 ? "not_found" : "forbidden");
   const paper = owned.row;
   const sourceLocator = paper.storageUrl ?? paperSourceKey(paperId);
+  let llmKey = "";
+  try {
+    llmKey = await getDecryptedApiKey(userId);
+  } catch {
+    llmKey = "";
+  }
 
   try {
     let annRefs: Awaited<ReturnType<typeof extractAnnotationMarkers>>["references"] = [];
@@ -46,7 +53,7 @@ export async function POST(request: NextRequest, { params }: Ctx) {
       const annResult = await extractAnnotationMarkers(sourceLocator, {
         userId,
         paperId,
-        llmKey: "",
+        llmKey,
       });
       annRefs = annResult.references;
       annMarkers = annResult.markers;
@@ -118,7 +125,7 @@ export async function POST(request: NextRequest, { params }: Ctx) {
       const pages = await extractPdfPages(sourceLocator, {
         userId,
         paperId,
-        llmKey: "",
+        llmKey,
       });
       const { markers, references } = extractCitations(pages);
 
