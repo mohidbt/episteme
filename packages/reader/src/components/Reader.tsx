@@ -309,6 +309,8 @@ export function Reader({
     rects: aiHighlights.find((x) => x.id === h.id)?.rects ?? null,
   }));
   const mergedSidebarHighlights = [...aiSidebarHighlights, ...sidebarHighlights.map((h) => ({ ...h, source: h.source ?? "user" as const }))];
+  const highlightsSidebarError = mergedSidebarHighlights.length === 0 ? (highlightsError ?? aiHighlightsError) : null;
+  const commentsSidebarError = sidebarHighlights.length === 0 ? highlightsError : null;
 
   useEffect(() => {
     setCitationsLoading(true);
@@ -604,7 +606,7 @@ export function Reader({
           highlights={mergedSidebarHighlights}
           runs={autoRuns}
           loading={highlightsLoading || aiHighlightsLoading}
-          error={highlightsError ?? aiHighlightsError}
+          error={highlightsSidebarError}
           onNavigateHighlight={(id) => setFocusHighlightId(id)}
           dockControl={
             <DockMenu
@@ -672,7 +674,7 @@ export function Reader({
           open={commentsOpen}
           highlights={sidebarHighlights}
           loading={highlightsLoading}
-          error={highlightsError}
+          error={commentsSidebarError}
           onNavigate={(page) => useReaderState.getState().setScrollTargetPage(page)}
           dockControl={
             <DockMenu

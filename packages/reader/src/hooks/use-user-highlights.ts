@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import type { UserHighlight } from "../components/UserHighlightLayer";
+import { useHighlightsResource } from "./use-highlights-resource";
 
 interface RawHighlight {
   id: number;
@@ -54,30 +54,14 @@ function toUserHighlight(h: RawHighlight): UserHighlight {
  * Re-fetches whenever `refreshKey` changes.
  */
 export function useUserHighlights(paperId: string, refreshKey: number = 0): Result {
-  const [state, setState] = useState<{
-    highlights: SidebarHighlight[];
-    loading: boolean;
-    error: string | null;
-  }>({ highlights: [], loading: true, error: null });
-
-  useEffect(() => {
-    const controller = new AbortController();
-    fetch(`/api/user-highlights?paperId=${paperId}`, { signal: controller.signal })
-      .then((res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return res.json();
-      })
-      .then((data: { highlights: SidebarHighlight[] }) => {
-        setState({ highlights: data.highlights ?? [], loading: false, error: null });
-      })
-      .catch((err: unknown) => {
-        if (err instanceof Error && err.name === "AbortError") return;
-        setState((prev) => ({ ...prev, loading: false, error: "Failed to load highlights" }));
-      });
-    return () => controller.abort();
-  }, [paperId, refreshKey]);
-
-  const { highlights, loading, error } = state;
+  const { data: highlights, loading, error } = useHighlightsResource<SidebarHighlight>({
+    paperId,
+    refreshKey,
+    source: "user",
+    errorMessage: "Failed to load highlights",
+    mapRow: (row) => row,
+    url: `/api/user-highlights?paperId=${paperId}`,
+  });
 
   return {
     highlights,

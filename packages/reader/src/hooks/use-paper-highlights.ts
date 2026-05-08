@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import type { UserHighlight } from "../components/UserHighlightLayer";
+import { useHighlightsResource } from "./use-highlights-resource";
 
 export interface PaperHighlightRow {
   id: string;
@@ -73,65 +73,18 @@ function toUserHighlight(row: PaperHighlightRow): UserHighlight {
 }
 
 export function usePaperHighlights(paperId: string, refreshKey: number = 0): Result {
-  const [state, setState] = useState<{
-    highlights: PaperHighlightRow[];
-    loading: boolean;
-    error: string | null;
-  }>({ highlights: [], loading: true, error: null });
-
-  useEffect(() => {
-    let cancelled = false;
-    const controller = new AbortController();
-
-    const load = async (initial: boolean) => {
-      try {
-        const res = await fetch(`/api/paper-highlights?paperId=${paperId}`, {
-          signal: controller.signal,
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const rows = (await res.json()) as PaperHighlightRow[];
-        if (cancelled) return;
-        setState({
-          highlights: (rows ?? []).map(normalizePageIndex),
-          loading: false,
-          error: null,
-        });
-      } catch (err) {
-        if (cancelled) return;
-        if (err instanceof Error && err.name === "AbortError") return;
-        // Only flag an error on the first load; later poll failures are silent
-        // so a transient network blip doesn't blank out existing rows.
-        if (initial) {
-          setState((prev) => ({ ...prev, loading: false, error: "Failed to load AI highlights" }));
-        }
-      }
-    };
-
-    void load(true);
-    // Live-refresh: agent-created highlights need to appear without a manual
-    // page reload. Poll every 4s while the tab is visible.
-    const interval = setInterval(() => {
-      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
-      void load(false);
-    }, 4000);
-    const onFocus = () => void load(false);
-    if (typeof window !== "undefined") {
-      window.addEventListener("focus", onFocus);
-    }
-
-    return () => {
-      cancelled = true;
-      controller.abort();
-      clearInterval(interval);
-      if (typeof window !== "undefined") {
-        window.removeEventListener("focus", onFocus);
-      }
-    };
-  }, [paperId, refreshKey]);
+  const state = useHighlightsResource<PaperHighlightRow>({
+    paperId,
+    refreshKey,
+    source: "ai",
+    errorMessage: "Failed to load AI highlights",
+    mapRow: normalizePageIndex,
+    url: `/api/paper-highlights?paperId=${paperId}`,
+  });
 
   return {
-    highlights: state.highlights,
-    userHighlights: state.highlights.map(toUserHighlight),
+    highlights: state.data,
+    userHighlights: state.data.map(toUserHighlight),
     loading: state.loading,
     error: state.error,
   };
