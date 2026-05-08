@@ -190,6 +190,27 @@
       "when": 1777853000000,
       "tag": "0026_library_references_folder",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1777892400000,
+      "tag": "0027_paper_highlights_run_cols",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1777978800000,
+      "tag": "0028_kg_schema",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1778254200000,
+      "tag": "0029_document_references_paper_compat",
+      "breakpoints": true
     }
   ]
 }
