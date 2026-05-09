@@ -418,15 +418,22 @@ describe("AgentBall", () => {
       expect(body.className).not.toContain("hidden");
     });
 
-    it("applies inset-0 when fullscreen toggled, restores on second click", async () => {
+    // E4 #24 — fullscreen no longer fills the entire viewport; it must
+    // anchor to the tabbar (top) and sidebar (left) so it doesn't cover
+    // the global navigation chrome.
+    it("anchors to tabbar+sidebar when fullscreen toggled, restores on second click", async () => {
       renderBall();
       fireEvent.click(screen.getByTestId("agent-ball"));
       const panel = await waitFor(() => screen.getByTestId("agent-panel"));
-      expect(panel.className).not.toContain("inset-0");
+      expect(panel.className).not.toContain("top-[var(--tabbar-h)] bottom-0 left-[var(--sidebar-width)]");
       fireEvent.click(screen.getByLabelText(/fullscreen agent/i));
-      expect(panel.className).toContain("inset-0");
-      fireEvent.click(screen.getByLabelText(/exit fullscreen/i));
+      expect(panel.className).toContain("top-[var(--tabbar-h)]");
+      expect(panel.className).toContain("bottom-0");
+      expect(panel.className).toContain("left-[var(--sidebar-width)]");
+      expect(panel.className).toContain("right-0");
       expect(panel.className).not.toContain("inset-0");
+      fireEvent.click(screen.getByLabelText(/exit fullscreen/i));
+      expect(panel.className).not.toContain("left-[var(--sidebar-width)]");
     });
   });
 
@@ -565,7 +572,8 @@ describe("AgentBall", () => {
       fireEvent.pointerDown(fullscreenBtn, { clientX: 10, pointerId: 1 });
       fireEvent.pointerUp(fullscreenBtn, { clientX: 10, pointerId: 1 });
       fireEvent.click(fullscreenBtn);
-      expect(panel.className).toContain("inset-0");
+      // E4 #24 — fullscreen is now anchored between sidebar+tabbar, not inset-0.
+      expect(panel.className).toContain("left-[var(--sidebar-width)]");
 
       fireEvent.pointerDown(closeBtn, { clientX: 10, pointerId: 1 });
       fireEvent.pointerUp(closeBtn, { clientX: 10, pointerId: 1 });

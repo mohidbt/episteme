@@ -282,7 +282,7 @@ export function AgentBall(_props: AgentBallProps) {
   // (Height is implied by top+bottom anchors above — no explicit h.)
   const panelSizeClass = `w-[min(480px,calc(100vw-var(--sidebar-width)-2rem))]`;
   const panelLayoutClass = fullscreen
-    ? `fixed inset-0 z-50 flex flex-col rounded-lg border bg-background shadow-xl`
+    ? `fixed top-[var(--tabbar-h)] bottom-0 left-[var(--sidebar-width)] right-0 z-50 flex flex-col rounded-lg border bg-background shadow-xl`
     : panelPositioned
       ? `fixed z-50 flex ${panelSizeClass} ${panelBoundsClass} flex-col rounded-lg border bg-background shadow-xl`
       : `fixed left-1/2 -translate-x-1/2 z-50 flex ${panelSizeClass} ${panelBoundsClass} flex-col rounded-lg border bg-background shadow-xl`;
@@ -372,20 +372,22 @@ export function AgentBall(_props: AgentBallProps) {
           >
             <PlusIcon className="h-4 w-4" />
           </button>
-          <button
-            type="button"
-            onClick={() => setCollapsed((c) => !c)}
-            aria-label={collapsed ? "Expand agent" : "Collapse agent"}
-            title={collapsed ? "Expand" : "Collapse"}
-            className="rounded p-1 hover:bg-muted"
-            data-testid="agent-collapse"
-          >
-            {collapsed ? (
-              <ChevronUp className="h-4 w-4" />
-            ) : (
-              <ChevronDown className="h-4 w-4" />
-            )}
-          </button>
+          {!fullscreen && (
+            <button
+              type="button"
+              onClick={() => setCollapsed((c) => !c)}
+              aria-label={collapsed ? "Expand agent" : "Collapse agent"}
+              title={collapsed ? "Expand" : "Collapse"}
+              className="rounded p-1 hover:bg-muted"
+              data-testid="agent-collapse"
+            >
+              {collapsed ? (
+                <ChevronUp className="h-4 w-4" />
+              ) : (
+                <ChevronDown className="h-4 w-4" />
+              )}
+            </button>
+          )}
           <button
             type="button"
             onClick={() => setFullscreen((f) => !f)}
