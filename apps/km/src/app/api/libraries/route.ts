@@ -30,6 +30,16 @@ export async function POST(req: Request) {
   const body = await req.json().catch(() => null);
   const parsed = libraryCreateSchema.safeParse(body);
   if (!parsed.success) return jsonError(400, "validation", { issues: parsed.error.issues });
+  // One-library-per-user invariant. Reject before opening a transaction so we
+  // don't have to swallow the unique-constraint error from the DB.
+  const [existing] = await db
+    .select({ id: libraries.id })
+    .from(libraries)
+    .where(eq(libraries.userId, userId))
+    .limit(1);
+  if (existing) {
+    return jsonError(409, "library_exists", { libraryId: existing.id });
+  }
   const row = await db.transaction(async (tx) => {
     const [lib] = await tx
       .insert(libraries)
