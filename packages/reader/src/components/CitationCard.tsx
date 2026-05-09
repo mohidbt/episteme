@@ -75,6 +75,26 @@ export function CitationCard({
   const [leftPos, setLeftPos] = useState<number>(rect?.left ?? 0);
   const [abstractExpanded, setAbstractExpanded] = useState(false);
   const [folderMenuOpen, setFolderMenuOpen] = useState(false);
+  const [folderMenuAlign, setFolderMenuAlign] = useState<"right" | "left">("right");
+
+  // Compute dropdown alignment to avoid horizontal viewport clipping.
+  // Default: right-anchored (drops left from button). If button is too close
+  // to the left edge, anchor left instead so the dropdown opens to the right.
+  useEffect(() => {
+    if (!folderMenuOpen) return;
+    const btnWrap = folderMenuRef.current;
+    if (!btnWrap) return;
+    const rect = btnWrap.getBoundingClientRect();
+    // Approx dropdown width (w-56 = 14rem = 224px).
+    const DROPDOWN_WIDTH = 224;
+    // If anchoring right (default) would push the dropdown's left past 0, flip.
+    const rightAnchoredLeft = rect.right - DROPDOWN_WIDTH;
+    if (rightAnchoredLeft < 8) {
+      setFolderMenuAlign("left");
+    } else {
+      setFolderMenuAlign("right");
+    }
+  }, [folderMenuOpen]);
 
   // Close folder menu on outside click.
   useEffect(() => {
@@ -364,7 +384,10 @@ export function CitationCard({
                 {folderMenuOpen && (
                   <div
                     role="menu"
-                    className="absolute right-0 top-full z-[60] mt-1 max-h-64 w-56 overflow-y-auto rounded-md border bg-background p-1 shadow-lg"
+                    className={[
+                      "absolute top-full z-[60] mt-1 max-h-64 w-56 overflow-y-auto rounded-md border bg-background p-1 shadow-lg",
+                      folderMenuAlign === "right" ? "right-0" : "left-0",
+                    ].join(" ")}
                   >
                     <button
                       type="button"
