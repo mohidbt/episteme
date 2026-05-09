@@ -181,11 +181,11 @@ export async function runDbChecks(databaseUrl: string): Promise<DbCheckSummary> 
         union all
         select
           'document_references.document_id_nullable',
-          exists (
+          not exists (
             select 1 from information_schema.columns
-            where table_schema = 'public' and table_name = 'document_references' and column_name = 'document_id' and is_nullable = 'YES'
+            where table_schema = 'public' and table_name = 'document_references' and column_name = 'document_id' and is_nullable = 'NO'
           ),
-          'compatibility window requires document_id nullable until backfill cleanup migration'
+          'document_id must be absent (rebaselined) or nullable (legacy compat window)'
         union all
         select
           'paper_highlights.run_id_exists',
