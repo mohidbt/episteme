@@ -858,8 +858,16 @@ export function FileBrowser({
   const handleRootMouseDown = useCallback(
     (ev: ReactMouseEvent<HTMLDivElement>) => {
       // Only start marquee on empty background — not on a tile.
-      if (ev.target !== ev.currentTarget) return;
+      // In list view (and tile view at root), child rows fill the container
+      // so `ev.target !== ev.currentTarget` is always true. Use a row-aware
+      // check: if the click is inside a file/folder row, bail; otherwise
+      // we're on empty space and it's a marquee start.
       if (ev.button !== 0) return;
+      const target = ev.target as Element | null;
+      if (target?.closest?.('[data-testid^="fb-item-"]')) return;
+      // Also bail on interactive controls embedded in the empty area
+      // (e.g. column header buttons in list view).
+      if (target?.closest?.("button, a, input, [role='button']")) return;
       const root = ev.currentTarget;
       const box = root.getBoundingClientRect();
       marqueeStartRef.current = {

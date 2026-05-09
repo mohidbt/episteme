@@ -310,6 +310,42 @@ describe("FileBrowser selection", () => {
       screen.getByTestId("fb-item-p1").getAttribute("data-selected"),
     ).not.toBe("true");
   });
+
+  // C5/#18: marquee (rubber-band) drag-select must start when the user
+  // mousedowns on empty space INSIDE the file-browser root, even if the
+  // event target is a descendant (e.g. an inner Table element in list view,
+  // or a TileGroup wrapper in tile view at root).
+  it("starts marquee when mousedown target is a descendant but not a row", () => {
+    renderFb();
+    fireEvent.click(screen.getByTestId("fb-view-list"));
+    const root = screen.getByTestId("fb-root");
+    // In list view the root contains a <table>; mousedown on a non-row
+    // descendant (e.g. an empty cell in tbody) must still arm marquee.
+    const tbody = root.querySelector("tbody")!;
+    expect(tbody).toBeTruthy();
+    // Fire mousedown ON tbody itself (not on a tr) — simulates clicking
+    // dead space below the last row.
+    fireEvent.mouseDown(tbody, { button: 0, clientX: 5, clientY: 5 });
+    // Move enough to trigger marquee rendering (>= 3px threshold).
+    fireEvent(
+      window,
+      new MouseEvent("mousemove", { bubbles: true, clientX: 200, clientY: 200 }),
+    );
+    expect(screen.queryByTestId("fb-marquee")).toBeTruthy();
+    fireEvent(window, new MouseEvent("mouseup", { bubbles: true }));
+  });
+
+  it("does NOT start marquee when mousedown is on an item row", () => {
+    renderFb();
+    const p1 = screen.getByTestId("fb-item-p1");
+    fireEvent.mouseDown(p1, { button: 0, clientX: 5, clientY: 5 });
+    fireEvent(
+      window,
+      new MouseEvent("mousemove", { bubbles: true, clientX: 200, clientY: 200 }),
+    );
+    expect(screen.queryByTestId("fb-marquee")).toBeNull();
+    fireEvent(window, new MouseEvent("mouseup", { bubbles: true }));
+  });
 });
 
 describe("FileBrowser keyboard", () => {
