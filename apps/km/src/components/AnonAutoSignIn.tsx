@@ -20,7 +20,8 @@ export function AnonAutoSignIn() {
   useEffect(() => {
     let cancelled = false;
     if (!inFlight) inFlight = signIn.anonymous();
-    inFlight
+    const promise = inFlight;
+    promise
       .then(() => {
         if (!cancelled) router.refresh();
       })

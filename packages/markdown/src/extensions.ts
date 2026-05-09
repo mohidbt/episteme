@@ -48,14 +48,16 @@ lowlight.register("yaml", yaml);
 lowlight.register("yml", yaml);
 
 // Full @tiptap/extension-link, extended with a markdown-link input rule so
-// typing `[text](url)` followed by a space/enter compiles the range into a
-// link mark. autolink + linkOnPaste handle bare-URL paste and selection
+// typing `[text](url)` followed by a space compiles the range into a link
+// mark. autolink + linkOnPaste handle bare-URL paste and selection
 // paste-as-link (see Bug D6).
 //
 // markdown-link input rule: `[text](url)` followed by a space. Space is the
-// trigger character. Replaces the literal markdown range with the link text
-// carrying a link mark to the URL, plus an unmarked trailing space so the
-// caret continues outside the link (no inclusive-mark drag).
+// only trigger character (Tiptap InputRule fires on typed character input;
+// Enter is handled by separate keymaps and does not flow through here).
+// Replaces the literal markdown range with the link text carrying a link
+// mark to the URL, plus an unmarked trailing space so the caret continues
+// outside the link (no inclusive-mark drag).
 const MARKDOWN_LINK_INPUT_REGEX = /\[([^\]]+)\]\(([^)\s]+)\) $/;
 
 const Link = TiptapLink.extend({

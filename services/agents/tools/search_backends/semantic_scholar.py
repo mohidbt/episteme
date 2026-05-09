@@ -64,8 +64,22 @@ def _retry_after_seconds(response: httpx.Response) -> float | None:
     raw = response.headers.get("Retry-After") if hasattr(response, "headers") else None
     if not raw:
         return None
+    # Numeric form: delta-seconds.
     try:
         return float(raw)
+    except (TypeError, ValueError):
+        pass
+    # HTTP-date form (RFC 7231 §7.1.3): IMF-fixdate / obs-date.
+    try:
+        from email.utils import parsedate_to_datetime
+        from datetime import datetime, timezone
+        dt = parsedate_to_datetime(raw)
+        if dt is None:
+            return None
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        delta = (dt - datetime.now(timezone.utc)).total_seconds()
+        return max(0.0, delta)
     except (TypeError, ValueError):
         return None
 

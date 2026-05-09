@@ -67,7 +67,7 @@ describe("seedAnonymousUser", () => {
       .from(libraries)
       .where(eq(libraries.userId, userId));
     expect(libs).toHaveLength(1);
-    expect(libs[0].name).toBe("My Library");
+    expect(libs[0].name).toBe("Example Library");
 
     const allFolders = await db
       .select()

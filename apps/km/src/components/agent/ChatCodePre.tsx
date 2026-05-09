@@ -141,6 +141,10 @@ export function ChatCodePre({ children }: ChatCodePreProps) {
       }
       toast.success("Added to library");
       window.open(`/n/${slug}`, "_blank", "noopener,noreferrer");
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      console.error("[ChatCodePre] add to library failed:", err);
+      toast.error(`Failed to add to library: ${detail}`);
     } finally {
       setAdding(false);
     }

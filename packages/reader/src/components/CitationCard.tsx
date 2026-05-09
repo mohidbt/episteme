@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 import { X, Star, ExternalLink, Folder } from "lucide-react";
@@ -80,7 +80,9 @@ export function CitationCard({
   // Compute dropdown alignment to avoid horizontal viewport clipping.
   // Default: right-anchored (drops left from button). If button is too close
   // to the left edge, anchor left instead so the dropdown opens to the right.
-  useEffect(() => {
+  // useLayoutEffect runs before paint so first open shows correct alignment
+  // without a flash from the default `right` value.
+  useLayoutEffect(() => {
     if (!folderMenuOpen) return;
     const btnWrap = folderMenuRef.current;
     if (!btnWrap) return;

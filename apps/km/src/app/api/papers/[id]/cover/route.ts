@@ -21,6 +21,9 @@ export async function GET(req: Request, { params }: Ctx) {
   // placeholder instead of a broken <img>. Storage misconfiguration (e.g. S3
   // env vars unset in deploy) also lands here; logged loudly so deploy
   // breakage is diagnosable.
+  // Proxy bytes (don't 302 redirect): browsers block opaque cross-origin
+  // image responses with ERR_BLOCKED_BY_ORB when fetched as <img> from a
+  // different origin (R2). Streaming through this same-origin route avoids it.
   let url: string;
   try {
     url = await storage.getPresignedGet(paperCoverKey(id), PRESIGN_TTL_SEC);
@@ -31,8 +34,15 @@ export async function GET(req: Request, { params }: Ctx) {
     );
     return jsonError(404, "cover_unavailable");
   }
-  return new Response(null, {
-    status: 302,
-    headers: { location: url, "cache-control": "private, no-store" },
+  const upstream = await fetch(url);
+  if (!upstream.ok || !upstream.body) {
+    return jsonError(upstream.status === 404 ? 404 : 502, "cover_unavailable");
+  }
+  return new Response(upstream.body, {
+    status: 200,
+    headers: {
+      "content-type": upstream.headers.get("content-type") ?? "image/png",
+      "cache-control": "private, max-age=300",
+    },
   });
 }
