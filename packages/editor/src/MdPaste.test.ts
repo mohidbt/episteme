@@ -21,12 +21,6 @@ function simulatePaste(
   plain: string,
   html?: string,
 ): boolean {
-  const handlePaste = editor.view.someProp("handlePaste") as
-    | ((view: unknown, event: Event, slice: unknown) => boolean)
-    | undefined;
-
-  if (!handlePaste) return false;
-
   const clipboardData = {
     getData: (type: string) => {
       if (type === "text/plain") return plain;
@@ -37,7 +31,15 @@ function simulatePaste(
   };
 
   const event = Object.assign(new Event("paste"), { clipboardData });
-  return handlePaste(editor.view, event, null);
+  // Walk every registered handlePaste handler the way ProseMirror does —
+  // the first to return truthy wins. Multiple plugins (e.g. @tiptap/extension-
+  // link's linkOnPaste) now coexist with MdPaste, so we cannot rely on
+  // someProp() with no callback returning the only handler.
+  return !!editor.view.someProp(
+    "handlePaste",
+    (handler: (v: unknown, e: Event, s: unknown) => boolean) =>
+      handler(editor.view, event, null),
+  );
 }
 
 // ─── helpers ────────────────────────────────────────────────────────────────

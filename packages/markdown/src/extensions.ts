@@ -1,6 +1,7 @@
-import { Mark } from "@tiptap/core";
+import { InputRule } from "@tiptap/core";
 import StarterKit from "@tiptap/starter-kit";
 import Italic from "@tiptap/extension-italic";
+import TiptapLink from "@tiptap/extension-link";
 import TaskList from "@tiptap/extension-task-list";
 import TaskItem from "@tiptap/extension-task-item";
 import Table from "@tiptap/extension-table";
@@ -46,22 +47,36 @@ lowlight.register("sql", sql);
 lowlight.register("yaml", yaml);
 lowlight.register("yml", yaml);
 
-// Minimal Link mark so tiptap-markdown's link parser/serializer activates.
-// We don't need the full @tiptap/extension-link (click handling, paste rules)
-// for headless MD round-tripping.
-const Link = Mark.create({
-  name: "link",
-  addAttributes() {
-    return {
-      href: { default: null },
-      title: { default: null },
-    };
-  },
-  parseHTML() {
-    return [{ tag: "a[href]" }];
-  },
-  renderHTML({ HTMLAttributes }) {
-    return ["a", HTMLAttributes, 0];
+// Full @tiptap/extension-link, extended with a markdown-link input rule so
+// typing `[text](url)` followed by a space/enter compiles the range into a
+// link mark. autolink + linkOnPaste handle bare-URL paste and selection
+// paste-as-link (see Bug D6).
+//
+// markdown-link input rule: `[text](url)` followed by a space. Space is the
+// trigger character. Replaces the literal markdown range with the link text
+// carrying a link mark to the URL, plus an unmarked trailing space so the
+// caret continues outside the link (no inclusive-mark drag).
+const MARKDOWN_LINK_INPUT_REGEX = /\[([^\]]+)\]\(([^)\s]+)\) $/;
+
+const Link = TiptapLink.extend({
+  addInputRules() {
+    return [
+      ...(this.parent?.() ?? []),
+      new InputRule({
+        find: MARKDOWN_LINK_INPUT_REGEX,
+        handler: ({ state, range, match }) => {
+          const [, label, href] = match;
+          if (!label || !href) return null;
+          const mark = state.schema.marks.link.create({ href });
+          state.tr
+            .replaceWith(range.from, range.to, [
+              state.schema.text(label, [mark]),
+              state.schema.text(" "),
+            ])
+            .setMeta("preventAutolink", true);
+        },
+      }),
+    ];
   },
 });
 
@@ -103,7 +118,11 @@ export const createExtensions = (opts?: {
     }),
     codeBlock.configure({ lowlight, defaultLanguage: null }),
     ItalicUnderscore,
-    Link,
+    Link.configure({
+      openOnClick: true,
+      autolink: true,
+      linkOnPaste: true,
+    }),
     TaskList,
     TaskItem.configure({ nested: true }),
     Table.configure({ resizable: true }),

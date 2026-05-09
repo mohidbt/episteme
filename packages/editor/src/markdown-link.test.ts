@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Editor } from "@tiptap/core";
+import { Slice, Fragment } from "@tiptap/pm/model";
 import { editorExtensions } from "./extensions";
 
 /**
@@ -46,29 +47,55 @@ function findLinkMark(editor: Editor): { text: string; href: string } | null {
   return walk(json.content);
 }
 
-function simulatePaste(editor: Editor, plain: string): boolean {
-  const handlePaste = editor.view.someProp("handlePaste") as
-    | ((view: unknown, event: Event, slice: unknown) => boolean)
-    | undefined;
-  if (!handlePaste) return false;
+function simulatePaste(editor: Editor, plain: string): void {
+  const view = editor.view;
+  const { schema } = view.state;
+
+  // First give registered `handlePaste` handlers (e.g. Link's linkOnPaste,
+  // MdPaste) a chance — same way ProseMirror would.
+  const text = schema.text(plain);
+  const para = schema.nodes.paragraph.create(null, text);
+  const slice = new Slice(Fragment.from(para), 1, 1);
+
   const clipboardData = {
     getData: (type: string) => (type === "text/plain" ? plain : ""),
     types: ["text/plain"],
   };
   const event = Object.assign(new Event("paste"), { clipboardData });
-  return handlePaste(editor.view, event, null);
+
+  const handled = view.someProp("handlePaste", (handler) =>
+    handler(view, event, slice),
+  );
+
+  // No handler claimed the paste → fall through to ProseMirror's default,
+  // which is to replaceSelectionWith the slice and tag the transaction with
+  // uiEvent='paste'. The `pasteRulesPlugin` watches that meta to apply
+  // markPasteRule (Link's bare-URL autolink). We replicate that here.
+  if (!handled) {
+    const tr = view.state.tr.replaceSelection(slice);
+    tr.setMeta("uiEvent", "paste");
+    view.dispatch(tr);
+  }
 }
 
 describe("D6 markdown link behaviours", () => {
   it("typing `[hello](https://example.com) ` produces a link mark", () => {
     const editor = makeEditor();
-    // Insert through the view so input rules run.
-    editor.commands.insertContent("[hello](https://example.com)");
-    // Trigger the input rule by typing a trailing space via an explicit
-    // textInput transaction (input rules are applied on text input).
-    const { state, dispatch } = editor.view;
-    const tr = state.tr.insertText(" ", state.selection.from);
-    dispatch(tr);
+    // Simulate true typing: each char enters through ProseMirror's textInput
+    // path, which is what triggers input rules. View.someProp("handleTextInput")
+    // dispatches the inputRulesPlugin handler.
+    const text = "[hello](https://example.com) ";
+    for (const ch of text) {
+      const view = editor.view;
+      const { from, to } = view.state.selection;
+      const handled = view.someProp("handleTextInput", (h) =>
+        h(view, from, to, ch),
+      );
+      if (!handled) {
+        const tr = view.state.tr.insertText(ch, from, to);
+        view.dispatch(tr);
+      }
+    }
 
     const link = findLinkMark(editor);
     expect(link).not.toBeNull();
