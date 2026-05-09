@@ -1,6 +1,7 @@
 import { createHash } from "crypto";
 import { readdirSync, readFileSync } from "fs";
-import { basename, join, resolve } from "path";
+import { basename, dirname, join, resolve } from "path";
+import { fileURLToPath } from "url";
 import postgres from "postgres";
 
 const MIGRATION_FILE_RE = /^(\d{4}_.+)\.sql$/;
@@ -60,7 +61,8 @@ export function runJournalChecks(opts?: {
   migrationsDir?: string;
   journalPath?: string;
 }): JournalCheckSummary {
-  const repoRoot = opts?.repoRoot ?? resolve(__dirname, "../../..");
+  const here = dirname(fileURLToPath(import.meta.url));
+  const repoRoot = opts?.repoRoot ?? resolve(here, "../../..");
   const migrationsDir = opts?.migrationsDir ?? join(repoRoot, "packages/db/drizzle");
   const journalPath = opts?.journalPath ?? join(repoRoot, "packages/db/drizzle/meta/_journal.json");
 
