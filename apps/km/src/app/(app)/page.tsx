@@ -1,4 +1,4 @@
-import { getRequiredUserId } from "@/lib/session";
+import { getCurrentSession, getRequiredUserId } from "@/lib/session";
 import { getDefaultLibrary } from "@/lib/default-library";
 import { listAllFolders, listFolderContents } from "@/lib/folders-server";
 import { FileBrowser } from "@/components/FileBrowser";
@@ -9,6 +9,8 @@ import { serializeFolderContents } from "@/app/(app)/drive/serialize";
 
 export default async function DriveRootPage() {
   const userId = await getRequiredUserId();
+  const session = await getCurrentSession();
+  const isAnonymous = session?.isAnonymous ?? false;
 
   const library = await getDefaultLibrary(userId);
   if (!library) {
@@ -39,6 +41,7 @@ export default async function DriveRootPage() {
         contents={serializeFolderContents(contents)}
         folders={allFolders}
         isTrashView={false}
+        defaultView={isAnonymous ? "list" : "tile"}
       />
     </div>
   );

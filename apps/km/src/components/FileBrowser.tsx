@@ -68,6 +68,12 @@ interface Props {
   isTrashView?: boolean;
   /** Optional override for empty-trash handler (for tests). Default: internal handler. */
   onEmptyTrash?: () => void;
+  /**
+   * View to use when localStorage has no persisted preference. Defaults to
+   * "tile". Guest accounts pass "list" so the first-paint experience matches
+   * the demo guidance.
+   */
+  defaultView?: ViewMode;
 }
 
 /**
@@ -283,9 +289,10 @@ export function FileBrowser({
   folders,
   isTrashView = false,
   onEmptyTrash: onEmptyTrashProp,
+  defaultView = "tile",
 }: Props) {
   const router = useRouter();
-  const [view, setView] = useState<ViewMode>("tile");
+  const [view, setView] = useState<ViewMode>(defaultView);
   useEffect(() => {
     try {
       const stored = localStorage.getItem("km:fb:view");
