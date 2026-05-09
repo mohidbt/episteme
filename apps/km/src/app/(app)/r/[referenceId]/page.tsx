@@ -4,9 +4,7 @@ import { BookMarked } from "lucide-react";
 import { getRequiredUserId } from "@/lib/session";
 import { getDefaultLibrary } from "@/lib/default-library";
 import { getReference, listPapersInLibrary } from "@/lib/references-server";
-import { listAllFolders } from "@/lib/folders-server";
-import { PathPill, type PathPillSegment } from "@/components/PathPill";
-import { splitFolderPath } from "@/lib/tree";
+import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { ReferenceForm } from "@/components/ReferenceForm";
 import { ReferenceAttachToPaperButton } from "@/components/ReferenceAttachToPaperButton";
 import { ReferenceAgenticSearchButton } from "@/components/ReferenceAgenticSearchButton";
@@ -26,10 +24,9 @@ export default async function ReferencePage({
   ]);
   if (!ref) notFound();
 
-  const [papersInLib, allFolders] = await Promise.all([
-    library ? listPapersInLibrary(library.id, userId) : Promise.resolve([]),
-    library ? listAllFolders(library.id, userId) : Promise.resolve([]),
-  ]);
+  const papersInLib = library
+    ? await listPapersInLibrary(library.id, userId)
+    : [];
 
   const attachedPaper = ref.paperId
     ? (papersInLib.find((p) => p.id === ref.paperId) ?? null)
@@ -38,28 +35,17 @@ export default async function ReferencePage({
     denormaliseForList(validateCslJson(ref.cslJson)).title.trim() ||
     ref.citationKey;
 
-  const folderSegs = splitFolderPath(ref.folderPath);
-  const pillSegments: PathPillSegment[] = library
-    ? [
-        { id: "root", label: library.name, href: "/" },
-        ...folderSegs.map((name, i) => ({
-          id: `folder-${i}`,
-          label: name,
-          href:
-            "/drive/" +
-            folderSegs
-              .slice(0, i + 1)
-              .map((x) => encodeURIComponent(x))
-              .join("/"),
-        })),
-        { id: "title", label: displayTitle, href: null },
-      ]
-    : [];
-
   return (
     <div className="mx-auto max-w-3xl p-6">
       <TabTitleUpdater href={`/r/${ref.id}`} title={displayTitle} />
-      {library && <PathPill className="mb-4" segments={pillSegments} />}
+      {library && (
+        <Breadcrumbs
+          libraryName={library.name}
+          section="references"
+          folderPath={ref.folderPath}
+          title={displayTitle}
+        />
+      )}
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <ReferenceAgenticSearchButton
           referenceId={ref.id}
