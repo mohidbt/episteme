@@ -6,15 +6,18 @@
  * Steps (per Phase 1.3b Task 12):
  *   1. Snapshot `git diff` of services/agents/ excluding services/agents/skills/.
  *   2. Apply a fixture skill at services/agents/skills/<FIXTURE_SKILL_NAME>/SKILL.md.
- *   3. Spawn the FastAPI service (uvicorn) on an ephemeral port.
- *   4. POST /agents/km/config with enabledSkills=[<FIXTURE_SKILL_NAME>].
- *   5. STRICT LOAD ASSERTION: GET /agents/km/debug/loaded_skills?only=<name>
- *      and verify the response includes the fixture name. Without this step
- *      a /invoke 200 could mask a silently-skipped skill — see strengthen #1.
- *   6. POST /agents/km/invoke — assert the agent BUILDS without error
- *      (returns 200 streaming response).
- *   7. Always delete the fixture (finally).
- *   8. Re-snapshot diff outside skills/ and assert it didn't expand.
+ *   3. Spawn the FastAPI service (uvicorn) on an ephemeral port — boot smoke:
+ *      proves the new SKILL.md doesn't break Python imports.
+ *   4. POST /agents/km/config with enabledSkills=[<FIXTURE_SKILL_NAME>] —
+ *      proves the in-memory config router accepts the skill name.
+ *   5. STRICT LOAD ASSERTION (disk-parse): run a small Python program inside
+ *      services/agents/ that imports `_parse_skill_md_text` and asserts the
+ *      fixture's SKILL.md parses into a SkillSpec with the expected name.
+ *      This mirrors what DriveSkillsLoader._seed_from_disk would copy into
+ *      drive notes on first use, without requiring KM to be running.
+ *      Live drive-side parse is covered by tests/test_drive_skills_loader.py.
+ *   6. Always delete the fixture (finally).
+ *   7. Re-snapshot diff outside skills/ and assert it didn't expand.
  *
  * Notes:
  *   - The spec illustrated the fixture name as "__fixture-skill__", but the
@@ -22,15 +25,13 @@
  *     starting with "_" or ".". Changing the loader to allow underscored
  *     names would itself be a "core change" — the exact thing this gate
  *     forbids. So we use a non-underscored name for the fixture.
- *   - The /debug/loaded_skills endpoint is HMAC-gated (no info leak). It
- *     returns the `load_skills(only=...)` result as JSON; an unknown name
- *     bubbles up as a 500 from load_skills' KeyError, which fails this gate.
- *   - The "agent lists the skill" via LLM call assertion is brittle without
- *     a working OpenRouter key — see tech-debt §1.3b-T12-1. The debug
- *     endpoint replaces it with a deterministic equivalent.
- *   - Requires INHALE_INTERNAL_SECRET env var (HMAC) and EPISTEME_AGENTS_PG_URL
- *     for the saver/store. If EPISTEME_AGENTS_PG_URL is unset, the service
- *     falls back to in-memory checkpointer which is fine for this gate.
+ *   - We previously hit /agents/km/debug/loaded_skills + /agents/km/invoke
+ *     here, but both paths require KM at :3001 (DriveSkillsLoader bootstraps
+ *     via NotesBackend → /api/folders). CI has no KM, so those steps were
+ *     unreachable behind a uvicorn entrypoint bug; once that bug was fixed
+ *     they reliably 500'd. The disk-parse assertion is the deterministic
+ *     equivalent for the gate's purpose (PRD §5.4.7 loadable invariant).
+ *   - Requires INHALE_INTERNAL_SECRET env var (HMAC) for the /config call.
  */
 import {
   spawn,
@@ -374,63 +375,44 @@ async function main(): Promise<void> {
       }
     }
 
-    // Step 5 (Strengthen #1): strict load assertion. The /config + /invoke
-    // smoke alone does NOT prove the fixture skill was actually resolved by
-    // load_skills() — create_deep_agent could silently ignore an unresolved
-    // skill name. Hit the HMAC-gated debug endpoint and assert the fixture
-    // name is in the response payload. If load_skills KeyErrors here, the
-    // endpoint 500s and this gate fails as intended.
+    // Step 5: strict load assertion via disk-parse. We invoke the same
+    // _parse_skill_md_text() function that DriveSkillsLoader uses against
+    // the fixture's on-disk SKILL.md. If the parse returns None (missing
+    // frontmatter, bad shape) the gate fails — which is the regression we
+    // care about for PRD §5.4.7 ("adding a SKILL.md is sufficient").
+    // Live drive bootstrap+parse is covered by the agents pytest suite
+    // (tests/test_drive_skills_loader.py) where NotesBackend is mocked.
     {
-      const path = `/agents/km/debug/loaded_skills?only=${FIXTURE_SKILL_NAME}`;
-      const res = await fetch(baseUrl + path, {
-        method: "GET",
-        headers: authHeaders("GET", path, ""),
+      const py = [
+        "import sys",
+        "from pathlib import Path",
+        "from skills import SKILLS_ROOT, _parse_skill_md_text",
+        `name = ${JSON.stringify(FIXTURE_SKILL_NAME)}`,
+        "skill_md = SKILLS_ROOT / name / 'SKILL.md'",
+        "spec = _parse_skill_md_text(skill_md.read_text(encoding='utf-8'), skill_md)",
+        "if spec is None:",
+        "    sys.exit(f'parse returned None for {skill_md}')",
+        "if spec.name != name:",
+        "    sys.exit(f'parsed name {spec.name!r} != fixture {name!r}')",
+        "print(spec.name)",
+      ].join("\n");
+      const result = spawnSync("uv", ["run", "python", "-c", py], {
+        cwd: AGENTS_DIR,
+        encoding: "utf-8",
       });
-      if (res.status !== 200) {
-        const text = await res.text();
+      if (result.status !== 0) {
         throw new Error(
-          `/debug/loaded_skills returned ${res.status}: ${text}`,
+          `disk-parse assertion failed (exit ${result.status}): ${result.stderr || result.stdout}`,
         );
       }
-      const payload = (await res.json()) as Array<{ name: string }>;
-      const names = payload.map((s) => s.name);
-      if (!names.includes(FIXTURE_SKILL_NAME)) {
+      if (!result.stdout.includes(FIXTURE_SKILL_NAME)) {
         throw new Error(
-          `/debug/loaded_skills did not include fixture ${FIXTURE_SKILL_NAME}; got ${JSON.stringify(names)}`,
+          `disk-parse stdout missing fixture name; got ${JSON.stringify(result.stdout)}`,
         );
       }
     }
 
-    // Step 6: POST /agents/km/invoke — assert agent BUILDS (200 streaming).
-    {
-      const threadId = randomUUID();
-      const body = JSON.stringify({ thread_id: threadId, message: "list your skills" });
-      const path = "/agents/km/invoke";
-      const res = await fetch(baseUrl + path, {
-        method: "POST",
-        headers: authHeaders("POST", path, body),
-        body,
-      });
-      if (res.status !== 200) {
-        const text = await res.text();
-        throw new Error(`/invoke returned ${res.status}: ${text}`);
-      }
-      // Drain a small slice of the stream then abort — we only need to confirm
-      // the agent BUILT (load_skills() resolved the fixture). Any 5xx during
-      // build would surface as a non-200 status above.
-      try {
-        const reader = res.body?.getReader();
-        if (reader) {
-          // Read at most one chunk with a short timeout, then cancel.
-          await Promise.race([reader.read(), delay(2_000)]);
-          await reader.cancel();
-        }
-      } catch {
-        // Stream-cancel races are tolerable here.
-      }
-    }
-
-    // Step 8: re-snapshot. Diff invariant must hold.
+    // Step 7: re-snapshot. Diff invariant must hold.
     const finalDiff = gitDiffOutsideSkills();
     const finalUntracked = gitUntrackedOutsideSkills();
     if (!diffsEqual(baselineDiff, finalDiff)) {
@@ -458,7 +440,7 @@ async function main(): Promise<void> {
     if ((err as Error).stack) process.stderr.write(`${(err as Error).stack}\n`);
     exitCode = 1;
   } finally {
-    // Step 7: revert fixture unconditionally.
+    // Step 6 (finally): revert fixture unconditionally.
     revertFixture();
     if (proc && !proc.killed) {
       proc.kill("SIGTERM");
