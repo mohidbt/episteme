@@ -18,4 +18,4 @@ Edit this note. Delete it. Make it yours.
 
 ## Markdown reminder
 
-Format with **bold**, *italic*, `code`, [links](https://example.com), # headings, - bullets, > quotes.
+Format with `**bold**`, `*italic*`, `` `code` ``, `[links](url)`, `# headings`, `- bullets`, `> quotes`.
