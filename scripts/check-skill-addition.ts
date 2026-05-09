@@ -269,7 +269,7 @@ async function spawnFastapi(port: number): Promise<ChildProcessWithoutNullStream
     [
       "run",
       "uvicorn",
-      "main:app",
+      "app:app",
       "--host",
       "127.0.0.1",
       "--port",
