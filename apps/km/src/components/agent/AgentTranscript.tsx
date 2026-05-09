@@ -90,6 +90,11 @@ import {
 } from "lucide-react";
 import { FileDiffCard } from "./FileDiffCard";
 import { SkillLoadCard } from "./SkillLoadCard";
+import { ChatCodePre } from "./ChatCodePre";
+
+// #21 — replace Streamdown's built-in code-block toolbar (copy + download)
+// with our own renderer that exposes Copy + Add to library.
+const chatStreamdownComponents = { pre: ChatCodePre };
 
 export interface AgentTranscriptProps {
   threadId: string;
@@ -726,6 +731,8 @@ function TextCardView({
           {/* RG3 #58 — assistant prose paragraphs use leading-snug (1.375); user bubble inherits. */}
           <MessageResponse
             className={card.role === "assistant" ? "[&_p]:leading-snug" : undefined}
+            controls={false}
+            components={chatStreamdownComponents}
           >
             {stripBlankRows(card.text)}
           </MessageResponse>
