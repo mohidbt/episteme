@@ -22,7 +22,7 @@ export default async function NotesPage() {
   const rows = allNotes.filter((note) => {
     if (!note.folderId) return true;
     const chain = resolveChain(allFolders, note.folderId);
-    return !chain.some((f) => f.isTrash);
+    return !chain.some((f) => f.isTrash || f.name === ".episteme");
   });
 
   return (
