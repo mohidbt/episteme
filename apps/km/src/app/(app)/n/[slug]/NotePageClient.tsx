@@ -204,7 +204,7 @@ export function NotePageClient({
             <span>{referenceCount} references</span>
           </>
         )}
-        <span className="synced-pill" data-testid="synced-pill">
+        <span className="synced-pill pointer-events-none" data-testid="synced-pill">
           <span
             data-sync-status={saving ? "saving" : "synced"}
             className={`inline-block size-1.5 rounded-full ${saving ? "bg-amber-500" : "bg-green-500"}`}
