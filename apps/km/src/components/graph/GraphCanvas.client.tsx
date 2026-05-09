@@ -124,7 +124,7 @@ export default function GraphCanvas({ payload }: { payload: GraphPayload }) {
     : null
 
   return (
-    <div ref={wrapperRef} className="h-full w-full bg-background">
+    <div ref={wrapperRef} className="h-full w-full overflow-hidden rounded-tl-xl bg-background">
       <ForceGraph2D
         graphData={graphData}
         width={size.width}
