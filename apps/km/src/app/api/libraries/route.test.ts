@@ -74,42 +74,72 @@ describe("libraries", () => {
   });
 
   it("auto-seeds a Trash folder when creating a library", async () => {
-    const c = await POST(
-      req("/api/libraries", {
-        method: "POST",
-        cookie: u.cookie,
-        body: JSON.stringify({ name: "Trash-Seeded Lib" }),
-      }),
-    );
-    expect(c.status).toBe(201);
-    const lib = await c.json();
+    // Fresh user — POST /api/libraries enforces one-library-per-user (409
+    // on second POST), so each test that creates a library needs its own.
+    const fresh = await createTestUser();
+    try {
+      const c = await POST(
+        req("/api/libraries", {
+          method: "POST",
+          cookie: fresh.cookie,
+          body: JSON.stringify({ name: "Trash-Seeded Lib" }),
+        }),
+      );
+      expect(c.status).toBe(201);
+      const lib = await c.json();
 
-    const trashRows = await db
-      .select({
-        id: folders.id,
-        name: folders.name,
-        parentId: folders.parentId,
-        isTrash: folders.isTrash,
-        userId: folders.userId,
-      })
-      .from(folders)
-      .where(and(eq(folders.libraryId, lib.id), eq(folders.isTrash, true)));
-    expect(trashRows.length).toBe(1);
-    expect(trashRows[0].name).toBe("Trash");
-    expect(trashRows[0].parentId).toBeNull();
-    expect(trashRows[0].isTrash).toBe(true);
-    expect(trashRows[0].userId).toBe(u.id);
+      const trashRows = await db
+        .select({
+          id: folders.id,
+          name: folders.name,
+          parentId: folders.parentId,
+          isTrash: folders.isTrash,
+          userId: folders.userId,
+        })
+        .from(folders)
+        .where(and(eq(folders.libraryId, lib.id), eq(folders.isTrash, true)));
+      expect(trashRows.length).toBe(1);
+      expect(trashRows[0].name).toBe("Trash");
+      expect(trashRows[0].parentId).toBeNull();
+      expect(trashRows[0].isTrash).toBe(true);
+      expect(trashRows[0].userId).toBe(fresh.id);
+    } finally {
+      await deleteTestUser(fresh.id);
+    }
   });
 
   it("forbids other user mutation", async () => {
-    const c = await POST(
-      req("/api/libraries", { method: "POST", cookie: u.cookie, body: JSON.stringify({ name: "Secret" }) }),
-    );
-    const lib = await c.json();
-    const r = await PATCH_ID(
-      req(`/api/libraries/${lib.id}`, { method: "PATCH", cookie: other.cookie, body: JSON.stringify({ name: "Hack" }) }),
-      params({ id: String(lib.id) }),
-    );
-    expect(r.status).toBe(403);
+    const owner = await createTestUser();
+    try {
+      const c = await POST(
+        req("/api/libraries", { method: "POST", cookie: owner.cookie, body: JSON.stringify({ name: "Secret" }) }),
+      );
+      const lib = await c.json();
+      const r = await PATCH_ID(
+        req(`/api/libraries/${lib.id}`, { method: "PATCH", cookie: other.cookie, body: JSON.stringify({ name: "Hack" }) }),
+        params({ id: String(lib.id) }),
+      );
+      expect(r.status).toBe(403);
+    } finally {
+      await deleteTestUser(owner.id);
+    }
+  });
+
+  it("409 when user already has a library", async () => {
+    const solo = await createTestUser();
+    try {
+      const first = await POST(
+        req("/api/libraries", { method: "POST", cookie: solo.cookie, body: JSON.stringify({ name: "First" }) }),
+      );
+      expect(first.status).toBe(201);
+      const dup = await POST(
+        req("/api/libraries", { method: "POST", cookie: solo.cookie, body: JSON.stringify({ name: "Second" }) }),
+      );
+      expect(dup.status).toBe(409);
+      const j = await dup.json();
+      expect(j.error).toBe("library_exists");
+    } finally {
+      await deleteTestUser(solo.id);
+    }
   });
 });

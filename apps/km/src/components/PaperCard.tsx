@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { FileText } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 
 interface PaperCardProps {
@@ -34,8 +35,10 @@ export function PaperCard({ id, title, filename, authors, year }: PaperCardProps
           {coverFailed ? (
             <div
               aria-hidden
-              className="flex h-full w-full items-center justify-center text-muted-foreground"
+              data-testid="paper-card-cover-placeholder"
+              className="flex h-full w-full flex-col items-center justify-center gap-2 text-muted-foreground/70"
             >
+              <FileText className="h-8 w-8" strokeWidth={1.25} />
               <span className="text-[10px] uppercase tracking-[0.14em]">No cover</span>
             </div>
           ) : (

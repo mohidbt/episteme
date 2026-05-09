@@ -14,7 +14,7 @@ from lib.auto_highlight_tools import build_tools
 RUN_ID = "11111111-1111-1111-1111-111111111111"
 USER_ID = "user_1"
 PAPER_ID = "00000000-0000-0000-0000-000000000042"
-PDF_PATH = str(Path(__file__).resolve().parents[3] / "apps/web/e2e/fixtures/test.pdf")
+PDF_PATH = str(Path(__file__).resolve().parents[3] / "apps/km/e2e/fixtures/reader-test.pdf")
 
 
 def _get_tool(tools, name):

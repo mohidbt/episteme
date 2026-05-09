@@ -222,6 +222,9 @@ describe("importLibraryZip", () => {
 });
 
 describe("importLibraryZip — folder_id population (T22)", () => {
+  // Each test in this block creates its own user to honour the
+  // one-library-per-user invariant: prior versions of these tests inserted
+  // multiple libraries onto a single shared u2.
   let u2: TestUser;
   let lib2Id: number;
 
@@ -284,54 +287,55 @@ describe("importLibraryZip — folder_id population (T22)", () => {
   }, 60_000);
 
   it("top-level entry note.md under rootFolderId sets folder_id = rootFolderId without creating sub-folders", async () => {
-    const lib2Folders = await db
-      .select({ id: folders.id })
-      .from(folders)
-      .where(and(eq(folders.libraryId, lib2Id), eq(folders.userId, u2.id)));
-    const folderCountBefore = lib2Folders.length;
+    // Use an isolated user to avoid the one-library-per-user collision.
+    const u3 = await createTestUser();
+    try {
+      const [lib3] = await db
+        .insert(libraries)
+        .values({ userId: u3.id, name: "T22LibToplevel" })
+        .returning();
+      const [rootFolder] = await db
+        .insert(folders)
+        .values({ libraryId: lib3.id, userId: u3.id, parentId: null, name: "RootToplevel" })
+        .returning();
+      const rootFolderId = rootFolder.id;
 
-    // Create a separate library to isolate
-    const [lib3] = await db
-      .insert(libraries)
-      .values({ userId: u2.id, name: "T22LibToplevel" })
-      .returning();
-    const [rootFolder] = await db
-      .insert(folders)
-      .values({ libraryId: lib3.id, userId: u2.id, parentId: null, name: "RootToplevel" })
-      .returning();
-    const rootFolderId = rootFolder.id;
+      const zipBuf = await buildZip({
+        entries: [
+          {
+            type: "file",
+            name: "T22LibToplevel/notes/note.md",
+            body: "top-level note",
+          },
+        ],
+      });
 
-    const zipBuf = await buildZip({
-      entries: [
-        {
-          type: "file",
-          name: "T22LibToplevel/notes/note.md",
-          body: "top-level note",
-        },
-      ],
-    });
+      await importLibraryZip(u3.id, lib3.id, zipBuf, rootFolderId);
 
-    await importLibraryZip(u2.id, lib3.id, zipBuf, rootFolderId);
+      // No new sub-folders created under rootFolderId
+      const subFolders = await db
+        .select()
+        .from(folders)
+        .where(and(eq(folders.libraryId, lib3.id), eq(folders.userId, u3.id), eq(folders.parentId, rootFolderId)));
+      expect(subFolders).toHaveLength(0);
 
-    // No new sub-folders created under rootFolderId
-    const subFolders = await db
-      .select()
-      .from(folders)
-      .where(and(eq(folders.libraryId, lib3.id), eq(folders.userId, u2.id), eq(folders.parentId, rootFolderId)));
-    expect(subFolders).toHaveLength(0);
-
-    // Note's folder_id = rootFolderId
-    const [noteRow] = await db
-      .select()
-      .from(notes)
-      .where(and(eq(notes.libraryId, lib3.id), eq(notes.userId, u2.id)));
-    expect(noteRow.folderId).toBe(rootFolderId);
+      // Note's folder_id = rootFolderId
+      const [noteRow] = await db
+        .select()
+        .from(notes)
+        .where(and(eq(notes.libraryId, lib3.id), eq(notes.userId, u3.id)));
+      expect(noteRow.folderId).toBe(rootFolderId);
+    } finally {
+      await deleteTestUser(u3.id);
+    }
   }, 60_000);
 
   it("null rootFolderId with entry a/note.md creates folder at library root (parentId=null)", async () => {
+    const u4 = await createTestUser();
+    try {
     const [lib4] = await db
       .insert(libraries)
-      .values({ userId: u2.id, name: "T22LibNullRoot" })
+      .values({ userId: u4.id, name: "T22LibNullRoot" })
       .returning();
 
     const zipBuf = await buildZip({
@@ -344,13 +348,13 @@ describe("importLibraryZip — folder_id population (T22)", () => {
       ],
     });
 
-    await importLibraryZip(u2.id, lib4.id, zipBuf, null);
+    await importLibraryZip(u4.id, lib4.id, zipBuf, null);
 
     // Folder "a" created at library root (parentId = null)
     const [folderA] = await db
       .select()
       .from(folders)
-      .where(and(eq(folders.libraryId, lib4.id), eq(folders.userId, u2.id), eq(folders.name, "a")));
+      .where(and(eq(folders.libraryId, lib4.id), eq(folders.userId, u4.id), eq(folders.name, "a")));
     expect(folderA).toBeTruthy();
     expect(folderA.parentId).toBeNull();
 
@@ -358,57 +362,65 @@ describe("importLibraryZip — folder_id population (T22)", () => {
     const [noteRow] = await db
       .select()
       .from(notes)
-      .where(and(eq(notes.libraryId, lib4.id), eq(notes.userId, u2.id)));
+      .where(and(eq(notes.libraryId, lib4.id), eq(notes.userId, u4.id)));
     expect(noteRow.folderId).toBe(folderA.id);
+    } finally {
+      await deleteTestUser(u4.id);
+    }
   }, 60_000);
 
   it("re-importing the same zip under the same rootFolderId reuses existing folders (idempotent)", async () => {
-    const [lib5] = await db
-      .insert(libraries)
-      .values({ userId: u2.id, name: "T22LibIdempotent" })
-      .returning();
-    const [rootFolder] = await db
-      .insert(folders)
-      .values({ libraryId: lib5.id, userId: u2.id, parentId: null, name: "RootIdempotent" })
-      .returning();
-    const rootFolderId = rootFolder.id;
+    const u5 = await createTestUser();
+    try {
+      const [lib5] = await db
+        .insert(libraries)
+        .values({ userId: u5.id, name: "T22LibIdempotent" })
+        .returning();
+      const [rootFolder] = await db
+        .insert(folders)
+        .values({ libraryId: lib5.id, userId: u5.id, parentId: null, name: "RootIdempotent" })
+        .returning();
+      const rootFolderId = rootFolder.id;
 
-    const zipBuf = await buildZip({
-      entries: [
-        {
-          type: "file",
-          name: "T22LibIdempotent/notes/x/y/note.md",
-          body: "idempotency test",
-        },
-      ],
-    });
+      const zipBuf = await buildZip({
+        entries: [
+          {
+            type: "file",
+            name: "T22LibIdempotent/notes/x/y/note.md",
+            body: "idempotency test",
+          },
+        ],
+      });
 
-    // First import
-    await importLibraryZip(u2.id, lib5.id, zipBuf, rootFolderId);
+      // First import
+      await importLibraryZip(u5.id, lib5.id, zipBuf, rootFolderId);
 
-    const folderCountAfterFirst = await db
-      .select({ count: count() })
-      .from(folders)
-      .where(and(eq(folders.libraryId, lib5.id), eq(folders.userId, u2.id)));
+      const folderCountAfterFirst = await db
+        .select({ count: count() })
+        .from(folders)
+        .where(and(eq(folders.libraryId, lib5.id), eq(folders.userId, u5.id)));
 
-    // Second import (different note slug, same folder structure)
-    const zipBuf2 = await buildZip({
-      entries: [
-        {
-          type: "file",
-          name: "T22LibIdempotent/notes/x/y/note-second.md",
-          body: "second note in same folder",
-        },
-      ],
-    });
-    await importLibraryZip(u2.id, lib5.id, zipBuf2, rootFolderId);
+      // Second import (different note slug, same folder structure)
+      const zipBuf2 = await buildZip({
+        entries: [
+          {
+            type: "file",
+            name: "T22LibIdempotent/notes/x/y/note-second.md",
+            body: "second note in same folder",
+          },
+        ],
+      });
+      await importLibraryZip(u5.id, lib5.id, zipBuf2, rootFolderId);
 
-    const folderCountAfterSecond = await db
-      .select({ count: count() })
-      .from(folders)
-      .where(and(eq(folders.libraryId, lib5.id), eq(folders.userId, u2.id)));
+      const folderCountAfterSecond = await db
+        .select({ count: count() })
+        .from(folders)
+        .where(and(eq(folders.libraryId, lib5.id), eq(folders.userId, u5.id)));
 
-    // Folder count must be unchanged
-    expect(folderCountAfterSecond[0].count).toBe(folderCountAfterFirst[0].count);
+      // Folder count must be unchanged
+      expect(folderCountAfterSecond[0].count).toBe(folderCountAfterFirst[0].count);
+    } finally {
+      await deleteTestUser(u5.id);
+    }
   }, 60_000);
 });

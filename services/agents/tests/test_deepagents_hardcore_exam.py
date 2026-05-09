@@ -147,7 +147,7 @@ def test_deepagents_tool_inventory_is_stable():
     from subagents import RESEARCHER_TOOL_NAMES, SYNTHESIZER_TOOL_NAMES, VERIFIER_TOOL_NAMES  # noqa: PLC0415
 
     tool_names = {t.name for t in ALL_TOOLS}
-    assert len(tool_names) == 25
+    assert len(tool_names) == 26
     assert _CORE_TOOL_NAMES.issubset(tool_names)
     assert set(RESEARCHER_TOOL_NAMES).issubset(tool_names | {"arxiv_search", "biorxiv_search", "pubmed_search"})
     assert set(SYNTHESIZER_TOOL_NAMES).issubset(tool_names)

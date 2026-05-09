@@ -33,6 +33,8 @@ import { cn } from "@/lib/utils";
 const STORAGE_KEY = "app-tabs-v1";
 const DEFAULT_HREF = "/";
 const DEFAULT_TITLE = "Drive";
+const GUEST_WELCOME_HREF = "/n/welcome-to-episteme";
+const GUEST_WELCOME_TITLE = "Welcome to Episteme";
 
 /** /drive redirects to /, so normalize to the canonical path. */
 function normalizeHref(href: string): string {
@@ -79,7 +81,13 @@ function loadFromStorage(): TabsState | null {
   }
 }
 
-export function TabBarProvider({ children }: { children: ReactNode }) {
+export function TabBarProvider({
+  children,
+  isAnonymous = false,
+}: {
+  children: ReactNode;
+  isAnonymous?: boolean;
+}) {
   const router = useRouter();
   const pathname = usePathname();
   // Initialize with the same default the server renders to avoid SSR/client
@@ -88,15 +96,34 @@ export function TabBarProvider({ children }: { children: ReactNode }) {
   const stateRef = useRef<TabsState>(DEFAULT_STATE);
   stateRef.current = state;
   const persistedRef = useRef(false);
+  // When guest-bootstrap navigates to the welcome note, the pathname-sync
+  // effect would briefly observe the still-current pathname (e.g. "/") and
+  // overwrite the bootstrapped activeHref. Gate the next pathname sync until
+  // the router finishes the bootstrap navigation.
+  const skipPathSyncUntilRef = useRef<string | null>(null);
 
   // Hydrate from localStorage after mount (client-only).
   useEffect(() => {
     const stored = loadFromStorage();
     if (stored && (stored.tabs.length > 0 || stored.activeHref)) {
       setState(stored);
+    } else if (isAnonymous) {
+      // Guest first-paint: Drive + Welcome note, Welcome active.
+      const guestState: TabsState = {
+        tabs: [
+          { href: DEFAULT_HREF, title: DEFAULT_TITLE },
+          { href: GUEST_WELCOME_HREF, title: GUEST_WELCOME_TITLE },
+        ],
+        activeHref: GUEST_WELCOME_HREF,
+      };
+      setState(guestState);
+      if (pathname !== GUEST_WELCOME_HREF) {
+        skipPathSyncUntilRef.current = GUEST_WELCOME_HREF;
+        router.push(GUEST_WELCOME_HREF);
+      }
     }
     persistedRef.current = true;
-  }, []);
+  }, [isAnonymous, pathname, router]);
 
   // Persist on change — but only after the initial hydration pass, so we
   // don't overwrite stored state with the default on first commit.
@@ -115,6 +142,15 @@ export function TabBarProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!pathname) return;
     const href = normalizeHref(pathname);
+    // Suppress the sync until the guest-bootstrap navigation lands on the
+    // welcome note; otherwise the bootstrap activeHref gets clobbered.
+    if (skipPathSyncUntilRef.current) {
+      if (href === skipPathSyncUntilRef.current) {
+        skipPathSyncUntilRef.current = null;
+      } else {
+        return;
+      }
+    }
     setState((prev) => {
       const exists = prev.tabs.some((t) => t.href === href);
       if (exists) {

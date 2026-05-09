@@ -158,76 +158,83 @@ describe("paper delete sets reference.paperId to null", () => {
 
 describe("polymorphic note_links", () => {
   it("accepts all 3 target kinds and unresolved wikilinks", async () => {
-    const libId = await createLib(userA, "Poly Lib");
+    // Fresh user — userA already owns a library from the previous describe
+    // block, and one-library-per-user blocks a second createLib call here.
+    const u = await createTestUser();
+    try {
+      const libId = await createLib(u, "Poly Lib");
 
-    const srcNote = await (await POST_NOTE(
-      req("/api/notes", {
-        method: "POST",
-        cookie: userA.cookie,
-        body: JSON.stringify({ libraryId: libId, title: "Source" }),
-      }),
-    )).json();
-
-    const tgtNote = await (await POST_NOTE(
-      req("/api/notes", {
-        method: "POST",
-        cookie: userA.cookie,
-        body: JSON.stringify({ libraryId: libId, title: "TargetNote" }),
-      }),
-    )).json();
-
-    const tgtPaper = await (await POST_PAPER(
-      req("/api/papers", {
-        method: "POST",
-        cookie: userA.cookie,
-        body: JSON.stringify({
-          libraryId: libId,
-          filename: "t.pdf",
-          contentType: "application/pdf",
-          sizeBytes: 1024,
-        }),
-      }),
-    )).json();
-
-    const tgtRef = await (await POST_REF(
-      req("/api/references", {
-        method: "POST",
-        cookie: userA.cookie,
-        body: JSON.stringify({
-          libraryId: libId,
-          citationKey: `pk${Date.now()}`,
-          cslJson: {},
-        }),
-      }),
-    )).json();
-
-    const cases = [
-      { targetKind: "note", targetId: tgtNote.id, targetTitleRaw: "TargetNote" },
-      { targetKind: "paper", targetId: tgtPaper.paperId, targetTitleRaw: "T" },
-      { targetKind: "reference", targetId: tgtRef.id, targetTitleRaw: "ref" },
-      { targetKind: "note", targetId: null, targetTitleRaw: "Unresolved Thing" },
-    ];
-
-    for (const c of cases) {
-      const r = await POST_LINK(
-        req(`/api/notes/${srcNote.id}/links`, {
+      const srcNote = await (await POST_NOTE(
+        req("/api/notes", {
           method: "POST",
-          cookie: userA.cookie,
-          body: JSON.stringify(c),
+          cookie: u.cookie,
+          body: JSON.stringify({ libraryId: libId, title: "Source" }),
         }),
-        params({ id: srcNote.id }),
-      );
-      expect(r.status).toBe(201);
-    }
+      )).json();
 
-    const linkRows = await db
-      .select()
-      .from(noteLinks)
-      .where(eq(noteLinks.sourceNoteId, srcNote.id));
-    expect(linkRows.length).toBe(4);
-    const kinds = linkRows.map((l) => l.targetKind).sort();
-    expect(kinds).toEqual(["note", "note", "paper", "reference"]);
-    expect(linkRows.some((l) => l.targetId === null && l.targetTitleRaw === "Unresolved Thing")).toBe(true);
+      const tgtNote = await (await POST_NOTE(
+        req("/api/notes", {
+          method: "POST",
+          cookie: u.cookie,
+          body: JSON.stringify({ libraryId: libId, title: "TargetNote" }),
+        }),
+      )).json();
+
+      const tgtPaper = await (await POST_PAPER(
+        req("/api/papers", {
+          method: "POST",
+          cookie: u.cookie,
+          body: JSON.stringify({
+            libraryId: libId,
+            filename: "t.pdf",
+            contentType: "application/pdf",
+            sizeBytes: 1024,
+          }),
+        }),
+      )).json();
+
+      const tgtRef = await (await POST_REF(
+        req("/api/references", {
+          method: "POST",
+          cookie: u.cookie,
+          body: JSON.stringify({
+            libraryId: libId,
+            citationKey: `pk${Date.now()}`,
+            cslJson: {},
+          }),
+        }),
+      )).json();
+
+      const cases = [
+        { targetKind: "note", targetId: tgtNote.id, targetTitleRaw: "TargetNote" },
+        { targetKind: "paper", targetId: tgtPaper.paperId, targetTitleRaw: "T" },
+        { targetKind: "reference", targetId: tgtRef.id, targetTitleRaw: "ref" },
+        { targetKind: "note", targetId: null, targetTitleRaw: "Unresolved Thing" },
+      ];
+
+      for (const c of cases) {
+        const r = await POST_LINK(
+          req(`/api/notes/${srcNote.id}/links`, {
+            method: "POST",
+            cookie: u.cookie,
+            body: JSON.stringify(c),
+          }),
+          params({ id: srcNote.id }),
+        );
+        expect(r.status).toBe(201);
+      }
+
+      const linkRows = await db
+        .select()
+        .from(noteLinks)
+        .where(eq(noteLinks.sourceNoteId, srcNote.id));
+      expect(linkRows.length).toBe(4);
+      const kinds = linkRows.map((l) => l.targetKind).sort();
+      expect(kinds).toEqual(["note", "note", "paper", "reference"]);
+      expect(linkRows.some((l) => l.targetId === null && l.targetTitleRaw === "Unresolved Thing")).toBe(true);
+    } finally {
+      await deleteTestUser(u.id);
+    }
   });
 });
 
@@ -275,30 +282,35 @@ describe("cross-library ownership on POST", () => {
 
 describe("folder_path default and listing", () => {
   it("defaults to empty string and is filterable", async () => {
-    const libId = await createLib(userA, "Folder Lib");
+    const u = await createTestUser();
+    try {
+      const libId = await createLib(u, "Folder Lib");
 
-    const noteR = await POST_NOTE(
-      req("/api/notes", {
-        method: "POST",
-        cookie: userA.cookie,
-        body: JSON.stringify({ libraryId: libId, title: "Root Note" }),
-      }),
-    );
-    const note = await noteR.json();
-    expect(note.folderPath).toBe("");
+      const noteR = await POST_NOTE(
+        req("/api/notes", {
+          method: "POST",
+          cookie: u.cookie,
+          body: JSON.stringify({ libraryId: libId, title: "Root Note" }),
+        }),
+      );
+      const note = await noteR.json();
+      expect(note.folderPath).toBe("");
 
-    const { GET: GET_NOTES } = await import("./notes/route");
+      const { GET: GET_NOTES } = await import("./notes/route");
 
-    const emptyList = await GET_NOTES(
-      req(`/api/notes?libraryId=${libId}&folderPath=`, { cookie: userA.cookie }),
-    );
-    const emptyRows = await emptyList.json();
-    expect(emptyRows.some((n: any) => n.id === note.id)).toBe(true);
+      const emptyList = await GET_NOTES(
+        req(`/api/notes?libraryId=${libId}&folderPath=`, { cookie: u.cookie }),
+      );
+      const emptyRows = await emptyList.json();
+      expect(emptyRows.some((n: any) => n.id === note.id)).toBe(true);
 
-    const otherList = await GET_NOTES(
-      req(`/api/notes?libraryId=${libId}&folderPath=other/`, { cookie: userA.cookie }),
-    );
-    const otherRows = await otherList.json();
-    expect(otherRows.some((n: any) => n.id === note.id)).toBe(false);
+      const otherList = await GET_NOTES(
+        req(`/api/notes?libraryId=${libId}&folderPath=other/`, { cookie: u.cookie }),
+      );
+      const otherRows = await otherList.json();
+      expect(otherRows.some((n: any) => n.id === note.id)).toBe(false);
+    } finally {
+      await deleteTestUser(u.id);
+    }
   });
 });

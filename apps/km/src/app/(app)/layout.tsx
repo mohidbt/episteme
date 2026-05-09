@@ -15,7 +15,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   const prefs = await getUserPreferences(session.userId);
   return (
     <AgentBallProvider>
-      <TabBarProvider>
+      <TabBarProvider isAnonymous={session.isAnonymous}>
         <SidebarProvider className="h-dvh overflow-hidden">
           <Sidebar userId={session.userId} isAnonymous={session.isAnonymous} />
           <div className="flex-1 min-w-0 h-full flex flex-col overflow-hidden bg-[var(--bg-roof)]">

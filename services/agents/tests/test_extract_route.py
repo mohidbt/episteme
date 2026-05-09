@@ -217,10 +217,10 @@ def test_extract_smoke_two_cells_succeed():
     types = [e["event"] for e in events]
 
     assert types.count("cell_started") == 2
-    assert types.count("cell_filled") == 2
+    assert types.count("cell_update") == 2
     assert types.count("done") == 1
 
-    filled = [e["data"] for e in events if e["event"] == "cell_filled"]
+    filled = [e["data"] for e in events if e["event"] == "cell_update"]
     by_key = {(d["row"], d["col"]): d for d in filled}
     assert by_key[(0, "n_subjects")]["value"] == "42"
     assert by_key[(0, "n_subjects")]["grounding"]["block_ids"] == ["paper-A:7"]
@@ -267,7 +267,7 @@ def test_extract_failure_isolation():
     types = [e["event"] for e in events]
     assert types.count("cell_started") == 2
     assert types.count("cell_failed") == 1
-    assert types.count("cell_filled") == 1
+    assert types.count("cell_update") == 1
     assert types.count("done") == 1
 
     failed = [e["data"] for e in events if e["event"] == "cell_failed"][0]
@@ -333,7 +333,7 @@ def test_extract_concurrency_cap_4():
     assert r.status_code == 200
     events = _parse_sse(r.text)
     types = [e["event"] for e in events]
-    assert types.count("cell_filled") == 8
+    assert types.count("cell_update") == 8
     assert types.count("done") == 1
     assert max_in_flight <= 4, f"concurrency cap violated: max_in_flight={max_in_flight}"
     # Sanity: at least 4 cells overlap at some point given 8 dispatched + sleeps.

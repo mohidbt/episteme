@@ -20,12 +20,20 @@ from __future__ import annotations
 
 import asyncio
 import json
+from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
 from lib import chandra as chandra_lib
 from lib.chandra import ChandraParseFailed, ensure_parsed, parse_blocks
+
+
+@asynccontextmanager
+async def _fake_download(storage_url):
+    """Stand-in for lib.storage.download_to_tempfile — yields the storage_url
+    unchanged so tests can assert run_chandra(storage_url, ocr_key)."""
+    yield storage_url
 
 
 # ---------------------------------------------------------------------------
@@ -163,7 +171,8 @@ async def test_ensure_parsed_success_path():
         {"success": True, "json": FIXTURE_JSON, "page_count": 1, "error": None},
     )()
 
-    with patch("lib.chandra.run_chandra", new_callable=AsyncMock, return_value=fake_result) as mock_run:
+    with patch("lib.chandra.run_chandra", new_callable=AsyncMock, return_value=fake_result) as mock_run, \
+         patch("lib.storage.download_to_tempfile", _fake_download):
         result = await ensure_parsed(PAPER_ID, conn, ocr_key="ck-test")
 
     assert result == "done"
@@ -182,7 +191,7 @@ async def test_ensure_parsed_chandra_failure_marks_failed():
         "lib.chandra.run_chandra",
         new_callable=AsyncMock,
         side_effect=RuntimeError("network down"),
-    ):
+    ), patch("lib.storage.download_to_tempfile", _fake_download):
         with pytest.raises(ChandraParseFailed):
             await ensure_parsed(PAPER_ID, conn, ocr_key="ck-test")
 
@@ -200,7 +209,8 @@ async def test_ensure_parsed_chandra_returns_unsuccessful_marks_failed():
         {"success": False, "json": None, "page_count": 0, "error": "API error"},
     )()
 
-    with patch("lib.chandra.run_chandra", new_callable=AsyncMock, return_value=fake_result):
+    with patch("lib.chandra.run_chandra", new_callable=AsyncMock, return_value=fake_result), \
+         patch("lib.storage.download_to_tempfile", _fake_download):
         with pytest.raises(ChandraParseFailed):
             await ensure_parsed(PAPER_ID, conn, ocr_key="ck-test")
 
@@ -264,6 +274,7 @@ async def test_ensure_parsed_concurrent_callers_run_chandra_once():
     # Tighten poll interval so the test isn't slow.
     with patch.object(chandra_lib, "POLL_INTERVAL_SECONDS", 0.01), \
          patch.object(chandra_lib, "POLL_TIMEOUT_SECONDS", 5.0), \
+         patch("lib.storage.download_to_tempfile", _fake_download), \
          patch("lib.chandra.run_chandra", new=AsyncMock(side_effect=slow_run)) as mock_run:
         c1 = make_shared_conn()
         c2 = make_shared_conn()

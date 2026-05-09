@@ -22,6 +22,20 @@
             }
           },
           {
+            "id": "263b0f73da3fdbbd",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "docs/superpowers/plans/2026-04-19-episteme-km.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "2026-04-19-episteme-km"
+            }
+          },
+          {
             "id": "c057ae6aaea6789a",
             "type": "leaf",
             "state": {
@@ -50,34 +64,6 @@
             }
           },
           {
-            "id": "263b0f73da3fdbbd",
-            "type": "leaf",
-            "state": {
-              "type": "markdown",
-              "state": {
-                "file": "docs/superpowers/plans/2026-04-19-episteme-km.md",
-                "mode": "source",
-                "source": false
-              },
-              "icon": "lucide-file",
-              "title": "2026-04-19-episteme-km"
-            }
-          },
-          {
-            "id": "444930d6e412560a",
-            "type": "leaf",
-            "state": {
-              "type": "markdown",
-              "state": {
-                "file": "docs/superpowers/plans/phases/phase-1.5-rag-rewrite.md",
-                "mode": "source",
-                "source": false
-              },
-              "icon": "lucide-file",
-              "title": "phase-1.5-rag-rewrite"
-            }
-          },
-          {
             "id": "29f4a4eaefddc08e",
             "type": "leaf",
             "state": {
@@ -92,7 +78,7 @@
             }
           }
         ],
-        "currentTab": 4
+        "currentTab": 1
       }
     ],
     "direction": "vertical"
@@ -254,44 +240,44 @@
       "bases:Neue Base erstellen": false
     }
   },
-  "active": "444930d6e412560a",
+  "active": "263b0f73da3fdbbd",
   "lastOpenFiles": [
-    "services/agents/tests/__pycache__/test_km_extract_stub.cpython-313-pytest-9.0.3.pyc",
-    "services/agents/tests/test_km_extract_stub.py",
-    "docs/superpowers/plans/phases/phase-1.4.x-extraction-skill.md",
-    "docs/superpowers/plans/2026-04-19-episteme-km.md",
+    "_tmp_8462_7edcd412be41bcb50a55a2c8c2a15e2a",
+    "apps/km/src/components/PaperCard.test.tsx",
+    "docs/temp/agent_shell_batch_summary.md",
+    "docs/temp/b1_highlight_runs_summary.md",
+    "docs/temp/s2_rate_limit_summary.md",
+    "docs/temp/reader_ui_summary.md",
+    "apps/km/src/components/agent/ChatCodePre.test.tsx",
+    "docs/temp/editor_batch_summary.md",
+    "apps/km/src/components/agent/ChatCodePre.tsx",
+    "docs/temp/drive_ux_summary.md",
+    "services/agents/tests/__pycache__/test_paper_search_cache.cpython-313-pytest-9.0.3.pyc",
+    "services/agents/tests/test_paper_search_cache.py",
+    "docs/temp/test_instructions_p0_batch.md",
+    "docs/temp/a4_v2_summary.md",
+    "docs/temp/a4_multi_library_attempt_killed.md",
+    "docs/superpowers/plans/phases/phase-1.9.x-paper-ingestion-hardening.md",
+    "docs/temp/h2_pytest_attempt_killed.md",
+    "apps/km/src/app/api/references/from-bib/route.test.ts.tmp.23114.1778337812174",
+    "packages/db/drizzle/0030_one_library_per_user.sql",
     "docs/superpowers/specs/2026-04-26-roadmap-update-design.md",
-    "docs/superpowers/plans/phases/phase-1.5-rag-rewrite.md",
-    "docs/superpowers/plans/phases/phase-4.3-extra-workflows.md",
-    "docs/superpowers/plans/phases/phase-1.4-agent-workflows.md",
+    "docs/superpowers/plans/phases/phase-1.3-agent-platform.md",
+    "docs/superpowers/plans/2026-04-19-episteme-km.md",
     "episteme-km-prd.md",
-    "apps/km/src/components/DetailUploadBar.tsx",
-    "apps/km/src/components/FolderDestinationPicker.tsx",
-    "apps/km/src/components/DetailUploadBar.test.tsx",
-    "apps/km/src/app/(app)/agents/[id]/page.test.tsx",
-    "apps/km/src/lib/agents/get-thread-messages.test.ts",
-    "apps/km/src/lib/agents/get-thread-messages.ts",
-    "services/sync/tsconfig.tsbuildinfo",
-    "apps/km/src/components/ui/PillSwitcher.tsx",
-    "apps/km/public/seed/pca-jolliffe2002.csl.json",
+    "docs/superpowers/plans/phases/phase-1.4-agent-workflows.md",
+    "docs/superpowers/plans/phases/phase-1.5-rag-rewrite.md",
+    "apps/km/src/app/api/user-highlights/route.schema-mismatch.test.ts",
+    "apps/km/src/app/api/user-highlights/schema-mismatch.ts",
+    "services/agents/tests/__pycache__/test_km_extract_stub.cpython-313-pytest-9.0.3.pyc",
+    "docs/superpowers/plans/phases/phase-1.4.x-extraction-skill.md",
+    "docs/superpowers/plans/phases/phase-4.3-extra-workflows.md",
     "services/agents/skills/paper-search/SKILL.md",
     "docs/superpowers/plans/phases/phase-1.5.1-agent-paper-reading.md",
     "docs/superpowers/plans/phases/phase-1.3h-skills-subagents-disambiguation.md",
     "docs/superpowers/plans/phases/phase-1.3g-skills-vs-subagents-honesty-pass.md",
     "docs/superpowers/plans/phases/phase-1.3g-agentic-paper-search.md",
     "services/agents/skills/_deep-read/SKILL.md",
-    "docs/superpowers/specs/2026-04-23-unified-drive-and-data-type-design.md",
-    "docs/superpowers/specs/2026-04-29-agentic-paper-search-design.md",
-    "docs/superpowers/plans/phases/phase-2.2-drive-as-filesystem.md",
-    "docs/superpowers/plans/phases/phase-1.3.x-papersets.md",
-    "docs/superpowers/plans/phases/phase-1.3f-drive-unified-skills.md",
-    "docs/superpowers/plans/phases/phase-1.3e-drive-unified-memory.md",
-    "docs/superpowers/plans/phases/phase-1.3-agent-platform.md",
-    "docs/superpowers/specs/2026-04-28-queued-changes-triage-design.md",
-    "docs/superpowers/plans/phases/phase-1.7-migration.md",
-    "services/agents/skills/fixture-skill-scalability-gate/SKILL.md",
-    "services/agents/skills/synthesis/SKILL.md",
-    "services/agents/skills/deep-read/SKILL.md",
     "apps/km/e2e/fixtures/phase-1.0-yjs-page2.png",
     "apps/km/e2e/fixtures/phase-1.0-yjs-page1.png",
     "apps/km/e2e/fixtures/perf-fix-instant-load.png",

@@ -21,18 +21,22 @@ import { getTrashFolderId } from "@/lib/folders-server";
 
 let u: TestUser;
 let other: TestUser;
+// Second library for cross-library scoping tests. Per the
+// one-library-per-user invariant, this lives under a separate user (u2).
+let u2: TestUser;
 let libraryId: number;
 let libraryId2: number;
 
 beforeAll(async () => {
   u = await createTestUser();
   other = await createTestUser();
+  u2 = await createTestUser();
   const r = await POST_LIB(
     req("/api/libraries", { method: "POST", cookie: u.cookie, body: JSON.stringify({ name: "Refs Lib" }) }),
   );
   libraryId = (await r.json()).id;
   const r2 = await POST_LIB(
-    req("/api/libraries", { method: "POST", cookie: u.cookie, body: JSON.stringify({ name: "Refs Lib 2" }) }),
+    req("/api/libraries", { method: "POST", cookie: u2.cookie, body: JSON.stringify({ name: "Refs Lib 2" }) }),
   );
   libraryId2 = (await r2.json()).id;
 });
@@ -40,6 +44,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await deleteTestUser(u.id);
   await deleteTestUser(other.id);
+  await deleteTestUser(u2.id);
 });
 
 let keyCounter = 0;
@@ -219,7 +224,7 @@ describe("references citation_key_conflict", () => {
     const b = await POST(
       req("/api/references", {
         method: "POST",
-        cookie: u.cookie,
+        cookie: u2.cookie,
         body: JSON.stringify({ libraryId: libraryId2, citationKey: key, cslJson: { id: key, type: "article-journal", title: "T" } }),
       }),
     );
@@ -341,12 +346,16 @@ describe("references GET ?q=", () => {
 // ── GET pagination (limit/offset) ───────────────────────────────────────────
 
 describe("references GET pagination", () => {
+  // Fresh user — one-library-per-user means we can't create a second lib
+  // under `u` (which already owns "Refs Lib").
+  let pagU: TestUser;
   let pagLib: number;
   beforeAll(async () => {
+    pagU = await createTestUser();
     const r = await POST_LIB(
       req("/api/libraries", {
         method: "POST",
-        cookie: u.cookie,
+        cookie: pagU.cookie,
         body: JSON.stringify({ name: "Pagination Lib" }),
       }),
     );
@@ -356,7 +365,7 @@ describe("references GET pagination", () => {
       const r2 = await POST(
         req("/api/references", {
           method: "POST",
-          cookie: u.cookie,
+          cookie: pagU.cookie,
           body: JSON.stringify({
             libraryId: pagLib,
             citationKey: `pag${Date.now()}-${i}`,
@@ -367,16 +376,19 @@ describe("references GET pagination", () => {
       expect(r2.status).toBe(201);
     }
   });
+  afterAll(async () => {
+    await deleteTestUser(pagU.id);
+  });
 
   it("default limit caps at 20", async () => {
-    const r = await GET(req(`/api/references?libraryId=${pagLib}`, { cookie: u.cookie }));
+    const r = await GET(req(`/api/references?libraryId=${pagLib}`, { cookie: pagU.cookie }));
     const rows = (await r.json()) as unknown[];
     expect(rows.length).toBe(20);
   });
 
   it("limit=200 is clamped to 100 (and we only have 25 here)", async () => {
     const r = await GET(
-      req(`/api/references?libraryId=${pagLib}&limit=200`, { cookie: u.cookie }),
+      req(`/api/references?libraryId=${pagLib}&limit=200`, { cookie: pagU.cookie }),
     );
     const rows = (await r.json()) as unknown[];
     // Only 25 seeded, but limit must accept and cap to 100; result count <= 100.
@@ -385,11 +397,11 @@ describe("references GET pagination", () => {
 
   it("offset=10 skips first 10 rows", async () => {
     const all = await GET(
-      req(`/api/references?libraryId=${pagLib}&limit=100`, { cookie: u.cookie }),
+      req(`/api/references?libraryId=${pagLib}&limit=100`, { cookie: pagU.cookie }),
     );
     const allRows = (await all.json()) as Array<{ id: string }>;
     const r = await GET(
-      req(`/api/references?libraryId=${pagLib}&limit=100&offset=10`, { cookie: u.cookie }),
+      req(`/api/references?libraryId=${pagLib}&limit=100&offset=10`, { cookie: pagU.cookie }),
     );
     const rows = (await r.json()) as Array<{ id: string }>;
     expect(rows.length).toBe(allRows.length - 10);
@@ -398,14 +410,14 @@ describe("references GET pagination", () => {
 
   it("400 on invalid limit", async () => {
     const r = await GET(
-      req(`/api/references?libraryId=${pagLib}&limit=0`, { cookie: u.cookie }),
+      req(`/api/references?libraryId=${pagLib}&limit=0`, { cookie: pagU.cookie }),
     );
     expect(r.status).toBe(400);
   });
 
   it("400 on negative offset", async () => {
     const r = await GET(
-      req(`/api/references?libraryId=${pagLib}&offset=-1`, { cookie: u.cookie }),
+      req(`/api/references?libraryId=${pagLib}&offset=-1`, { cookie: pagU.cookie }),
     );
     expect(r.status).toBe(400);
   });

@@ -181,13 +181,14 @@ describe("POST /api/libraries/:id/import", () => {
   });
 
   it("200 .md import with folderId sets note's folderId", async () => {
-    // Create a real folder first so the FK constraint is satisfied
+    // Fresh user — one-library-per-user means we can't create another lib
+    // under `u` (which already owns "Import Lib").
     const { POST: POST_FOLDER } = await import("../../../folders/route");
-    const POST_LIB2 = POST_LIB;
-    const libRes = await POST_LIB2(
+    const folderUser = await createTestUser();
+    const libRes = await POST_LIB(
       req("/api/libraries", {
         method: "POST",
-        cookie: u.cookie,
+        cookie: folderUser.cookie,
         body: JSON.stringify({ name: "FolderIdLib" }),
       }),
     );
@@ -196,7 +197,7 @@ describe("POST /api/libraries/:id/import", () => {
     const folderRes = await POST_FOLDER(
       req("/api/folders", {
         method: "POST",
-        cookie: u.cookie,
+        cookie: folderUser.cookie,
         body: JSON.stringify({
           libraryId: folderLibId,
           parentId: null,
@@ -219,7 +220,7 @@ describe("POST /api/libraries/:id/import", () => {
     form.set("folderId", folderId);
 
     const r = await POST(
-      formRequest(`/api/libraries/${folderLibId}/import`, form, u.cookie),
+      formRequest(`/api/libraries/${folderLibId}/import`, form, folderUser.cookie),
       params({ id: String(folderLibId) }),
     );
     expect(r.status).toBe(200);
@@ -237,6 +238,7 @@ describe("POST /api/libraries/:id/import", () => {
       );
     expect(rows).toHaveLength(1);
     expect(rows[0].folderId).toBe(folderId);
+    await deleteTestUser(folderUser.id);
   });
 
   it("200 .md import without folderId leaves note's folderId null", async () => {

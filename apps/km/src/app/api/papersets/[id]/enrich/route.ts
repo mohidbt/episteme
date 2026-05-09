@@ -128,16 +128,34 @@ export async function POST(req: Request, { params }: Ctx) {
     ocrKey: (await getDecryptedChandraKey(userId)) ?? "",
   });
 
+  const agentsUrl = process.env.AGENTS_URL ?? "";
+  if (!agentsUrl) {
+    // Distinguish "deploy is misconfigured" (env unset) from "agents service
+    // is down" — both used to surface as a generic upstream_unavailable.
+    console.error(
+      "papersets/enrich: AGENTS_URL is not set; cannot reach agents service",
+    );
+    await clearRunning();
+    return sseError(
+      "agents_url_missing",
+      "AGENTS_URL is not configured for this deployment",
+    );
+  }
+
   let upstream: Response;
   try {
-    upstream = await fetch(`${process.env.AGENTS_URL ?? "http://localhost:8001"}${upstreamPath}`, {
+    upstream = await fetch(`${agentsUrl}${upstreamPath}`, {
       method: "POST",
       headers: { ...headers, "Content-Type": "application/json" },
       body: upstreamBody,
     });
-  } catch {
+  } catch (err) {
+    const reason = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+    console.error(
+      `papersets/enrich: upstream fetch failed (AGENTS_URL=${agentsUrl}): ${reason}`,
+    );
     await clearRunning();
-    return sseError("upstream_unavailable", "agents service unreachable");
+    return sseError("upstream_unavailable", `agents service unreachable: ${reason}`);
   }
 
   if (upstream.status === 501) {
