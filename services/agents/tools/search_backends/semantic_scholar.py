@@ -20,6 +20,55 @@ _client = httpx.AsyncClient(timeout=30.0)
 _last_request_time: float = 0.0
 _lock = asyncio.Lock()
 
+# --- Bug #22 mitigations -----------------------------------------------------
+# Process-wide query cache. Keyed by (query, year, limit, kind).
+# Holds list[PaperResult] (or single PaperResult for DOI lookups). TTL gated
+# in get/set helpers below.
+_CACHE_TTL_SECONDS = 3600  # 1 hour
+_query_cache: dict[tuple, tuple[float, object]] = {}
+
+# Process-wide circuit breaker. When S2 returns 429 we set this to a wall-clock
+# timestamp; any S2 call before that time short-circuits to the cache (or
+# returns empty) instead of hammering the API.
+_s2_cooldown_until: float = 0.0
+_DEFAULT_COOLDOWN_SECONDS = 60.0
+
+
+def _cache_get(key: tuple) -> object | None:
+    entry = _query_cache.get(key)
+    if entry is None:
+        return None
+    expires_at, value = entry
+    if time.time() >= expires_at:
+        _query_cache.pop(key, None)
+        return None
+    return value
+
+
+def _cache_set(key: tuple, value: object) -> None:
+    _query_cache[key] = (time.time() + _CACHE_TTL_SECONDS, value)
+
+
+def _in_cooldown() -> bool:
+    return time.time() < _s2_cooldown_until
+
+
+def _trip_cooldown(retry_after: float | None) -> None:
+    global _s2_cooldown_until
+    wait = retry_after if (retry_after and retry_after > 0) else _DEFAULT_COOLDOWN_SECONDS
+    _s2_cooldown_until = max(_s2_cooldown_until, time.time() + wait)
+    logger.warning("S2 circuit breaker tripped for %.0fs", wait)
+
+
+def _retry_after_seconds(response: httpx.Response) -> float | None:
+    raw = response.headers.get("Retry-After") if hasattr(response, "headers") else None
+    if not raw:
+        return None
+    try:
+        return float(raw)
+    except (TypeError, ValueError):
+        return None
+
 
 def _snippet(abstract: str | None) -> str | None:
     if not abstract:
@@ -90,20 +139,34 @@ async def _throttled_get(url: str, params: dict | None = None) -> httpx.Response
 
 
 async def _search_request(url: str, params: dict) -> httpx.Response:
-    """Make an S2 API request with exponential backoff on 429."""
+    """GET with backoff on 429. Honours Retry-After when present.
+
+    On terminal 429, trips the global cooldown so subsequent callers
+    short-circuit instead of hammering S2.
+    """
     response = await _throttled_get(url, params=params)
     for attempt in range(3):
         if response.status_code != 429:
             break
-        wait = 3 * (2 ** attempt)  # 3s, 6s, 12s
-        logger.warning("S2 rate-limited, retrying in %ds (attempt %d)", wait, attempt + 1)
+        retry_after = _retry_after_seconds(response)
+        wait = retry_after if retry_after is not None else 3 * (2 ** attempt)
+        logger.warning("S2 rate-limited, retrying in %.1fs (attempt %d)", wait, attempt + 1)
         await asyncio.sleep(wait)
         response = await _throttled_get(url, params=params)
+    if response.status_code == 429:
+        _trip_cooldown(_retry_after_seconds(response))
     return response
 
 
 class SemanticScholarSearch(PaperSearchService):
     async def search_by_doi(self, doi: str) -> PaperResult | None:
+        cache_key = ("doi", doi)
+        cached = _cache_get(cache_key)
+        if cached is not None:
+            return cached if isinstance(cached, PaperResult) else None
+        if _in_cooldown():
+            # Avoid hammering S2 during a known rate-limit window.
+            return None
         url = f"{_BASE_URL}/paper/DOI:{doi}"
         response = await _search_request(url, {"fields": _FIELDS})
         if response.status_code == 404:
@@ -113,6 +176,7 @@ class SemanticScholarSearch(PaperSearchService):
             raise S2Error(response.status_code, response.text)
         result = _parse_paper(response.json())
         result.match_confidence = "exact"
+        _cache_set(cache_key, result)
         return result
 
     async def search_by_query(
@@ -121,6 +185,13 @@ class SemanticScholarSearch(PaperSearchService):
         year: str | None = None,
         limit: int = 5,
     ) -> list[PaperResult]:
+        cache_key = ("query", query, year, limit)
+        cached = _cache_get(cache_key)
+        if cached is not None:
+            return list(cached)  # type: ignore[arg-type]
+        if _in_cooldown():
+            # Cooldown active — return empty rather than 429 the world.
+            return []
         params: dict = {"query": query, "limit": limit, "fields": _FIELDS}
         if year:
             params["year"] = year
@@ -135,4 +206,6 @@ class SemanticScholarSearch(PaperSearchService):
             if i == 0:
                 paper.match_confidence = "high"
             results.append(paper)
+        _cache_set(cache_key, list(results))
         return results
+
