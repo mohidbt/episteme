@@ -342,6 +342,48 @@ async def test_highlight_calls_km_post():
 
 
 @pytest.mark.asyncio
+async def test_highlight_attaches_run_id_per_invocation():
+    """Each highlight() tool call generates a fresh uuid runId stamped on the
+    POST body so the reader can group highlights by AI run."""
+    from tools.pdfs import highlight  # noqa: PLC0415
+    from deps import db as db_module  # noqa: PLC0415
+
+    class _Conn:
+        async def fetch(self, *_args, **_kwargs):
+            return [{"page": 0, "bbox": {"x0": 1, "y0": 2, "x1": 3, "y1": 4}, "order_index": 7}]
+
+    class _Acquire:
+        async def __aenter__(self):
+            return _Conn()
+        async def __aexit__(self, *_exc):
+            return False
+
+    class _Pool:
+        def acquire(self):
+            return _Acquire()
+
+    seen_run_ids = []
+    with patch("tools.pdfs.km_post", new_callable=AsyncMock) as mock_post:
+        prev_pool = db_module._pool
+        db_module._pool = _Pool()
+        mock_post.return_value = {"id": "hl1"}
+        try:
+            for _ in range(2):
+                await highlight.ainvoke(
+                    {"pdf_id": "pdf1", "block_ids": ["pdf1:p0:7"]},
+                    config=CFG,
+                )
+                seen_run_ids.append(mock_post.call_args.args[1].get("runId"))
+        finally:
+            db_module._pool = prev_pool
+
+    # Each invocation should have a non-empty runId; they should differ
+    # (uuid4 per call ⇒ groups highlights by tool invocation).
+    assert all(isinstance(r, str) and len(r) >= 8 for r in seen_run_ids), seen_run_ids
+    assert seen_run_ids[0] != seen_run_ids[1]
+
+
+@pytest.mark.asyncio
 async def test_extract_passages_stubbed():
     from tools.pdfs import extract_passages  # noqa: PLC0415
 

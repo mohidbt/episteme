@@ -6,6 +6,7 @@ The authenticated user_id is injected at runtime via ``RunnableConfig``
 
 """
 import json
+import uuid
 from urllib.parse import quote_plus
 
 from langchain_core.runnables import RunnableConfig
@@ -194,10 +195,15 @@ async def highlight(
     if not bbox_list or page_for_payload is None:
         return {"error": True, "message": "matched blocks have no bbox data"}
 
+    # Generate a fresh runId per tool invocation so the reader sidebar can
+    # group multiple highlights produced by one call (and distinguish runs
+    # across calls within a single chat session).
+    run_id = str(uuid.uuid4())
     body: dict = {
         "paperId": pdf_id,
         "page": page_for_payload,
         "bbox": bbox_list,
+        "runId": run_id,
     }
     if note is not None:
         body["noteMd"] = note
