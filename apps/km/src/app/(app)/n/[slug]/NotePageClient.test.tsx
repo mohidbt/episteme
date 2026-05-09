@@ -161,14 +161,12 @@ describe("NotePageClient — dynamic synced pill (#135)", () => {
     expect(pill.textContent).toContain("Synced");
   });
 
-  it("synced pill is display-only (no onclick, pointer-events-none)", () => {
+  it("synced pill is a button that opens the versions drawer", () => {
     render(<NotePageClient {...baseProps} />);
     const pill = screen.getByTestId("synced-pill") as HTMLElement;
-    // Display-only: must not have a click handler attached and must opt out
-    // of pointer events so an overlapping Sheet trigger can't be activated by
-    // clicks aimed at the pill.
-    expect(pill.onclick).toBeNull();
-    expect(pill.className).toContain("pointer-events-none");
+    expect(pill.tagName).toBe("BUTTON");
+    expect(pill.getAttribute("aria-label")).toBe("Open versions");
+    expect(pill.className).not.toContain("pointer-events-none");
   });
 
   it("updates 'Last edited' after a save finishes without reload", async () => {

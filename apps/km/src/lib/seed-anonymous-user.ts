@@ -342,6 +342,13 @@ export async function seedAnonymousUser(userId: string): Promise<void> {
     pdfBuf,
     "application/pdf",
   );
+  // storage_url must mirror what finalize would set — chandra, read_paper,
+  // citations/extract, pages/[n]/text all key off it. Seed bypasses finalize
+  // so we set it explicitly here.
+  await db
+    .update(papers)
+    .set({ storageUrl: paperSourceKey(paper.id) })
+    .where(eq(papers.id, paper.id));
 
   // Cover failure must NOT fail the whole seed — same policy as finalize
   // route. Use console.error (not warn) and include the storage endpoint so
@@ -437,6 +444,10 @@ export async function seedAnonymousUser(userId: string): Promise<void> {
       buf,
       "application/pdf",
     );
+    await db
+      .update(papers)
+      .set({ storageUrl: paperSourceKey(inserted.id) })
+      .where(eq(papers.id, inserted.id));
     try {
       const cover = await extractCover(new Uint8Array(buf));
       await storage.uploadObject(paperCoverKey(inserted.id), cover, "image/png");
@@ -502,6 +513,10 @@ export async function seedAnonymousUser(userId: string): Promise<void> {
       buf,
       "application/pdf",
     );
+    await db
+      .update(papers)
+      .set({ storageUrl: paperSourceKey(inserted.id) })
+      .where(eq(papers.id, inserted.id));
     try {
       const cover = await extractCover(new Uint8Array(buf));
       await storage.uploadObject(paperCoverKey(inserted.id), cover, "image/png");

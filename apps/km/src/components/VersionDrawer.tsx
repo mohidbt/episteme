@@ -68,13 +68,26 @@ export function VersionDrawer({
   currentMd,
   onBeforeRestore,
   onAfterRestore,
+  open,
+  onOpenChange,
 }: {
   noteId: string;
   currentMd: string;
   onBeforeRestore?: () => Promise<void> | void;
   onAfterRestore?: () => void;
+  open?: boolean;
+  onOpenChange?: (next: boolean) => void;
 }) {
-  const [isOpen, setIsOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const isControlled = open !== undefined;
+  const isOpen = isControlled ? open : internalOpen;
+  const setIsOpen = useCallback(
+    (next: boolean) => {
+      if (!isControlled) setInternalOpen(next);
+      onOpenChange?.(next);
+    },
+    [isControlled, onOpenChange],
+  );
   const [revisions, setRevisions] = useState<Revision[] | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [selectedBody, setSelectedBody] = useState<string | null>(null);

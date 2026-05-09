@@ -73,6 +73,7 @@ export function NotePageClient({
   const [titleDraft, setTitleDraft] = useState(title);
   const [savingTitle, setSavingTitle] = useState(false);
   const [contentSaving, setContentSaving] = useState(false);
+  const [versionsOpen, setVersionsOpen] = useState(false);
   const [lastEditedAt, setLastEditedAt] = useState<Date | null>(
     updatedAt ? new Date(updatedAt) : null,
   );
@@ -181,6 +182,8 @@ export function NotePageClient({
             currentMd={initialMd}
             onBeforeRestore={onBeforeRestore}
             onAfterRestore={onAfterRestore}
+            open={versionsOpen}
+            onOpenChange={setVersionsOpen}
           />
           <DownloadButton
             slug={noteSlug}
@@ -204,13 +207,20 @@ export function NotePageClient({
             <span>{referenceCount} references</span>
           </>
         )}
-        <span className="synced-pill pointer-events-none" data-testid="synced-pill">
+        <button
+          type="button"
+          onClick={() => setVersionsOpen(true)}
+          className="synced-pill cursor-pointer hover:opacity-80"
+          data-testid="synced-pill"
+          aria-label="Open versions"
+          title="Open versions"
+        >
           <span
             data-sync-status={saving ? "saving" : "synced"}
             className={`inline-block size-1.5 rounded-full ${saving ? "bg-amber-500" : "bg-green-500"}`}
           />
           {saving ? "Saving…" : "Synced"}
-        </span>
+        </button>
       </div>
 
       <NoteEditor
