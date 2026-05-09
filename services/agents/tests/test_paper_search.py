@@ -244,6 +244,83 @@ async def test_fetch_download_failure():
     assert "download failed" in result["error"].lower() or "PDF" in result["error"]
 
 
+@pytest.mark.asyncio
+async def test_fetch_finalize_error_payload_fails_and_does_not_patch_reference():
+    pdf_resp = MagicMock()
+    pdf_resp.content = b"%PDF-1.7"
+    pdf_resp.raise_for_status = MagicMock()
+    put_resp = MagicMock()
+    put_resp.raise_for_status = MagicMock()
+
+    clients = [AsyncMock(), AsyncMock()]
+    clients[0].get.return_value = pdf_resp
+    clients[1].put.return_value = put_resp
+    for c in clients:
+        c.__aenter__.return_value = c
+        c.__aexit__.return_value = False
+
+    with (
+        patch("tools.paper_search.km_get", new_callable=AsyncMock, return_value=REFERENCE_NO_DOI),
+        patch(
+            "tools.paper_search.km_post",
+            new_callable=AsyncMock,
+            side_effect=[
+                {"id": "paper-new", "presignedUrl": "https://upload"},
+                {"error": True, "status": 500, "body": {"error": "finalize failed"}},
+            ],
+        ) as mock_km_post,
+        patch("tools.paper_search.km_patch", new_callable=AsyncMock) as mock_km_patch,
+        patch("tools.paper_search.httpx.AsyncClient", side_effect=clients),
+    ):
+        result = await agentic_fetch_papers.ainvoke(
+            {"reference_id": "ref-2", "paper_url": "https://pdfs.com/paper.pdf"},
+            config=_make_config(),
+        )
+
+    assert result["success"] is False
+    assert "finalize" in result["error"].lower()
+    mock_km_patch.assert_not_awaited()
+    assert mock_km_post.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_fetch_finalize_exception_fails_and_does_not_patch_reference():
+    pdf_resp = MagicMock()
+    pdf_resp.content = b"%PDF-1.7"
+    pdf_resp.raise_for_status = MagicMock()
+    put_resp = MagicMock()
+    put_resp.raise_for_status = MagicMock()
+
+    clients = [AsyncMock(), AsyncMock()]
+    clients[0].get.return_value = pdf_resp
+    clients[1].put.return_value = put_resp
+    for c in clients:
+        c.__aenter__.return_value = c
+        c.__aexit__.return_value = False
+
+    with (
+        patch("tools.paper_search.km_get", new_callable=AsyncMock, return_value=REFERENCE_NO_DOI),
+        patch(
+            "tools.paper_search.km_post",
+            new_callable=AsyncMock,
+            side_effect=[
+                {"id": "paper-new", "presignedUrl": "https://upload"},
+                RuntimeError("finalize crashed"),
+            ],
+        ),
+        patch("tools.paper_search.km_patch", new_callable=AsyncMock) as mock_km_patch,
+        patch("tools.paper_search.httpx.AsyncClient", side_effect=clients),
+    ):
+        result = await agentic_fetch_papers.ainvoke(
+            {"reference_id": "ref-2", "paper_url": "https://pdfs.com/paper.pdf"},
+            config=_make_config(),
+        )
+
+    assert result["success"] is False
+    assert "finalize" in result["error"].lower()
+    mock_km_patch.assert_not_awaited()
+
+
 # -- Helper ------------------------------------------------------------------
 
 

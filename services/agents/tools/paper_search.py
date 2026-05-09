@@ -325,7 +325,20 @@ async def agentic_fetch_papers(
                         return {"success": False, "error": f"S3 upload failed: {exc}"}
 
     # Finalize paper — triggers PDF processing
-    await km_post(f"/api/papers/{paper_id}/finalize", {}, user_id=user_id)
+    try:
+        finalize_resp = await km_post(f"/api/papers/{paper_id}/finalize", {}, user_id=user_id)
+    except Exception as exc:
+        return {"success": False, "error": f"Failed to finalize paper: {exc}"}
+    if isinstance(finalize_resp, dict) and (
+        finalize_resp.get("error")
+        or (isinstance(finalize_resp.get("status"), int) and finalize_resp.get("status") >= 400)
+    ):
+        return {
+            "success": False,
+            "error": "Failed to finalize paper",
+            "detail": finalize_resp,
+            "paper_id": paper_id,
+        }
 
     # Link reference to paper via PATCH
     await km_patch(

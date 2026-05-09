@@ -26,7 +26,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from lib import chandra as chandra_lib
-from lib.chandra import ChandraParseFailed, ensure_parsed, parse_blocks
+from lib.chandra import ChandraContractError, ChandraParseFailed, ChandraSourceAccessError, ensure_parsed, parse_blocks
 
 
 @asynccontextmanager
@@ -126,6 +126,8 @@ def _make_conn(initial_status: str, storage_url: str | None = "/tmp/p.pdf") -> A
             state["status"] = "done"
         elif "SET chandra_status = 'failed'" in sql:
             state["status"] = "failed"
+        elif "SET chandra_status = 'pending'" in sql:
+            state["status"] = "pending"
         return None
 
     async def executemany(sql, rows):
@@ -250,6 +252,8 @@ async def test_ensure_parsed_concurrent_callers_run_chandra_once():
                 shared_state["status"] = "done"
             elif "SET chandra_status = 'failed'" in sql:
                 shared_state["status"] = "failed"
+            elif "SET chandra_status = 'pending'" in sql:
+                shared_state["status"] = "pending"
 
         async def executemany(sql, rows):
             return None
@@ -290,11 +294,46 @@ async def test_ensure_parsed_concurrent_callers_run_chandra_once():
 
 @pytest.mark.asyncio
 async def test_ensure_parsed_missing_storage_url_marks_failed():
-    """A paper with NULL storage_url → fail loud, status='failed'."""
+    """A paper with NULL storage_url and no canonical object is a contract error."""
     conn = _make_conn("pending", storage_url=None)
-    with pytest.raises(ChandraParseFailed):
-        await ensure_parsed(PAPER_ID, conn, ocr_key="ck-test")
+    with patch("lib.storage.object_exists", new_callable=AsyncMock, return_value=False):
+        with pytest.raises(ChandraContractError):
+            await ensure_parsed(PAPER_ID, conn, ocr_key="ck-test")
     assert conn._state["status"] == "failed"
+
+
+@pytest.mark.asyncio
+async def test_ensure_parsed_missing_storage_url_uses_canonical_fallback_when_present():
+    """If storage_url is NULL but canonical source exists, parse should proceed."""
+    conn = _make_conn("pending", storage_url=None)
+    fake_result = type(
+        "Result",
+        (),
+        {"success": True, "json": FIXTURE_JSON, "page_count": 1, "error": None},
+    )()
+
+    with patch("lib.storage.object_exists", new_callable=AsyncMock, return_value=True), \
+         patch("lib.storage.download_to_tempfile", _fake_download), \
+         patch("lib.chandra.run_chandra", new_callable=AsyncMock, return_value=fake_result) as mock_run:
+        result = await ensure_parsed(PAPER_ID, conn, ocr_key="ck-test")
+
+    assert result == "done"
+    mock_run.assert_called_once_with(f"{PAPER_ID}/source.pdf", "ck-test")
+    assert conn._state["status"] == "done"
+
+
+@pytest.mark.asyncio
+async def test_ensure_parsed_missing_storage_url_exists_check_error_is_transient():
+    """Canonical existence check errors are transient source-access failures."""
+    conn = _make_conn("pending", storage_url=None)
+    with patch(
+        "lib.storage.object_exists",
+        new_callable=AsyncMock,
+        side_effect=RuntimeError("s3 unavailable"),
+    ):
+        with pytest.raises(ChandraSourceAccessError):
+            await ensure_parsed(PAPER_ID, conn, ocr_key="ck-test")
+    assert conn._state["status"] == "pending"
 
 
 @pytest.mark.asyncio

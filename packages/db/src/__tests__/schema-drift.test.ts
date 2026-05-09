@@ -80,4 +80,14 @@ describe("schema drift critical check mapping", () => {
       "missing",
     );
   });
+
+  it("includes papers storage_url contract checks", () => {
+    const checks = mapCriticalCheckRows([
+      { check_name: "papers.storage_url_present_for_parse_active_rows", ok: false, details: "2 rows" },
+      { check_name: "papers.storage_url_canonical_shape", ok: true, details: "ok" },
+    ]);
+    expect(checks.map((c) => c.name)).toContain("papers.storage_url_present_for_parse_active_rows");
+    expect(checks.map((c) => c.name)).toContain("papers.storage_url_canonical_shape");
+    expect(checks[0]?.details).toBe("2 rows");
+  });
 });

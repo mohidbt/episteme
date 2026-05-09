@@ -64,3 +64,16 @@ jobs:
             exit 1
           fi
 
+      - name: Restore schema for storage_url drift simulation
+        run: pnpm db:migrate
+
+      - name: Simulate parse-active papers with missing storage_url
+        run: |
+          pnpm exec tsx -e "import postgres from 'postgres'; (async () => { const sql = postgres(process.env.DATABASE_URL!); await sql\`insert into users (id) values ('u-ci-storage') on conflict (id) do nothing\`; await sql\`insert into libraries (id, user_id, name) values (4242, 'u-ci-storage', 'CI Lib') on conflict (id) do nothing\`; await sql\`insert into papers (id, library_id, user_id, folder_path, filename, title, chandra_status, storage_url) values ('11111111-1111-1111-1111-111111111111'::uuid, 4242, 'u-ci-storage', '', 'x.pdf', 'x', 'done', null) on conflict (id) do update set chandra_status='done', storage_url=null\`; await sql.end(); })();"
+
+      - name: Predeploy check fails on missing papers.storage_url
+        run: |
+          if pnpm db:predeploy-check; then
+            echo "expected predeploy check to fail for missing papers.storage_url"
+            exit 1
+          fi

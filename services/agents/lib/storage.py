@@ -17,6 +17,7 @@ from pathlib import Path
 
 import boto3
 from botocore.client import Config
+from botocore.exceptions import ClientError
 
 
 def _client():
@@ -32,6 +33,27 @@ def _client():
 
 def _download_sync(key: str, dest: str) -> None:
     _client().download_file(os.environ["S3_BUCKET"], key, dest)
+
+
+def _exists_sync(key: str) -> bool:
+    try:
+        _client().head_object(Bucket=os.environ["S3_BUCKET"], Key=key)
+        return True
+    except ClientError as exc:
+        code = str(exc.response.get("Error", {}).get("Code", ""))
+        if code in {"404", "NoSuchKey", "NotFound"}:
+            return False
+        raise
+
+
+def paperSourceKey(paper_id: str) -> str:
+    """Canonical object key for a paper source PDF."""
+    return f"{paper_id}/source.pdf"
+
+
+async def object_exists(key: str) -> bool:
+    """Check whether an object key exists in S3-compatible storage."""
+    return await asyncio.to_thread(_exists_sync, key)
 
 
 @asynccontextmanager

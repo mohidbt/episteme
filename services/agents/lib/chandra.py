@@ -44,6 +44,14 @@ class ChandraParseFailed(Exception):
     """Raised when Chandra OCR fails or papers.chandra_status is 'failed'."""
 
 
+class ChandraContractError(ChandraParseFailed):
+    """Hard non-retryable data contract violation."""
+
+
+class ChandraSourceAccessError(ChandraParseFailed):
+    """Retryable/transient failure accessing source objects."""
+
+
 def _strip_html(raw: str) -> str:
     """Remove HTML tags, unescape HTML entities, and return plain text."""
     return html.unescape(re.sub(r"<[^>]+>", "", raw or "").strip())
@@ -234,10 +242,21 @@ async def ensure_parsed(
 
     # 3. We won the CAS. Run Chandra + insert + mark done. On any error: mark failed.
     try:
-        if not storage_url:
-            raise ChandraParseFailed(f"paper {paper_id} has no storage_url")
+        from lib.storage import download_to_tempfile, object_exists, paperSourceKey
 
-        from lib.storage import download_to_tempfile
+        if not storage_url:
+            canonical_key = paperSourceKey(paper_id)
+            try:
+                exists = await object_exists(canonical_key)
+            except Exception as exc:
+                raise ChandraSourceAccessError(
+                    f"paper {paper_id} storage lookup failed for canonical key {canonical_key}: {exc!r}"
+                ) from exc
+            if not exists:
+                raise ChandraContractError(
+                    f"paper {paper_id} missing storage_url and canonical source object {canonical_key} not found"
+                )
+            storage_url = canonical_key
 
         async with download_to_tempfile(storage_url) as local_path:
             result = await run_chandra(local_path, ocr_key)
@@ -260,6 +279,12 @@ async def ensure_parsed(
         )
         return "done"
     except Exception as exc:
+        if isinstance(exc, ChandraSourceAccessError):
+            await conn.execute(
+                "UPDATE papers SET chandra_status = 'pending' WHERE id = $1",
+                paper_id,
+            )
+            raise
         await conn.execute(
             "UPDATE papers SET chandra_status = 'failed' WHERE id = $1",
             paper_id,

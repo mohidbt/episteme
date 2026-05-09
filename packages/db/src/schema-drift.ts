@@ -228,6 +228,26 @@ export async function runDbChecks(databaseUrl: string): Promise<DbCheckSummary> 
               and indexname = 'user_highlights_user_paper_idx'
           ),
           'expected user+paper access index is missing'
+        union all
+        select
+          'papers.storage_url_present_for_parse_active_rows',
+          not exists (
+            select 1
+            from papers p
+            where p.chandra_status in ('running', 'done', 'failed')
+              and p.storage_url is null
+          ),
+          'parse-active papers must have storage_url'
+        union all
+        select
+          'papers.storage_url_canonical_shape',
+          not exists (
+            select 1
+            from papers p
+            where p.storage_url is not null
+              and p.storage_url !~ '^[0-9a-fA-F-]{36}/source\\.pdf$'
+          ),
+          'storage_url must match <paper_uuid>/source.pdf'
       )
       select check_name, ok, details from checks
     `;
