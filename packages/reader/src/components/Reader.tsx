@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect, useRef, type ReactNode } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef, type ReactNode } from "react";
 import { Group, Panel, Separator } from "react-resizable-panels";
 import { toast } from "sonner";
 
@@ -309,6 +309,27 @@ export function Reader({
     rects: aiHighlights.find((x) => x.id === h.id)?.rects ?? null,
   }));
   const mergedSidebarHighlights = [...aiSidebarHighlights, ...sidebarHighlights.map((h) => ({ ...h, source: h.source ?? "user" as const }))];
+  // Derive runs from chat-agent highlights (paper_highlights.runId) so each
+  // tool invocation that produced highlights shows up as a sidebar entry,
+  // even when no ai_highlight_runs row exists (chat-agent highlight tool path).
+  const chatAgentRuns = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const h of paperHighlights) {
+      const rid = h.runId ?? null;
+      if (!rid) continue;
+      counts.set(rid, (counts.get(rid) ?? 0) + 1);
+    }
+    const known = new Set(autoRuns.map((r) => r.id));
+    return Array.from(counts.entries())
+      .filter(([id]) => !known.has(id))
+      .map(([id, n]) => ({
+        id,
+        instruction: "AI highlight",
+        summary: null,
+        highlightCount: n,
+      }));
+  }, [paperHighlights, autoRuns]);
+  const allRuns = [...autoRuns, ...chatAgentRuns];
   const highlightsSidebarError = mergedSidebarHighlights.length === 0 ? (highlightsError ?? aiHighlightsError) : null;
   const commentsSidebarError = sidebarHighlights.length === 0 ? highlightsError : null;
 
@@ -604,7 +625,7 @@ export function Reader({
         <HighlightsSidebar
           open={sidebarOpen}
           highlights={mergedSidebarHighlights}
-          runs={autoRuns}
+          runs={allRuns}
           loading={highlightsLoading || aiHighlightsLoading}
           error={highlightsSidebarError}
           onNavigateHighlight={(id) => setFocusHighlightId(id)}
