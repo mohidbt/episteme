@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { userHighlights } from "@episteme/db/schema";
 import { getUserIdFromRequest } from "@/lib/auth";
 import { jsonError } from "@/lib/crud";
+import { schemaMismatchResponseIfNeeded } from "../schema-mismatch";
 
 export const runtime = "nodejs";
 
@@ -37,16 +38,23 @@ export async function PATCH(req: Request, { params }: Ctx) {
     return jsonError(422, "validation", { message: "no updatable fields" });
   }
 
-  const [updated] = await db
-    .update(userHighlights)
-    .set(patch)
-    .where(
-      and(
-        eq(userHighlights.id, hId),
-        eq(userHighlights.userId, userId),
-      ),
-    )
-    .returning();
+  let updated;
+  try {
+    [updated] = await db
+      .update(userHighlights)
+      .set(patch)
+      .where(
+        and(
+          eq(userHighlights.id, hId),
+          eq(userHighlights.userId, userId),
+        ),
+      )
+      .returning();
+  } catch (error) {
+    const schemaMismatch = schemaMismatchResponseIfNeeded(error);
+    if (schemaMismatch) return schemaMismatch;
+    throw error;
+  }
   if (!updated) return jsonError(404, "not_found");
   return Response.json({ highlight: updated });
 }
@@ -58,15 +66,22 @@ export async function DELETE(req: Request, { params }: Ctx) {
   const hId = parseHighlightId(highlightId);
   if (hId === null) return jsonError(400, "validation", { message: "invalid highlightId" });
 
-  const [deleted] = await db
-    .delete(userHighlights)
-    .where(
-      and(
-        eq(userHighlights.id, hId),
-        eq(userHighlights.userId, userId),
-      ),
-    )
-    .returning({ id: userHighlights.id });
+  let deleted;
+  try {
+    [deleted] = await db
+      .delete(userHighlights)
+      .where(
+        and(
+          eq(userHighlights.id, hId),
+          eq(userHighlights.userId, userId),
+        ),
+      )
+      .returning({ id: userHighlights.id });
+  } catch (error) {
+    const schemaMismatch = schemaMismatchResponseIfNeeded(error);
+    if (schemaMismatch) return schemaMismatch;
+    throw error;
+  }
 
   if (!deleted) return jsonError(404, "not_found");
   return new Response(null, { status: 204 });

@@ -11,6 +11,7 @@ import { db } from "@/lib/db";
 import { papers, userHighlights } from "@episteme/db/schema";
 import { getUserIdFromRequest } from "@/lib/auth";
 import { jsonError, requireOwned } from "@/lib/crud";
+import { schemaMismatchResponseIfNeeded } from "./schema-mismatch";
 import {
   getAuthedUserId,
   MissingInternalSecretError,
@@ -53,16 +54,23 @@ export async function GET(req: Request) {
   const owned = await requireOwned<PaperRow>(papers, paperId, userId);
   if (!owned.ok) return jsonError(owned.status, owned.status === 404 ? "not_found" : "forbidden");
 
-  const rows = await db
-    .select()
-    .from(userHighlights)
-    .where(
-      and(
-        eq(userHighlights.paperId, paperId),
-        eq(userHighlights.userId, userId),
-      ),
-    )
-    .orderBy(asc(userHighlights.createdAt));
+  let rows;
+  try {
+    rows = await db
+      .select()
+      .from(userHighlights)
+      .where(
+        and(
+          eq(userHighlights.paperId, paperId),
+          eq(userHighlights.userId, userId),
+        ),
+      )
+      .orderBy(asc(userHighlights.createdAt));
+  } catch (error) {
+    const schemaMismatch = schemaMismatchResponseIfNeeded(error);
+    if (schemaMismatch) return schemaMismatch;
+    throw error;
+  }
   return Response.json({ highlights: rows });
 }
 
@@ -92,22 +100,29 @@ export async function POST(req: Request) {
   const owned = await requireOwned<PaperRow>(papers, parsed.data.paperId, userId);
   if (!owned.ok) return jsonError(owned.status, owned.status === 404 ? "not_found" : "forbidden");
 
-  const [row] = await db
-    .insert(userHighlights)
-    .values({
-      userId,
-      paperId: parsed.data.paperId,
-      pageNumber: parsed.data.pageNumber,
-      textContent: parsed.data.textContent,
-      startOffset: parsed.data.startOffset,
-      endOffset: parsed.data.endOffset,
-      color: parsed.data.color ?? "yellow",
-      note: parsed.data.note ?? null,
-      rects: (parsed.data.rects ?? null) as typeof userHighlights.$inferInsert["rects"],
-      source: parsed.data.source ?? "user",
-      layerId: parsed.data.layerId ?? null,
-    })
-    .returning();
+  let row;
+  try {
+    [row] = await db
+      .insert(userHighlights)
+      .values({
+        userId,
+        paperId: parsed.data.paperId,
+        pageNumber: parsed.data.pageNumber,
+        textContent: parsed.data.textContent,
+        startOffset: parsed.data.startOffset,
+        endOffset: parsed.data.endOffset,
+        color: parsed.data.color ?? "yellow",
+        note: parsed.data.note ?? null,
+        rects: (parsed.data.rects ?? null) as typeof userHighlights.$inferInsert["rects"],
+        source: parsed.data.source ?? "user",
+        layerId: parsed.data.layerId ?? null,
+      })
+      .returning();
+  } catch (error) {
+    const schemaMismatch = schemaMismatchResponseIfNeeded(error);
+    if (schemaMismatch) return schemaMismatch;
+    throw error;
+  }
 
   return Response.json({ highlight: row }, { status: 201 });
 }
@@ -122,13 +137,19 @@ export async function DELETE(req: Request) {
   const owned = await requireOwned<PaperRow>(papers, paperId, userId);
   if (!owned.ok) return jsonError(owned.status, owned.status === 404 ? "not_found" : "forbidden");
 
-  await db
-    .delete(userHighlights)
-    .where(
-      and(
-        eq(userHighlights.paperId, paperId),
-        eq(userHighlights.userId, userId),
-      ),
-    );
+  try {
+    await db
+      .delete(userHighlights)
+      .where(
+        and(
+          eq(userHighlights.paperId, paperId),
+          eq(userHighlights.userId, userId),
+        ),
+      );
+  } catch (error) {
+    const schemaMismatch = schemaMismatchResponseIfNeeded(error);
+    if (schemaMismatch) return schemaMismatch;
+    throw error;
+  }
   return new Response(null, { status: 204 });
 }

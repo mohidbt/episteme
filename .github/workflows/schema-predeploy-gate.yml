@@ -1,0 +1,66 @@
+name: schema-predeploy-gate
+
+on:
+  pull_request:
+    paths:
+      - "packages/db/**"
+      - ".github/workflows/schema-predeploy-gate.yml"
+      - "pnpm-lock.yaml"
+      - "package.json"
+  push:
+    branches: [main]
+
+jobs:
+  predeploy-check:
+    name: db predeploy check
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: episteme_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d episteme_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/episteme_ci
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.12.0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Apply DB migrations
+        run: pnpm db:migrate
+
+      - name: Predeploy check passes on migrated schema
+        run: pnpm db:predeploy-check
+
+      - name: Simulate missing user_highlights.paper_id
+        run: |
+          pnpm exec tsx -e "import postgres from 'postgres'; const sql = postgres(process.env.DATABASE_URL!); await sql\`alter table user_highlights drop column if exists paper_id\`; await sql.end();"
+
+      - name: Predeploy check fails on drift
+        run: |
+          if pnpm db:predeploy-check; then
+            echo "expected predeploy check to fail after drift simulation"
+            exit 1
+          fi
+

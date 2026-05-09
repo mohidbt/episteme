@@ -2,7 +2,11 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 import { describe, expect, it } from "vitest";
-import { drizzleTagFromFile, runJournalChecks } from "../schema-drift";
+import {
+  drizzleTagFromFile,
+  mapCriticalCheckRows,
+  runJournalChecks,
+} from "../schema-drift";
 
 function setupFixture(tags: string[], journalTags = tags): { root: string } {
   const root = mkdtempSync(join(tmpdir(), "schema-drift-"));
@@ -56,5 +60,24 @@ describe("schema drift journal checks", () => {
       "0029_document_references_paper_compat",
     );
     expect(drizzleTagFromFile("README.md")).toBeNull();
+  });
+});
+
+describe("schema drift critical check mapping", () => {
+  it("includes new user_highlights paper_id checks", () => {
+    const checks = mapCriticalCheckRows([
+      { check_name: "user_highlights.paper_id_exists", ok: true, details: "x" },
+      { check_name: "user_highlights.paper_id_not_null", ok: true, details: "x" },
+      { check_name: "user_highlights.user_paper_index_exists", ok: false, details: "missing" },
+    ]);
+    expect(checks.map((c) => c.name)).toEqual([
+      "user_highlights.paper_id_exists",
+      "user_highlights.paper_id_not_null",
+      "user_highlights.user_paper_index_exists",
+    ]);
+    expect(checks.every((c) => c.ok)).toBe(false);
+    expect(checks.find((c) => c.name === "user_highlights.user_paper_index_exists")?.details).toBe(
+      "missing",
+    );
   });
 });

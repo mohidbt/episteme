@@ -26,6 +26,20 @@ export type DbCheckSummary = {
   checks: CheckResult[];
 };
 
+type CriticalCheckRow = {
+  check_name: string;
+  ok: boolean;
+  details: string;
+};
+
+export function mapCriticalCheckRows(rows: CriticalCheckRow[]): CheckResult[] {
+  return rows.map((row) => ({
+    name: row.check_name,
+    ok: row.ok,
+    details: row.ok ? undefined : row.details,
+  }));
+}
+
 export type PredeployCheckSummary = {
   ok: boolean;
   timestamp: string;
@@ -145,11 +159,7 @@ export async function runDbChecks(databaseUrl: string): Promise<DbCheckSummary> 
       details: contiguousMigrationIds ? undefined : "drizzle.__drizzle_migrations ids are not contiguous from 1",
     });
 
-    const criticalRows = await sql<{
-      check_name: string;
-      ok: boolean;
-      details: string;
-    }[]>`
+    const criticalRows = await sql<CriticalCheckRow[]>`
       with checks as (
         select
           'document_references.paper_id_exists'::text as check_name,
@@ -190,17 +200,37 @@ export async function runDbChecks(databaseUrl: string): Promise<DbCheckSummary> 
             where table_schema = 'public' and table_name = 'paper_highlights' and column_name = 'tool_call_id'
           ),
           'required for reader tool traceability'
+        union all
+        select
+          'user_highlights.paper_id_exists',
+          exists (
+            select 1 from information_schema.columns
+            where table_schema = 'public' and table_name = 'user_highlights' and column_name = 'paper_id'
+          ),
+          'required for user highlights paper linkage'
+        union all
+        select
+          'user_highlights.paper_id_not_null',
+          exists (
+            select 1 from information_schema.columns
+            where table_schema = 'public' and table_name = 'user_highlights' and column_name = 'paper_id' and is_nullable = 'NO'
+          ),
+          'paper_id must be NOT NULL per current user_highlights schema'
+        union all
+        select
+          'user_highlights.user_paper_index_exists',
+          exists (
+            select 1 from pg_indexes
+            where schemaname = 'public'
+              and tablename = 'user_highlights'
+              and indexname = 'user_highlights_user_paper_idx'
+          ),
+          'expected user+paper access index is missing'
       )
       select check_name, ok, details from checks
     `;
 
-    checks.push(
-      ...criticalRows.map((row) => ({
-        name: row.check_name,
-        ok: row.ok,
-        details: row.ok ? undefined : row.details,
-      })),
-    );
+    checks.push(...mapCriticalCheckRows(criticalRows));
 
     return {
       ok: checks.every((check) => check.ok),
