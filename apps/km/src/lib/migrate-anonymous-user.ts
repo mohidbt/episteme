@@ -122,6 +122,27 @@ export async function migrateAnonymousUser(
         .where(eq(libraries.userId, anonUserId));
     }
 
+    // Resolve userId-scoped uniqueness collisions before the second-pass
+    // user_id update. Two tables enforce (userId, X) uniques:
+    //   - notes_user_slug_unique on (userId, slug)
+    //   - library_references_user_doi_unique_idx on (userId, doi) [partial]
+    // When `survivor` exists, anon's child rows are already re-parented to
+    // the survivor's library_id but still carry anonUserId; setting them to
+    // newUserId would collide with newUser's seeded duplicates (e.g. both
+    // libs have a "welcome-to-episteme" note). Delete anon's collisions
+    // first — newUser's existing rows are canonical.
+    if (survivor) {
+      await tx.execute(sql`
+        DELETE FROM notes a
+         WHERE a.user_id = ${anonUserId}
+           AND EXISTS (
+             SELECT 1 FROM notes b
+              WHERE b.user_id = ${newUserId}
+                AND b.slug = a.slug
+           )
+      `);
+    }
+
     // Now re-parent everything else by user_id. Skip anything that already
     // points at the survivor (already migrated above for the with-survivor
     // branch — those rows now have user_id=anonUserId still since we updated
