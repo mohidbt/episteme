@@ -65,6 +65,7 @@ const statusIcons: Record<ToolPart["state"], ReactNode> = {
 
 const TOOL_DISPLAY_NAMES: Record<string, string> = {
   Task: "Subagent",
+  task: "Subagent",
 };
 
 export const getStatusBadge = (status: ToolPart["state"]) => (
