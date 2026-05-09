@@ -355,7 +355,18 @@ function FileBrowserItemImpl({
         }
       >
         <TableCell className="flex min-w-0 items-center gap-2 font-medium">
-          <Icon aria-hidden className="size-4 text-muted-foreground" />
+          {/*
+           * List-view icons are normalized to a single 16px lucide glyph with
+           * fixed stroke and `shrink-0` so flex layout never compresses them.
+           * Without `size={16}` lucide falls back to its default 24 attribute
+           * which can win over the Tailwind class on some browsers.
+           */}
+          <Icon
+            aria-hidden
+            size={16}
+            strokeWidth={2}
+            className="size-4 shrink-0 text-muted-foreground"
+          />
           {item.href != null ? (
             <Link
               href={item.href}
