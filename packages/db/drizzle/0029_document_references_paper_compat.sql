@@ -7,8 +7,19 @@ ALTER TABLE "document_references"
 
 -- Legacy environments may still require document_id NOT NULL, but current
 -- app writes are keyed by paper_id. Relax nullability for compatibility.
-ALTER TABLE "document_references"
-  ALTER COLUMN "document_id" DROP NOT NULL;
+-- Guarded: rebaselined environments never had a document_id column.
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+      FROM information_schema.columns
+     WHERE table_name = 'document_references'
+       AND column_name = 'document_id'
+  ) THEN
+    ALTER TABLE "document_references"
+      ALTER COLUMN "document_id" DROP NOT NULL;
+  END IF;
+END $$;
 
 -- Best-effort backfill for rows that still have only document_id.
 -- Uses (user_id, filename) as the shared stable bridge between legacy
