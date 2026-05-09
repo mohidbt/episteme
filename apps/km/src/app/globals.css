@@ -279,7 +279,7 @@
     transition: opacity 150ms ease;
   }
   .sidebar-section-toggle:hover .section-chevron,
-  .sidebar-section-toggle:focus .section-chevron {
+  .sidebar-section-toggle:focus-visible .section-chevron {
     opacity: 1;
   }
 
