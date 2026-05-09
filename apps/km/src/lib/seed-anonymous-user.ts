@@ -261,7 +261,7 @@ export async function seedAnonymousUser(userId: string): Promise<void> {
   const { lib, foundationsFolder, pcaFolder, bioFolder } = await db.transaction(async (tx) => {
     const [created] = await tx
       .insert(libraries)
-      .values({ userId, name: "My Library" })
+      .values({ userId, name: "Example Library" })
       .returning();
     await tx.insert(folders).values({
       libraryId: created.id,
@@ -343,12 +343,20 @@ export async function seedAnonymousUser(userId: string): Promise<void> {
     "application/pdf",
   );
 
-  // Cover failure must NOT fail the whole seed — same policy as finalize route.
+  // Cover failure must NOT fail the whole seed — same policy as finalize
+  // route. Use console.error (not warn) and include the storage endpoint so
+  // deploy breakage (e.g. S3_ENDPOINT unset on Vercel) is diagnosable from
+  // logs instead of silently producing coverless guest libraries.
   try {
     const cover = await extractCover(new Uint8Array(pdfBuf));
     await storage.uploadObject(paperCoverKey(paper.id), cover, "image/png");
   } catch (err) {
-    console.warn(`seed: cover extraction failed for paper ${paper.id}`, err);
+    const reason = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+    console.error(
+      `seed: cover extraction/upload failed for paper ${paper.id} ` +
+        `(s3_endpoint=${process.env.S3_ENDPOINT ?? "<unset>"} ` +
+        `s3_bucket=${process.env.S3_BUCKET ?? "<unset>"}): ${reason}`,
+    );
   }
 
   for (let i = 0; i < SEED_REFERENCES.length; i++) {

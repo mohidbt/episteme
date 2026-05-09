@@ -65,6 +65,15 @@ export function SidebarShell({ library, tree, isAnonymous }: SidebarShellProps) 
   const onMutate = () => router.refresh();
   const trashFolder = tree.folders.find((f) => f.isTrash) ?? null;
 
+  // Guest accounts created before the "Example Library" rename still have
+  // libraries named "My Library" in the database. Display the new label at
+  // render time so existing guest sessions reflect the new copy without a
+  // backfill migration.
+  const displayLibraryName =
+    isAnonymous && library.name === "My Library"
+      ? "Example Library"
+      : library.name;
+
   const [collapsed, setCollapsed] = React.useState(false);
 
   // Hydrate collapsed state from localStorage on mount.
@@ -136,7 +145,7 @@ export function SidebarShell({ library, tree, isAnonymous }: SidebarShellProps) 
                   ε
                 </span>
                 <span className="font-semibold text-[14px] tracking-tight text-foreground truncate">
-                  {library.name}
+                  {displayLibraryName}
                 </span>
               </Link>
             </SidebarHeader>
