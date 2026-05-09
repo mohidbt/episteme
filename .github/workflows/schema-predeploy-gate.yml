@@ -55,7 +55,7 @@ jobs:
 
       - name: Simulate missing user_highlights.paper_id
         run: |
-          pnpm exec tsx -e "import postgres from 'postgres'; const sql = postgres(process.env.DATABASE_URL!); await sql\`alter table user_highlights drop column if exists paper_id\`; await sql.end();"
+          pnpm exec tsx -e "import postgres from 'postgres'; (async () => { const sql = postgres(process.env.DATABASE_URL!); await sql\`alter table user_highlights drop column if exists paper_id\`; await sql.end(); })();"
 
       - name: Predeploy check fails on drift
         run: |
