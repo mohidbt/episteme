@@ -9,9 +9,7 @@ import { getRequiredUserId } from "@/lib/session";
 import { db } from "@/lib/db";
 import { noteLinks, notes, user } from "@episteme/db/schema";
 import { getDefaultLibrary } from "@/lib/default-library";
-import { listAllFolders } from "@/lib/folders-server";
-import { PathPill, type PathPillSegment } from "@/components/PathPill";
-import { splitFolderPath } from "@/lib/tree";
+import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { BacklinksPanel } from "@/components/BacklinksPanel";
 import { NotePageClient } from "./NotePageClient";
 import { mintCollabToken } from "@/lib/collab-token";
@@ -85,27 +83,16 @@ export default async function NotePage({
   );
 
   const library = await getDefaultLibrary(userId);
-  const allFolders = library ? await listAllFolders(library.id, userId) : [];
-  const folderSegs = splitFolderPath(note.folderPath ?? "");
-  const pillSegments: PathPillSegment[] = library
-    ? [
-        { id: "root", label: library.name, href: "/" },
-        ...folderSegs.map((name, i) => ({
-          id: `folder-${i}`,
-          label: name,
-          href:
-            "/drive/" +
-            folderSegs
-              .slice(0, i + 1)
-              .map((x) => encodeURIComponent(x))
-              .join("/"),
-        })),
-        { id: "title", label: note.title, href: null },
-      ]
-    : [];
   return (
     <div className="mx-auto max-w-3xl p-6">
-      {library && <PathPill className="mb-2 font-mono text-[11px] tracking-[0.06em] text-[var(--fg-muted)]" segments={pillSegments} />}
+      {library && (
+        <Breadcrumbs
+          libraryName={library.name}
+          section="notes"
+          folderPath={note.folderPath ?? ""}
+          title={note.title}
+        />
+      )}
       <NotePageClient
         id={note.id}
         title={note.title}
