@@ -150,6 +150,7 @@ export function FileBrowserToolbar({
                   libraryId={libraryId}
                   folderPath={folderPath}
                   folderId={folderId}
+                  onComplete={onMutate}
                 />
                 <DialogFooter>
                   <Button

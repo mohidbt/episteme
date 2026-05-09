@@ -46,6 +46,13 @@ interface UnifiedDropzoneProps {
    * stable across sign-in.
    */
   isAnonymous?: boolean;
+  /**
+   * Fired once per successfully-uploaded item, immediately after the server
+   * confirms the create. Consumers wire this to `router.refresh()` (or an
+   * optimistic insert) so the new row appears in the list without waiting
+   * for the rest of the batch to finish.
+   */
+  onComplete?: () => void;
 }
 
 const IMAGE_MIME_BY_EXT: Record<string, string> = {
@@ -112,6 +119,7 @@ export function UnifiedDropzone({
   folderPath,
   folderId,
   isAnonymous: isAnonymousProp,
+  onComplete,
 }: UnifiedDropzoneProps) {
   const router = useRouter();
   const session = useSession();
@@ -182,6 +190,7 @@ export function UnifiedDropzone({
           const finRes = await fetch(`/api/papers/${paperId}/finalize`, { method: "POST" });
           if (!finRes.ok) throw new Error(`finalize_failed_${finRes.status}`);
           updateItem(item.id, { status: "done", progress: 100 });
+          onComplete?.();
         } else if (item.fileType === "image") {
           const contentType = imageMimeFor(item.file);
           if (!contentType) throw new Error("unsupported_image");
@@ -209,6 +218,7 @@ export function UnifiedDropzone({
           updateItem(item.id, { xhr: handle.xhr });
           await handle.promise;
           updateItem(item.id, { xhr: null, status: "done", progress: 100 });
+          onComplete?.();
         } else if (item.fileType === "note") {
           const controller = new AbortController();
           updateItem(item.id, { controller });
@@ -224,6 +234,7 @@ export function UnifiedDropzone({
           });
           if (!res.ok) throw new Error(`note_upload_failed_${res.status}`);
           updateItem(item.id, { controller: null, status: "done", progress: 100 });
+          onComplete?.();
         } else if (item.fileType === "reference") {
           const controller = new AbortController();
           updateItem(item.id, { controller });
@@ -240,6 +251,7 @@ export function UnifiedDropzone({
           if (!res.ok) throw new Error(`ref_upload_failed_${res.status}`);
           const result = (await res.json()) as { created: number; skipped: number };
           updateItem(item.id, { controller: null, status: "done", progress: 100 });
+          onComplete?.();
           if (result.skipped > 0) {
             toast.info(`${result.created} created, ${result.skipped} skipped (duplicate keys)`);
           }
@@ -258,7 +270,7 @@ export function UnifiedDropzone({
         toast.error(`Failed: ${item.file.name}`, { description: msg });
       }
     },
-    [libraryId, folderPath, folderId, updateItem],
+    [libraryId, folderPath, folderId, updateItem, onComplete],
   );
 
   const cancelItem = useCallback(

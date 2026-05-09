@@ -369,6 +369,38 @@ describe("UnifiedDropzone", () => {
     expect(noteCall).toBeUndefined();
   });
 
+  it("calls onComplete after each successful upload (auto-refresh hook)", async () => {
+    // C3/#11: drive list must auto-refresh after upload. UnifiedDropzone
+    // exposes onComplete so consumers wire `router.refresh()` (or an
+    // optimistic insert) per success — without waiting for the whole batch.
+    mockFetch({
+      "/api/notes/from-file": {
+        status: 201,
+        body: { id: "note-1", slug: "test-note", title: "Test" },
+      },
+    });
+
+    const onComplete = vi.fn();
+    render(
+      <UnifiedDropzone
+        libraryId={1}
+        folderPath=""
+        folderId={null}
+        onComplete={onComplete}
+      />,
+    );
+    const input = document.querySelector("input[type=file]") as HTMLInputElement;
+    const file = new File(["# Test"], "test.md", { type: "text/markdown" });
+
+    await act(async () => {
+      dropFile(input, file);
+    });
+
+    await waitFor(() => {
+      expect(onComplete).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it("shows toast.error for unknown extension files", async () => {
     render(<UnifiedDropzone libraryId={1} folderPath="" folderId={null} />);
     const input = document.querySelector("input[type=file]") as HTMLInputElement;
