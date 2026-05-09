@@ -569,14 +569,6 @@ export function AgentTranscript({
               className="flex items-center gap-2"
             >
               <Shimmer duration={1}>Thinking…</Shimmer>
-              {state.recursionStep !== undefined ? (
-                <span
-                  data-testid="recursion-step"
-                  className="text-xs text-muted-foreground"
-                >
-                  step {state.recursionStep}
-                </span>
-              ) : null}
             </div>
           ) : null}
         </ConversationContent>
