@@ -279,6 +279,7 @@ export function AgentTranscript({
   );
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const agentBall = useAgentBallOptional();
   useEffect(() => {
     agentBall?.setWorking(streaming);
@@ -372,6 +373,17 @@ export function AgentTranscript({
     return () => {
       abortRef.current?.abort();
     };
+  }, []);
+
+  // #25 — focus prompt textarea on every mount/open transition. The parent
+  // (AgentBall) keys the AgentTranscript on threadId, so on every re-open with
+  // a fresh thread this effect re-runs. requestAnimationFrame defers until
+  // after the panel transitions in, avoiding browser focus-loss on layout.
+  useEffect(() => {
+    const id = requestAnimationFrame(() => {
+      inputRef.current?.focus();
+    });
+    return () => cancelAnimationFrame(id);
   }, []);
 
   const handleSend = useCallback(
@@ -581,6 +593,8 @@ export function AgentTranscript({
       </Conversation>
       <div className="border-t p-2 flex items-center gap-2">
         <Textarea
+          ref={inputRef}
+          autoFocus
           className="min-h-9 max-h-48 resize-none py-1.5 text-sm"
           placeholder="Ask anything"
           value={input}

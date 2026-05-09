@@ -375,7 +375,10 @@ export function AgentBall(_props: AgentBallProps) {
           {!fullscreen && (
             <button
               type="button"
-              onClick={() => setCollapsed((c) => !c)}
+              onClick={(e) => {
+                setCollapsed((c) => !c);
+                e.currentTarget.blur();
+              }}
               aria-label={collapsed ? "Expand agent" : "Collapse agent"}
               title={collapsed ? "Expand" : "Collapse"}
               className="rounded p-1 hover:bg-muted"
