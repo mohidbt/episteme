@@ -116,3 +116,41 @@ async def test_429_sets_global_cooldown_skips_http():
     assert mock_get.call_count == first_call_count, "no HTTP during cooldown"
 
 
+@pytest.mark.asyncio
+async def test_search_by_dois_uses_batch_endpoint():
+    backend = SemanticScholarSearch()
+    batch_resp = MagicMock(status_code=200)
+    batch_resp.json.return_value = [
+        {
+            "paperId": "a",
+            "title": "Paper A",
+            "authors": [],
+            "year": 2020,
+            "externalIds": {"DOI": "10.1/a"},
+            "openAccessPdf": None,
+            "citationCount": 0,
+            "abstract": None,
+        },
+        {
+            "paperId": "b",
+            "title": "Paper B",
+            "authors": [],
+            "year": 2021,
+            "externalIds": {"DOI": "10.1/b"},
+            "openAccessPdf": None,
+            "citationCount": 0,
+            "abstract": None,
+        },
+    ]
+
+    with patch(
+        "tools.search_backends.semantic_scholar._throttled_post",
+        new_callable=AsyncMock,
+    ) as mock_post:
+        mock_post.return_value = batch_resp
+        results = await backend.search_by_dois(["10.1/a", "10.1/b"])
+
+    assert mock_post.call_count == 1, "batch endpoint must be a single POST"
+    assert len(results) == 2
+    assert results[0].doi == "10.1/a"
+    assert results[1].doi == "10.1/b"

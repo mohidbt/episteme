@@ -138,6 +138,22 @@ async def _throttled_get(url: str, params: dict | None = None) -> httpx.Response
         return await _client.get(url, params=params, headers=headers)
 
 
+async def _throttled_post(
+    url: str, json: dict | None = None, params: dict | None = None
+) -> httpx.Response:
+    global _last_request_time
+    async with _semaphore:
+        if not _api_key:
+            async with _lock:
+                now = time.monotonic()
+                wait = 1.0 - (now - _last_request_time)
+                if wait > 0:
+                    await asyncio.sleep(wait)
+                _last_request_time = time.monotonic()
+        headers = {"x-api-key": _api_key} if _api_key else {}
+        return await _client.post(url, json=json, params=params, headers=headers)
+
+
 async def _search_request(url: str, params: dict) -> httpx.Response:
     """GET with backoff on 429. Honours Retry-After when present.
 
@@ -209,3 +225,50 @@ class SemanticScholarSearch(PaperSearchService):
         _cache_set(cache_key, list(results))
         return results
 
+    async def search_by_dois(self, dois: list[str]) -> list[PaperResult]:
+        """Batch DOI lookup via S2's /paper/batch endpoint.
+
+        One POST returns up to 500 papers. Falls back to empty list if S2
+        is in cooldown. Per-id null entries (S2 couldn't resolve that DOI)
+        are skipped silently.
+        """
+        if not dois:
+            return []
+        # Serve from cache where possible; only fetch the misses.
+        results: list[PaperResult] = []
+        misses: list[str] = []
+        for doi in dois:
+            cached = _cache_get(("doi", doi))
+            if isinstance(cached, PaperResult):
+                results.append(cached)
+            elif cached is None:
+                misses.append(doi)
+        if not misses:
+            return results
+        if _in_cooldown():
+            return results
+
+        url = f"{_BASE_URL}/paper/batch"
+        ids = [f"DOI:{d}" for d in misses]
+        response = await _throttled_post(url, json={"ids": ids}, params={"fields": _FIELDS})
+        # S2 batch returns 429 too — honour the breaker, fall back per-paper.
+        if response.status_code == 429:
+            _trip_cooldown(_retry_after_seconds(response))
+            return results
+        if response.status_code != 200:
+            logger.error(
+                "S2 batch lookup failed: %s %s", response.status_code, response.text[:200]
+            )
+            return results
+
+        body = response.json()
+        if not isinstance(body, list):
+            return results
+        for doi, entry in zip(misses, body, strict=False):
+            if not entry:
+                continue
+            paper = _parse_paper(entry)
+            paper.match_confidence = "exact"
+            _cache_set(("doi", doi), paper)
+            results.append(paper)
+        return results
