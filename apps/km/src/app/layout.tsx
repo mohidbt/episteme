@@ -5,6 +5,7 @@ import { Geist_Mono, Outfit, Philosopher } from "next/font/google";
 import { fraunces, jetbrainsMono } from "./fonts";
 import { Toaster } from "@/components/ui/sonner";
 import { SpeedInsights } from "@vercel/speed-insights/next";
+import { Analytics } from "@vercel/analytics/next";
 
 const outfit = Outfit({
   variable: "--font-geist-sans",
@@ -43,6 +44,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         {children}
         <Toaster position="bottom-right" />
         <SpeedInsights />
+        <Analytics />
       </body>
     </html>
   );
