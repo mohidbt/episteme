@@ -7,6 +7,7 @@ import time
 
 import httpx
 
+from . import _cooldown_store
 from .base import PaperResult, PaperSearchService
 
 logger = logging.getLogger(__name__)
@@ -49,15 +50,27 @@ def _cache_set(key: tuple, value: object) -> None:
     _query_cache[key] = (time.time() + _CACHE_TTL_SECONDS, value)
 
 
-def _in_cooldown() -> bool:
-    return time.time() < _s2_cooldown_until
+async def _in_cooldown() -> bool:
+    """True if S2 is in a cooldown window. Checks process-local first, then
+    the Postgres-backed shared store (so a 429 on instance A protects B)."""
+    global _s2_cooldown_until
+    now = time.time()
+    if now < _s2_cooldown_until:
+        return True
+    shared = await _cooldown_store.get_cooldown_until()
+    if shared > _s2_cooldown_until:
+        _s2_cooldown_until = shared
+    return now < _s2_cooldown_until
 
 
-def _trip_cooldown(retry_after: float | None) -> None:
+async def _trip_cooldown(retry_after: float | None) -> None:
+    """Trip cooldown locally and in the shared store (best-effort)."""
     global _s2_cooldown_until
     wait = retry_after if (retry_after and retry_after > 0) else _DEFAULT_COOLDOWN_SECONDS
-    _s2_cooldown_until = max(_s2_cooldown_until, time.time() + wait)
+    deadline = time.time() + wait
+    _s2_cooldown_until = max(_s2_cooldown_until, deadline)
     logger.warning("S2 circuit breaker tripped for %.0fs", wait)
+    await _cooldown_store.set_cooldown_until(deadline)
 
 
 def _retry_after_seconds(response: httpx.Response) -> float | None:
@@ -171,10 +184,15 @@ async def _throttled_post(
 async def _search_request(url: str, params: dict) -> httpx.Response:
     """GET with backoff on 429. Honours Retry-After when present.
 
-    On terminal 429, trips the global cooldown so subsequent callers
-    short-circuit instead of hammering S2.
+    Unauthenticated path: trip cooldown immediately on the first 429 and
+    return — retries from a Vercel egress IP just extend a quota window we
+    share with every other Vercel customer hitting S2. Authenticated path
+    keeps the 3-retry behaviour (per-key quota; retries actually help).
     """
     response = await _throttled_get(url, params=params)
+    if response.status_code == 429 and not _api_key:
+        await _trip_cooldown(_retry_after_seconds(response))
+        return response
     for attempt in range(3):
         if response.status_code != 429:
             break
@@ -184,7 +202,7 @@ async def _search_request(url: str, params: dict) -> httpx.Response:
         await asyncio.sleep(wait)
         response = await _throttled_get(url, params=params)
     if response.status_code == 429:
-        _trip_cooldown(_retry_after_seconds(response))
+        await _trip_cooldown(_retry_after_seconds(response))
     return response
 
 
@@ -194,7 +212,7 @@ class SemanticScholarSearch(PaperSearchService):
         cached = _cache_get(cache_key)
         if cached is not None:
             return cached if isinstance(cached, PaperResult) else None
-        if _in_cooldown():
+        if await _in_cooldown():
             # Avoid hammering S2 during a known rate-limit window.
             return None
         url = f"{_BASE_URL}/paper/DOI:{doi}"
@@ -222,7 +240,7 @@ class SemanticScholarSearch(PaperSearchService):
         cached = _cache_get(cache_key)
         if cached is not None:
             return list(cached)  # type: ignore[arg-type]
-        if _in_cooldown():
+        if await _in_cooldown():
             # Cooldown active — return empty rather than 429 the world.
             return []
         params: dict = {"query": query, "limit": limit, "fields": _FIELDS}
@@ -262,7 +280,7 @@ class SemanticScholarSearch(PaperSearchService):
                 misses.append(doi)
         if not misses:
             return results
-        if _in_cooldown():
+        if await _in_cooldown():
             return results
 
         url = f"{_BASE_URL}/paper/batch"
@@ -270,7 +288,7 @@ class SemanticScholarSearch(PaperSearchService):
         response = await _throttled_post(url, json={"ids": ids}, params={"fields": _FIELDS})
         # S2 batch returns 429 too — honour the breaker, fall back per-paper.
         if response.status_code == 429:
-            _trip_cooldown(_retry_after_seconds(response))
+            await _trip_cooldown(_retry_after_seconds(response))
             return results
         if response.status_code != 200:
             logger.error(

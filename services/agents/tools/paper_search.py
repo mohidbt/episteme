@@ -362,9 +362,13 @@ async def search_papers_online(query: str) -> object:
     requests and retries on 429 with exponential backoff (3s/6s/12s). On
     persistent failure returns a structured error so the agent can adapt.
     """
+    # Cap to first 10 whitespace tokens. S2's search backend penalises long
+    # verbose queries hard (and the LLM tends to stuff "similar papers ELMo
+    # GPT RoBERTa…" into one call). 10 tokens is enough for title+author.
+    capped = " ".join(query.split()[:10])
     backend = SemanticScholarSearch()
     try:
-        results = await backend.search_by_query(query, limit=5)
+        results = await backend.search_by_query(capped, limit=5)
     except S2Error as exc:
         return {
             "error": True,
