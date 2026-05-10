@@ -171,11 +171,19 @@ def _jsonable(value: Any) -> Any:
         return {k: _jsonable(v) for k, v in as_dict.items() if v not in (None, (), [])}
     if hasattr(value, "model_dump"):
         try:
-            return _jsonable(value.model_dump())
+            dumped = value.model_dump()
         except Exception:  # noqa: BLE001 — pydantic v1/v2 + custom failures
-            pass
+            dumped = None
+        # Guard: MagicMock and similar duck-typed objects auto-create
+        # `model_dump` and return another mock, causing infinite recursion.
+        # Real pydantic returns dict; pydantic v1 dict()-shape also dict.
+        if isinstance(dumped, (dict, list)):
+            return _jsonable(dumped)
     if hasattr(value, "content"):
-        return _jsonable(getattr(value, "content"))
+        content = getattr(value, "content")
+        # Same guard: only recurse when content is a real JSON-friendly shape.
+        if isinstance(content, (str, int, float, bool, dict, list)) or content is None:
+            return _jsonable(content)
     return value
 
 

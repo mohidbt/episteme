@@ -298,7 +298,7 @@ def test_invoke_free_model_rate_limit_uses_friendly_message():
     # Force the cached config for user_1 to a free model.
     config_cache._CACHE["user_1"] = {
         **config_cache._DEFAULTS,
-        "modelPreference": "openai/gpt-5.4-nano",
+        "modelPreference": "openai/gpt-5.4-nano:free",
     }
 
     response = httpx.Response(
@@ -1110,8 +1110,12 @@ def test_resume_passes_user_id_in_configurable():
 # Recursion-step telemetry (T9)
 # ---------------------------------------------------------------------------
 
-def test_invoke_emits_recursion_step_every_10_chain_ends():
-    """Every 10th on_chain_end event must yield a `recursion_step` SSE frame."""
+def test_invoke_emits_recursion_step_every_chain_end():
+    """Each on_chain_end event yields a `recursion_step` SSE frame.
+
+    Interval is 1 (see ``_RECURSION_STEP_INTERVAL``) so the UI sub-counter
+    advances visibly while the agent runs.
+    """
     async def fake_25_chain_ends(input_, config, version):
         for _ in range(25):
             yield {"event": "on_chain_end", "run_id": "x", "data": {"output": {}}}
@@ -1132,6 +1136,6 @@ def test_invoke_emits_recursion_step_every_10_chain_ends():
     assert r.status_code == 200
     events = _parse_sse(r.text)
     rs = [e for e in events if e["event"] == "recursion_step"]
-    assert len(rs) == 2, f"expected 2 recursion_step frames, got {len(rs)}: {rs!r}"
-    assert rs[0]["data"]["step"] == 10
-    assert rs[1]["data"]["step"] == 20
+    assert len(rs) == 25, f"expected 25 recursion_step frames, got {len(rs)}: {rs!r}"
+    assert rs[0]["data"]["step"] == 1
+    assert rs[-1]["data"]["step"] == 25

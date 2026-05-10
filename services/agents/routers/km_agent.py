@@ -89,7 +89,8 @@ def _flush_pending_interrupts(agent, thread_id: str) -> list[tuple[str, dict]]:
     for task in snap.tasks or []:
         for interrupt in (getattr(task, "interrupts", None) or ()):
             value = getattr(interrupt, "value", interrupt)
-            interrupt_id = getattr(interrupt, "id", "") or ""
+            raw_id = getattr(interrupt, "id", "")
+            interrupt_id = raw_id if isinstance(raw_id, str) else ""
             tool = ""
             args: dict = {}
             allowed: list = []
@@ -176,7 +177,8 @@ def _map_event(ev: dict) -> tuple[str, dict] | None:
             return None
         interrupt = interrupts[0]
         value = getattr(interrupt, "value", interrupt) if not isinstance(interrupt, dict) else interrupt
-        interrupt_id = getattr(interrupt, "id", run_id)
+        raw_id = getattr(interrupt, "id", run_id)
+        interrupt_id = raw_id if isinstance(raw_id, str) else run_id
         # langchain HumanInTheLoopMiddleware emits a HITLRequest:
         #   {"action_requests": [{"name", "args", "description"}, ...],
         #    "review_configs": [{"action_name", "allowed_decisions"}, ...]}
