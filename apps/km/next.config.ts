@@ -17,6 +17,15 @@ const config: NextConfig = {
     "@episteme/reader",
   ],
   serverExternalPackages: ["@napi-rs/canvas", "pdfjs-dist"],
+  // pdfjs-dist lazy-imports pdf.worker.mjs at runtime ("fake worker" fallback).
+  // Vercel's nft trace misses it because the path is built dynamically.
+  // Force-include so /var/task has the file. See seed cover-extract failures
+  // in prod logs (deploy lxbwnu9nx).
+  outputFileTracingIncludes: {
+    "/api/**/*": [
+      "../../node_modules/.pnpm/pdfjs-dist@*/node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs",
+    ],
+  },
   experimental: {
     optimizePackageImports: ["lucide-react", "@base-ui/react"],
   },

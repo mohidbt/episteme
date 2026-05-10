@@ -42,11 +42,13 @@ async def require_internal(
     if not hmac.compare_digest(expected, x_inhale_sig):
         raise HTTPException(status_code=401, detail="sig mismatch")
 
+    ocr_key = x_inhale_ocr_key or os.environ.get("DATALAB_API_KEY", "")
+
     return {
         "user_id": x_inhale_user_id,
         "paper_id": x_inhale_paper_id or None,
         "llm_key": x_inhale_llm_key,
-        "ocr_key": x_inhale_ocr_key,
+        "ocr_key": ocr_key,
     }
 
 
