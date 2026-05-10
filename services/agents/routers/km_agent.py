@@ -90,7 +90,11 @@ def _flush_pending_interrupts(agent, thread_id: str) -> list[tuple[str, dict]]:
         for interrupt in (getattr(task, "interrupts", None) or ()):
             value = getattr(interrupt, "value", interrupt)
             raw_id = getattr(interrupt, "id", "")
-            interrupt_id = raw_id if isinstance(raw_id, str) else ""
+            if not isinstance(raw_id, str):
+                logger.warning("interrupt id has unexpected type %s; coercing to \"\"", type(raw_id).__name__)
+                interrupt_id = ""
+            else:
+                interrupt_id = raw_id
             tool = ""
             args: dict = {}
             allowed: list = []
@@ -178,7 +182,11 @@ def _map_event(ev: dict) -> tuple[str, dict] | None:
         interrupt = interrupts[0]
         value = getattr(interrupt, "value", interrupt) if not isinstance(interrupt, dict) else interrupt
         raw_id = getattr(interrupt, "id", run_id)
-        interrupt_id = raw_id if isinstance(raw_id, str) else run_id
+        if not isinstance(raw_id, str):
+            logger.warning("on_chain_end interrupt id has unexpected type %s; falling back to run_id", type(raw_id).__name__)
+            interrupt_id = run_id
+        else:
+            interrupt_id = raw_id
         # langchain HumanInTheLoopMiddleware emits a HITLRequest:
         #   {"action_requests": [{"name", "args", "description"}, ...],
         #    "review_configs": [{"action_name", "allowed_decisions"}, ...]}

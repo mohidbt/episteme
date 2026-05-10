@@ -10,6 +10,7 @@ from app import app
 
 SECRET = "test-secret-abc"
 os.environ["INHALE_INTERNAL_SECRET"] = SECRET
+os.environ["EPISTEME_PDF_LOCAL_TEST"] = "1"
 client = TestClient(app)
 
 

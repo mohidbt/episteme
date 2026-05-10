@@ -177,12 +177,12 @@ def _jsonable(value: Any) -> Any:
         # Guard: MagicMock and similar duck-typed objects auto-create
         # `model_dump` and return another mock, causing infinite recursion.
         # Real pydantic returns dict; pydantic v1 dict()-shape also dict.
-        if isinstance(dumped, (dict, list)):
+        if isinstance(dumped, (dict, list, tuple)):
             return _jsonable(dumped)
     if hasattr(value, "content"):
         content = getattr(value, "content")
         # Same guard: only recurse when content is a real JSON-friendly shape.
-        if isinstance(content, (str, int, float, bool, dict, list)) or content is None:
+        if isinstance(content, (str, int, float, bool, dict, list, tuple)) or content is None:
             return _jsonable(content)
     return value
 

@@ -31,6 +31,7 @@ from tools.search import search_library
 SECRET = "test-secret-abc"
 os.environ["INHALE_INTERNAL_SECRET"] = SECRET
 os.environ["INHALE_STUB_EMBEDDINGS"] = "1"
+os.environ["EPISTEME_PDF_LOCAL_TEST"] = "1"
 
 
 class _FakeConn:

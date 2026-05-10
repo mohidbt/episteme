@@ -202,7 +202,7 @@ class SemanticScholarSearch(PaperSearchService):
         if response.status_code == 404:
             return None
         if response.status_code >= 500:
-            logger.error("S2 DOI lookup failed: %s %s", response.status_code, response.text[:200])
+            logger.warning("Semantic Scholar 5xx for DOI %s: status=%d", doi, response.status_code)
             return None
         if response.status_code != 200:
             logger.error("S2 DOI lookup failed: %s %s", response.status_code, response.text[:200])

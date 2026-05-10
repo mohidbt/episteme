@@ -61,11 +61,19 @@ async def download_to_tempfile(key: str, suffix: str = ".pdf"):
     """Download S3 object at `key` to a tempfile; yield path; delete on exit.
 
     Local-path passthrough: when ``key`` is an absolute path that exists on
-    disk (tests + dev scripts pass real files), yield it as-is and skip both
-    the S3 download and the unlink. Production callers pass S3 keys like
-    ``"<uuid>/source.pdf"`` (relative) — those never match the shortcut.
+    disk, yield it as-is and skip both the S3 download and the unlink.
+    Gated behind ``EPISTEME_PDF_LOCAL_TEST=1`` so production NEVER accepts a
+    local path even if a caller passed one in (the HMAC-authed pdf routes
+    accept arbitrary file_path strings). Set this env var only in tests.
     """
-    if key.startswith("/") and Path(key).is_file():
+    # Test-only local-path passthrough. Gated behind EPISTEME_PDF_LOCAL_TEST=1
+    # so production NEVER accepts a local path even if a caller passed one in
+    # (the HMAC-authed pdf routes accept arbitrary file_path strings).
+    if (
+        os.environ.get("EPISTEME_PDF_LOCAL_TEST") == "1"
+        and key.startswith("/")
+        and Path(key).is_file()
+    ):
         yield key
         return
     fd, path = tempfile.mkstemp(suffix=suffix)

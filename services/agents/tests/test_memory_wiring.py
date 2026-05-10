@@ -51,9 +51,11 @@ def test_build_memory_backend_writes_under_memories_user_id_prefix():
     # (3 segments: .episteme / agents / memories), plus km_post for the note.
     # We return a valid folder id each time, then a note object for the write.
     folder_call_count = 0
+    posts: list[tuple[str, dict]] = []
 
     async def _mock_km_post(path, body, *, user_id):
         nonlocal folder_call_count
+        posts.append((path, body))
         if path == "/api/notes":
             return {"id": "note-1", "title": body.get("title"), "error": None}
         # folder creation
@@ -73,6 +75,25 @@ def test_build_memory_backend_writes_under_memories_user_id_prefix():
 
     assert result.error is None, f"expected no error, got {result.error!r}"
     assert result.path == f"{MEMORIES_PATH}research-interests.md"
+
+    # Verify NotesBackend.bootstrap ran (km_get was called for library resolution).
+    assert mock_km_get.await_count >= 1, (
+        f"expected km_get to be called at least once, got {mock_km_get.await_count}"
+    )
+    # Verify the note write reached NotesBackend (a POST to /api/notes was made).
+    assert any(p == "/api/notes" for p, _ in posts), (
+        f"expected a POST to /api/notes; recorded posts: {[p for p, _ in posts]}"
+    )
+    # Verify the note body's title corresponds to the written path.
+    note_bodies = [body for p, body in posts if p == "/api/notes"]
+    assert any("research-interests" in (body.get("title") or "") for body in note_bodies), (
+        f"expected note title to contain 'research-interests'; bodies: {note_bodies}"
+    )
+    # Verify user_id propagated to km_get calls.
+    km_get_calls = mock_km_get.call_args_list
+    assert any(call.kwargs.get("user_id") == "alice" for call in km_get_calls), (
+        f"expected km_get called with user_id='alice'; calls: {km_get_calls}"
+    )
 
 
 def test_build_memory_backend_isolates_users():
