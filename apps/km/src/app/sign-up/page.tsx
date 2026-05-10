@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { signUp } from "@episteme/auth/client";
@@ -23,6 +23,20 @@ export default function SignUpPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [isGuest, setIsGuest] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/auth/get-session", { credentials: "include" })
+      .then((r) => r.json())
+      .then((s: { user?: { isAnonymous?: boolean } } | null) => {
+        if (!cancelled) setIsGuest(s?.user?.isAnonymous === true);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -50,6 +64,17 @@ export default function SignUpPage() {
         </CardHeader>
         <form onSubmit={handleSubmit}>
           <CardContent className="space-y-4">
+            {isGuest && (
+              <p
+                role="note"
+                data-testid="guest-data-warning"
+                className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-200"
+              >
+                Heads up: edits made in guest mode (uploaded papers, notes,
+                annotations) won&rsquo;t carry over into your new account. You
+                start with a clean library.
+              </p>
+            )}
             {error && <p className="text-sm text-destructive">{error}</p>}
             <div className="space-y-1.5">
               <Label htmlFor="name">Name</Label>

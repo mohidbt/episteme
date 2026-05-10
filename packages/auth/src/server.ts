@@ -7,17 +7,23 @@ import * as schema from "@episteme/db/schema";
 export interface CreateAuthOpts {
   /**
    * Fires after better-auth creates a new user row when `isAnonymous === true`.
-   * Use to seed app-level state (libraries, demo content, etc.). Kept as an
-   * injected callback so `@episteme/auth` stays decoupled from app concerns
-   * (storage, crossref, etc.).
+   * Use to seed the demo workspace shown to guests.
    */
   onAnonymousUserCreate?: (userId: string) => Promise<void>;
   /**
-   * Fires when an anonymous session signs up / signs in for real and the
-   * better-auth anonymous plugin links the two accounts. Implementations
-   * should migrate per-user FK rows from `anonUserId` → `newUserId` so the
-   * anon user's seeded data follows them into the authed account. After this
-   * callback returns, the plugin deletes the anonymous user row.
+   * Fires after better-auth creates a new user row when `isAnonymous === false`
+   * — i.e. a real signup (direct or via anon→signup link). Use to seed the
+   * minimal welcome workspace (empty library + welcome note). Both signup
+   * paths share this hook so direct signups don't land in a libraryless
+   * broken state.
+   */
+  onRealUserCreate?: (userId: string) => Promise<void>;
+  /**
+   * Fires when an anonymous session is linked to a real account. Runs BEFORE
+   * the anonymous plugin deletes the anon user row (so its child rows are
+   * still in the DB and can be enumerated for side-effect cleanup like R2
+   * object deletion). The user-delete cascade then wipes the DB rows
+   * automatically — DO NOT mutate `user_id` here. Pure cleanup hook.
    */
   onAnonymousLink?: (anonUserId: string, newUserId: string) => Promise<void>;
 }
@@ -69,11 +75,13 @@ export function createAuth(opts: CreateAuthOpts = {}) {
       user: {
         create: {
           after: async (user) => {
-            if (
-              opts.onAnonymousUserCreate &&
-              (user as { isAnonymous?: boolean }).isAnonymous === true
-            ) {
-              await opts.onAnonymousUserCreate(user.id);
+            const isAnon = (user as { isAnonymous?: boolean }).isAnonymous === true;
+            if (isAnon) {
+              if (opts.onAnonymousUserCreate) {
+                await opts.onAnonymousUserCreate(user.id);
+              }
+            } else if (opts.onRealUserCreate) {
+              await opts.onRealUserCreate(user.id);
             }
           },
         },
