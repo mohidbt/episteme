@@ -51,4 +51,12 @@ describe("proxy() default publish domain", () => {
     const rewrittenTo = res?.headers?.get?.("x-middleware-rewrite");
     expect(rewrittenTo).toBeFalsy();
   });
+
+  it("returns 404 for WordPress bot probe paths (/wp-admin/install.php)", async () => {
+    const { proxy } = await import("./proxy");
+    const req = buildRequest("tryepisteme.com", "/wp-admin/install.php");
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const res: any = proxy(req as any);
+    expect(res?.status).toBe(404);
+  });
 });
