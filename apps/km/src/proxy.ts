@@ -4,7 +4,7 @@ import { decideHostRewrite } from "@/lib/proxy-host";
 const PUBLISH_DOMAIN = process.env.EPISTEME_PUBLISH_DOMAIN ?? "tryepisteme.com";
 
 const BOT_PROBE_RE =
-  /^\/(?:wp-admin|wp-login|wp-content|wp-includes|xmlrpc\.php|\.env|\.git)(?:\/|$)/i;
+  /^\/(?:wp-admin|wp-login|wp-content|wp-includes)(?:\.|\/|$)|^\/(?:xmlrpc\.php|\.env|\.git(?:\/|$))/i;
 
 export function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
