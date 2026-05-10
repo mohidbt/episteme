@@ -31,7 +31,15 @@ export async function seedRealUser(userId: string): Promise<void> {
     .limit(1);
   if (existing) return;
 
-  const lib = await db.transaction(async (tx) => {
+  // Read disk + resolve slug BEFORE the transaction so a transient I/O
+  // failure aborts cleanly instead of leaving a library row without a
+  // welcome note (the early-return above would then permanently wedge
+  // re-tries: lib exists → no-op → user never sees the welcome note).
+  const noteMdPath = path.join(process.cwd(), SEED_DIR, WELCOME_NOTE_FILE);
+  const contentMd = await fs.readFile(noteMdPath, "utf8");
+  const slug = await resolveNoteSlug(userId, WELCOME_NOTE_TITLE);
+
+  await db.transaction(async (tx) => {
     const [created] = await tx
       .insert(libraries)
       .values({ userId, name: REAL_USER_LIBRARY_NAME })
@@ -43,18 +51,13 @@ export async function seedRealUser(userId: string): Promise<void> {
       name: TRASH_FOLDER_NAME,
       isTrash: true,
     });
-    return created;
-  });
-
-  const noteMdPath = path.join(process.cwd(), SEED_DIR, WELCOME_NOTE_FILE);
-  const contentMd = await fs.readFile(noteMdPath, "utf8");
-  const slug = await resolveNoteSlug(userId, WELCOME_NOTE_TITLE);
-  await db.insert(notes).values({
-    libraryId: lib.id,
-    userId,
-    folderPath: "",
-    title: WELCOME_NOTE_TITLE,
-    slug,
-    contentMd,
+    await tx.insert(notes).values({
+      libraryId: created.id,
+      userId,
+      folderPath: "",
+      title: WELCOME_NOTE_TITLE,
+      slug,
+      contentMd,
+    });
   });
 }

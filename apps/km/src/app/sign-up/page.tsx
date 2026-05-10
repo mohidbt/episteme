@@ -23,16 +23,24 @@ export default function SignUpPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  // Start hidden to avoid a flash for non-guests; if the session probe
+  // fails outright we fail-open (show the warning) rather than letting a
+  // guest sign up unwarned because of a network hiccup.
   const [isGuest, setIsGuest] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     fetch("/api/auth/get-session", { credentials: "include" })
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error(`session ${r.status}`);
+        return r.json();
+      })
       .then((s: { user?: { isAnonymous?: boolean } } | null) => {
         if (!cancelled) setIsGuest(s?.user?.isAnonymous === true);
       })
-      .catch(() => {});
+      .catch(() => {
+        if (!cancelled) setIsGuest(true);
+      });
     return () => {
       cancelled = true;
     };
