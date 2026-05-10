@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   fetchHighlights,
   logHighlightsErrorCleared,
   type HighlightSource,
 } from "./highlights-client";
+
+const POLL_INTERVAL_MS = 30000;
 
 type ResourceState<T> = {
   data: T[];
@@ -36,6 +38,13 @@ export function useHighlightsResource<T>({
     error: null,
   });
 
+  const mapRowRef = useRef(mapRow);
+  const errorMessageRef = useRef(errorMessage);
+  useEffect(() => {
+    mapRowRef.current = mapRow;
+    errorMessageRef.current = errorMessage;
+  });
+
   useEffect(() => {
     let cancelled = false;
     const controller = new AbortController();
@@ -58,7 +67,7 @@ export function useHighlightsResource<T>({
         if (initial) {
           setState((prev) => {
             if (prev.data.length > 0) return { ...prev, loading: false };
-            return { ...prev, loading: false, error: errorMessage };
+            return { ...prev, loading: false, error: errorMessageRef.current };
           });
         }
         return;
@@ -69,7 +78,7 @@ export function useHighlightsResource<T>({
           logHighlightsErrorCleared({ paperId, source });
         }
         return {
-          data: result.highlights.map(mapRow),
+          data: result.highlights.map(mapRowRef.current),
           loading: false,
           error: null,
         };
@@ -80,7 +89,7 @@ export function useHighlightsResource<T>({
     const interval = setInterval(() => {
       if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
       void load(false);
-    }, 4000);
+    }, POLL_INTERVAL_MS);
     const onFocus = () => void load(false);
     if (typeof window !== "undefined") {
       window.addEventListener("focus", onFocus);
@@ -94,7 +103,7 @@ export function useHighlightsResource<T>({
         window.removeEventListener("focus", onFocus);
       }
     };
-  }, [paperId, refreshKey, source, errorMessage, mapRow, url]);
+  }, [paperId, refreshKey, source, url]);
 
   return state;
 }

@@ -34,6 +34,10 @@ const VALID_COLORS: UserHighlight["color"][] = [
   "amber",
 ];
 
+function identityRow<T>(row: T): T {
+  return row;
+}
+
 function toUserHighlight(h: RawHighlight): UserHighlight {
   const color = (VALID_COLORS as string[]).includes(h.color)
     ? (h.color as UserHighlight["color"])
@@ -59,7 +63,7 @@ export function useUserHighlights(paperId: string, refreshKey: number = 0): Resu
     refreshKey,
     source: "user",
     errorMessage: "Failed to load highlights",
-    mapRow: (row) => row,
+    mapRow: identityRow,
     url: `/api/user-highlights?paperId=${paperId}`,
   });
 

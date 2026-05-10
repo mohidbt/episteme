@@ -19,7 +19,7 @@ interface ThreadJson extends Omit<AgentThreadRow, "createdAt" | "updatedAt" | "l
   lastMessageAt: string | null;
 }
 
-const POLL_INTERVAL_MS = 5000;
+const POLL_INTERVAL_MS = 30000;
 
 function statusBadge(status: AgentThreadStatus) {
   switch (status) {
