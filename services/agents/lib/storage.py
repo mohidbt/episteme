@@ -58,7 +58,16 @@ async def object_exists(key: str) -> bool:
 
 @asynccontextmanager
 async def download_to_tempfile(key: str, suffix: str = ".pdf"):
-    """Download S3 object at `key` to a tempfile; yield path; delete on exit."""
+    """Download S3 object at `key` to a tempfile; yield path; delete on exit.
+
+    Local-path passthrough: when ``key`` is an absolute path that exists on
+    disk (tests + dev scripts pass real files), yield it as-is and skip both
+    the S3 download and the unlink. Production callers pass S3 keys like
+    ``"<uuid>/source.pdf"`` (relative) — those never match the shortcut.
+    """
+    if key.startswith("/") and Path(key).is_file():
+        yield key
+        return
     fd, path = tempfile.mkstemp(suffix=suffix)
     os.close(fd)
     try:

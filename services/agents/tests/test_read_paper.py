@@ -152,7 +152,7 @@ async def test_read_paper_sections_returns_methods_window():
         )
     block_ids = [b["block_id"] for b in result["blocks"]]
     # Should be order_index 2, 3, 4 (Methods header + paragraph + table) — stops before Results (5).
-    assert block_ids == [f"{PAPER_ID}:2", f"{PAPER_ID}:3", f"{PAPER_ID}:4"]
+    assert block_ids == [f"{PAPER_ID}:p2:2", f"{PAPER_ID}:p2:3", f"{PAPER_ID}:p3:4"]
     assert result["paper_id"] == PAPER_ID
     assert result["truncated"] is False
 
@@ -168,7 +168,7 @@ async def test_read_paper_blocks_table_filter():
         )
     assert all(b["kind"] == "table" for b in result["blocks"])
     assert len(result["blocks"]) == 1
-    assert result["blocks"][0]["block_id"] == f"{PAPER_ID}:4"
+    assert result["blocks"][0]["block_id"] == f"{PAPER_ID}:p3:4"
     assert result["blocks"][0]["text"] == "Table 1 contents"
 
 
@@ -239,7 +239,7 @@ async def test_read_paper_rag_fts_fallback():
 
 @pytest.mark.asyncio
 async def test_read_paper_block_id_format():
-    """Every block has block_id = f'{paper_id}:{order_index}'."""
+    """Every block has block_id = f'{paper_id}:p{page}:{order_index}'."""
     conn = _make_conn()
     with _patch_pool_and_ensure(conn):
         result = await read_paper.ainvoke(
@@ -247,8 +247,9 @@ async def test_read_paper_block_id_format():
             config=_config(),
         )
     for b in result["blocks"]:
-        prefix, idx = b["block_id"].split(":")
+        prefix, page_part, idx = b["block_id"].split(":")
         assert prefix == PAPER_ID
+        assert page_part.startswith("p") and page_part[1:].isdigit()
         assert idx.isdigit()
 
 
@@ -263,7 +264,7 @@ async def test_read_paper_section_resolved_for_paragraph():
         )
     # paragraph at order_index=3 lives under Methods.
     by_idx = {b["block_id"]: b for b in result["blocks"]}
-    assert by_idx[f"{PAPER_ID}:3"]["section"] == "Methods"
+    assert by_idx[f"{PAPER_ID}:p2:3"]["section"] == "Methods"
 
 
 @pytest.mark.asyncio
@@ -276,9 +277,9 @@ async def test_read_paper_text_resolution_per_kind():
             config=_config(),
         )
     by_idx = {b["block_id"]: b for b in result["blocks"]}
-    assert by_idx[f"{PAPER_ID}:3"]["text"] == "We used a transformer model."  # paragraph.text
-    assert by_idx[f"{PAPER_ID}:6"]["text"] == "Figure 1: results plot."        # figure.caption
-    assert by_idx[f"{PAPER_ID}:7"]["text"] == "E=mc^2"                          # formula.latex
+    assert by_idx[f"{PAPER_ID}:p2:3"]["text"] == "We used a transformer model."  # paragraph.text
+    assert by_idx[f"{PAPER_ID}:p4:6"]["text"] == "Figure 1: results plot."        # figure.caption
+    assert by_idx[f"{PAPER_ID}:p5:7"]["text"] == "E=mc^2"                          # formula.latex
 
 
 # ---------------------------------------------------------------------------

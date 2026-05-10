@@ -201,6 +201,9 @@ class SemanticScholarSearch(PaperSearchService):
         response = await _search_request(url, {"fields": _FIELDS})
         if response.status_code == 404:
             return None
+        if response.status_code >= 500:
+            logger.error("S2 DOI lookup failed: %s %s", response.status_code, response.text[:200])
+            return None
         if response.status_code != 200:
             logger.error("S2 DOI lookup failed: %s %s", response.status_code, response.text[:200])
             raise S2Error(response.status_code, response.text)

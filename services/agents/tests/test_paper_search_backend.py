@@ -59,11 +59,9 @@ async def test_search_by_doi_found():
     mock_response.status_code = 200
     mock_response.json.return_value = S2_DOI_RESPONSE
 
-    with patch.object(backend.__class__.__mro__[0], "_throttled_get", new_callable=AsyncMock) as mock_get:
-        # We need to patch the module-level function
-        with patch("tools.search_backends.semantic_scholar._throttled_get", new_callable=AsyncMock) as mock_get:
-            mock_get.return_value = mock_response
-            result = await backend.search_by_doi("10.5555/3295222.3295349")
+    with patch("tools.search_backends.semantic_scholar._throttled_get", new_callable=AsyncMock) as mock_get:
+        mock_get.return_value = mock_response
+        result = await backend.search_by_doi("10.5555/3295222.3295349")
 
     assert result is not None
     assert result.title == "Attention Is All You Need"
@@ -140,7 +138,8 @@ async def test_search_by_doi_server_error():
     mock_response = MagicMock()
     mock_response.status_code = 500
 
-    with patch("tools.search_backends.semantic_scholar._throttled_get", new_callable=AsyncMock) as mock_get:
+    with patch("tools.search_backends.semantic_scholar._cache_get", return_value=None), \
+         patch("tools.search_backends.semantic_scholar._throttled_get", new_callable=AsyncMock) as mock_get:
         mock_get.return_value = mock_response
         result = await backend.search_by_doi("10.5555/3295222.3295349")
 
