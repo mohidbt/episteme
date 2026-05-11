@@ -9,27 +9,34 @@ import {
 } from "@/lib/storage";
 
 /**
- * Delete the anon user's R2 objects before the user-delete cascade wipes
- * the rows that hold the storage keys. Without this, every guest session
- * leaks its seeded paper PDFs + cover PNGs into R2 (guests can't upload,
- * but seedAnonymousUser uploads ~6 seed PDFs + covers per session).
+ * Delete a user's R2 objects (papers + covers + assets) before the
+ * user-delete cascade fires and the rows holding the storage keys are gone.
  *
- * Called from better-auth anonymous plugin's onLinkAccount hook. Best-effort:
- * a missing R2 object is fine; we don't roll back the link on cleanup
- * failure since the DB cascade still happens.
+ * Used in two places:
+ *   1. anonymous plugin onLinkAccount — fires when a guest signs up / signs
+ *      in to an existing account, before better-auth deletes the anon row.
+ *   2. /api/internal/cleanup-anon-orphans cron — sweeps stale anon sessions
+ *      that were never linked (user abandoned the tab).
+ *
+ * Note: anon R2 content is NOT limited to seedAnonymousUser's seed PDFs.
+ * Guests can also add papers via the agent tool `agentic_fetch_papers`
+ * (POST /api/papers has no isAnonymous gate, and the agent dual-auth
+ * bypasses cookie checks). Enumerating papers + assets covers both
+ * origins uniformly.
+ *
+ * Best-effort: each delete is `.catch()`-ed so a missing R2 object or
+ * transient error doesn't fail the calling flow; the subsequent DB
+ * cascade is the source of truth for "this user is gone".
  */
-export async function cleanupAnonymousR2(
-  anonUserId: string,
-  _newUserId: string,
-): Promise<void> {
+export async function cleanupUserR2(userId: string): Promise<void> {
   const paperRows = await db
     .select({ id: papers.id })
     .from(papers)
-    .where(eq(papers.userId, anonUserId));
+    .where(eq(papers.userId, userId));
   const assetRows = await db
     .select({ id: assets.id })
     .from(assets)
-    .where(eq(assets.userId, anonUserId));
+    .where(eq(assets.userId, userId));
 
   const keys: string[] = [];
   for (const p of paperRows) {
@@ -42,4 +49,15 @@ export async function cleanupAnonymousR2(
   await Promise.all(
     keys.map((k) => storage.deleteObject(k).catch(() => {})),
   );
+}
+
+/**
+ * better-auth `onAnonymousLink` adapter — signature `(anonUserId, newUserId)`.
+ * Delegates to `cleanupUserR2`.
+ */
+export async function cleanupAnonymousR2(
+  anonUserId: string,
+  _newUserId: string,
+): Promise<void> {
+  await cleanupUserR2(anonUserId);
 }
