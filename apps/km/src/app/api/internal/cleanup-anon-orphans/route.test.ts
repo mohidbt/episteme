@@ -103,9 +103,19 @@ describe("POST/GET /api/internal/cleanup-anon-orphans", () => {
       ).status,
     ).toBe(200);
 
-    const req = new Request("http://localhost/api/internal/cleanup-anon-orphans", {
+    // GET without x-vercel-cron header → 401 (defends against leaked secret).
+    const reqNoCronHeader = new Request("http://localhost/api/internal/cleanup-anon-orphans", {
       method: "GET",
       headers: { authorization: `Bearer ${CRON_SECRET}` },
+    });
+    expect((await GET(reqNoCronHeader)).status).toBe(401);
+
+    const req = new Request("http://localhost/api/internal/cleanup-anon-orphans", {
+      method: "GET",
+      headers: {
+        authorization: `Bearer ${CRON_SECRET}`,
+        "x-vercel-cron": "1",
+      },
     });
     const res = await GET(req);
     expect(res.status).toBe(200);

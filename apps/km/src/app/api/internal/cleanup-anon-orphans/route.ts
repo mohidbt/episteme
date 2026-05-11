@@ -11,15 +11,24 @@ const MIN_MAX_AGE_DAYS = 1;
 const DEFAULT_LIMIT = 200;
 
 /**
- * Vercel Cron sends `Authorization: Bearer $CRON_SECRET` — NOT the HMAC
- * scheme used by service-to-service traffic. Accept either so the route
- * can be invoked both from Vercel Cron and from internal services.
+ * Vercel Cron sends `Authorization: Bearer $CRON_SECRET` AND
+ * `x-vercel-cron: 1` (the latter set by Vercel's infra and stripped from
+ * inbound external requests). Require both for destructive GETs so a
+ * leaked CRON_SECRET alone can't be replayed via curl to thrash R2.
+ * Manual operators should call POST (with bearer) and pass `dryRun: true`
+ * first.
  */
-function checkCronBearer(request: Request): boolean {
+function checkVercelCron(request: Request): boolean {
   const secret = process.env.CRON_SECRET;
   if (!secret) return false;
-  const header = request.headers.get("authorization") ?? "";
-  return header === `Bearer ${secret}`;
+  const auth = request.headers.get("authorization") ?? "";
+  if (auth !== `Bearer ${secret}`) return false;
+  // GET = Vercel Cron path — require the infra header too.
+  if (request.method === "GET") {
+    return request.headers.get("x-vercel-cron") !== null;
+  }
+  // POST = internal operator path — bearer alone is enough.
+  return true;
 }
 
 interface Body {
@@ -43,7 +52,7 @@ interface Body {
  * Response: { ok, processed, failed, dryRun, candidates }
  */
 async function handle(request: Request, rawBody: string): Promise<Response> {
-  if (!checkCronBearer(request)) {
+  if (!checkVercelCron(request)) {
     try {
       const auth = await verifyInternalAuth(request, rawBody);
       if (!auth.ok) {
