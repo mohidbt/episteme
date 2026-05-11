@@ -6,8 +6,9 @@ import {
   logHighlightsErrorCleared,
   type HighlightSource,
 } from "./highlights-client";
+import { subscribeHighlightsChange } from "../lib/highlights-channel";
 
-const POLL_INTERVAL_MS = 30000;
+const BACKSTOP_INTERVAL_MS = 300_000;
 
 type ResourceState<T> = {
   data: T[];
@@ -89,11 +90,17 @@ export function useHighlightsResource<T>({
     const interval = setInterval(() => {
       if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
       void load(false);
-    }, POLL_INTERVAL_MS);
+    }, BACKSTOP_INTERVAL_MS);
     const onFocus = () => void load(false);
     if (typeof window !== "undefined") {
       window.addEventListener("focus", onFocus);
     }
+
+    const unsubscribe = subscribeHighlightsChange((evt) => {
+      if (evt.paperId !== paperId) return;
+      if (evt.source !== source) return;
+      void load(false);
+    });
 
     return () => {
       cancelled = true;
@@ -102,6 +109,7 @@ export function useHighlightsResource<T>({
       if (typeof window !== "undefined") {
         window.removeEventListener("focus", onFocus);
       }
+      unsubscribe();
     };
   }, [paperId, refreshKey, source, url]);
 

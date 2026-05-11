@@ -22,6 +22,7 @@ import { useReaderState } from "../hooks/use-reader-state";
 import { useCitationClick } from "../hooks/use-citation-click";
 import { useUserHighlights } from "../hooks/use-user-highlights";
 import { usePaperHighlights } from "../hooks/use-paper-highlights";
+import { postHighlightsChange } from "../lib/highlights-channel";
 import type { ReaderMode } from "../plugins/types";
 
 type DocProcessingStatus = "pending" | "processing" | "ready" | "failed";
@@ -431,10 +432,11 @@ export function Reader({
     async (color: HighlightColor) => {
       await saveHighlight(color);
       setRefreshKey((k) => k + 1);
+      postHighlightsChange({ paperId, source: "user" });
       setActiveSelection(null);
       clearSelection();
     },
-    [saveHighlight, clearSelection]
+    [saveHighlight, clearSelection, paperId]
   );
 
   const handleComment = useCallback(
@@ -452,10 +454,11 @@ export function Reader({
         }
       }
       setRefreshKey((k) => k + 1);
+      postHighlightsChange({ paperId, source: "user" });
       setActiveSelection(null);
       clearSelection();
     },
-    [saveHighlight, clearSelection]
+    [saveHighlight, clearSelection, paperId]
   );
 
   const handleCommitStart = useCallback(() => {
@@ -465,20 +468,21 @@ export function Reader({
   const deleteHighlight = useCallback(
     async (id: number | string): Promise<boolean> => {
       try {
-        const path =
-          typeof id === "number"
-            ? `/api/user-highlights/${id}`
-            : `/api/paper-highlights/${id}`;
+        const isUser = typeof id === "number";
+        const path = isUser
+          ? `/api/user-highlights/${id}`
+          : `/api/paper-highlights/${id}`;
         const res = await fetch(path, { method: "DELETE" });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         setRefreshKey((k) => k + 1);
+        postHighlightsChange({ paperId, source: isUser ? "user" : "ai" });
         return true;
       } catch {
         setSaveError("Failed to delete.");
         return false;
       }
     },
-    []
+    [paperId]
   );
 
   const handleEraseHighlight = useCallback(async () => {
