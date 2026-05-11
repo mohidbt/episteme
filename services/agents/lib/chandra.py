@@ -142,6 +142,12 @@ async def run_chandra(file_path: str, api_key: str):
     """Call Chandra OCR asynchronously via AsyncDatalabClient."""
     from datalab_sdk import AsyncDatalabClient, ConvertOptions
 
+    api_key = (api_key or "").strip()
+    logger.info(
+        "chandra: invoking AsyncDatalabClient (key_len=%d, key_prefix=%r)",
+        len(api_key),
+        api_key[:4] if api_key else "",
+    )
     async with AsyncDatalabClient(api_key=api_key) as chandra:
         return await chandra.convert(
             file_path=file_path,
