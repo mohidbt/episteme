@@ -101,7 +101,7 @@ def _make_mock_agent(astream_events_coro=None):
     task_with_interrupt.id = "t1"
     task_with_interrupt.interrupts = [MagicMock(value={"tool": "make_public"})]
     snapshot.tasks = [task_with_interrupt]
-    agent.get_state = MagicMock(return_value=snapshot)
+    agent.aget_state = AsyncMock(return_value=snapshot)
     return agent
 
 

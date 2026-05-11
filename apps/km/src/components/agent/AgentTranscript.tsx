@@ -330,8 +330,32 @@ export function AgentTranscript({
         const decoder = new TextDecoder();
         let buf = "";
         let mutated = false;
+        // 60s idle watchdog: TCP can die silently (Mac sleep, NAT timeout) and
+        // reader.read() will hang forever. Race each read against a timeout
+        // so we surface a stalled stream instead of the spinner running
+        // indefinitely.
         while (true) {
-          const { value, done } = await reader.read();
+          const READ_TIMEOUT_MS = 60_000;
+          let timeoutId: ReturnType<typeof setTimeout> | null = null;
+          const timeout = new Promise<{ stalled: true }>((resolve) => {
+            timeoutId = setTimeout(() => resolve({ stalled: true }), READ_TIMEOUT_MS);
+          });
+          let result: { stalled: true } | ReadableStreamReadResult<Uint8Array>;
+          try {
+            result = await Promise.race([reader.read(), timeout]);
+          } finally {
+            if (timeoutId) clearTimeout(timeoutId);
+          }
+          if ("stalled" in result) {
+            try {
+              await reader.cancel();
+            } catch {
+              // ignore
+            }
+            toast.error("Agent stream stalled. Try again or refresh.");
+            break;
+          }
+          const { value, done } = result;
           if (done) break;
           buf += decoder.decode(value, { stream: true });
           const { events, rest } = parseSseChunk(buf);
@@ -353,6 +377,26 @@ export function AgentTranscript({
     },
     [threadId, pageContext, router, onPdfExtractProgress, onBeforeSendMessage],
   );
+
+  // Sleep/wake recovery: when tab becomes visible after long hide, abort any
+  // in-flight reader. The TCP connection is likely dead but reader.read() may
+  // not have ticked the watchdog yet. Aborting clears the spinner immediately.
+  useEffect(() => {
+    let hiddenAt = 0;
+    const onVis = () => {
+      if (document.visibilityState === "hidden") {
+        hiddenAt = Date.now();
+        return;
+      }
+      const hiddenMs = hiddenAt ? Date.now() - hiddenAt : 0;
+      hiddenAt = 0;
+      if (hiddenMs > 30_000 && abortRef.current) {
+        abortRef.current.abort();
+      }
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
+  }, []);
 
   // Keep ref in sync so the auto-send effect can access it without TDZ
   defaultSendRef.current = defaultSend;

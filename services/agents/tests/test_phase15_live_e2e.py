@@ -203,7 +203,7 @@ class _ToolFlowAgent:
             "data": {"chunk": type("Chunk", (), {"content": "noop"})()},
         }
 
-    def get_state(self, *_args, **_kwargs):
+    async def aget_state(self, *_args, **_kwargs):
         class _Snap:
             tasks = []
         return _Snap()

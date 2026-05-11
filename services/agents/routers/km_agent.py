@@ -68,7 +68,7 @@ router = APIRouter(prefix="/agents/km", tags=["km-agent"])
 # Event mapping
 # ---------------------------------------------------------------------------
 
-def _flush_pending_interrupts(agent, thread_id: str) -> list[tuple[str, dict]]:
+async def _flush_pending_interrupts(agent, thread_id: str) -> list[tuple[str, dict]]:
     """Read post-stream snapshot for pending HITL interrupts.
 
     `astream_events(version="v2")` does NOT surface `__interrupt__` in any
@@ -79,10 +79,15 @@ def _flush_pending_interrupts(agent, thread_id: str) -> list[tuple[str, dict]]:
     after the model emits the gated tool_call.
 
     Returns a list of (event_type, payload) tuples ready to format_typed.
+
+    NOTE: must use ``aget_state`` — sync ``get_state`` against
+    ``AsyncPostgresSaver`` from the main asyncio thread raises
+    ``Synchronous calls to AsyncPostgresSaver are only allowed from a
+    different thread`` and silently swallows the interrupt flush.
     """
     out: list[tuple[str, dict]] = []
     try:
-        snap = agent.get_state({"configurable": {"thread_id": thread_id}})
+        snap = await agent.aget_state({"configurable": {"thread_id": thread_id}})
     except Exception as e:  # noqa: BLE001
         logger.warning("snapshot read for interrupt flush failed: %s", e)
         return out
@@ -522,7 +527,7 @@ async def invoke(req: Request, auth: InternalAuthDep):
                         yield format_typed(mapped[0], mapped[1])
                     for extra in _extra_events(ev, mapped):
                         yield format_typed(extra[0], extra[1])
-            for ev_type, payload in _flush_pending_interrupts(agent, thread_id):
+            for ev_type, payload in await _flush_pending_interrupts(agent, thread_id):
                 yield format_typed(ev_type, payload)
         except openai.RateLimitError as e:
             logger.warning("agent stream rate-limited: %s", e)
@@ -634,7 +639,7 @@ async def resume(req: Request, auth: InternalAuthDep):
                     yield format_typed(mapped[0], mapped[1])
                     for extra in _extra_events(ev, mapped):
                         yield format_typed(extra[0], extra[1])
-            for ev_type, payload in _flush_pending_interrupts(agent, thread_id):
+            for ev_type, payload in await _flush_pending_interrupts(agent, thread_id):
                 yield format_typed(ev_type, payload)
         except openai.RateLimitError as e:
             logger.warning("agent stream rate-limited: %s", e)

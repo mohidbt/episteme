@@ -172,7 +172,7 @@ def test_hardcore_promptset_exam_red_green():
                 new_callable=AsyncMock,
                 return_value=MagicMock(
                     astream_events=_fake_events_for_skill(scenario["skill"]),
-                    get_state=MagicMock(return_value=MagicMock(tasks=[], values={})),
+                    aget_state=AsyncMock(return_value=MagicMock(tasks=[], values={})),
                 ),
             ):
                 r = client.post(

@@ -84,7 +84,7 @@ async def _deep_read_flow_events(input_, config, version):  # noqa: ARG001
 def _fake_agent():
     agent = MagicMock()
     agent.astream_events = _deep_read_flow_events
-    agent.get_state = MagicMock(return_value=MagicMock(tasks=[], values={}))
+    agent.aget_state = AsyncMock(return_value=MagicMock(tasks=[], values={}))
     return agent
 
 
