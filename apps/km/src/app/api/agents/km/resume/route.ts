@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { getDecryptedApiKey, getDecryptedChandraKey } from "@episteme/auth/byok";
+import { getDecryptedApiKey } from "@episteme/auth/byok";
 import { getSessionInfo } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { agentConfigs } from "@episteme/db/schema";
@@ -17,8 +17,6 @@ export async function POST(req: Request) {
   } catch {
     return Response.json({ error: OPENROUTER_KEY_MISSING }, { status: 400 });
   }
-  const ocrKey: string = (await getDecryptedChandraKey(session.userId)) ?? "";
-
   const bodyText = await req.text();
 
   // Mirror /invoke: pass modelPreference + enabledSkills from Postgres so
@@ -60,7 +58,6 @@ export async function POST(req: Request) {
     body: upstreamBody,
     userId: session.userId,
     llmKey,
-    ocrKey,
   });
 
   const upstream = await fetch(`${process.env.AGENTS_URL}${path}`, {

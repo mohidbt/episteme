@@ -9,12 +9,10 @@ async def require_internal(
     request: Request,
     x_inhale_user_id: Annotated[str | None, Header()] = None,
     x_inhale_paper_id: Annotated[str | None, Header()] = None,
-    # NOTE: OCR/LLM key headers are intentionally excluded from the signed HMAC payload.
+    # NOTE: LLM key header is intentionally excluded from the signed HMAC payload.
     # Next.js decrypts and forwards the per-user key on each request. Replay risk is bounded
-    # by FRESHNESS_SECONDS (60s). An attacker who captures a request can only reuse that key
-    # for <=60s; paper_id/file_path are signed so output cannot be redirected.
+    # by FRESHNESS_SECONDS (60s). OCR/Datalab key is server-side only via DATALAB_API_KEY env.
     x_inhale_llm_key: Annotated[str, Header()] = "",
-    x_inhale_ocr_key: Annotated[str, Header()] = "",
     x_inhale_ts: Annotated[str, Header()] = "",
     x_inhale_sig: Annotated[str, Header()] = "",
 ) -> dict:
@@ -42,13 +40,11 @@ async def require_internal(
     if not hmac.compare_digest(expected, x_inhale_sig):
         raise HTTPException(status_code=401, detail="sig mismatch")
 
-    ocr_key = (x_inhale_ocr_key or os.environ.get("DATALAB_API_KEY", "")).strip()
-
     return {
         "user_id": x_inhale_user_id,
         "paper_id": x_inhale_paper_id or None,
         "llm_key": x_inhale_llm_key,
-        "ocr_key": ocr_key,
+        "ocr_key": os.environ.get("DATALAB_API_KEY", "").strip(),
     }
 
 

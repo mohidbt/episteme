@@ -7,7 +7,6 @@ vi.mock("@/lib/auth", () => ({
 
 vi.mock("@episteme/auth/byok", () => ({
   getDecryptedApiKey: vi.fn(),
-  getDecryptedChandraKey: vi.fn().mockResolvedValue(null),
 }));
 
 vi.mock("@/lib/agents/sign-request", () => ({

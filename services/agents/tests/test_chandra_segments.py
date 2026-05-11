@@ -34,6 +34,11 @@ def _signed_headers(
     body: bytes,
     ocr_key: str = "ck-test-key",
 ) -> dict:
+    """Sets DATALAB_API_KEY env as the OCR-key channel (replaces removed header)."""
+    if ocr_key:
+        os.environ["DATALAB_API_KEY"] = ocr_key
+    else:
+        os.environ.pop("DATALAB_API_KEY", None)
     ts = str(int(time.time()))
     sig = hmac.new(
         SECRET.encode(),
@@ -43,7 +48,6 @@ def _signed_headers(
     return {
         "X-Inhale-User-Id": "user_1",
         "X-Inhale-Paper-Id": "00000000-0000-0000-0000-000000000042",
-        "X-Inhale-OCR-Key": ocr_key,
         "X-Inhale-Ts": ts,
         "X-Inhale-Sig": sig,
         "Content-Type": "application/json",
@@ -270,8 +274,6 @@ def test_no_ocr_key_returns_skipped():
     try:
         body = json.dumps({"paper_id": "00000000-0000-0000-0000-000000000042", "file_path": "/tmp/test.pdf"}).encode()
         headers = _signed_headers("POST", PATH, body, ocr_key="")
-        # Remove the OCR key header entirely
-        headers.pop("X-Inhale-OCR-Key", None)
 
         r = client.post(PATH, content=body, headers=headers)
 

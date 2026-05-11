@@ -3,10 +3,9 @@ import { eq } from "drizzle-orm";
 
 vi.mock("@episteme/auth/byok", () => ({
   getDecryptedApiKey: vi.fn(),
-  getDecryptedChandraKey: vi.fn(),
 }));
 
-import { getDecryptedApiKey, getDecryptedChandraKey } from "@episteme/auth/byok";
+import { getDecryptedApiKey } from "@episteme/auth/byok";
 import { db } from "@/lib/db";
 import { papers, papersets, libraries } from "@episteme/db/schema";
 import { POST } from "./route";
@@ -43,7 +42,6 @@ beforeEach(() => {
   process.env.INHALE_INTERNAL_SECRET = "test-secret-abc";
   process.env.AGENTS_URL = "http://test-agents:8000";
   vi.mocked(getDecryptedApiKey).mockResolvedValue("sk-test-key");
-  vi.mocked(getDecryptedChandraKey).mockResolvedValue("chandra-test-key");
 });
 
 afterEach(() => {
