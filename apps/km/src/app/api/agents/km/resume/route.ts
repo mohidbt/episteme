@@ -17,9 +17,7 @@ export async function POST(req: Request) {
   } catch {
     return Response.json({ error: OPENROUTER_KEY_MISSING }, { status: 400 });
   }
-  // Mirror /invoke behavior: OCR key is optional; when absent, fall back to
-  // the LLM key so read_paper/pdf tools still receive configurable.ocr_key.
-  const ocrKey: string = (await getDecryptedChandraKey(session.userId)) ?? llmKey;
+  const ocrKey: string = (await getDecryptedChandraKey(session.userId)) ?? "";
 
   const bodyText = await req.text();
 
