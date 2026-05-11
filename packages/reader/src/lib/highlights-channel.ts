@@ -27,17 +27,37 @@ function releaseChannel(): void {
   }
 }
 
+function shouldLogDebug(): boolean {
+  return process.env.NODE_ENV === "development" || process.env.NODE_ENV === "test";
+}
+
 export function postHighlightsChange(evt: HighlightsChannelEvent): void {
-  if (!isSupported()) return;
+  if (!isSupported()) {
+    if (shouldLogDebug()) {
+      console.debug("highlights_channel_post_skipped", { reason: "unsupported" });
+    }
+    return;
+  }
   // Lazy create + close-if-orphan: posting from a tab with zero local
   // subscribers (e.g. a non-reader page emitting a write) must not leak a
   // channel handle.
   const owns = channel === null;
   const ch = ensureChannel();
-  ch?.postMessage(evt);
-  if (owns && subscriberCount === 0) {
-    channel?.close();
-    channel = null;
+  try {
+    ch?.postMessage(evt);
+  } catch (err) {
+    if (shouldLogDebug()) {
+      console.debug("highlights_channel_post_failed", {
+        paperId: evt.paperId,
+        source: evt.source,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  } finally {
+    if (owns && subscriberCount === 0) {
+      channel?.close();
+      channel = null;
+    }
   }
 }
 
