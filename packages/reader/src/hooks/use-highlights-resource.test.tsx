@@ -113,4 +113,86 @@ describe("useHighlightsResource", () => {
     expect(fetchSpy.mock.calls.length).toBe(initialCalls);
     otherTab.close();
   });
+
+  it("dedupes overlapping triggers via in-flight guard", async () => {
+    let resolveFetch: ((res: Response) => void) | null = null;
+    const fetchSpy = vi.fn(
+      () =>
+        new Promise<Response>((resolve) => {
+          resolveFetch = resolve;
+        }),
+    );
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const paperId = "00000000-0000-0000-0000-000000000004";
+    render(<Probe paperId={paperId} rerenderTrigger={0} />);
+    // Initial load is pending; fire several broadcast events before it
+    // settles. Guard should suppress concurrent fetches.
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
+
+    const otherTab = new BroadcastChannel("episteme.highlights");
+    for (let i = 0; i < 5; i++) {
+      otherTab.postMessage({ paperId, source: "user" });
+    }
+    await new Promise((r) => setTimeout(r, 50));
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+
+    resolveFetch?.(
+      new Response(JSON.stringify({ highlights: [] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    otherTab.close();
+  });
+
+  it("does not refetch after unmount", async () => {
+    const fetchSpy = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ highlights: [] }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+    );
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const paperId = "00000000-0000-0000-0000-000000000005";
+    const ui = render(<Probe paperId={paperId} rerenderTrigger={0} />);
+    await waitFor(() => expect(ui.getByTestId("count").textContent).toBe("0"));
+    const initialCalls = fetchSpy.mock.calls.length;
+
+    ui.unmount();
+
+    const otherTab = new BroadcastChannel("episteme.highlights");
+    otherTab.postMessage({ paperId, source: "user" });
+    await new Promise((r) => setTimeout(r, 50));
+    expect(fetchSpy.mock.calls.length).toBe(initialCalls);
+    otherTab.close();
+  });
+
+  it("works when BroadcastChannel is unavailable (graceful no-op)", async () => {
+    const originalBC = globalThis.BroadcastChannel;
+    // @ts-expect-error — testing env without BroadcastChannel
+    delete globalThis.BroadcastChannel;
+    const fetchSpy = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ highlights: [] }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+    );
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const paperId = "00000000-0000-0000-0000-000000000006";
+    let renderError: unknown = null;
+    try {
+      const ui = render(<Probe paperId={paperId} rerenderTrigger={0} />);
+      await waitFor(() => expect(ui.getByTestId("count").textContent).toBe("0"));
+    } catch (e) {
+      renderError = e;
+    }
+
+    globalThis.BroadcastChannel = originalBC;
+    expect(renderError).toBeNull();
+  });
 });

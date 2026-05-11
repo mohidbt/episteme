@@ -48,9 +48,20 @@ export function useHighlightsResource<T>({
 
   useEffect(() => {
     let cancelled = false;
+    let inFlight = false;
     const controller = new AbortController();
 
     const load = async (initial: boolean) => {
+      if (inFlight) return;
+      inFlight = true;
+      try {
+        await loadInner(initial);
+      } finally {
+        inFlight = false;
+      }
+    };
+
+    const loadInner = async (initial: boolean) => {
       const result = await fetchHighlights<T>({
         paperId,
         source,
