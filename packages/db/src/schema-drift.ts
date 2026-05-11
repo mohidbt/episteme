@@ -230,6 +230,54 @@ export async function runDbChecks(databaseUrl: string): Promise<DbCheckSummary> 
           'expected user+paper access index is missing'
         union all
         select
+          'document_segments.paper_id_exists',
+          exists (
+            select 1 from information_schema.columns
+            where table_schema = 'public' and table_name = 'document_segments' and column_name = 'paper_id'
+          ),
+          'column required for chandra parse INSERT path'
+        union all
+        select
+          'document_segments.paper_id_not_null',
+          exists (
+            select 1 from information_schema.columns
+            where table_schema = 'public' and table_name = 'document_segments' and column_name = 'paper_id' and is_nullable = 'NO'
+          ),
+          'paper_id must be NOT NULL per current document_segments schema'
+        union all
+        select
+          'document_outlines.paper_id_exists',
+          exists (
+            select 1 from information_schema.columns
+            where table_schema = 'public' and table_name = 'document_outlines' and column_name = 'paper_id'
+          ),
+          'column required after 0024 inhale-merger re-key'
+        union all
+        select
+          'processing_jobs.paper_id_exists',
+          exists (
+            select 1 from information_schema.columns
+            where table_schema = 'public' and table_name = 'processing_jobs' and column_name = 'paper_id'
+          ),
+          'column required after 0024 inhale-merger re-key'
+        union all
+        select
+          'agent_conversations.paper_id_exists',
+          exists (
+            select 1 from information_schema.columns
+            where table_schema = 'public' and table_name = 'agent_conversations' and column_name = 'paper_id'
+          ),
+          'column required after 0024 inhale-merger re-key'
+        union all
+        select
+          'ai_highlight_runs.paper_id_exists',
+          exists (
+            select 1 from information_schema.columns
+            where table_schema = 'public' and table_name = 'ai_highlight_runs' and column_name = 'paper_id'
+          ),
+          'column required after 0025 paper_id-keyed restore'
+        union all
+        select
           'papers.storage_url_present_for_parse_active_rows',
           not exists (
             select 1
