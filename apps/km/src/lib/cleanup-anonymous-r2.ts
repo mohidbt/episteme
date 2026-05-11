@@ -46,9 +46,16 @@ export async function cleanupUserR2(userId: string): Promise<void> {
     keys.push(assetSourceKey(a.id));
   }
 
-  await Promise.all(
-    keys.map((k) => storage.deleteObject(k).catch(() => {})),
-  );
+  // Cap concurrency. A single guest deletes ~13 keys; the cron sweep can
+  // call this for 200 users back-to-back. Unbounded Promise.all would peak
+  // at ~2600 in-flight R2 deletes and risk throttling / timeouts.
+  const CONCURRENCY = 8;
+  for (let i = 0; i < keys.length; i += CONCURRENCY) {
+    const batch = keys.slice(i, i + CONCURRENCY);
+    await Promise.all(
+      batch.map((k) => storage.deleteObject(k).catch(() => {})),
+    );
+  }
 }
 
 /**

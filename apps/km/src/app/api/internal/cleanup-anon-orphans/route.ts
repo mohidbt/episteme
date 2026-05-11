@@ -7,7 +7,20 @@ import { cleanupUserR2 } from "@/lib/cleanup-anonymous-r2";
 export const runtime = "nodejs";
 
 const DEFAULT_MAX_AGE_DAYS = 7;
+const MIN_MAX_AGE_DAYS = 1;
 const DEFAULT_LIMIT = 200;
+
+/**
+ * Vercel Cron sends `Authorization: Bearer $CRON_SECRET` — NOT the HMAC
+ * scheme used by service-to-service traffic. Accept either so the route
+ * can be invoked both from Vercel Cron and from internal services.
+ */
+function checkCronBearer(request: Request): boolean {
+  const secret = process.env.CRON_SECRET;
+  if (!secret) return false;
+  const header = request.headers.get("authorization") ?? "";
+  return header === `Bearer ${secret}`;
+}
 
 interface Body {
   maxAgeDays?: number;
@@ -30,16 +43,18 @@ interface Body {
  * Response: { ok, processed, failed, dryRun, candidates }
  */
 async function handle(request: Request, rawBody: string): Promise<Response> {
-  try {
-    const auth = await verifyInternalAuth(request, rawBody);
-    if (!auth.ok) {
-      return Response.json({ error: "unauthorized" }, { status: 401 });
+  if (!checkCronBearer(request)) {
+    try {
+      const auth = await verifyInternalAuth(request, rawBody);
+      if (!auth.ok) {
+        return Response.json({ error: "unauthorized" }, { status: 401 });
+      }
+    } catch (error) {
+      if (error instanceof MissingInternalSecretError) {
+        return Response.json({ error: "internal auth misconfigured" }, { status: 500 });
+      }
+      throw error;
     }
-  } catch (error) {
-    if (error instanceof MissingInternalSecretError) {
-      return Response.json({ error: "internal auth misconfigured" }, { status: 500 });
-    }
-    throw error;
   }
 
   let body: Body = {};
@@ -51,7 +66,7 @@ async function handle(request: Request, rawBody: string): Promise<Response> {
     }
   }
 
-  const maxAgeDays = body.maxAgeDays ?? DEFAULT_MAX_AGE_DAYS;
+  const maxAgeDays = Math.max(body.maxAgeDays ?? DEFAULT_MAX_AGE_DAYS, MIN_MAX_AGE_DAYS);
   const limit = Math.min(body.limit ?? DEFAULT_LIMIT, 1000);
   const dryRun = body.dryRun === true;
 
@@ -109,4 +124,10 @@ async function handle(request: Request, rawBody: string): Promise<Response> {
 export async function POST(request: Request): Promise<Response> {
   const rawBody = await request.text();
   return handle(request, rawBody);
+}
+
+// Vercel Cron sends GET. Accept it with default body so the route can be
+// scheduled without any vercel.ts plumbing for request bodies.
+export async function GET(request: Request): Promise<Response> {
+  return handle(request, "");
 }

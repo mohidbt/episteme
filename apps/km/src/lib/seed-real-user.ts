@@ -39,25 +39,34 @@ export async function seedRealUser(userId: string): Promise<void> {
   const contentMd = await fs.readFile(noteMdPath, "utf8");
   const slug = await resolveNoteSlug(userId, WELCOME_NOTE_TITLE);
 
-  await db.transaction(async (tx) => {
-    const [created] = await tx
-      .insert(libraries)
-      .values({ userId, name: REAL_USER_LIBRARY_NAME })
-      .returning();
-    await tx.insert(folders).values({
-      libraryId: created.id,
-      userId,
-      parentId: null,
-      name: TRASH_FOLDER_NAME,
-      isTrash: true,
+  try {
+    await db.transaction(async (tx) => {
+      const [created] = await tx
+        .insert(libraries)
+        .values({ userId, name: REAL_USER_LIBRARY_NAME })
+        .returning();
+      await tx.insert(folders).values({
+        libraryId: created.id,
+        userId,
+        parentId: null,
+        name: TRASH_FOLDER_NAME,
+        isTrash: true,
+      });
+      await tx.insert(notes).values({
+        libraryId: created.id,
+        userId,
+        folderPath: "",
+        title: WELCOME_NOTE_TITLE,
+        slug,
+        contentMd,
+      });
     });
-    await tx.insert(notes).values({
-      libraryId: created.id,
-      userId,
-      folderPath: "",
-      title: WELCOME_NOTE_TITLE,
-      slug,
-      contentMd,
-    });
-  });
+  } catch (err) {
+    // Concurrent seeder won the race (libraries_user_id_unique). The first
+    // run owns the welcome seed; bail out without surfacing a 500 from the
+    // user-create auth hook.
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes("libraries_user_id_unique")) return;
+    throw err;
+  }
 }
