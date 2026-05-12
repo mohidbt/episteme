@@ -1263,3 +1263,41 @@ def test_invoke_emits_recursion_step_every_chain_end():
     assert len(rs) == 25, f"expected 25 recursion_step frames, got {len(rs)}: {rs!r}"
     assert rs[0]["data"]["step"] == 1
     assert rs[-1]["data"]["step"] == 25
+
+
+# ---------------------------------------------------------------------------
+# /extract data-extract skill body cache (phase 1.9e tech debt)
+# ---------------------------------------------------------------------------
+
+
+def test_data_extract_skill_body_cached_across_calls():
+    """The /extract route caches load_skills(['data-extract']) at module level.
+
+    Walking SKILLS_ROOT and parsing every SKILL.md once per cell × paperset is
+    wasteful. The helper must hit disk on the first call and dict-lookup
+    thereafter.
+    """
+    from routers import km_agent as km_agent_module
+
+    km_agent_module._data_extract_skill_body.cache_clear()
+    try:
+        fake_spec = MagicMock()
+        fake_spec.name = "data-extract"
+        fake_spec.body.return_value = "# data-extract skill body"
+
+        spy = MagicMock(return_value=[fake_spec])
+        with patch("routers.km_agent.load_skills", spy):
+            first = km_agent_module._data_extract_skill_body()
+            second = km_agent_module._data_extract_skill_body()
+            third = km_agent_module._data_extract_skill_body()
+
+        assert first == "# data-extract skill body"
+        assert second == first
+        assert third == first
+        assert spy.call_count == 1, (
+            f"expected load_skills called exactly once across 3 helper calls, "
+            f"got {spy.call_count}"
+        )
+        spy.assert_called_once_with(["data-extract"])
+    finally:
+        km_agent_module._data_extract_skill_body.cache_clear()

@@ -16,6 +16,7 @@ enough for legitimate runs while still bounding pathological loops
 import asyncio
 import json
 import logging
+from functools import cache as _fn_cache
 
 import openai
 from fastapi import APIRouter, HTTPException, Query, Request
@@ -50,6 +51,19 @@ _RECURSION_STEP_INTERVAL = 1
 _RECURSION_LOG_INTERVAL = 10
 
 _GUEST_FORBIDDEN = {"error": "guests cannot use agents", "code": "guest_forbidden"}
+
+
+@_fn_cache
+def _data_extract_skill_body() -> str:
+    """Return the body of the `data-extract` skill, cached for process lifetime.
+
+    /extract runs per cell × per paperset; walking SKILLS_ROOT and parsing every
+    SKILL.md on every request is wasteful. The cache lives here (not in the
+    skill loader) so skill-loader unit tests that monkeypatch SKILLS_ROOT
+    remain unaffected.
+    """
+    [spec] = load_skills(["data-extract"])
+    return spec.body()
 
 
 def _reject_guest(user_id: str) -> None:
@@ -950,8 +964,7 @@ async def extract(req: Request, auth: InternalAuthDep):
     queue: asyncio.Queue = asyncio.Queue()
     SENTINEL = object()
 
-    loaded = load_skills(["data-extract"])
-    skill_body = next((s.body() for s in loaded if s.name == "data-extract"), "")
+    skill_body = _data_extract_skill_body()
 
     async def run_cell(cell: dict) -> bool:
         row = cell["row_idx"]
