@@ -13,29 +13,7 @@ from langchain.agents.middleware.types import AgentMiddleware
 from langchain_core.messages import AIMessage, ToolMessage
 
 
-def _read_paper_targeted(msg: ToolMessage, paper_id: str) -> bool:
-    """Return True if *msg* is the result of a read_paper call for *paper_id*.
-
-    Algorithm:
-    1. The ToolMessage carries ``tool_call_id`` which links it to an AIMessage
-       tool_call entry with the same ``id``.
-    2. We search ``msg``'s sibling context by inspecting the ToolMessage itself
-       — but ToolMessage doesn't carry the originating AIMessage directly.
-    3. Callers (``awrap_tool_call``) pass the full ``state["messages"]`` list;
-       we traverse it here looking for an AIMessage whose ``tool_calls`` contains
-       an entry whose ``id == msg.tool_call_id`` and ``name == "read_paper"``
-       with ``args["paper_id"] == paper_id``.
-
-    This function receives the ToolMessage and the full messages list via the
-    closure in ``awrap_tool_call``; see usage below.
-    """
-    # This is a pure predicate called with the already-matched ToolMessage.
-    # The AIMessage lookup is done in _find_read_paper_call; this function
-    # is kept as the per-message predicate for the filter comprehension.
-    raise NotImplementedError("Use _read_paper_targeted_in_thread instead")
-
-
-def _read_paper_targeted_in_thread(
+def _read_paper_targeted(
     messages: list,
     tool_msg: ToolMessage,
     paper_id: str,
@@ -100,7 +78,7 @@ class GroundingGuard(AgentMiddleware):
             m for m in messages
             if isinstance(m, ToolMessage)
             and getattr(m, "name", None) == "read_paper"
-            and _read_paper_targeted_in_thread(messages, m, paper_id)
+            and _read_paper_targeted(messages, m, paper_id)
         ]
 
         if not prior:
