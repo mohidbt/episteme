@@ -360,26 +360,7 @@ async def build_km_agent(
     tools = _filter_tools_for_permissions(tools, permissions=permissions)
     subagents = _select_subagents(loaded, available_tools=tools)
 
-    # Advertise enabled skills in the system prompt (name + description only).
-    # Full skill bodies are not inlined to avoid token bloat; the agent reads
-    # them on-demand via the filesystem tools when a skill matches the prompt.
-    # SkillsMiddleware is disabled (skills=None) because it leaks absolute
-    # filesystem paths in its advertisement.
     system_prompt = _MEMORY_SYSTEM_PROMPT
-    if loaded:
-        bullets = "\n".join(f"- **{s.name}**: {s.description}" for s in loaded)
-        system_prompt += (
-            "\n\n## Skills (workflows you execute INLINE)\n\n"
-            "The following skills are enabled for this conversation. A skill is "
-            "a workflow YOU execute step-by-step yourself, using your tools. "
-            "Skills are NOT subagents and MUST NOT be passed to the `task` tool "
-            "as a `subagent_type` — `task` only accepts the subagent types its "
-            "own description lists.\n\n"
-            "When the user's request matches a skill's description, follow the "
-            "skill's instructions inline. If you need the full workflow, read "
-            f"the skill's SKILL.md from `/.episteme/agents/skills/<name>/SKILL.md`.\n\n"
-            f"{bullets}"
-        )
 
     # Inject user-authored personal skills into the system prompt.
     # Personal skills are simple (name + instructions) and don't have
@@ -408,7 +389,7 @@ async def build_km_agent(
         model=model,
         tools=tools,
         subagents=subagents,
-        skills=None,
+        skills=["/.episteme/agents/skills/"],
         system_prompt=system_prompt,
         store=store,
         checkpointer=saver,
