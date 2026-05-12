@@ -1,0 +1,243 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - generic [ref=e3]:
+      - generic [ref=e4]:
+        - link "ε Example Library" [ref=e6] [cursor=pointer]:
+          - /url: /
+          - generic [ref=e7]: ε
+          - generic [ref=e8]: Example Library
+        - generic [ref=e9]:
+          - generic [ref=e10]:
+            - button "Drive" [expanded] [ref=e11]:
+              - img [ref=e12]
+              - generic [ref=e17]: Drive
+              - img [ref=e18]
+            - generic [ref=e20]:
+              - list [ref=e21]:
+                - listitem [ref=e22]:
+                  - button "Bio" [ref=e23]:
+                    - img [ref=e24]
+                    - img [ref=e26]
+                    - generic [ref=e28]: Bio
+                - listitem [ref=e29]:
+                  - button "Bio (merged from anon)" [ref=e30]:
+                    - img [ref=e31]
+                    - img [ref=e33]
+                    - generic [ref=e35]: Bio (merged from anon)
+                - listitem [ref=e36]:
+                  - button "PSM" [ref=e37]:
+                    - img [ref=e38]
+                    - img [ref=e40]
+                    - generic [ref=e42]: PSM
+                - listitem [ref=e43]:
+                  - button "PSM (merged from anon)" [ref=e44]:
+                    - img [ref=e45]
+                    - img [ref=e47]
+                    - generic [ref=e49]: PSM (merged from anon)
+                - listitem [ref=e50]:
+                  - button "Reading List" [ref=e51]:
+                    - img [ref=e52]
+                    - img [ref=e54]
+                    - generic [ref=e56]: Reading List
+                - listitem [ref=e57]:
+                  - button "Reading List (merged from anon)" [ref=e58]:
+                    - img [ref=e59]
+                    - img [ref=e61]
+                    - generic [ref=e63]: Reading List (merged from anon)
+                - listitem [ref=e64]:
+                  - button "Highly accurate protein structure prediction with AlphaFold" [ref=e65] [cursor=pointer]:
+                    - generic [ref=e66]: Highly accurate protein structure prediction with AlphaFold
+                - listitem [ref=e67]:
+                  - button "Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks" [ref=e68] [cursor=pointer]:
+                    - generic [ref=e69]: Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks
+                - listitem [ref=e70]:
+                  - button "Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks" [ref=e71] [cursor=pointer]:
+                    - generic [ref=e72]: Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks
+                - listitem [ref=e73]:
+                  - button "Welcome to Episteme" [ref=e74] [cursor=pointer]:
+                    - generic [ref=e75]: Welcome to Episteme
+                - listitem [ref=e76]:
+                  - link "Trash" [ref=e77] [cursor=pointer]:
+                    - /url: /trash
+                    - img [ref=e78]
+                    - generic [ref=e81]: Trash
+                - listitem "Drop here to move to library root" [ref=e82]
+              - status [ref=e83]
+          - generic [ref=e84]:
+            - button "Collections" [ref=e85]:
+              - img [ref=e86]
+              - generic [ref=e89]: Collections
+              - img [ref=e90]
+            - list [ref=e93]:
+              - listitem [ref=e94]:
+                - link "Papers" [ref=e95] [cursor=pointer]:
+                  - /url: /papers
+                  - img [ref=e96]
+                  - generic [ref=e99]: Papers
+              - listitem [ref=e100]:
+                - link "References" [ref=e101] [cursor=pointer]:
+                  - /url: /references
+                  - img [ref=e102]
+                  - generic [ref=e105]: References
+              - listitem [ref=e106]:
+                - link "Notes" [ref=e107] [cursor=pointer]:
+                  - /url: /notes
+                  - img [ref=e108]
+                  - generic [ref=e111]: Notes
+              - listitem [ref=e112]:
+                - link "Graph" [ref=e113] [cursor=pointer]:
+                  - /url: /graph
+                  - img [ref=e114]
+                  - generic [ref=e119]: Graph
+              - listitem [ref=e120]:
+                - link "Papersets" [ref=e121] [cursor=pointer]:
+                  - /url: /papersets
+                  - img [ref=e122]
+                  - generic [ref=e124]: Papersets
+          - generic [ref=e125]:
+            - button "Agent" [ref=e126]:
+              - img [ref=e127]
+              - generic [ref=e129]: Agent
+              - img [ref=e130]
+            - list [ref=e133]:
+              - listitem [ref=e134]:
+                - link "Convos" [ref=e135] [cursor=pointer]:
+                  - /url: /agents
+                  - img [ref=e136]
+                  - generic [ref=e139]: Convos
+          - generic [ref=e140]:
+            - button "Settings" [ref=e141]:
+              - img [ref=e142]
+              - generic [ref=e153]: Settings
+              - img [ref=e154]
+            - list [ref=e157]:
+              - listitem [ref=e158]:
+                - link "Data" [ref=e159] [cursor=pointer]:
+                  - /url: /settings/data
+                  - img [ref=e160]
+                  - generic [ref=e164]: Data
+              - listitem [ref=e165]:
+                - link "Appearance" [ref=e166] [cursor=pointer]:
+                  - /url: /settings/appearance
+                  - img [ref=e167]
+                  - generic [ref=e173]: Appearance
+              - listitem [ref=e174]:
+                - link "Agent settings" [ref=e175] [cursor=pointer]:
+                  - /url: /settings/agents
+                  - img [ref=e176]
+                  - generic [ref=e179]: Agent settings
+      - button "Collapse sidebar" [ref=e180]:
+        - img [ref=e181]
+    - generic [ref=e183]:
+      - tablist "Open tabs" [ref=e184]:
+        - tab "Drive Close Drive" [ref=e185]:
+          - button "Drive" [ref=e186]
+          - button "Close Drive" [ref=e187]:
+            - img [ref=e188]
+        - tab "Welcome to Episteme Close Welcome to Episteme" [ref=e191]:
+          - button "Welcome to Episteme" [ref=e192]
+          - button "Close Welcome to Episteme" [ref=e193]:
+            - img [ref=e194]
+        - tab "Papers Close Papers" [ref=e197]:
+          - button "Papers" [ref=e198]
+          - button "Close Papers" [ref=e199]:
+            - img [ref=e200]
+        - tab "Settings Close Settings" [ref=e203]:
+          - button "Settings" [ref=e204]
+          - button "Close Settings" [ref=e205]:
+            - img [ref=e206]
+        - tab "Reference Close Reference" [ref=e209]:
+          - button "Reference" [ref=e210]
+          - button "Close Reference" [ref=e211]:
+            - img [ref=e212]
+        - tab "Paper Close Paper" [ref=e215]:
+          - button "Paper" [ref=e216]
+          - button "Close Paper" [ref=e217]:
+            - img [ref=e218]
+        - tab "Reader Close Reader" [ref=e221]:
+          - button "Reader" [ref=e222]
+          - button "Close Reader" [ref=e223]:
+            - img [ref=e224]
+        - tab "Papersets Close Papersets" [ref=e227]:
+          - button "Papersets" [ref=e228]
+          - button "Close Papersets" [ref=e229]:
+            - img [ref=e230]
+        - tab "Paperset Close Paperset" [selected] [ref=e330]:
+          - button "Paperset" [ref=e331]
+          - button "Close Paperset" [ref=e332]:
+            - img [ref=e333]
+        - button "New tab" [ref=e233]:
+          - img [ref=e234]
+      - status [ref=e235]
+      - main [ref=e236]:
+        - generic [ref=e336]:
+          - generic [ref=e337]:
+            - navigation "Breadcrumbs" [ref=e338]:
+              - link "Example Library" [ref=e339] [cursor=pointer]:
+                - /url: /
+                - generic [ref=e340]: Example Library
+              - img [ref=e341]
+              - link "PSM (merged from anon)" [ref=e343] [cursor=pointer]:
+                - /url: /drive/PSM%20(merged%20from%20anon)
+                - generic [ref=e344]: PSM (merged from anon)
+              - img [ref=e345]
+              - generic [ref=e348]: pca-survey.csv
+            - generic [ref=e349]:
+              - heading "pca-survey.csv" [level=1] [ref=e350]
+              - link "Download pca-survey.csv" [ref=e352] [cursor=pointer]:
+                - /url: /api/papersets/0c9c18ed-5dbb-4e76-a2d7-3968047f1d53/file
+                - img [ref=e353]
+                - text: Download
+          - generic [ref=e356]:
+            - button "Add papers" [ref=e357]:
+              - img
+              - text: Add papers
+            - button "Add column" [ref=e358]:
+              - img
+              - text: Add column
+            - button "Run enrichment Cmd+Enter" [disabled]:
+              - generic: ⬡
+              - text: Run enrichment
+              - generic "Cmd+Enter":
+                - generic: ⌘
+                - generic: +
+                - generic: ↵
+          - table [ref=e362]:
+            - rowgroup [ref=e363]:
+              - row "Paper Uses PCA Actions for column Uses PCA Variables matched on Actions for column Variables matched on" [ref=e364]:
+                - columnheader "Paper" [ref=e365]
+                - columnheader "Uses PCA Actions for column Uses PCA" [ref=e366] [cursor=pointer]:
+                  - generic [ref=e367]:
+                    - generic [ref=e368]: Uses PCA
+                    - button "Actions for column Uses PCA" [ref=e369]:
+                      - img [ref=e370]
+                - columnheader "Variables matched on Actions for column Variables matched on" [ref=e374] [cursor=pointer]:
+                  - generic [ref=e375]:
+                    - generic [ref=e376]: Variables matched on
+                    - button "Actions for column Variables matched on" [ref=e377]:
+                      - img [ref=e378]
+            - rowgroup [ref=e382]:
+              - row "Using Propensity-Score Matched Cohorts to Evaluate Career Outcomes for Medical Students Completing the Underserved Pathway Yes, foundational derivation n-dimensional point coordinates" [ref=e383]:
+                - rowheader "Using Propensity-Score Matched Cohorts to Evaluate Career Outcomes for Medical Students Completing the Underserved Pathway" [ref=e384] [cursor=pointer]:
+                  - generic [ref=e385]: Using Propensity-Score Matched Cohorts to Evaluate Career Outcomes for Medical Students Completing the Underserved Pathway
+                - cell "Yes, foundational derivation" [ref=e386]:
+                  - generic [ref=e388]: Yes, foundational derivation
+                - cell "n-dimensional point coordinates" [ref=e389]:
+                  - generic [ref=e391]: n-dimensional point coordinates
+              - 'row "Propensity-score matching with GAN-generated observations from electronic health records: simulation study and application to the evaluation of prone positioning in COVID-19 patients under mechanical ventilation — —" [ref=e392]':
+                - 'rowheader "Propensity-score matching with GAN-generated observations from electronic health records: simulation study and application to the evaluation of prone positioning in COVID-19 patients under mechanical ventilation" [ref=e393] [cursor=pointer]':
+                  - generic [ref=e394]: "Propensity-score matching with GAN-generated observations from electronic health records: simulation study and application to the evaluation of prone positioning in COVID-19 patients under mechanical ventilation"
+                - cell "—" [ref=e395]
+                - cell "—" [ref=e396]
+              - row "Propensity score matching–difference-in-differences analysis of the casual effect of opening intermediate high-speed railway stations on employment status in surrounding municipalities Yes, comprehensive treatment (book) general multivariate observations" [ref=e397]:
+                - rowheader "Propensity score matching–difference-in-differences analysis of the casual effect of opening intermediate high-speed railway stations on employment status in surrounding municipalities" [ref=e398] [cursor=pointer]:
+                  - generic [ref=e399]: Propensity score matching–difference-in-differences analysis of the casual effect of opening intermediate high-speed railway stations on employment status in surrounding municipalities
+                - cell "Yes, comprehensive treatment (book)" [ref=e400]:
+                  - generic [ref=e402]: Yes, comprehensive treatment (book)
+                - cell "general multivariate observations" [ref=e403]:
+                  - generic [ref=e405]: general multivariate observations
+    - button "Open agent" [ref=e277]:
+      - img "Open agent" [ref=e278]:
+        - img [ref=e279]
+  - region "Notifications alt+T"
+  - alert [ref=e329]

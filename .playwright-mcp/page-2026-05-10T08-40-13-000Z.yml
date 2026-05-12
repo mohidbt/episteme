@@ -1,0 +1,235 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e20]:
+    - generic [ref=e21]:
+      - generic [ref=e22]:
+        - link "ε Example Library" [ref=e24] [cursor=pointer]:
+          - /url: /
+          - generic [ref=e25]: ε
+          - generic [ref=e26]: Example Library
+        - generic [ref=e27]:
+          - button "Drive" [ref=e29]:
+            - img [ref=e30]
+            - generic [ref=e35]: Drive
+            - img [ref=e36]
+          - generic [ref=e38]:
+            - button "Collections" [ref=e39]:
+              - img [ref=e40]
+              - generic [ref=e43]: Collections
+              - img [ref=e44]
+            - list [ref=e47]:
+              - listitem [ref=e48]:
+                - link "Papers" [ref=e49] [cursor=pointer]:
+                  - /url: /papers
+                  - img [ref=e50]
+                  - generic [ref=e53]: Papers
+              - listitem [ref=e54]:
+                - link "References" [ref=e55] [cursor=pointer]:
+                  - /url: /references
+                  - img [ref=e56]
+                  - generic [ref=e59]: References
+              - listitem [ref=e60]:
+                - link "Notes" [ref=e61] [cursor=pointer]:
+                  - /url: /notes
+                  - img [ref=e62]
+                  - generic [ref=e65]: Notes
+              - listitem [ref=e66]:
+                - link "Graph" [ref=e67] [cursor=pointer]:
+                  - /url: /graph
+                  - img [ref=e68]
+                  - generic [ref=e73]: Graph
+              - listitem [ref=e74]:
+                - link "Papersets" [ref=e75] [cursor=pointer]:
+                  - /url: /papersets
+                  - img [ref=e76]
+                  - generic [ref=e78]: Papersets
+          - generic [ref=e79]:
+            - button "Agent" [ref=e80]:
+              - img [ref=e81]
+              - generic [ref=e83]: Agent
+              - img [ref=e84]
+            - list [ref=e87]:
+              - listitem [ref=e88]:
+                - link "Convos" [ref=e89] [cursor=pointer]:
+                  - /url: /agents
+                  - img [ref=e90]
+                  - generic [ref=e93]: Convos
+          - generic [ref=e94]:
+            - button "Settings" [ref=e95]:
+              - img [ref=e96]
+              - generic [ref=e107]: Settings
+              - img [ref=e108]
+            - list [ref=e111]:
+              - listitem [ref=e112]:
+                - link "Data" [ref=e113] [cursor=pointer]:
+                  - /url: /settings/data
+                  - img [ref=e114]
+                  - generic [ref=e118]: Data
+              - listitem [ref=e119]:
+                - link "Appearance" [ref=e120] [cursor=pointer]:
+                  - /url: /settings/appearance
+                  - img [ref=e121]
+                  - generic [ref=e127]: Appearance
+              - listitem [ref=e128]:
+                - link "Agent settings" [ref=e129] [cursor=pointer]:
+                  - /url: /settings/agents
+                  - img [ref=e130]
+                  - generic [ref=e133]: Agent settings
+      - button "Collapse sidebar" [ref=e134]:
+        - img [ref=e135]
+    - generic [ref=e137]:
+      - tablist "Open tabs" [ref=e138]:
+        - tab "Drive Close Drive" [ref=e139]:
+          - button "Drive" [ref=e140]
+          - button "Close Drive" [ref=e141]:
+            - img [ref=e142]
+        - tab "Welcome to Episteme Close Welcome to Episteme" [ref=e145]:
+          - button "Welcome to Episteme" [ref=e146]
+          - button "Close Welcome to Episteme" [ref=e147]:
+            - img [ref=e148]
+        - tab "Papers Close Papers" [selected] [ref=e151]:
+          - button "Papers" [ref=e152]
+          - button "Close Papers" [ref=e153]:
+            - img [ref=e154]
+        - button "New tab" [ref=e157]:
+          - img [ref=e158]
+      - status [ref=e159]
+      - main [ref=e160]:
+        - generic [ref=e161]:
+          - heading "Papers" [level=1] [ref=e162]
+          - button "Choose File" [ref=e163]
+          - button "Upload PDF" [ref=e164]:
+            - img [ref=e165]
+            - text: Upload PDF
+          - generic [ref=e168]: →
+          - button "Library root" [ref=e169]:
+            - img [ref=e170]
+            - generic [ref=e172]: Library root
+            - img [ref=e173]
+          - generic [ref=e175]: or drop a file here
+          - button "Folder" [ref=e177]:
+            - text: Folder
+            - img [ref=e178]
+          - generic [ref=e180]:
+            - group "Papers view mode" [ref=e182]:
+              - button "Grid view" [pressed] [ref=e183]:
+                - img
+              - button "List view" [ref=e184]:
+                - img
+            - generic [ref=e185]:
+              - generic [ref=e186]:
+                - link "Spontaneous switching in a protein signalling array reveals near-critical cooperativity" [ref=e187] [cursor=pointer]:
+                  - /url: /p/3ac1a2d2-f2cf-4ec2-80d8-f00a57116f05
+                  - generic [ref=e190]:
+                    - generic [ref=e191]:
+                      - heading "Spontaneous switching in a protein signalling array reveals near-critical cooperativity" [level=3] [ref=e192]
+                      - generic [ref=e193]: "2026"
+                    - paragraph [ref=e194]: Johannes M. Keegstra
+                - generic [ref=e195] [cursor=pointer]: Bio (merged from anon)
+              - generic [ref=e196]:
+                - link "A travelling-wave strategy for plant–fungal trade" [ref=e197] [cursor=pointer]:
+                  - /url: /p/eb67d868-3a3f-4b53-80f9-02e5b8a2df16
+                  - generic [ref=e200]:
+                    - generic [ref=e201]:
+                      - heading "A travelling-wave strategy for plant–fungal trade" [level=3] [ref=e202]
+                      - generic [ref=e203]: "2025"
+                    - paragraph [ref=e204]: Loreto Oyarte Galvez, Corentin Bisot, Philippe Bourrianne, …
+                - generic [ref=e205] [cursor=pointer]: Bio (merged from anon)
+              - generic [ref=e206]:
+                - link "Propensity score matching–difference-in-differences analysis of the casual effect of opening intermediate high-speed railway stations on employment status in surrounding municipalities" [ref=e207] [cursor=pointer]:
+                  - /url: /p/e977a3c0-eb35-46da-ba78-99f1bf774738
+                  - generic [ref=e208]:
+                    - generic [ref=e210]:
+                      - img [ref=e211]
+                      - generic [ref=e214]: No cover
+                    - generic [ref=e215]:
+                      - generic [ref=e216]:
+                        - heading "Propensity score matching–difference-in-differences analysis of the casual effect of opening intermediate high-speed railway stations on employment status in surrounding municipalities" [level=3] [ref=e217]
+                        - generic [ref=e218]: "2025"
+                      - paragraph [ref=e219]: Jikang Fan, Shintaro Terabe, Hideki Yaginuma
+                - generic [ref=e220] [cursor=pointer]: PSM (merged from anon)
+              - generic [ref=e221]:
+                - 'link "Propensity-score matching with GAN-generated observations from electronic health records: simulation study and application to the evaluation of prone positioning in COVID-19 patients under mechanical ventilation" [ref=e222] [cursor=pointer]':
+                  - /url: /p/7baece0b-192b-45dc-bbfc-98c068dc74c3
+                  - generic [ref=e223]:
+                    - generic [ref=e225]:
+                      - img [ref=e226]
+                      - generic [ref=e229]: No cover
+                    - generic [ref=e230]:
+                      - generic [ref=e231]:
+                        - 'heading "Propensity-score matching with GAN-generated observations from electronic health records: simulation study and application to the evaluation of prone positioning in COVID-19 patients under mechanical ventilation" [level=3] [ref=e232]'
+                        - generic [ref=e233]: "2025"
+                      - paragraph [ref=e234]: Bertrand Bouvarel, Benjamin Glemain, Fabrice Carrat, …
+                - generic [ref=e235] [cursor=pointer]: PSM (merged from anon)
+              - generic [ref=e236]:
+                - link "Using Propensity-Score Matched Cohorts to Evaluate Career Outcomes for Medical Students Completing the Underserved Pathway" [ref=e237] [cursor=pointer]:
+                  - /url: /p/f219b60d-1279-4421-9a3d-47d6bf574f6f
+                  - generic [ref=e240]:
+                    - generic [ref=e241]:
+                      - heading "Using Propensity-Score Matched Cohorts to Evaluate Career Outcomes for Medical Students Completing the Underserved Pathway" [level=3] [ref=e242]
+                      - generic [ref=e243]: "2025"
+                    - paragraph [ref=e244]: Genya Shimkin, Kimberly Kardonsky, Alisse Cassell, …
+                - generic [ref=e245] [cursor=pointer]: PSM (merged from anon)
+              - link "Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks" [ref=e247] [cursor=pointer]:
+                - /url: /p/3495457a-0fbb-4358-9d46-b74e22988977
+                - generic [ref=e250]:
+                  - generic [ref=e251]:
+                    - heading "Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks" [level=3] [ref=e252]
+                    - generic [ref=e253]: "2020"
+                  - paragraph [ref=e254]: Patrick Lewis, Ethan Perez, Aleksandra Piktus, …
+              - generic [ref=e255]:
+                - link "Spontaneous switching in a protein signalling array reveals near-critical cooperativity" [ref=e256] [cursor=pointer]:
+                  - /url: /p/72e1ca2f-4b4f-44b5-bcc0-fc01b3d088a2
+                  - generic [ref=e259]:
+                    - generic [ref=e260]:
+                      - heading "Spontaneous switching in a protein signalling array reveals near-critical cooperativity" [level=3] [ref=e261]
+                      - generic [ref=e262]: "2026"
+                    - paragraph [ref=e263]: Johannes M. Keegstra
+                - generic [ref=e264] [cursor=pointer]: Bio
+              - generic [ref=e265]:
+                - link "A travelling-wave strategy for plant–fungal trade" [ref=e266] [cursor=pointer]:
+                  - /url: /p/07e64dd3-7632-4f81-9129-a1864a65e944
+                  - generic [ref=e269]:
+                    - generic [ref=e270]:
+                      - heading "A travelling-wave strategy for plant–fungal trade" [level=3] [ref=e271]
+                      - generic [ref=e272]: "2025"
+                    - paragraph [ref=e273]: Loreto Oyarte Galvez, Corentin Bisot, Philippe Bourrianne, …
+                - generic [ref=e274] [cursor=pointer]: Bio
+              - generic [ref=e275]:
+                - link "Propensity score matching–difference-in-differences analysis of the casual effect of opening intermediate high-speed railway stations on employment status in surrounding municipalities" [ref=e276] [cursor=pointer]:
+                  - /url: /p/87c9d721-1400-48b6-a4ad-34786658020b
+                  - generic [ref=e279]:
+                    - generic [ref=e280]:
+                      - heading "Propensity score matching–difference-in-differences analysis of the casual effect of opening intermediate high-speed railway stations on employment status in surrounding municipalities" [level=3] [ref=e281]
+                      - generic [ref=e282]: "2025"
+                    - paragraph [ref=e283]: Jikang Fan, Shintaro Terabe, Hideki Yaginuma
+                - generic [ref=e284] [cursor=pointer]: PSM
+              - generic [ref=e285]:
+                - 'link "Propensity-score matching with GAN-generated observations from electronic health records: simulation study and application to the evaluation of prone positioning in COVID-19 patients under mechanical ventilation" [ref=e286] [cursor=pointer]':
+                  - /url: /p/d88eaf74-7f4f-46a2-9944-e1b38207b936
+                  - generic [ref=e289]:
+                    - generic [ref=e290]:
+                      - 'heading "Propensity-score matching with GAN-generated observations from electronic health records: simulation study and application to the evaluation of prone positioning in COVID-19 patients under mechanical ventilation" [level=3] [ref=e291]'
+                      - generic [ref=e292]: "2025"
+                    - paragraph [ref=e293]: Bertrand Bouvarel, Benjamin Glemain, Fabrice Carrat, …
+                - generic [ref=e294] [cursor=pointer]: PSM
+              - generic [ref=e295]:
+                - link "Using Propensity-Score Matched Cohorts to Evaluate Career Outcomes for Medical Students Completing the Underserved Pathway" [ref=e296] [cursor=pointer]:
+                  - /url: /p/8384aeda-96d1-4370-a2cc-56ce06be202e
+                  - generic [ref=e299]:
+                    - generic [ref=e300]:
+                      - heading "Using Propensity-Score Matched Cohorts to Evaluate Career Outcomes for Medical Students Completing the Underserved Pathway" [level=3] [ref=e301]
+                      - generic [ref=e302]: "2025"
+                    - paragraph [ref=e303]: Genya Shimkin, Kimberly Kardonsky, Alisse Cassell, …
+                - generic [ref=e304] [cursor=pointer]: PSM
+              - link "Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks" [ref=e306] [cursor=pointer]:
+                - /url: /p/81eef1d8-ade0-42a3-ac73-1208fe5e9b68
+                - generic [ref=e309]:
+                  - generic [ref=e310]:
+                    - heading "Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks" [level=3] [ref=e311]
+                    - generic [ref=e312]: "2020"
+                  - paragraph [ref=e313]: Patrick Lewis, Ethan Perez, Aleksandra Piktus, …
+    - button "Open agent" [ref=e314]:
+      - img "Open agent" [ref=e315]:
+        - img [ref=e316]
+  - region "Notifications alt+T"
+  - alert [ref=e19]
