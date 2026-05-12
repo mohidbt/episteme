@@ -280,6 +280,54 @@ def test_extract_failure_isolation():
 
 
 # ---------------------------------------------------------------------------
+# T6: per-cell prompt contains data-extract skill body
+# ---------------------------------------------------------------------------
+
+
+def test_per_cell_prompt_contains_skill_body():
+    """The prompt passed to astream_events must include the data-extract skill body."""
+    cells = [{"row_idx": 0, "col_name": "n_subjects"}]
+    body = json.dumps({"paperset_id": "pset-1", "cells": cells}).encode()
+    headers = _signed_headers("POST", "/agents/km/extract", body)
+
+    captured_prompts: list[str] = []
+
+    agent = MagicMock()
+
+    async def capturing_astream(input_, config, version):  # noqa: ARG001
+        captured_prompts.append(input_["messages"][0]["content"])
+        for ev in _csv_write_cell_event(0, "n_subjects", "42", "paper-A", ["paper-A:7"]):
+            yield ev
+
+    agent.astream_events = capturing_astream
+
+    with patch(
+        "routers.km_agent.km_get",
+        new_callable=AsyncMock,
+        return_value=_DEFAULT_PAPERSET,
+    ), patch(
+        "routers.km_agent.build_km_agent",
+        new_callable=AsyncMock,
+        return_value=agent,
+    ):
+        r = client.post("/agents/km/extract", content=body, headers=headers)
+
+    assert r.status_code == 200
+    assert len(captured_prompts) == 1
+    prompt = captured_prompts[0]
+
+    # Skill body heading
+    assert "# Data extract" in prompt
+    # Specific rule from SKILL.md body
+    assert "read_paper(paper_id, scope)" in prompt
+    # Current task separator injected after skill body
+    assert "# Current task" in prompt
+    # Cell-specific context
+    assert "paper-A" in prompt
+    assert "n_subjects" in prompt
+
+
+# ---------------------------------------------------------------------------
 # Concurrency cap: 8 cells dispatched, max in-flight == 4
 # ---------------------------------------------------------------------------
 

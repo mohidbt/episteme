@@ -24,6 +24,7 @@ from langgraph.types import Command
 
 from deps.auth import InternalAuthDep
 from km_agent import build_km_agent
+from skills import load_skills
 from skills.drive_loader import DriveSkillsLoader
 from checkpointer import get_saver
 from store import get_store
@@ -902,6 +903,9 @@ async def extract(req: Request, auth: InternalAuthDep):
     queue: asyncio.Queue = asyncio.Queue()
     SENTINEL = object()
 
+    loaded = load_skills(["data-extract"])
+    skill_body = next((s.body() for s in loaded if s.name == "data-extract"), "")
+
     async def run_cell(cell: dict) -> bool:
         row = cell["row_idx"]
         col = cell["col_name"]
@@ -910,11 +914,11 @@ async def extract(req: Request, auth: InternalAuthDep):
             paper_id = (row_refs[row] or {}).get("paper_id", "")
             description = col_by_name[col].get("description", "")
             prompt = (
+                f"{skill_body}\n\n"
+                "---\n\n# Current task\n"
                 f"Fill cell (row={row}, col=\"{col}\") in paperset file_id={paperset_id}.\n"
                 f"Target paper_id: {paper_id}\n"
                 f"Column description (your extraction prompt): {description}\n"
-                "Follow the data-extract skill rules: scope-first read, one-value, "
-                "mandatory grounding, \"n/a\" for unanswered."
             )
             tid = f"extract:{paperset_id}:{row}:{col}"
             filled_payload: dict | None = None
