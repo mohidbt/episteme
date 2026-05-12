@@ -63,20 +63,28 @@ export async function POST(req: Request) {
   if (items.some((it) => it.paperId !== items[0].paperId)) {
     return jsonError(400, "validation", { message: "all highlights must target the same paperId" });
   }
-  const rows = await db
-    .insert(paperHighlights)
-    .values(
-      items.map((it) => ({
-        paperId: it.paperId,
-        userId,
-        page: it.page,
-        bbox: (it.bbox ?? null) as typeof paperHighlights.$inferInsert["bbox"],
-        runId: it.runId ?? null,
-        toolCallId: it.toolCallId ?? null,
-        color: it.color ?? null,
-        noteMd: it.noteMd ?? null,
-      })),
-    )
-    .returning();
+  let rows;
+  try {
+    rows = await db
+      .insert(paperHighlights)
+      .values(
+        items.map((it) => ({
+          paperId: it.paperId,
+          userId,
+          page: it.page,
+          bbox: (it.bbox ?? null) as typeof paperHighlights.$inferInsert["bbox"],
+          runId: it.runId ?? null,
+          toolCallId: it.toolCallId ?? null,
+          color: it.color ?? null,
+          noteMd: it.noteMd ?? null,
+        })),
+      )
+      .returning();
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    const code = (e as { code?: string })?.code;
+    console.error("[paper-highlights POST] insert failed", { code, msg, itemCount: items.length, sampleBboxType: Array.isArray(items[0]?.bbox) ? "array" : typeof items[0]?.bbox });
+    return jsonError(500, "db_insert_failed", { code, message: msg });
+  }
   return Response.json(Array.isArray(parsed.data) ? rows : rows[0], { status: 201 });
 }
