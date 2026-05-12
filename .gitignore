@@ -24,3 +24,5 @@ test-results
 **/uploads
 .worktrees/
 .claude/worktrees/
+.claude/scheduled_tasks.lock
+.playwright-mcp/
