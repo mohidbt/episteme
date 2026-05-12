@@ -27,6 +27,7 @@ from langgraph.graph.state import CompiledStateGraph
 from langgraph.store.base import BaseStore
 
 from lib.km_http import km_get
+from middleware.grounding_guard import GroundingGuard
 from skills import SkillSpec
 from skills.drive_loader import DriveSkillsLoader
 from subagents import build_researcher, build_synthesizer, build_verifier
@@ -395,4 +396,5 @@ async def build_km_agent(
         checkpointer=saver,
         backend=_build_memory_backend(user_id=user_id, store=store),
         interrupt_on=_build_interrupt_on(approval_rules, loaded_skills=loaded),
+        middleware=[GroundingGuard()],
     )
