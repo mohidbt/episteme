@@ -565,6 +565,130 @@ def test_resume_calls_astream_events_with_command():
     assert captured["resume_value"] == {"decisions": [{"type": "approve"}]}
 
 
+def _agent_with_pending(n_pending: int, captured: dict):
+    """Build a mock agent whose aget_state returns N pending action_requests.
+
+    astream_events captures the resume value so tests can assert the resolved
+    decisions list length and order.
+    """
+    async def capture_input(input_, config, version):
+        from langgraph.types import Command  # noqa: PLC0415
+
+        captured["input"] = input_
+        captured["is_command"] = isinstance(input_, Command)
+        captured["resume_value"] = getattr(input_, "resume", None)
+        if False:
+            yield
+
+    agent = MagicMock()
+    agent.astream_events = capture_input
+    snapshot = MagicMock()
+    action_requests = [
+        {"id": f"tc-{i}", "name": "highlight", "args": {"page": i}}
+        for i in range(n_pending)
+    ]
+    task = MagicMock()
+    task.interrupts = [MagicMock(value={"action_requests": action_requests})]
+    snapshot.tasks = [task]
+    agent.aget_state = AsyncMock(return_value=snapshot)
+    return agent
+
+
+def test_resume_positional_pass_through_for_matching_decision_count():
+    """N=3 pending action_requests + 3 client decisions → resume length 3, order preserved."""
+    captured: dict = {}
+    agent = _agent_with_pending(3, captured)
+    body = json.dumps({
+        "thread_id": "t-batch-3",
+        "decisions": [
+            {"tool_call_id": "tc-0", "type": "approve"},
+            {"tool_call_id": "tc-1", "type": "reject"},
+            {"tool_call_id": "tc-2", "type": "approve"},
+        ],
+    }).encode()
+
+    with patch("routers.km_agent.build_km_agent", new_callable=AsyncMock, return_value=agent):
+        r = client.post(
+            "/agents/km/resume",
+            content=body,
+            headers=_signed_headers("POST", "/agents/km/resume", body),
+        )
+
+    assert r.status_code == 200
+    decisions = captured["resume_value"]["decisions"]
+    assert len(decisions) == 3
+    assert [d["type"] for d in decisions] == ["approve", "reject", "approve"]
+
+
+def test_resume_broadcasts_single_decision_to_all_pending():
+    """N=5 pending, client sends [{type:'approve'}] → broadcast to 5 approves."""
+    captured: dict = {}
+    agent = _agent_with_pending(5, captured)
+    body = json.dumps({
+        "thread_id": "t-batch-5",
+        "decisions": [{"type": "approve"}],
+    }).encode()
+
+    with patch("routers.km_agent.build_km_agent", new_callable=AsyncMock, return_value=agent):
+        r = client.post(
+            "/agents/km/resume",
+            content=body,
+            headers=_signed_headers("POST", "/agents/km/resume", body),
+        )
+
+    assert r.status_code == 200
+    decisions = captured["resume_value"]["decisions"]
+    assert len(decisions) == 5
+    assert all(d["type"] == "approve" for d in decisions)
+
+
+def test_resume_broadcasts_single_with_tool_call_id_to_all_pending():
+    """N=2 pending, client sends [{tool_call_id:'X', type:'approve'}] → broadcast 2."""
+    captured: dict = {}
+    agent = _agent_with_pending(2, captured)
+    body = json.dumps({
+        "thread_id": "t-batch-2",
+        "decisions": [{"tool_call_id": "X", "type": "approve"}],
+    }).encode()
+
+    with patch("routers.km_agent.build_km_agent", new_callable=AsyncMock, return_value=agent):
+        r = client.post(
+            "/agents/km/resume",
+            content=body,
+            headers=_signed_headers("POST", "/agents/km/resume", body),
+        )
+
+    assert r.status_code == 200
+    decisions = captured["resume_value"]["decisions"]
+    assert len(decisions) == 2
+    assert all(d["type"] == "approve" for d in decisions)
+    # _tool_call_id internal key must be stripped before forwarding to middleware.
+    assert all("tool_call_id" not in d and "_tool_call_id" not in d for d in decisions)
+
+
+def test_resume_rejects_mismatched_count_with_400():
+    """N=3 pending, client sends 2 decisions (and not 1) → HTTP 400."""
+    captured: dict = {}
+    agent = _agent_with_pending(3, captured)
+    body = json.dumps({
+        "thread_id": "t-mismatch",
+        "decisions": [{"type": "approve"}, {"type": "approve"}],
+    }).encode()
+
+    with patch("routers.km_agent.build_km_agent", new_callable=AsyncMock, return_value=agent):
+        r = client.post(
+            "/agents/km/resume",
+            content=body,
+            headers=_signed_headers("POST", "/agents/km/resume", body),
+        )
+
+    assert r.status_code == 400
+    detail = r.json().get("detail", {})
+    assert detail.get("error") == "decision_count_mismatch"
+    assert detail.get("expected") == 3
+    assert detail.get("received") == 2
+
+
 def test_resume_streams_done_event():
     body = json.dumps({"thread_id": "t2", "decisions": []}).encode()
 

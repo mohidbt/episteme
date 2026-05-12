@@ -402,6 +402,136 @@ describe("AgentTranscript", () => {
     });
   });
 
+  it("Approve on batched (N=3) interrupt POSTs N decisions in order (phase 1.9f)", async () => {
+    const events: AgentEvent[] = [
+      {
+        type: "interrupt",
+        id: "int-batch",
+        tool: "highlight",
+        args: { page: 1 },
+        allowed_decisions: ["approve", "reject"],
+        actions: [
+          {
+            tool_call_id: "tc-a",
+            tool: "highlight",
+            args: { page: 1 },
+            allowed_decisions: ["approve", "reject"],
+          },
+          {
+            tool_call_id: "tc-b",
+            tool: "highlight",
+            args: { page: 2 },
+            allowed_decisions: ["approve", "reject"],
+          },
+          {
+            tool_call_id: "tc-c",
+            tool: "highlight",
+            args: { page: 3 },
+            allowed_decisions: ["approve", "reject"],
+          },
+        ],
+      },
+    ];
+    const fetchMock = fetch as unknown as ReturnType<typeof vi.fn>;
+    fetchMock
+      .mockResolvedValueOnce(streamResponse(events))
+      .mockResolvedValueOnce(
+        new Response("", { status: 200, headers: { "content-type": "text/event-stream" } }),
+      );
+
+    render(<AgentTranscript threadId="t-batch" />);
+    const ta = screen.getByLabelText("Message agent") as HTMLTextAreaElement;
+    fireEvent.change(ta, { target: { value: "go" } });
+    fireEvent.click(screen.getByRole("button", { name: /send/i }));
+
+    const approveBtn = await waitFor(() =>
+      screen.getByRole("button", { name: /approve/i }),
+    );
+    fireEvent.click(approveBtn);
+
+    await waitFor(() => {
+      const calls = fetchMock.mock.calls;
+      const resumeCall = calls.find(
+        (c) => typeof c[0] === "string" && c[0].includes("/api/agents/km/resume"),
+      );
+      expect(resumeCall).toBeTruthy();
+      const body = JSON.parse((resumeCall![1] as RequestInit).body as string);
+      expect(body).toEqual({
+        thread_id: "t-batch",
+        decisions: [
+          { tool_call_id: "tc-a", type: "approve" },
+          { tool_call_id: "tc-b", type: "approve" },
+          { tool_call_id: "tc-c", type: "approve" },
+        ],
+      });
+    });
+  });
+
+  it("Reject on batched (N=3) interrupt POSTs N reject decisions (phase 1.9f)", async () => {
+    const events: AgentEvent[] = [
+      {
+        type: "interrupt",
+        id: "int-batch-rej",
+        tool: "highlight",
+        args: { page: 1 },
+        allowed_decisions: ["approve", "reject"],
+        actions: [
+          {
+            tool_call_id: "tc-x",
+            tool: "highlight",
+            args: { page: 1 },
+            allowed_decisions: ["approve", "reject"],
+          },
+          {
+            tool_call_id: "tc-y",
+            tool: "highlight",
+            args: { page: 2 },
+            allowed_decisions: ["approve", "reject"],
+          },
+          {
+            tool_call_id: "tc-z",
+            tool: "highlight",
+            args: { page: 3 },
+            allowed_decisions: ["approve", "reject"],
+          },
+        ],
+      },
+    ];
+    const fetchMock = fetch as unknown as ReturnType<typeof vi.fn>;
+    fetchMock
+      .mockResolvedValueOnce(streamResponse(events))
+      .mockResolvedValueOnce(
+        new Response("", { status: 200, headers: { "content-type": "text/event-stream" } }),
+      );
+
+    render(<AgentTranscript threadId="t-batch-rej" />);
+    const ta = screen.getByLabelText("Message agent") as HTMLTextAreaElement;
+    fireEvent.change(ta, { target: { value: "go" } });
+    fireEvent.click(screen.getByRole("button", { name: /send/i }));
+
+    const rejectBtn = await waitFor(() =>
+      screen.getByRole("button", { name: /reject/i }),
+    );
+    fireEvent.click(rejectBtn);
+
+    await waitFor(() => {
+      const calls = fetchMock.mock.calls;
+      const resumeCall = calls.find(
+        (c) => typeof c[0] === "string" && c[0].includes("/api/agents/km/resume"),
+      );
+      expect(resumeCall).toBeTruthy();
+      const body = JSON.parse((resumeCall![1] as RequestInit).body as string);
+      expect(body.thread_id).toBe("t-batch-rej");
+      expect(body.decisions).toHaveLength(3);
+      expect(body.decisions.every((d: { type: string }) => d.type === "reject")).toBe(true);
+      expect(body.decisions.map((d: { tool_call_id: string }) => d.tool_call_id)).toEqual([
+        "tc-x",
+        "tc-y",
+        "tc-z",
+      ]);
+    });
+  });
+
   it("forwards pageContext in the invoke body so the agent grounds to the open note (Task #27)", async () => {
     const fetchMock = fetch as unknown as ReturnType<typeof vi.fn>;
     fetchMock.mockResolvedValueOnce(

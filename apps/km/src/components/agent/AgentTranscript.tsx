@@ -15,6 +15,7 @@ import {
   initialAgentTranscriptState,
   type ErrorCard as ErrorCardData,
   type FileDiffCard as FileDiffCardData,
+  type InterruptAction,
   type InterruptCard as InterruptCardData,
   type SkillLoadCard as SkillLoadCardData,
   type SuggestionCard as SuggestionCardData,
@@ -184,6 +185,19 @@ function parseSseChunk(
     try {
       const data = JSON.parse(dataLines.join("\n"));
       if (eventName && !data.type) data.type = eventName;
+      // Phase 1.9f forward-compat: an older server may emit `interrupt`
+      // without the `actions[]` list. Synthesize a 1-element list so the
+      // reducer / decision sender never has to branch on its absence.
+      if (data.type === "interrupt" && !Array.isArray(data.actions)) {
+        data.actions = [
+          {
+            tool_call_id: data.id,
+            tool: data.tool,
+            args: data.args,
+            allowed_decisions: data.allowed_decisions,
+          },
+        ];
+      }
       events.push(data as AgentEvent);
     } catch {
       // Drop malformed frame.
@@ -461,19 +475,32 @@ export function AgentTranscript({
   );
 
   const sendDecision = useCallback(
-    async (cardId: string, type: "approve" | "reject"): Promise<boolean> => {
+    async (
+      cardId: string,
+      type: "approve" | "reject",
+      actions?: InterruptAction[],
+    ): Promise<boolean> => {
       abortRef.current?.abort();
       const controller = new AbortController();
       abortRef.current = controller;
       dispatch({ type: "__resume" });
       setStreaming(true);
+      // Phase 1.9f: when the interrupt bundled N gated tool calls, POST N
+      // decisions so langchain's HITL middleware count matches (avoids
+      // ValueError "Number of human decisions (1) does not match
+      // number of hanging tool calls (N)"). Fallback to single-decision
+      // for synthesized/empty `actions` so legacy paths still work.
+      const decisions =
+        actions && actions.length > 0
+          ? actions.map((a) => ({ tool_call_id: a.toolCallId, type }))
+          : [{ tool_call_id: cardId, type }];
       try {
         const res = await fetch("/api/agents/km/resume", {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
             thread_id: threadId,
-            decisions: [{ tool_call_id: cardId, type }],
+            decisions,
           }),
           signal: controller.signal,
         });
@@ -670,7 +697,11 @@ interface CardViewProps {
   streaming: boolean;
   onSuggestionClick: (suggestion: string) => void;
   threadId: string;
-  onDecision: (cardId: string, type: "approve" | "reject") => Promise<boolean>;
+  onDecision: (
+    cardId: string,
+    type: "approve" | "reject",
+    actions?: InterruptAction[],
+  ) => Promise<boolean>;
   onForkSubmit: (messageId: string, editedText: string) => void;
   citationsByMessage: Record<string, Citation[]>;
   onCitationClick: (citation: Citation) => void;
@@ -963,26 +994,31 @@ function SuggestionCardView({
 interface InterruptCardViewProps {
   card: InterruptCardData;
   threadId: string;
-  onDecision: (cardId: string, type: "approve" | "reject") => Promise<boolean>;
+  onDecision: (
+    cardId: string,
+    type: "approve" | "reject",
+    actions?: InterruptAction[],
+  ) => Promise<boolean>;
 }
 
 function InterruptCardView({ card, onDecision }: InterruptCardViewProps) {
   const [decided, setDecided] = useState<"approve" | "reject" | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const isBatch = card.actions.length > 1;
 
   const decide = useCallback(
     async (type: "approve" | "reject") => {
       if (decided || submitting) return;
       setSubmitting(true);
       setDecided(type);
-      const ok = await onDecision(card.id, type);
+      const ok = await onDecision(card.id, type, card.actions);
       if (!ok) {
         setDecided(null);
         toast.error("Failed to send decision. Try again.");
       }
       setSubmitting(false);
     },
-    [card.id, onDecision, decided, submitting],
+    [card.id, card.actions, onDecision, decided, submitting],
   );
 
   // Confirmation is driven from our local reducer/interrupt state, not the AI
@@ -1005,14 +1041,40 @@ function InterruptCardView({ card, onDecision }: InterruptCardViewProps) {
     <div data-testid="card-interrupt">
       <Confirmation approval={approval} state={confState}>
         <ConfirmationRequest>
-          <div className="space-y-2 text-xs">
-            <div className="font-medium">
-              Approval required: <span className="font-mono">{card.tool}</span>
+          {isBatch ? (
+            <div className="space-y-2 text-xs">
+              <div className="font-medium">
+                Approve {card.actions.length}{" "}
+                <span className="font-mono">{card.tool}</span> calls from this turn
+              </div>
+              <details className="text-[11px]">
+                <summary className="cursor-pointer text-muted-foreground">
+                  Show all {card.actions.length} calls
+                </summary>
+                <ul className="mt-1 space-y-1">
+                  {card.actions.map((a, i) => (
+                    <li
+                      key={a.toolCallId || `${a.tool}-${i}`}
+                      data-testid="interrupt-action"
+                    >
+                      <pre className="whitespace-pre-wrap break-words font-mono rounded bg-muted/40 p-2 max-h-32 overflow-auto">
+                        {JSON.stringify(a.args, null, 2)}
+                      </pre>
+                    </li>
+                  ))}
+                </ul>
+              </details>
             </div>
-            <pre className="whitespace-pre-wrap break-words font-mono text-[11px] rounded bg-muted/40 p-2 max-h-48 overflow-auto">
-              {JSON.stringify(card.args, null, 2)}
-            </pre>
-          </div>
+          ) : (
+            <div className="space-y-2 text-xs">
+              <div className="font-medium">
+                Approval required: <span className="font-mono">{card.tool}</span>
+              </div>
+              <pre className="whitespace-pre-wrap break-words font-mono text-[11px] rounded bg-muted/40 p-2 max-h-48 overflow-auto">
+                {JSON.stringify(card.args, null, 2)}
+              </pre>
+            </div>
+          )}
         </ConfirmationRequest>
         <ConfirmationAccepted>
           <span data-testid="interrupt-decided">Approved</span>

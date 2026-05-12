@@ -45,6 +45,20 @@ export type AgentEvent =
       tool: string;
       args: Record<string, unknown>;
       allowed_decisions: string[];
+      /**
+       * Phase 1.9f: full action list for batched HITL interrupts. When the
+       * model plans N parallel gated tool calls in one turn, langchain's
+       * HumanInTheLoopMiddleware bundles them into ONE interrupt with N
+       * action_requests; the UI renders a single batch card and posts N
+       * decisions back. For legacy/single-action interrupts this is a
+       * 1-element list mirroring the top-level tool/args fields.
+       */
+      actions?: Array<{
+        tool_call_id: string;
+        tool: string;
+        args: Record<string, unknown>;
+        allowed_decisions: string[];
+      }>;
     }
   | {
       type: "todos";

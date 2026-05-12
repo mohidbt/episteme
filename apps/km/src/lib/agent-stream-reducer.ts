@@ -58,12 +58,25 @@ export interface ToolCard {
   errorText?: string;
 }
 
+export interface InterruptAction {
+  toolCallId: string;
+  tool: string;
+  args: Record<string, unknown>;
+  allowedDecisions: string[];
+}
+
 export interface InterruptCard {
   kind: "interrupt";
   id: string;
   tool: string;
   args: Record<string, unknown>;
   allowedDecisions: string[];
+  /**
+   * Phase 1.9f: full action list for batched HITL interrupts. Always
+   * length >= 1 (single-action interrupts have a 1-element list mirroring
+   * the top-level fields, synthesized in parseSseChunk for forward compat).
+   */
+  actions: InterruptAction[];
 }
 
 export interface SkillLoadCard {
@@ -297,12 +310,29 @@ export function agentStreamReducer(
     }
 
     case "interrupt": {
+      const actions: InterruptAction[] =
+        Array.isArray(event.actions) && event.actions.length > 0
+          ? event.actions.map((a) => ({
+              toolCallId: a.tool_call_id,
+              tool: a.tool,
+              args: a.args,
+              allowedDecisions: a.allowed_decisions,
+            }))
+          : [
+              {
+                toolCallId: event.id,
+                tool: event.tool,
+                args: event.args,
+                allowedDecisions: event.allowed_decisions,
+              },
+            ];
       const card: InterruptCard = {
         kind: "interrupt",
         id: event.id,
         tool: event.tool,
         args: event.args,
         allowedDecisions: event.allowed_decisions,
+        actions,
       };
       return {
         ...state,

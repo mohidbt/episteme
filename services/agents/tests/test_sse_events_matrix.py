@@ -208,6 +208,73 @@ def test_all_event_types_format_with_minimal_payload():
 # Command extraction in routers/km_agent.py::_map_event.
 # ---------------------------------------------------------------------------
 
+def test_map_event_emits_full_actions_list_for_batched_interrupt():
+    """Phase 1.9f: when langchain HITL bundles N action_requests into one
+    interrupt, the SSE payload must surface ALL N in `actions[]` and mirror
+    actions[0] onto the legacy top-level tool/args/allowed_decisions keys.
+    """
+    from routers.km_agent import _map_event  # noqa: PLC0415
+
+    class _FakeInt:
+        def __init__(self, value, id):  # noqa: A002
+            self.value = value
+            self.id = id
+
+    value = {
+        "action_requests": [
+            {"id": "tc-a", "name": "highlight", "args": {"page": 1}},
+            {"id": "tc-b", "name": "highlight", "args": {"page": 2}},
+            {"id": "tc-c", "name": "highlight", "args": {"page": 3}},
+        ],
+        "review_configs": [
+            {"action_name": "highlight", "allowed_decisions": ["approve", "reject"]},
+            {"action_name": "highlight", "allowed_decisions": ["approve", "reject"]},
+            {"action_name": "highlight", "allowed_decisions": ["approve", "reject"]},
+        ],
+    }
+    ev = {
+        "event": "on_chain_end",
+        "run_id": "r-x",
+        "data": {"output": {"__interrupt__": [_FakeInt(value=value, id="int-1")]}},
+    }
+    mapped = _map_event(ev)
+    assert mapped is not None
+    ev_type, payload = mapped
+    assert ev_type == "interrupt"
+    assert payload["id"] == "int-1"
+    # Legacy mirror of actions[0]
+    assert payload["tool"] == "highlight"
+    assert payload["args"] == {"page": 1}
+    assert payload["allowed_decisions"] == ["approve", "reject"]
+    # Full actions list — 3 entries
+    assert len(payload["actions"]) == 3
+    assert [a["tool_call_id"] for a in payload["actions"]] == ["tc-a", "tc-b", "tc-c"]
+    assert payload["actions"][2]["args"] == {"page": 3}
+
+
+def test_map_event_legacy_shape_yields_single_action():
+    """Legacy hand-rolled {tool, args, allowed_decisions} value still
+    produces a 1-element `actions` list for forward-compat consumers.
+    """
+    from routers.km_agent import _map_event  # noqa: PLC0415
+
+    class _FakeInt:
+        def __init__(self, value, id):  # noqa: A002
+            self.value = value
+            self.id = id
+
+    value = {"tool": "make_public", "args": {"x": 1}, "allowed_decisions": ["approve"]}
+    ev = {
+        "event": "on_chain_end",
+        "run_id": "r-y",
+        "data": {"output": {"__interrupt__": [_FakeInt(value=value, id="int-2")]}},
+    }
+    _, payload = _map_event(ev)
+    assert payload["tool"] == "make_public"
+    assert len(payload["actions"]) == 1
+    assert payload["actions"][0]["tool"] == "make_public"
+
+
 def test_format_sse_serializes_langgraph_command():
     """format_sse must JSON-encode a langgraph Command without TypeError."""
     from langgraph.types import Command  # noqa: PLC0415

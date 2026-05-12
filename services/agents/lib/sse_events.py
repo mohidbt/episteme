@@ -38,11 +38,19 @@ class ToolResultEvent(TypedDict):
     state: Literal["output-available", "output-error"]
 
 
+class InterruptAction(TypedDict):
+    tool_call_id: str
+    tool: str
+    args: dict[str, Any]
+    allowed_decisions: list[str]
+
+
 class InterruptEvent(TypedDict):
     id: str
     tool: str
     args: dict[str, Any]
     allowed_decisions: list[str]
+    actions: NotRequired[list[InterruptAction]]
 
 
 class TodosItem(TypedDict):

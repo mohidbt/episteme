@@ -69,6 +69,75 @@ router = APIRouter(prefix="/agents/km", tags=["km-agent"])
 # Event mapping
 # ---------------------------------------------------------------------------
 
+def _build_interrupt_payload(interrupt_id: str, value: object) -> dict:
+    """Normalize a single interrupt's `value` into the SSE `interrupt` payload.
+
+    Phase 1.9f: emits a full ``actions`` list so the UI can render a batch
+    approval card when the model planned N parallel gated tool calls in one
+    turn. Legacy top-level ``tool``/``args``/``allowed_decisions`` mirror
+    ``actions[0]`` so existing single-action consumers keep working.
+
+    Shape accepted on `value`:
+      - HITLRequest: ``{"action_requests": [{name, args, ...}, ...],
+                        "review_configs": [{allowed_decisions, ...}, ...]}``
+      - Legacy hand-rolled: ``{"tool", "args", "allowed_decisions"}``
+    """
+    actions: list[dict] = []
+    if isinstance(value, dict):
+        action_requests = value.get("action_requests")
+        review_configs = value.get("review_configs")
+        if isinstance(action_requests, list) and action_requests:
+            for idx, ar in enumerate(action_requests):
+                if not isinstance(ar, dict):
+                    continue
+                rc = None
+                if isinstance(review_configs, list) and idx < len(review_configs):
+                    rc_candidate = review_configs[idx]
+                    if isinstance(rc_candidate, dict):
+                        rc = rc_candidate
+                actions.append({
+                    "tool_call_id": ar.get("id", "") or "",
+                    "tool": ar.get("name", "") or "",
+                    "args": ar.get("args", {}) or {},
+                    "allowed_decisions": (rc.get("allowed_decisions", []) or []) if rc else [],
+                })
+        # Legacy/test shape fallback — yields one action when action_requests absent.
+        if not actions:
+            actions.append({
+                "tool_call_id": value.get("tool_call_id", "") or "",
+                "tool": value.get("tool", "") or "",
+                "args": value.get("args", {}) or {},
+                "allowed_decisions": value.get("allowed_decisions", []) or [],
+            })
+    if not actions:
+        actions.append({"tool_call_id": "", "tool": "", "args": {}, "allowed_decisions": []})
+    first = actions[0]
+    return {
+        "id": interrupt_id,
+        "tool": first["tool"],
+        "args": first["args"],
+        "allowed_decisions": first["allowed_decisions"],
+        "actions": actions,
+    }
+
+
+def _pending_action_requests(state) -> list[dict]:
+    """Return action_requests from the first uncompleted interrupt in state.tasks.
+
+    Used by /resume to learn how many decisions the langchain HITL middleware
+    is waiting for, so the client can post a batched single approval and the
+    server broadcasts it to N positional decisions.
+    """
+    for task in getattr(state, "tasks", None) or []:
+        for interrupt in (getattr(task, "interrupts", None) or ()):
+            value = getattr(interrupt, "value", interrupt)
+            if isinstance(value, dict):
+                ars = value.get("action_requests")
+                if isinstance(ars, list):
+                    return [a for a in ars if isinstance(a, dict)]
+    return []
+
+
 async def _flush_pending_interrupts(agent, thread_id: str) -> list[tuple[str, dict]]:
     """Read post-stream snapshot for pending HITL interrupts.
 
@@ -101,34 +170,7 @@ async def _flush_pending_interrupts(agent, thread_id: str) -> list[tuple[str, di
                 interrupt_id = ""
             else:
                 interrupt_id = raw_id
-            tool = ""
-            args: dict = {}
-            allowed: list = []
-            if isinstance(value, dict):
-                action_requests = value.get("action_requests")
-                review_configs = value.get("review_configs")
-                if isinstance(action_requests, list) and action_requests:
-                    first = action_requests[0]
-                    if isinstance(first, dict):
-                        tool = first.get("name", "") or ""
-                        args = first.get("args", {}) or {}
-                if isinstance(review_configs, list) and review_configs:
-                    rc = review_configs[0]
-                    if isinstance(rc, dict):
-                        allowed = rc.get("allowed_decisions", []) or []
-                if not tool:
-                    tool = value.get("tool", "") or ""
-                if not args:
-                    args = value.get("args", {}) or {}
-                if not allowed:
-                    allowed = value.get("allowed_decisions", []) or []
-            payload = {
-                "id": interrupt_id,
-                "tool": tool,
-                "args": args,
-                "allowed_decisions": allowed,
-            }
-            out.append(("interrupt", payload))
+            out.append(("interrupt", _build_interrupt_payload(interrupt_id, value)))
     return out
 
 
@@ -193,34 +235,7 @@ def _map_event(ev: dict) -> tuple[str, dict] | None:
             interrupt_id = run_id
         else:
             interrupt_id = raw_id
-        # langchain HumanInTheLoopMiddleware emits a HITLRequest:
-        #   {"action_requests": [{"name", "args", "description"}, ...],
-        #    "review_configs": [{"action_name", "allowed_decisions"}, ...]}
-        # Older / hand-rolled callers may emit {"tool", "args", "allowed_decisions"}
-        # directly — keep the legacy path so route tests stay valid.
-        tool = ""
-        args: dict = {}
-        allowed: list = []
-        if isinstance(value, dict):
-            action_requests = value.get("action_requests")
-            review_configs = value.get("review_configs")
-            if isinstance(action_requests, list) and action_requests:
-                first = action_requests[0]
-                if isinstance(first, dict):
-                    tool = first.get("name", "") or ""
-                    args = first.get("args", {}) or {}
-            if isinstance(review_configs, list) and review_configs:
-                rc = review_configs[0]
-                if isinstance(rc, dict):
-                    allowed = rc.get("allowed_decisions", []) or []
-            # Legacy/test shape fallback.
-            if not tool:
-                tool = value.get("tool", "") or ""
-            if not args:
-                args = value.get("args", {}) or {}
-            if not allowed:
-                allowed = value.get("allowed_decisions", []) or []
-        return ("interrupt", {"id": interrupt_id, "tool": tool, "args": args, "allowed_decisions": allowed})
+        return ("interrupt", _build_interrupt_payload(interrupt_id, value))
 
     return None
 
@@ -587,13 +602,12 @@ async def resume(req: Request, auth: InternalAuthDep):
     )
 
     # langchain HumanInTheLoopMiddleware reads the resume payload as
-    # ``interrupt(...)["decisions"]`` — i.e. the resume value MUST be a dict
-    # of shape ``{"decisions": [...]}``. The frontend posts the bare list,
-    # so we wrap it here. Strip incidental keys (``tool_call_id``) the
-    # middleware doesn't need; only ``type`` (+ optional ``message`` for
-    # reject / ``edited_action`` for edit) is read.
+    # ``interrupt(...)["decisions"]`` of length N, where N == number of
+    # gated ``action_requests`` in the pending interrupt. Phase 1.9f: when
+    # the model planned N parallel calls in one turn, the UI sends ONE
+    # batched decision; we look up N from the checkpoint and broadcast.
     raw_decisions = body.get("decisions") or []
-    decisions: list[dict] = []
+    client_decisions: list[dict] = []
     for d in raw_decisions:
         if not isinstance(d, dict):
             continue
@@ -602,7 +616,45 @@ async def resume(req: Request, auth: InternalAuthDep):
             out["message"] = d["message"]
         if "edited_action" in d:
             out["edited_action"] = d["edited_action"]
-        decisions.append(out)
+        # Preserve tool_call_id so positional ordering can be matched/logged.
+        if "tool_call_id" in d:
+            out["_tool_call_id"] = d["tool_call_id"]
+        client_decisions.append(out)
+
+    thread_id = body["thread_id"]
+    try:
+        snap = await agent.aget_state({"configurable": {"thread_id": thread_id}})
+        pending = _pending_action_requests(snap)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("resume: state lookup failed (%s); forwarding decisions verbatim", e)
+        pending = []
+
+    n_pending = len(pending)
+    if n_pending == 0:
+        # Couldn't determine N (state lookup empty/failed) — pass through.
+        resolved = client_decisions
+    elif len(client_decisions) == n_pending:
+        resolved = client_decisions
+    elif len(client_decisions) == 1:
+        # Batched single approval — broadcast to all pending action_requests.
+        template = client_decisions[0]
+        resolved = [dict(template) for _ in range(n_pending)]
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "decision_count_mismatch",
+                "message": f"Got {len(client_decisions)} decisions, expected {n_pending} or 1.",
+                "expected": n_pending,
+                "received": len(client_decisions),
+            },
+        )
+
+    # Strip internal-only keys (_tool_call_id) before handing to middleware.
+    decisions: list[dict] = []
+    for d in resolved:
+        clean = {k: v for k, v in d.items() if not k.startswith("_")}
+        decisions.append(clean)
     resume_payload = {"decisions": decisions}
 
     async def gen():
