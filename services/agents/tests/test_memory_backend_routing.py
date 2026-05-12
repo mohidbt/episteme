@@ -14,6 +14,23 @@ def _make_backend(user_id: str = "u"):
     return _build_memory_backend(user_id=user_id, store=MagicMock())
 
 
+@pytest.mark.asyncio
+async def test_skills_route_respects_enabled_skills_filter():
+    """_build_memory_backend(enabled_skills=[...]) must pass the allow-list into
+    SkillsBackend so the skills route only advertises those subdirs."""
+    from km_agent import _build_memory_backend  # noqa: PLC0415
+
+    backend = _build_memory_backend(
+        user_id="u",
+        store=MagicMock(),
+        enabled_skills=["data-extract"],
+    )
+    skills_route = backend.routes["/.episteme/agents/skills/"]
+    result = await skills_route.als("/.episteme/agents/skills/")
+    names = {e["path"].rstrip("/").rsplit("/", 1)[-1] for e in result.entries}
+    assert names == {"data-extract"}, f"expected only data-extract, got {names!r}"
+
+
 # ---------------------------------------------------------------------------
 # T2 test 1 — skills path routes to SkillsBackend
 # ---------------------------------------------------------------------------

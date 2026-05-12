@@ -39,7 +39,18 @@ def _virtual_to_disk(virtual_path: str) -> Path:
 
 
 class SkillsBackend(BackendProtocol):
-    """Read-only backend backed by services/agents/skills/ on disk."""
+    """Read-only backend backed by services/agents/skills/ on disk.
+
+    When `enabled` is a non-empty/empty frozenset, `ls` only returns subdirs
+    whose name is in the allow-list — this scopes SkillsMiddleware's prompt
+    advertisement to the request's enabled_skills. When `enabled is None`,
+    every on-disk skill subdir is advertised (back-compat default).
+    Read/write paths are unaffected — on-demand `read_file` of any subpath
+    still resolves regardless of the filter.
+    """
+
+    def __init__(self, enabled: frozenset[str] | None = None) -> None:
+        self._enabled = enabled
 
     def ls(self, path: str) -> LsResult:
         disk_dir = _virtual_to_disk(path)
@@ -49,6 +60,8 @@ class SkillsBackend(BackendProtocol):
         entries: list[FileInfo] = []
         for child in sorted(disk_dir.iterdir()):
             if not child.is_dir() or child.name.startswith("_"):
+                continue
+            if self._enabled is not None and child.name not in self._enabled:
                 continue
             virtual_child = path.rstrip("/") + "/" + child.name + "/"
             entries.append(FileInfo(path=virtual_child, is_dir=True))

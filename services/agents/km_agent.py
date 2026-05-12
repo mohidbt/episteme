@@ -108,7 +108,12 @@ Never use `glob`, `grep`, `ls`, or `read_file` to look for PDFs, notes, or
 papers. If you need drive content, use the dedicated tools instead."""
 
 
-def _build_memory_backend(*, user_id: str, store: BaseStore) -> CompositeBackend:
+def _build_memory_backend(
+    *,
+    user_id: str,
+    store: BaseStore,
+    enabled_skills: list[str] | None = None,
+) -> CompositeBackend:
     """Build the deepagents filesystem backend with `/.episteme/agents/memories/`
     routed to real notes in the user's drive via NotesBackend.
 
@@ -117,16 +122,20 @@ def _build_memory_backend(*, user_id: str, store: BaseStore) -> CompositeBackend
     Postgres (default library, `.episteme/agents/memories` folder), so library
     export captures them and the user can edit them in the drive UI.
 
+    `enabled_skills` (when not None) scopes the SkillsBackend allow-list so
+    SkillsMiddleware's prompt advertisement only lists those skills.
+
     `store` is unused here but kept on the signature because deepagents may
     still require a `BaseStore` for unrelated middleware plumbing.
     """
     from backends.notes_backend import NotesBackend
     from backends.skills_backend import SkillsBackend
+    skills_enabled = frozenset(enabled_skills) if enabled_skills is not None else None
     return CompositeBackend(
         default=StateBackend(),
         routes={
             "/.episteme/agents/memories/": NotesBackend(user_id=user_id),
-            "/.episteme/agents/skills/":   SkillsBackend(),
+            "/.episteme/agents/skills/":   SkillsBackend(enabled=skills_enabled),
         },
     )
 
@@ -344,14 +353,11 @@ async def build_km_agent(
         Compiled StateGraph ready to invoke.
 
     Note:
-        deepagents `SkillsMiddleware` walks ``SKILLS_ROOT`` and advertises
-        **every** on-disk ``SKILL.md`` description in the system prompt
-        regardless of ``enabled_skills``. Tool filtering
-        (``_filter_tools_for_skills``) prevents disabled skills' tools from
-        being callable, but the disabled skills' descriptions still appear
-        in-context. Long-term: scope advertisement to enabled skills only —
-        see followup §1.3b-T5-1 in
-        ``docs/superpowers/plans/phases/phase-1.3b-agents.md`` tech-debt.
+        Skill advertisement is scoped to ``enabled_skills`` via the
+        ``SkillsBackend(enabled=...)`` filter in ``_build_memory_backend``.
+        ``SkillsMiddleware._alist_skills`` only sees the allow-listed subdirs,
+        so the system prompt advertises only enabled skills (matching the
+        existing tool-filter behavior in ``_filter_tools_for_skills``).
     """
     loaded = (
         await DriveSkillsLoader().load(enabled_skills, user_id=user_id, tolerant=True)
@@ -394,7 +400,9 @@ async def build_km_agent(
         system_prompt=system_prompt,
         store=store,
         checkpointer=saver,
-        backend=_build_memory_backend(user_id=user_id, store=store),
+        backend=_build_memory_backend(
+            user_id=user_id, store=store, enabled_skills=enabled_skills
+        ),
         interrupt_on=_build_interrupt_on(approval_rules, loaded_skills=loaded),
         middleware=[GroundingGuard()],
     )

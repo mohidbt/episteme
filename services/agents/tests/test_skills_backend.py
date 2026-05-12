@@ -57,6 +57,41 @@ async def test_read_respects_limit():
 
 
 @pytest.mark.asyncio
+async def test_ls_filters_to_enabled_skills():
+    """When `enabled` is a non-empty allow-list, ls returns only those subdirs."""
+    from backends.skills_backend import SkillsBackend  # noqa: PLC0415
+
+    backend = SkillsBackend(enabled=frozenset({"lit-triage"}))
+    result = await backend.als("/.episteme/agents/skills/")
+    entries = result.entries
+    assert entries is not None
+    names = {e["path"].rstrip("/").rsplit("/", 1)[-1] for e in entries}
+    assert names == {"lit-triage"}, f"expected only lit-triage, got {names!r}"
+
+
+@pytest.mark.asyncio
+async def test_ls_empty_enabled_returns_zero_entries():
+    """An empty allow-list yields zero advertised skills."""
+    from backends.skills_backend import SkillsBackend  # noqa: PLC0415
+
+    backend = SkillsBackend(enabled=frozenset())
+    result = await backend.als("/.episteme/agents/skills/")
+    assert result.entries == [], f"expected no entries, got {result.entries!r}"
+
+
+@pytest.mark.asyncio
+async def test_ls_default_none_returns_all_entries():
+    """Back-compat: SkillsBackend() with no allow-list returns all on-disk skills."""
+    from backends.skills_backend import SkillsBackend  # noqa: PLC0415
+
+    backend = SkillsBackend()
+    result = await backend.als("/.episteme/agents/skills/")
+    names = {e["path"].rstrip("/").rsplit("/", 1)[-1] for e in result.entries}
+    expected = {"data-extract", "claim-verify", "deep-read", "lit-triage", "paper-search", "synthesis"}
+    assert expected.issubset(names), f"missing: {expected - names}"
+
+
+@pytest.mark.asyncio
 async def test_read_respects_offset():
     """aread with offset=N must skip the first N lines."""
     backend = _make_backend()

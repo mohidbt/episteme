@@ -164,6 +164,53 @@ async def test_hand_rolled_bullets_block_removed():
 # Backend sanity check: read_file can fetch the skill body on demand
 # ---------------------------------------------------------------------------
 
+def _extract_skills_section(system_text: str) -> str:
+    """Return only the SkillsMiddleware-rendered '## Skills System' block.
+
+    Other parts of the system prompt mention skill names in prose
+    (e.g. the deep-read reference in _MEMORY_SYSTEM_PROMPT), so this isolates
+    the advertisement block for assertion.
+    """
+    marker = "## Skills System"
+    idx = system_text.find(marker)
+    return system_text[idx:] if idx != -1 else ""
+
+
+@pytest.mark.asyncio
+async def test_system_prompt_advertises_only_enabled_skills():
+    """build_km_agent(enabled_skills=['data-extract']) must produce a Skills
+    System section that mentions 'data-extract' but NOT other skill names."""
+    from skills import load_skills  # noqa: PLC0415
+
+    system_text = await _run_agent_and_capture_system_prompt(
+        enabled_skills=["data-extract"],
+        loaded_specs=load_skills(only=["data-extract"]),
+    )
+    skills_section = _extract_skills_section(system_text)
+    assert skills_section, "Skills System section missing from prompt"
+
+    assert "data-extract" in skills_section
+    for name in ["lit-triage", "claim-verify", "synthesis", "paper-search", "deep-read", "_deep-read"]:
+        assert name not in skills_section, (
+            f"Disabled skill {name!r} leaked into Skills System advertisement"
+        )
+
+
+@pytest.mark.asyncio
+async def test_system_prompt_omits_all_skills_when_empty_enabled():
+    """build_km_agent(enabled_skills=[]) yields no SkillsMiddleware section
+    (or an empty one) — no skill names advertised."""
+    system_text = await _run_agent_and_capture_system_prompt(
+        enabled_skills=[],
+        loaded_specs=[],
+    )
+    skills_section = _extract_skills_section(system_text)
+    for name in ["data-extract", "lit-triage", "claim-verify", "synthesis", "paper-search"]:
+        assert name not in skills_section, (
+            f"Skill {name!r} advertised despite empty enabled_skills"
+        )
+
+
 @pytest.mark.asyncio
 async def test_read_file_can_fetch_skill_body():
     """The SkillsBackend can serve the data-extract skill body via the virtual path.
