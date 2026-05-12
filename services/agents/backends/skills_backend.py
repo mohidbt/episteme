@@ -30,7 +30,12 @@ _DISK_ROOT = Path(__file__).resolve().parent.parent / "skills"
 
 def _virtual_to_disk(virtual_path: str) -> Path:
     relative = virtual_path.removeprefix(_VIRTUAL_ROOT).lstrip("/")
-    return _DISK_ROOT / relative
+    candidate = (_DISK_ROOT / relative).resolve()
+    if not candidate.is_relative_to(_DISK_ROOT):
+        raise PermissionError(
+            f"Path traversal detected: {virtual_path!r} resolves outside skills root"
+        )
+    return candidate
 
 
 class SkillsBackend(BackendProtocol):
@@ -54,7 +59,9 @@ class SkillsBackend(BackendProtocol):
         if not disk_path.is_file():
             return ReadResult(error="file_not_found")
         content = disk_path.read_text(encoding="utf-8")
-        return ReadResult(file_data=FileData(content=content, encoding="utf-8"))
+        lines = content.splitlines()
+        selected = lines[offset : offset + limit]
+        return ReadResult(file_data=FileData(content="\n".join(selected), encoding="utf-8"))
 
     def download_files(self, paths: list[str]) -> list[FileDownloadResponse]:
         results = []

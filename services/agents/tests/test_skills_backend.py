@@ -36,3 +36,37 @@ async def test_writes_rejected():
     backend = _make_backend()
     with pytest.raises(PermissionError):
         await backend.awrite("/.episteme/agents/skills/x/SKILL.md", "x")
+
+
+@pytest.mark.asyncio
+async def test_path_traversal_rejected():
+    """A virtual path with .. segments must not escape _DISK_ROOT."""
+    backend = _make_backend()
+    with pytest.raises((FileNotFoundError, PermissionError)):
+        await backend.aread("/.episteme/agents/skills/../../../etc/passwd")
+
+
+@pytest.mark.asyncio
+async def test_read_respects_limit():
+    """aread with limit=1 must return at most 1 line of content."""
+    backend = _make_backend()
+    result = await backend.aread("/.episteme/agents/skills/data-extract/SKILL.md", limit=1)
+    assert result.error is None
+    content = result.file_data["content"]
+    assert "\n" not in content, f"Expected 1 line, got multiple: {content!r}"
+
+
+@pytest.mark.asyncio
+async def test_read_respects_offset():
+    """aread with offset=N must skip the first N lines."""
+    backend = _make_backend()
+    # Read full file first to know what line N looks like
+    full = await backend.aread("/.episteme/agents/skills/data-extract/SKILL.md")
+    all_lines = full.file_data["content"].splitlines()
+    offset = 2
+    result = await backend.aread("/.episteme/agents/skills/data-extract/SKILL.md", offset=offset)
+    assert result.error is None
+    result_lines = result.file_data["content"].splitlines()
+    assert result_lines[0] == all_lines[offset], (
+        f"First line at offset={offset} should be {all_lines[offset]!r}, got {result_lines[0]!r}"
+    )
