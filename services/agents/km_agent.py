@@ -120,9 +120,13 @@ def _build_memory_backend(*, user_id: str, store: BaseStore) -> CompositeBackend
     still require a `BaseStore` for unrelated middleware plumbing.
     """
     from backends.notes_backend import NotesBackend
+    from backends.skills_backend import SkillsBackend
     return CompositeBackend(
         default=StateBackend(),
-        routes={"/.episteme/agents/memories/": NotesBackend(user_id=user_id)},
+        routes={
+            "/.episteme/agents/memories/": NotesBackend(user_id=user_id),
+            "/.episteme/agents/skills/":   SkillsBackend(),
+        },
     )
 
 
