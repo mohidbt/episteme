@@ -55,13 +55,7 @@ _GUEST_FORBIDDEN = {"error": "guests cannot use agents", "code": "guest_forbidde
 
 @_fn_cache
 def _data_extract_skill_body() -> str:
-    """Return the body of the `data-extract` skill, cached for process lifetime.
-
-    /extract runs per cell × per paperset; walking SKILLS_ROOT and parsing every
-    SKILL.md on every request is wasteful. The cache lives here (not in the
-    skill loader) so skill-loader unit tests that monkeypatch SKILLS_ROOT
-    remain unaffected.
-    """
+    """Cache lives here (not in the loader) so SKILLS_ROOT-monkeypatching tests stay valid."""
     [spec] = load_skills(["data-extract"])
     return spec.body()
 
