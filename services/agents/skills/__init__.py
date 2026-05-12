@@ -9,11 +9,23 @@ The deepagents skill middleware loads skills separately for system-prompt
 advertisement; we pass the SKILLS_ROOT path to `create_deep_agent(skills=...)`
 when any skill is enabled.
 
-Progressive disclosure: `SkillSpec.body()` reads the markdown body lazily.
+Canonical frontmatter form (Anthropic Agent Skills spec):
+  allowed-tools: tool_a tool_b tool_c   # space-delimited string
+  metadata:
+    subagents: [verifier]
+    require_approval: [update_note]
+
+Legacy form (deprecated, one-release transition):
+  tools: [tool_a, tool_b]               # YAML list
+  subagents: [verifier]
+  require_approval: [update_note]
+
+Body is captured eagerly during parse (single text pass).
 """
 from __future__ import annotations
 
 import re
+import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -22,7 +34,7 @@ import yaml
 
 SKILLS_ROOT = Path(__file__).resolve().parent
 
-_REQUIRED = ("name", "description", "tools", "subagents", "require_approval")
+_REQUIRED_BASE = ("name", "description")
 _FRONTMATTER_RE = re.compile(r"\A---\s*\n(.*?)\n---\s*\n?", re.DOTALL)
 
 
@@ -30,7 +42,9 @@ _FRONTMATTER_RE = re.compile(r"\A---\s*\n(.*?)\n---\s*\n?", re.DOTALL)
 class SkillSpec:
     """A parsed SKILL.md frontmatter spec.
 
-    Body content is loaded lazily via `body()` (progressive disclosure).
+    Body is captured eagerly from the source text during parse and returned
+    by `body()`. On disk-backed specs, `body()` falls back to a disk read
+    if the cache was not pre-populated (e.g. legacy construction).
     """
 
     name: str
@@ -45,7 +59,11 @@ class SkillSpec:
     _body_cache: str | None = field(default=None, repr=False)
 
     def body(self) -> str:
-        """Read + cache the SKILL.md body (everything after closing `---`)."""
+        """Return the SKILL.md body (everything after closing `---`).
+
+        Pre-populated during parse when text is already in memory. Falls back
+        to a disk read if not cached (e.g. SkillSpec built without parse).
+        """
         if self._body_cache is None:
             text = self.path.read_text(encoding="utf-8")
             m = _FRONTMATTER_RE.match(text)
@@ -54,11 +72,17 @@ class SkillSpec:
 
 
 def _parse_skill_md_text(text: str, path: Path) -> SkillSpec | None:
-    """Parse SKILL.md frontmatter from a raw string.
+    """Parse SKILL.md frontmatter from a raw string (canonical + legacy).
 
-    Returns None if frontmatter missing/invalid YAML. Raises ValueError if
-    frontmatter is present but missing required fields. The `path` parameter
-    is used for SkillSpec.path attribute and for error messages.
+    Canonical form uses `allowed-tools` (space-delimited) and nested
+    `metadata.subagents` / `metadata.require_approval`. Legacy form uses
+    top-level `tools` list, `subagents` list, `require_approval` list —
+    still accepted but emits DeprecationWarning.
+
+    Returns None if frontmatter is missing or YAML is invalid. Raises
+    ValueError if frontmatter is present but missing required base fields.
+    Body text (everything after the closing `---`) is captured eagerly and
+    stored in `_body_cache` so `body()` needs no second disk read.
     """
     m = _FRONTMATTER_RE.match(text)
     if not m:
@@ -70,11 +94,11 @@ def _parse_skill_md_text(text: str, path: Path) -> SkillSpec | None:
     if not isinstance(data, dict):
         return None
 
-    missing = [k for k in _REQUIRED if k not in data]
     name = data.get("name", path.parent.name)
-    if missing:
+    missing_base = [k for k in _REQUIRED_BASE if k not in data]
+    if missing_base:
         raise ValueError(
-            f"SKILL.md at {path} (skill '{name}') missing required fields: {missing}"
+            f"SKILL.md at {path} (skill '{name}') missing required fields: {missing_base}"
         )
 
     def _as_list(v: Any) -> list[str]:
@@ -84,16 +108,53 @@ def _parse_skill_md_text(text: str, path: Path) -> SkillSpec | None:
             return [str(x) for x in v]
         raise ValueError(f"expected list, got {type(v).__name__}")
 
+    # --- tools: canonical `allowed-tools` string, fallback to legacy `tools` list ---
+    if "allowed-tools" in data:
+        raw = data["allowed-tools"]
+        tools = raw.split() if isinstance(raw, str) else _as_list(raw)
+    elif "tools" in data:
+        warnings.warn(
+            f"SKILL.md at {path} (skill '{name}'): top-level `tools` key is deprecated. "
+            "Use `allowed-tools: tool_a tool_b` (space-delimited string). "
+            "Legacy support will be removed in the next release.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        tools = _as_list(data["tools"])
+    else:
+        raise ValueError(
+            f"SKILL.md at {path} (skill '{name}') missing required field: tools or allowed-tools"
+        )
+
+    # --- subagents / require_approval: canonical under `metadata`, fallback to top-level ---
+    meta = data.get("metadata") or {}
+    if meta:
+        subagents = _as_list(meta.get("subagents"))
+        require_approval = _as_list(meta.get("require_approval"))
+    else:
+        # Legacy: top-level keys — warn only once (tools warn already covers legacy detection)
+        if "subagents" not in data and "require_approval" not in data:
+            raise ValueError(
+                f"SKILL.md at {path} (skill '{name}') missing subagents/require_approval "
+                "(expected under `metadata:` or as legacy top-level keys)"
+            )
+        subagents = _as_list(data.get("subagents"))
+        require_approval = _as_list(data.get("require_approval"))
+
+    # Capture body eagerly — no second parse pass needed.
+    body_text = text[m.end():]
+
     return SkillSpec(
         name=str(data["name"]),
         description=str(data["description"]),
-        tools=_as_list(data["tools"]),
-        subagents=_as_list(data["subagents"]),
-        require_approval=_as_list(data["require_approval"]),
+        tools=tools,
+        subagents=subagents,
+        require_approval=require_approval,
         path=path,
         model=str(data["model"]) if data.get("model") else None,
         read=_as_list(data.get("read")),
         write=_as_list(data.get("write")),
+        _body_cache=body_text,
     )
 
 

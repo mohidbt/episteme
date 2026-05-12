@@ -1,9 +1,10 @@
 ---
 name: deep-read
 description: Deeply read a PDF — produce a citation-anchored summary with [[pdf:<id>#p<N>]] anchors.
-tools: [read_paper, pdf_read_text, pdf_explain_passage, search_pdfs, search_library, highlight, create_note]
-subagents: []
-require_approval: [highlight]
+allowed-tools: read_paper pdf_read_text pdf_explain_passage search_pdfs search_library highlight create_note
+metadata:
+  subagents: []
+  require_approval: [highlight]
 read: []
 write: [/.episteme/agents/memories/, /scratch/]
 ---

@@ -1,9 +1,10 @@
 ---
 name: paper-search
 description: "Use when the user asks to find, search, locate, or download a paper PDF for a reference. Call agentic_search_papers(reference_id) first — it searches Semantic Scholar (an EXTERNAL academic database, NOT the user's library) by DOI then by title/author/year and returns ranked candidates. Present candidate #1 to the user; on rejection present #2, etc. On approval call agentic_fetch_papers(reference_id, paper_url, metadata) to download the PDF and link it. Never use list_references or search_notes to find papers — always use agentic_search_papers. If the tool returns an error field, tell the user the search service is unavailable (not that the paper doesn't exist)."
-tools: [agentic_search_papers, agentic_fetch_papers]
-subagents: []
-require_approval: [agentic_fetch_papers]
+allowed-tools: agentic_search_papers agentic_fetch_papers
+metadata:
+  subagents: []
+  require_approval: [agentic_fetch_papers]
 read: [references, papers]
 write: [papers]
 ---

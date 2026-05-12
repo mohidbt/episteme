@@ -1,9 +1,10 @@
 ---
 name: data-extract
 description: Extract structured values from a paper into a CSV cell. One cell at a time.
-tools: [read_paper, csv_read, csv_write_cell]
-subagents: []
-require_approval: []
+allowed-tools: read_paper csv_read csv_write_cell
+metadata:
+  subagents: []
+  require_approval: []
 ---
 
 # Data extract

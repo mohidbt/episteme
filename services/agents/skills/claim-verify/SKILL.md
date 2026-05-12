@@ -1,9 +1,10 @@
 ---
 name: claim-verify
 description: Given a note, finds each standalone claim and verifies it against the user's PDF library. Flags unsupported claims inline.
-tools: [read_note, update_note, list_references]
-subagents: [verifier]
-require_approval: [update_note]
+allowed-tools: read_note update_note list_references
+metadata:
+  subagents: [verifier]
+  require_approval: [update_note]
 ---
 
 # Claim verifier

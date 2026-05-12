@@ -1,9 +1,10 @@
 ---
 name: synthesis
 description: Synthesize a topic or set of notes into a draft markdown report. Drafts to /scratch for user review before promoting to a note.
-tools: [search_notes, read_note, create_note]
-subagents: [synthesizer]
-require_approval: [create_note]
+allowed-tools: search_notes read_note create_note
+metadata:
+  subagents: [synthesizer]
+  require_approval: [create_note]
 ---
 
 # Synthesis

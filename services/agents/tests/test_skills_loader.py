@@ -122,11 +122,11 @@ def test_load_skills_missing_required_field_raises(tmp_path, monkeypatch):
 
 
 def test_load_skills_lazy_body_load(tmp_path, monkeypatch):
-    """Body must NOT be slurped during load_skills(); only on body() call.
+    """Body is captured eagerly during parse (single-pass) — body() is a cache hit.
 
-    We prove laziness by counting Path.read_text invocations: load_skills()
-    reads exactly once (frontmatter parse), body() adds one more read, and
-    the second body() call is a cache hit (no new read).
+    Since parse already has the full text in memory, body is stored in
+    _body_cache at parse time. load_skills() reads exactly once; body() and
+    subsequent calls are all cache hits (zero additional disk reads).
     """
     p = _write_skill(
         tmp_path,
@@ -159,13 +159,13 @@ def test_load_skills_lazy_body_load(tmp_path, monkeypatch):
     assert "Secret instructions" in body
     # Frontmatter should not be in body
     assert "name: lazy" not in body
-    # First body() call triggers a read.
-    assert counter["n"] == 2, f"expected 2 reads after first body(), got {counter['n']}"
+    # body() is a cache hit — no additional disk read (body captured during parse).
+    assert counter["n"] == 1, f"expected 1 total read (body captured eagerly), got {counter['n']}"
 
-    # Second body() call must be a cache hit — no new read.
+    # Second body() call is also a cache hit.
     body2 = s.body()
     assert body2 == body
-    assert counter["n"] == 2, f"expected cached body(), got {counter['n']} reads"
+    assert counter["n"] == 1, f"expected cached body(), got {counter['n']} reads"
 
 
 def test_deep_read_skill_tools_list():

@@ -1,9 +1,10 @@
 ---
 name: lit-triage
 description: Daily arXiv/bioRxiv/PubMed triage filtered by the user's research interests. Writes an inbox note with "must read / skim / skip" buckets + one-line citations.
-tools: [search_notes, list_references, create_note]
-subagents: [researcher]
-require_approval: [create_note]
+allowed-tools: search_notes list_references create_note
+metadata:
+  subagents: [researcher]
+  require_approval: [create_note]
 ---
 
 # Literature triage
