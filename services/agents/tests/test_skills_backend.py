@@ -42,7 +42,7 @@ async def test_writes_rejected():
 async def test_path_traversal_rejected():
     """A virtual path with .. segments must not escape _DISK_ROOT."""
     backend = _make_backend()
-    with pytest.raises((FileNotFoundError, PermissionError)):
+    with pytest.raises(PermissionError, match="outside skills root"):
         await backend.aread("/.episteme/agents/skills/../../../etc/passwd")
 
 
