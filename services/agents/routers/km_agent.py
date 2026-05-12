@@ -70,9 +70,13 @@ router = APIRouter(prefix="/agents/km", tags=["km-agent"])
 # ---------------------------------------------------------------------------
 
 def _build_interrupt_payload(interrupt_id: str, value: object) -> dict | None:
-    """Mirror ``actions[0]`` onto legacy top-level keys so single-action
+    """Build interrupt SSE payload or return None to drop the event.
+
+    Mirrors ``actions[0]`` onto legacy top-level keys so single-action
     consumers keep working alongside the batched ``actions`` list. Returns
-    None if neither the HITLRequest nor legacy shape is parseable."""
+    None (with a warning log) if neither the HITLRequest nor legacy shape is
+    parseable — the SSE event is then suppressed entirely.
+    """
     actions: list[dict] = []
     if isinstance(value, dict):
         action_requests = value.get("action_requests")
@@ -101,6 +105,7 @@ def _build_interrupt_payload(interrupt_id: str, value: object) -> dict | None:
                 "allowed_decisions": value.get("allowed_decisions", []) or [],
             })
     if not actions:
+        logger.warning("interrupt %s has unparseable value shape; dropping event", interrupt_id)
         return None
     first = actions[0]
     return {
