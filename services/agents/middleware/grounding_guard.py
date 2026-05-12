@@ -49,9 +49,10 @@ class GroundingGuard(AgentMiddleware):
     blocked with an error ToolMessage — forcing the model to read the paper
     first.
 
-    Cells with empty/missing grounding (e.g. n/a cells filled without a paper
-    reference) bypass this guard; downstream validation in cell-write.ts
-    handles the n/a-without-observation case.
+    Cells with empty/missing grounding (e.g. n/a writes) bypass this guard.
+    The n/a-without-read rule is enforced by the inlined data-extract skill
+    body (T6 prompt prefix), not here. cell-write.ts only rejects non-n/a
+    writes with empty block_ids; it does not gate on read_paper history.
     """
 
     async def awrap_tool_call(
