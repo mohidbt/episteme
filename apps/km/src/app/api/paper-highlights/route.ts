@@ -63,48 +63,20 @@ export async function POST(req: Request) {
   if (items.some((it) => it.paperId !== items[0].paperId)) {
     return jsonError(400, "validation", { message: "all highlights must target the same paperId" });
   }
-  let rows;
-  try {
-    rows = await db
-      .insert(paperHighlights)
-      .values(
-        items.map((it) => ({
-          paperId: it.paperId,
-          userId,
-          page: it.page,
-          bbox: (it.bbox ?? null) as typeof paperHighlights.$inferInsert["bbox"],
-          runId: it.runId ?? null,
-          toolCallId: it.toolCallId ?? null,
-          color: it.color ?? null,
-          noteMd: it.noteMd ?? null,
-        })),
-      )
-      .returning();
-  } catch (e) {
-    // TODO(diagnostic): revert after root cause of paper-highlights 500 confirmed.
-    const msg = e instanceof Error ? e.message : String(e);
-    const code =
-      (e as { code?: string })?.code
-      ?? ((e as { cause?: { code?: string } })?.cause?.code);
-    const causeMsg = (e as { cause?: { message?: string } })?.cause?.message;
-    const bboxTypes = items.map((it) =>
-      it.bbox === undefined || it.bbox === null
-        ? "none"
-        : Array.isArray(it.bbox)
-        ? "array"
-        : typeof it.bbox,
-    );
-    console.error("[paper-highlights POST] insert failed", {
-      code,
-      msg,
-      causeMsg,
-      itemCount: items.length,
-      bboxTypes,
-      paperId: items[0]?.paperId,
-      pages: items.map((it) => it.page),
-    });
-    // Do not echo raw driver message back to client — may leak schema/constraint names.
-    return jsonError(500, "db_insert_failed", { code: code ?? null });
-  }
+  const rows = await db
+    .insert(paperHighlights)
+    .values(
+      items.map((it) => ({
+        paperId: it.paperId,
+        userId,
+        page: it.page,
+        bbox: (it.bbox ?? null) as typeof paperHighlights.$inferInsert["bbox"],
+        runId: it.runId ?? null,
+        toolCallId: it.toolCallId ?? null,
+        color: it.color ?? null,
+        noteMd: it.noteMd ?? null,
+      })),
+    )
+    .returning();
   return Response.json(Array.isArray(parsed.data) ? rows : rows[0], { status: 201 });
 }

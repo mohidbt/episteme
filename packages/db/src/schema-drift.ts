@@ -196,12 +196,28 @@ export async function runDbChecks(databaseUrl: string): Promise<DbCheckSummary> 
           'required for highlight run linkage'
         union all
         select
+          'paper_highlights.run_id_is_text',
+          exists (
+            select 1 from information_schema.columns
+            where table_schema = 'public' and table_name = 'paper_highlights' and column_name = 'run_id' and data_type = 'text'
+          ),
+          'run_id must be text; agent writes uuid strings (caught prod 22P02 on 2026-05-12)'
+        union all
+        select
           'paper_highlights.tool_call_id_exists',
           exists (
             select 1 from information_schema.columns
             where table_schema = 'public' and table_name = 'paper_highlights' and column_name = 'tool_call_id'
           ),
           'required for reader tool traceability'
+        union all
+        select
+          'paper_highlights.tool_call_id_is_text',
+          exists (
+            select 1 from information_schema.columns
+            where table_schema = 'public' and table_name = 'paper_highlights' and column_name = 'tool_call_id' and data_type = 'text'
+          ),
+          'tool_call_id must be text; agent writes langchain tool call ids'
         union all
         select
           'user_highlights.paper_id_exists',
