@@ -6,7 +6,7 @@ GREEN: wire middleware=[GroundingGuard()] in build_km_agent.
 from __future__ import annotations
 
 from typing import List
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -49,26 +49,19 @@ async def test_grounding_guard_present_in_extract_route():
     mock_specs = load_skills(only=["data-extract"])
     model = _NopModel(captured=[])
 
-    captured_kwargs: dict = {}
-    real_create_deep_agent = None
-
-    def _capture_create_deep_agent(*args, **kwargs):
-        captured_kwargs.update(kwargs)
-        # Call through to the real function so the agent is actually built.
-        return real_create_deep_agent(*args, **kwargs)
-
     import km_agent as _km_agent_module  # noqa: PLC0415
 
-    real_create_deep_agent = _km_agent_module.__dict__.get("create_deep_agent")
-    # If not in module dict, import directly
-    if real_create_deep_agent is None:
-        from deepagents import create_deep_agent as _real  # noqa: PLC0415
-        real_create_deep_agent = _real
+    real_create_deep_agent = _km_agent_module.create_deep_agent
+    captured_kwargs: dict = {}
+
+    def _capture(*args, **kwargs):
+        captured_kwargs.update(kwargs)
+        return real_create_deep_agent(*args, **kwargs)
 
     with (
         patch("km_agent.DriveSkillsLoader") as MockLoader,
         patch("km_agent._fetch_personal_skills", new=AsyncMock(return_value=[])),
-        patch("km_agent.create_deep_agent", side_effect=_capture_create_deep_agent),
+        patch("km_agent.create_deep_agent", side_effect=_capture),
     ):
         MockLoader.return_value.load = AsyncMock(return_value=mock_specs)
         await _km_agent_module.build_km_agent(
