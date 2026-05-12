@@ -662,8 +662,8 @@ def test_resume_broadcasts_single_with_tool_call_id_to_all_pending():
     decisions = captured["resume_value"]["decisions"]
     assert len(decisions) == 2
     assert all(d["type"] == "approve" for d in decisions)
-    # _tool_call_id internal key must be stripped before forwarding to middleware.
-    assert all("tool_call_id" not in d and "_tool_call_id" not in d for d in decisions)
+    # tool_call_id passes through (middleware ignores it; pass-through is fine).
+    assert all(d.get("tool_call_id") == "X" for d in decisions)
 
 
 def test_resume_rejects_mismatched_count_with_400():

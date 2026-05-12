@@ -69,19 +69,10 @@ router = APIRouter(prefix="/agents/km", tags=["km-agent"])
 # Event mapping
 # ---------------------------------------------------------------------------
 
-def _build_interrupt_payload(interrupt_id: str, value: object) -> dict:
-    """Normalize a single interrupt's `value` into the SSE `interrupt` payload.
-
-    Phase 1.9f: emits a full ``actions`` list so the UI can render a batch
-    approval card when the model planned N parallel gated tool calls in one
-    turn. Legacy top-level ``tool``/``args``/``allowed_decisions`` mirror
-    ``actions[0]`` so existing single-action consumers keep working.
-
-    Shape accepted on `value`:
-      - HITLRequest: ``{"action_requests": [{name, args, ...}, ...],
-                        "review_configs": [{allowed_decisions, ...}, ...]}``
-      - Legacy hand-rolled: ``{"tool", "args", "allowed_decisions"}``
-    """
+def _build_interrupt_payload(interrupt_id: str, value: object) -> dict | None:
+    """Mirror ``actions[0]`` onto legacy top-level keys so single-action
+    consumers keep working alongside the batched ``actions`` list. Returns
+    None if neither the HITLRequest nor legacy shape is parseable."""
     actions: list[dict] = []
     if isinstance(value, dict):
         action_requests = value.get("action_requests")
@@ -101,8 +92,8 @@ def _build_interrupt_payload(interrupt_id: str, value: object) -> dict:
                     "args": ar.get("args", {}) or {},
                     "allowed_decisions": (rc.get("allowed_decisions", []) or []) if rc else [],
                 })
-        # Legacy/test shape fallback — yields one action when action_requests absent.
-        if not actions:
+        # Legacy hand-rolled shape — yields one action when action_requests absent.
+        if not actions and value.get("tool"):
             actions.append({
                 "tool_call_id": value.get("tool_call_id", "") or "",
                 "tool": value.get("tool", "") or "",
@@ -110,7 +101,7 @@ def _build_interrupt_payload(interrupt_id: str, value: object) -> dict:
                 "allowed_decisions": value.get("allowed_decisions", []) or [],
             })
     if not actions:
-        actions.append({"tool_call_id": "", "tool": "", "args": {}, "allowed_decisions": []})
+        return None
     first = actions[0]
     return {
         "id": interrupt_id,
@@ -170,7 +161,9 @@ async def _flush_pending_interrupts(agent, thread_id: str) -> list[tuple[str, di
                 interrupt_id = ""
             else:
                 interrupt_id = raw_id
-            out.append(("interrupt", _build_interrupt_payload(interrupt_id, value)))
+            payload = _build_interrupt_payload(interrupt_id, value)
+            if payload is not None:
+                out.append(("interrupt", payload))
     return out
 
 
@@ -235,7 +228,10 @@ def _map_event(ev: dict) -> tuple[str, dict] | None:
             interrupt_id = run_id
         else:
             interrupt_id = raw_id
-        return ("interrupt", _build_interrupt_payload(interrupt_id, value))
+        payload = _build_interrupt_payload(interrupt_id, value)
+        if payload is None:
+            return None
+        return ("interrupt", payload)
 
     return None
 
@@ -616,9 +612,8 @@ async def resume(req: Request, auth: InternalAuthDep):
             out["message"] = d["message"]
         if "edited_action" in d:
             out["edited_action"] = d["edited_action"]
-        # Preserve tool_call_id so positional ordering can be matched/logged.
         if "tool_call_id" in d:
-            out["_tool_call_id"] = d["tool_call_id"]
+            out["tool_call_id"] = d["tool_call_id"]
         client_decisions.append(out)
 
     thread_id = body["thread_id"]
@@ -650,12 +645,7 @@ async def resume(req: Request, auth: InternalAuthDep):
             },
         )
 
-    # Strip internal-only keys (_tool_call_id) before handing to middleware.
-    decisions: list[dict] = []
-    for d in resolved:
-        clean = {k: v for k, v in d.items() if not k.startswith("_")}
-        decisions.append(clean)
-    resume_payload = {"decisions": decisions}
+    resume_payload = {"decisions": resolved}
 
     async def gen():
         step = 0

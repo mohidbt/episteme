@@ -185,9 +185,7 @@ function parseSseChunk(
     try {
       const data = JSON.parse(dataLines.join("\n"));
       if (eventName && !data.type) data.type = eventName;
-      // Phase 1.9f forward-compat: an older server may emit `interrupt`
-      // without the `actions[]` list. Synthesize a 1-element list so the
-      // reducer / decision sender never has to branch on its absence.
+      // Older servers omit actions[]; synthesize so downstream never branches.
       if (data.type === "interrupt" && !Array.isArray(data.actions)) {
         data.actions = [
           {
@@ -476,24 +474,21 @@ export function AgentTranscript({
 
   const sendDecision = useCallback(
     async (
-      cardId: string,
+      _cardId: string,
       type: "approve" | "reject",
-      actions?: InterruptAction[],
+      actions: InterruptAction[],
     ): Promise<boolean> => {
       abortRef.current?.abort();
       const controller = new AbortController();
       abortRef.current = controller;
       dispatch({ type: "__resume" });
       setStreaming(true);
-      // Phase 1.9f: when the interrupt bundled N gated tool calls, POST N
-      // decisions so langchain's HITL middleware count matches (avoids
-      // ValueError "Number of human decisions (1) does not match
-      // number of hanging tool calls (N)"). Fallback to single-decision
-      // for synthesized/empty `actions` so legacy paths still work.
-      const decisions =
-        actions && actions.length > 0
-          ? actions.map((a) => ({ tool_call_id: a.toolCallId, type }))
-          : [{ tool_call_id: cardId, type }];
+      // POST N decisions so langchain HITL middleware's count matches the
+      // N hanging tool calls bundled into this interrupt.
+      const decisions = actions.map((a) => ({
+        tool_call_id: a.toolCallId,
+        type,
+      }));
       try {
         const res = await fetch("/api/agents/km/resume", {
           method: "POST",
@@ -700,7 +695,7 @@ interface CardViewProps {
   onDecision: (
     cardId: string,
     type: "approve" | "reject",
-    actions?: InterruptAction[],
+    actions: InterruptAction[],
   ) => Promise<boolean>;
   onForkSubmit: (messageId: string, editedText: string) => void;
   citationsByMessage: Record<string, Citation[]>;
@@ -997,7 +992,7 @@ interface InterruptCardViewProps {
   onDecision: (
     cardId: string,
     type: "approve" | "reject",
-    actions?: InterruptAction[],
+    actions: InterruptAction[],
   ) => Promise<boolean>;
 }
 

@@ -275,6 +275,25 @@ def test_map_event_legacy_shape_yields_single_action():
     assert payload["actions"][0]["tool"] == "make_public"
 
 
+def test_map_event_drops_interrupt_with_unparseable_value():
+    """When interrupt value has neither action_requests nor legacy tool shape,
+    _map_event must return None so no synthetic blank interrupt is emitted.
+    """
+    from routers.km_agent import _map_event  # noqa: PLC0415
+
+    class _FakeInt:
+        def __init__(self, value, id):  # noqa: A002
+            self.value = value
+            self.id = id
+
+    ev = {
+        "event": "on_chain_end",
+        "run_id": "r-z",
+        "data": {"output": {"__interrupt__": [_FakeInt(value={"unknown": "shape"}, id="int-3")]}},
+    }
+    assert _map_event(ev) is None
+
+
 def test_format_sse_serializes_langgraph_command():
     """format_sse must JSON-encode a langgraph Command without TypeError."""
     from langgraph.types import Command  # noqa: PLC0415
