@@ -107,8 +107,7 @@ async def csv_write_cell(
     PRECONDITION: For any cell where ``grounding.paper_id`` is set, you MUST call
     ``read_paper(paper_id=<that id>, scope=...)`` earlier in this thread before
     calling csv_write_cell. The runtime enforces this — an error ToolMessage is
-    returned if no prior read is observed. Writing "n/a" without reading is
-    also rejected (rule applies to both grounded values and the "n/a" sentinel).
+    returned if no prior read is observed.
 
     ``value`` and ``grounding`` remain in the schema for backward
     compatibility with older prompts, but user-facing calls ignore them. The

@@ -85,8 +85,7 @@ class GroundingGuard(AgentMiddleware):
             return ToolMessage(
                 content=(
                     f"error: forbidden — must call read_paper(paper_id='{paper_id}', scope=...) "
-                    "before writing this cell. Empty grounding for non-n/a values is rejected; "
-                    "writing 'n/a' without first observing the paper is also rejected."
+                    "earlier in this thread before writing a cell grounded in that paper."
                 ),
                 name=request.tool.name,
                 tool_call_id=request.tool_call["id"],
