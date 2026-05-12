@@ -126,13 +126,30 @@ def _parse_skill_md_text(text: str, path: Path) -> SkillSpec | None:
             f"SKILL.md at {path} (skill '{name}') missing required field: tools or allowed-tools"
         )
 
+    # --- emit DeprecationWarning for any legacy top-level subagents / require_approval ---
+    _legacy_top_level = [k for k in ("subagents", "require_approval") if k in data]
+    if _legacy_top_level:
+        warnings.warn(
+            f"SKILL.md at {path} (skill '{name}'): top-level "
+            f"{_legacy_top_level} key(s) are deprecated. "
+            "Move them under `metadata:` instead. "
+            "Legacy support will be removed in the next release.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+
     # --- subagents / require_approval: canonical under `metadata`, fallback to top-level ---
-    meta = data.get("metadata") or {}
+    raw_meta = data.get("metadata")
+    if raw_meta is not None and not isinstance(raw_meta, dict):
+        raise ValueError(
+            f"SKILL.md at {path} (skill '{name}'): `metadata` must be a dict, "
+            f"got {type(raw_meta).__name__}"
+        )
+    meta = raw_meta or {}
     if meta:
         subagents = _as_list(meta.get("subagents"))
         require_approval = _as_list(meta.get("require_approval"))
     else:
-        # Legacy: top-level keys — warn only once (tools warn already covers legacy detection)
         if "subagents" not in data and "require_approval" not in data:
             raise ValueError(
                 f"SKILL.md at {path} (skill '{name}') missing subagents/require_approval "

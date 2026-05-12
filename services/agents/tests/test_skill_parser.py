@@ -99,8 +99,10 @@ def test_populates_body_field():
     # body() must return non-empty string
     body = spec.body()
     assert len(body) > 0
-    # Must not contain frontmatter delimiters
-    assert "---" not in body
+    # Body must not start with a frontmatter delimiter line
+    assert not body.startswith("---\n")
+    # The canonical `name:` frontmatter line must not appear in the body
+    assert "name: data-extract" not in body
     # Must start with the first heading (after optional blank line)
     assert "# Data extract" in body
 
@@ -137,3 +139,46 @@ def test_legacy_top_level_keys_still_parse():
     # Must emit a DeprecationWarning for legacy form
     dep_warnings = [w for w in caught if issubclass(w.category, DeprecationWarning)]
     assert dep_warnings, "Expected at least one DeprecationWarning for legacy frontmatter"
+
+
+# ---------------------------------------------------------------------------
+# 5. metadata must be a dict — non-dict raises ValueError with skill name
+# ---------------------------------------------------------------------------
+
+METADATA_NON_DICT = """\
+---
+name: bad-skill
+description: Skill with non-dict metadata.
+allowed-tools: read_paper
+metadata: ["a", "b"]
+---
+
+# Bad skill
+"""
+
+
+def test_metadata_non_dict_raises():
+    with pytest.raises(ValueError) as exc_info:
+        _parse(METADATA_NON_DICT)
+    assert "bad-skill" in str(exc_info.value)
+
+
+# ---------------------------------------------------------------------------
+# 6. Top-level legacy `subagents` warns even when `allowed-tools` is used
+# ---------------------------------------------------------------------------
+
+CANONICAL_TOOLS_WITH_LEGACY_SUBAGENTS = """\
+---
+name: mixed-skill
+description: Skill mixing canonical tools with legacy top-level subagents.
+allowed-tools: read_paper
+subagents: [x]
+---
+
+# Mixed skill
+"""
+
+
+def test_legacy_subagents_top_level_warns():
+    with pytest.warns(DeprecationWarning, match="mixed-skill"):
+        _parse(CANONICAL_TOOLS_WITH_LEGACY_SUBAGENTS)
