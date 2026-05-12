@@ -5,118 +5,164 @@ deleting the hand-rolled bullets block.
 """
 from __future__ import annotations
 
-from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from typing import List
+from unittest.mock import AsyncMock, patch
 
 import pytest
+from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.messages import AIMessage, BaseMessage
+from langchain_core.outputs import ChatGeneration, ChatResult
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.store.memory import InMemoryStore
 
-
-def _make_data_extract_spec():
-    """Build a minimal SkillSpec for data-extract from disk."""
-    from skills import load_skills  # noqa: PLC0415
-    return load_skills(only=["data-extract"])
+SKILLS_ROOT = "/.episteme/agents/skills/"
 
 
-async def _build_capturing(enabled_skills: list[str], loaded_specs=None) -> dict:
-    """Call build_km_agent with captured create_deep_agent kwargs.
+# ---------------------------------------------------------------------------
+# Fake model that records model-facing messages and terminates the agent loop.
+# ---------------------------------------------------------------------------
+
+class _CapturingFakeModel(BaseChatModel):
+    """Minimal BaseChatModel that captures every invoke call's input messages.
+
+    Returns a no-tool AIMessage on the first call so the agent loop terminates
+    immediately without needing a real LLM key.
+    """
+
+    captured_inputs: list = []
+
+    @property
+    def _llm_type(self) -> str:
+        return "fake"
+
+    def _generate(self, messages: List[BaseMessage], **kwargs) -> ChatResult:
+        self.captured_inputs.append(list(messages))
+        # tool_calls=[] is required to end the agent loop (no pending tool calls)
+        return ChatResult(
+            generations=[ChatGeneration(message=AIMessage(content="done", tool_calls=[]))]
+        )
+
+    def bind_tools(self, tools, **kwargs):  # type: ignore[override]
+        # Return self — captured inputs are recorded regardless of bound tools.
+        return self
+
+
+def _extract_system_text(messages: list) -> str:
+    """Return the full text of the first SystemMessage in *messages*.
+
+    The content may be a list of prompt-cache blocks (dicts with a 'text' key)
+    or a plain string, depending on the deepagents / Anthropic middleware version.
+    """
+    from langchain_core.messages import SystemMessage  # noqa: PLC0415
+
+    sys_msgs = [m for m in messages if isinstance(m, SystemMessage)]
+    assert sys_msgs, "No SystemMessage found in model-facing messages"
+    content = sys_msgs[0].content
+    if isinstance(content, list):
+        return " ".join(
+            block.get("text", "") if isinstance(block, dict) else str(block)
+            for block in content
+        )
+    return str(content)
+
+
+async def _run_agent_and_capture_system_prompt(
+    enabled_skills: list[str],
+    loaded_specs=None,
+) -> str:
+    """Build the real agent (no create_deep_agent patch), run one turn with the
+    capturing fake model, and return the system message text the model saw.
 
     DriveSkillsLoader is mocked so no network call is needed.
     """
     from km_agent import build_km_agent  # noqa: PLC0415
+    from skills import load_skills  # noqa: PLC0415
 
-    captured: dict = {}
-    fake_graph = MagicMock()
-
-    def _capture_create(**kwargs):
-        captured.update(kwargs)
-        return fake_graph
-
-    # Return pre-loaded disk specs so the real filter / interrupt logic runs.
-    mock_specs = loaded_specs if loaded_specs is not None else _make_data_extract_spec()
+    mock_specs = loaded_specs if loaded_specs is not None else load_skills(only=["data-extract"])
+    model = _CapturingFakeModel(captured_inputs=[])
 
     with (
-        patch("km_agent.create_deep_agent", side_effect=_capture_create),
         patch("km_agent.DriveSkillsLoader") as MockLoader,
         patch("km_agent._fetch_personal_skills", new=AsyncMock(return_value=[])),
     ):
-        instance = MockLoader.return_value
-        instance.load = AsyncMock(return_value=mock_specs)
-        await build_km_agent(
+        MockLoader.return_value.load = AsyncMock(return_value=mock_specs)
+        agent = await build_km_agent(
             user_id="u1",
             thread_id="t1",
-            model="claude-sonnet-4-5-20250929",
+            model=model,
             enabled_skills=enabled_skills,
             approval_rules={},
             store=InMemoryStore(),
             saver=MemorySaver(),
         )
 
-    return captured
+    from langchain_core.messages import HumanMessage  # noqa: PLC0415
 
+    agent.invoke(
+        {"messages": [HumanMessage(content="hello")]},
+        config={"configurable": {"thread_id": "t1"}, "recursion_limit": 10},
+    )
+
+    assert model.captured_inputs, "Fake model was never called — agent did not reach the model node"
+    return _extract_system_text(model.captured_inputs[0])
+
+
+# ---------------------------------------------------------------------------
+# Integration test: model-facing prompt contains expected skill content
+# ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
 async def test_skills_section_advertises_reachable_path():
-    """After GREEN: create_deep_agent is called with skills=[SKILLS_ROOT].
+    """The compiled agent's first model call must include the skill name,
+    its virtual SKILL.md path, 'read_file', and 'limit=1000' in the system
+    message — proving SkillsMiddleware is wired and formats the prompt correctly.
 
-    The canonical SkillsMiddleware then advertises each skill's path in the
-    format  -> Read `/.episteme/agents/skills/<name>/SKILL.md` for full
-    instructions, and the template instructs the model to use read_file with
-    limit=1000.
+    Regression guard: temporarily set skills=None in km_agent.py and this test
+    fails; restore it and the test passes.
     """
-    captured = await _build_capturing(enabled_skills=["data-extract"])
-
-    # GREEN assertion: skills list must be passed (not None)
-    assert captured.get("skills") is not None, (
-        "create_deep_agent was called with skills=None — SkillsMiddleware not enabled"
-    )
-    assert "/.episteme/agents/skills/" in captured["skills"], (
-        f"Expected '/.episteme/agents/skills/' in skills sources, got: {captured['skills']}"
+    system_text = await _run_agent_and_capture_system_prompt(
+        enabled_skills=["data-extract"]
     )
 
-    # Verify the SKILLS_SYSTEM_PROMPT template (canonical) instructs read_file with limit=1000.
-    from deepagents.middleware.skills import SKILLS_SYSTEM_PROMPT  # noqa: PLC0415
+    assert "data-extract" in system_text, (
+        "Skill name 'data-extract' missing from model-facing system prompt"
+    )
+    assert f"{SKILLS_ROOT}data-extract/SKILL.md" in system_text, (
+        f"Reachable path '{SKILLS_ROOT}data-extract/SKILL.md' missing from system prompt"
+    )
+    assert "read_file" in system_text, (
+        "'read_file' instruction missing from model-facing system prompt"
+    )
+    assert "limit=1000" in system_text, (
+        "'limit=1000' instruction missing from model-facing system prompt"
+    )
 
-    assert "read_file" in SKILLS_SYSTEM_PROMPT
-    assert "limit=1000" in SKILLS_SYSTEM_PROMPT
 
-    # Verify SkillsMiddleware formats data-extract's path correctly.
-    from backends.skills_backend import SkillsBackend  # noqa: PLC0415
-    from deepagents.middleware.skills import SkillsMiddleware, _list_skills  # noqa: PLC0415
-
-    backend = SkillsBackend()
-    skills = _list_skills(backend, "/.episteme/agents/skills/")
-    skill_names = {s["name"] for s in skills}
-    assert "data-extract" in skill_names, f"data-extract not found in {skill_names}"
-
-    de = next(s for s in skills if s["name"] == "data-extract")
-    assert de["description"], "data-extract must have a description"
-    assert de["path"] == "/.episteme/agents/skills/data-extract/SKILL.md"
-
-    mw = SkillsMiddleware(backend=backend, sources=["/.episteme/agents/skills/"])
-    formatted = mw._format_skills_list(skills)
-    assert "data-extract" in formatted
-    assert "/.episteme/agents/skills/data-extract/SKILL.md" in formatted
-    assert "Read `/.episteme/agents/skills/data-extract/SKILL.md` for full instructions" in formatted
-
+# ---------------------------------------------------------------------------
+# Wiring-level regression guard: no hand-rolled bullets block
+# ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
 async def test_hand_rolled_bullets_block_removed():
-    """After GREEN: system_prompt passed to create_deep_agent must NOT contain
-    the hand-rolled '## Skills (workflows you execute INLINE)' marker.
+    """system_prompt passed to create_deep_agent must NOT contain the
+    hand-rolled '## Skills (workflows you execute INLINE)' marker.
 
-    Before GREEN (RED): build_km_agent appends the hand-rolled block when
-    enabled_skills is non-empty.
+    Before GREEN (RED): build_km_agent appended the hand-rolled block when
+    enabled_skills was non-empty.
     """
-    captured = await _build_capturing(enabled_skills=["data-extract"])
-    system_prompt = captured.get("system_prompt", "")
-
-    assert "## Skills (workflows you execute INLINE)" not in system_prompt, (
-        "Hand-rolled bullets block still present in system_prompt — "
-        "delete lines 363-382 in km_agent.py"
+    system_text = await _run_agent_and_capture_system_prompt(
+        enabled_skills=["data-extract"]
     )
 
+    assert "## Skills (workflows you execute INLINE)" not in system_text, (
+        "Hand-rolled bullets block still present in system_prompt — "
+        "delete the legacy hand-rolled block in km_agent.py"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Backend sanity check: read_file can fetch the skill body on demand
+# ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
 async def test_read_file_can_fetch_skill_body():
@@ -128,12 +174,11 @@ async def test_read_file_can_fetch_skill_body():
     from backends.skills_backend import SkillsBackend  # noqa: PLC0415
 
     backend = SkillsBackend()
-    result = await backend.aread("/.episteme/agents/skills/data-extract/SKILL.md")
+    result = await backend.aread(f"{SKILLS_ROOT}data-extract/SKILL.md")
 
     assert result.error is None, f"read failed: {result.error}"
     content = result.file_data["content"]
 
-    # First heading of the data-extract SKILL.md body
     assert "# Data extract" in content, (
         f"Expected '# Data extract' heading in skill body, got start: {content[:200]!r}"
     )
