@@ -32,7 +32,18 @@ function resolveTrustedOrigins(): string[] {
   const origins = new Set<string>();
   const add = (url: string | undefined) => {
     if (!url) return;
-    origins.add(url.startsWith("http") ? url : `https://${url}`);
+    const normalized = url.startsWith("http") ? url : `https://${url}`;
+    origins.add(normalized);
+    try {
+      const u = new URL(normalized);
+      if (u.hostname.startsWith("www.")) {
+        origins.add(`${u.protocol}//${u.hostname.slice(4)}${u.port ? `:${u.port}` : ""}`);
+      } else {
+        origins.add(`${u.protocol}//www.${u.hostname}${u.port ? `:${u.port}` : ""}`);
+      }
+    } catch {
+      // ignore malformed URL
+    }
   };
   add(process.env.BETTER_AUTH_URL);
   add(process.env.NEXT_PUBLIC_APP_URL);
