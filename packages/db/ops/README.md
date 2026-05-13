@@ -63,6 +63,29 @@ Then update the `PROD_DATABASE_URL` GitHub secret. Grants live on
 `predeploy_ro` (the NOLOGIN role) so they survive rotation without
 re-issuance.
 
+## schema-snapshot.sql (structural drift baseline)
+
+`packages/db/schema-snapshot.sql` is a normalized `pg_dump --schema-only`
+of prod. The daily `schema-snapshot-diff` GitHub Action diffs current prod
+against it and goes red on any structural delta — enums, defaults,
+triggers, RLS, function bodies, etc. (things `information_schema` misses).
+
+### Seeding the baseline (one-shot)
+
+```bash
+export DATABASE_URL='postgres://predeploy_ro_user:...@.../neondb?sslmode=require'
+packages/db/scripts/init-snapshot.sh
+# review the diff, then commit packages/db/schema-snapshot.sql
+```
+
+### After a planned migration deploys
+
+```bash
+DATABASE_URL='...' pnpm --filter @episteme/db db:snapshot-update
+git add packages/db/schema-snapshot.sql
+git commit -m "chore(db): refresh schema snapshot after <migration>"
+```
+
 ### Why not `neon roles create`?
 
 The Neon CLI/dashboard role-create flow auto-grants `neon_superuser` to new
