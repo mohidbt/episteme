@@ -75,42 +75,49 @@ export function CitationCard({
   const [leftPos, setLeftPos] = useState<number>(rect?.left ?? 0);
   const [abstractExpanded, setAbstractExpanded] = useState(false);
   const [folderMenuOpen, setFolderMenuOpen] = useState(false);
-  const [folderMenuAlign, setFolderMenuAlign] = useState<"right" | "left">("right");
+  const [folderMenuPos, setFolderMenuPos] = useState<{ top: number; left: number } | null>(null);
 
-  // Compute dropdown alignment to avoid horizontal viewport clipping.
-  // Default: right-anchored (drops left from button). If button is too close
-  // to the left edge, anchor left instead so the dropdown opens to the right.
-  // useLayoutEffect runs before paint so first open shows correct alignment
-  // without a flash from the default `right` value.
+  // Position dropdown with fixed coords so it escapes ancestor `overflow-hidden`
+  // (the citations sidebar clips absolute children). Anchor under the folder
+  // button, right-aligned by default; flip to left-aligned if it would overflow
+  // the viewport on the left.
   useLayoutEffect(() => {
     if (!folderMenuOpen) return;
     const btnWrap = folderMenuRef.current;
     if (!btnWrap) return;
-    const rect = btnWrap.getBoundingClientRect();
-    // Approx dropdown width (w-56 = 14rem = 224px).
+    const r = btnWrap.getBoundingClientRect();
     const DROPDOWN_WIDTH = 224;
-    // If anchoring right (default) would push the dropdown's left past 0, flip.
-    const rightAnchoredLeft = rect.right - DROPDOWN_WIDTH;
-    if (rightAnchoredLeft < 8) {
-      setFolderMenuAlign("left");
-    } else {
-      setFolderMenuAlign("right");
+    const MARGIN = 8;
+    let left = r.right - DROPDOWN_WIDTH;
+    if (left < MARGIN) left = r.left;
+    if (left + DROPDOWN_WIDTH > window.innerWidth - MARGIN) {
+      left = Math.max(MARGIN, window.innerWidth - DROPDOWN_WIDTH - MARGIN);
     }
+    setFolderMenuPos({ top: r.bottom + 4, left });
   }, [folderMenuOpen]);
 
-  // Close folder menu on outside click.
+  // Close folder menu on outside click. Menu is portaled via `fixed` so we
+  // also check against its DOM node (tracked by data attribute).
   useEffect(() => {
     if (!folderMenuOpen) return;
     function onDocMouseDown(e: MouseEvent) {
-      if (
-        folderMenuRef.current &&
-        !folderMenuRef.current.contains(e.target as Node)
-      ) {
-        setFolderMenuOpen(false);
-      }
+      const target = e.target as Node;
+      if (folderMenuRef.current && folderMenuRef.current.contains(target)) return;
+      const menuEl = document.querySelector('[data-folder-menu="true"]');
+      if (menuEl && menuEl.contains(target)) return;
+      setFolderMenuOpen(false);
+    }
+    function onScrollOrResize() {
+      setFolderMenuOpen(false);
     }
     document.addEventListener("mousedown", onDocMouseDown);
-    return () => document.removeEventListener("mousedown", onDocMouseDown);
+    window.addEventListener("resize", onScrollOrResize);
+    window.addEventListener("scroll", onScrollOrResize, true);
+    return () => {
+      document.removeEventListener("mousedown", onDocMouseDown);
+      window.removeEventListener("resize", onScrollOrResize);
+      window.removeEventListener("scroll", onScrollOrResize, true);
+    };
   }, [folderMenuOpen]);
 
   const isPopover = variant === "popover";
@@ -383,13 +390,12 @@ export function CitationCard({
                 >
                   <Folder className="size-3.5" aria-hidden />
                 </Button>
-                {folderMenuOpen && (
+                {folderMenuOpen && folderMenuPos && (
                   <div
                     role="menu"
-                    className={[
-                      "absolute top-full z-[60] mt-1 max-h-64 w-56 overflow-y-auto rounded-md border bg-background p-1 shadow-lg",
-                      folderMenuAlign === "right" ? "right-0" : "left-0",
-                    ].join(" ")}
+                    data-folder-menu="true"
+                    style={{ top: folderMenuPos.top, left: folderMenuPos.left }}
+                    className="fixed z-[60] max-h-64 w-56 overflow-y-auto rounded-md border bg-background p-1 shadow-lg"
                   >
                     <button
                       type="button"
