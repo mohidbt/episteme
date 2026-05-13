@@ -628,10 +628,12 @@ export function Reader({
       node: (
         <HighlightsSidebar
           open={sidebarOpen}
-          highlights={mergedSidebarHighlights}
+          aiHighlights={aiSidebarHighlights}
+          userHighlights={sidebarHighlights.map((h) => ({ ...h, source: h.source ?? ("user" as const) }))}
           runs={allRuns}
           loading={highlightsLoading || aiHighlightsLoading}
           error={highlightsSidebarError}
+          paperId={paperId}
           onNavigateHighlight={(id) => setFocusHighlightId(id)}
           dockControl={
             <DockMenu

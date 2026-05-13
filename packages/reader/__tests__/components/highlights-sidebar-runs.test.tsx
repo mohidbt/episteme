@@ -2,47 +2,186 @@ import { afterEach, describe, it, expect, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { HighlightsSidebar } from "../../src/components/HighlightsSidebar";
 
-afterEach(() => cleanup());
+// ─── localStorage mock ────────────────────────────────────────────────────────
+// happy-dom provides window.localStorage but its API surface differs slightly.
+// We stub it to a simple in-memory map so all tests stay portable.
 
-describe("HighlightsSidebar run rows", () => {
-  const highlights = [
-    { id: 11, pageNumber: 1, textContent: "a", color: "amber", note: null, comment: null, createdAt: "", runId: "run-1", source: "ai-auto" as const },
-    { id: 12, pageNumber: 2, textContent: "b", color: "amber", note: null, comment: null, createdAt: "", runId: "run-1", source: "ai-auto" as const },
-    { id: 13, pageNumber: 3, textContent: "c", color: "amber", note: null, comment: null, createdAt: "", runId: "run-1", source: "ai-auto" as const },
-  ];
+function makeFakeStorage() {
+  const store: Record<string, string> = {};
+  return {
+    getItem: (k: string) => store[k] ?? null,
+    setItem: (k: string, v: string) => { store[k] = v; },
+    removeItem: (k: string) => { delete store[k]; },
+    clear: () => { for (const k in store) delete store[k]; },
+  };
+}
 
-  it("clicking arrow on a 3-highlight run cycles through highlights", () => {
+let fakeStorage = makeFakeStorage();
+
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+  fakeStorage = makeFakeStorage();
+});
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function makeAiHighlight(
+  id: number | string,
+  runId: string | null = "run-1",
+  toolCallId: string | null = null,
+) {
+  return {
+    id,
+    pageNumber: 1,
+    textContent: `text-${id}`,
+    color: "amber",
+    note: null,
+    comment: null,
+    createdAt: "",
+    source: "ai-auto" as const,
+    runId,
+    toolCallId,
+  };
+}
+
+function makeUserHighlight(id: number) {
+  return {
+    id,
+    pageNumber: 2,
+    textContent: `user-text-${id}`,
+    color: "yellow",
+    note: null,
+    comment: null,
+    createdAt: "",
+  };
+}
+
+const BASE_PROPS = {
+  open: true,
+  loading: false,
+  error: null,
+  paperId: "paper-abc",
+};
+
+// ─── G8 Acceptance tests ──────────────────────────────────────────────────────
+
+describe("G8: one tab per run — runId grouping", () => {
+  it("1 run with 5 highlights (same runId, 5 different toolCallIds) → exactly ONE tab in AI segment", () => {
+    const highlights = [1, 2, 3, 4, 5].map((i) =>
+      makeAiHighlight(i, "run-1", `tc-${i}`),
+    );
+    const runs = [{ id: "run-1", instruction: "Summarise key points", summary: null, highlightCount: 5 }];
+
+    render(
+      <HighlightsSidebar
+        {...BASE_PROPS}
+        aiHighlights={highlights}
+        userHighlights={[]}
+        runs={runs}
+      />,
+    );
+
+    // AI segment is active by default when runs exist.
+    // There should be exactly one run row showing "(5)"
+    const runButtons = screen.getAllByRole("button", { name: /Summarise key points/i });
+    expect(runButtons).toHaveLength(1);
+    expect(runButtons[0].textContent).toContain("(5)");
+  });
+
+  it("3 user highlights + 1 AI run of 2 → segments are isolated, no overlap", () => {
+    const aiHighlights = [makeAiHighlight("a1", "run-X"), makeAiHighlight("a2", "run-X")];
+    const userHighlights = [makeUserHighlight(10), makeUserHighlight(11), makeUserHighlight(12)];
+    const runs = [{ id: "run-X", instruction: "Deep read", summary: null, highlightCount: 2 }];
+
+    render(
+      <HighlightsSidebar
+        {...BASE_PROPS}
+        aiHighlights={aiHighlights}
+        userHighlights={userHighlights}
+        runs={runs}
+      />,
+    );
+
+    // AI segment active (runs exist). Should show 1 run tab with (2).
+    expect(screen.getByRole("button", { name: /Deep read/i }).textContent).toContain("(2)");
+    // User highlights should NOT appear in AI segment.
+    expect(screen.queryByText("user-text-10")).toBeNull();
+
+    // Switch to User segment.
+    fireEvent.click(screen.getByRole("button", { name: /^User$/i }));
+
+    // User segment: 3 items, no AI run rows.
+    expect(screen.getByText("user-text-10")).toBeDefined();
+    expect(screen.getByText("user-text-11")).toBeDefined();
+    expect(screen.getByText("user-text-12")).toBeDefined();
+    expect(screen.queryByText(/Deep read/)).toBeNull();
+  });
+});
+
+describe("G8: segment persistence in localStorage", () => {
+  it("switching segment writes reader-highlights-segment:<paperId> to localStorage", () => {
+    vi.stubGlobal("localStorage", fakeStorage);
+
+    render(
+      <HighlightsSidebar
+        {...BASE_PROPS}
+        paperId="paper-xyz"
+        aiHighlights={[makeAiHighlight(1, "run-1")]}
+        userHighlights={[makeUserHighlight(99)]}
+        runs={[{ id: "run-1", instruction: "x", summary: null, highlightCount: 1 }]}
+      />,
+    );
+
+    // Switch to User segment.
+    fireEvent.click(screen.getByRole("button", { name: /^User$/i }));
+    expect(fakeStorage.getItem("reader-highlights-segment:paper-xyz")).toBe("user");
+
+    // Switch back to AI segment.
+    fireEvent.click(screen.getByRole("button", { name: /^AI$/i }));
+    expect(fakeStorage.getItem("reader-highlights-segment:paper-xyz")).toBe("ai");
+  });
+});
+
+// ─── Existing behaviour (kept passing) ────────────────────────────────────────
+
+describe("HighlightsSidebar run navigation (existing)", () => {
+  const highlights = [1, 2, 3].map((i) => makeAiHighlight(i, "run-1"));
+  const runs = [{ id: "run-1", instruction: "x", summary: "sum", highlightCount: 3 }];
+
+  it("clicking Next arrow on a 3-highlight run cycles through highlights", () => {
     const onNavigateHighlight = vi.fn();
     render(
       <HighlightsSidebar
-        open
-        highlights={highlights}
-        runs={[{ id: "run-1", instruction: "x", summary: "sum", highlightCount: 3 }]}
-        loading={false}
-        error={null}
+        {...BASE_PROPS}
+        aiHighlights={highlights}
+        userHighlights={[]}
+        runs={runs}
         onNavigateHighlight={onNavigateHighlight}
       />,
     );
     const next = screen.getByRole("button", { name: "Next highlight" });
+    // Start at cursor 0. First click → cursor becomes 1 → navigates to id=2
+    // Second click → cursor becomes 2 → navigates to id=3
+    // Third click → cursor becomes 0 → navigates to id=1
     fireEvent.click(next);
     fireEvent.click(next);
     fireEvent.click(next);
-    expect(onNavigateHighlight.mock.calls.map((c) => c[0])).toEqual([11, 12, 13]);
+    expect(onNavigateHighlight.mock.calls.map((c) => c[0])).toEqual([2, 3, 1]);
   });
 
   it("clicking row flies to first highlight", () => {
     const onNavigateHighlight = vi.fn();
     render(
       <HighlightsSidebar
-        open
-        highlights={highlights}
-        runs={[{ id: "run-1", instruction: "x", summary: "sum", highlightCount: 3 }]}
-        loading={false}
-        error={null}
+        {...BASE_PROPS}
+        aiHighlights={highlights}
+        userHighlights={[]}
+        runs={runs}
         onNavigateHighlight={onNavigateHighlight}
       />,
     );
     fireEvent.click(screen.getByRole("button", { name: /sum/i }));
-    expect(onNavigateHighlight).toHaveBeenCalledWith(11);
+    expect(onNavigateHighlight).toHaveBeenCalledWith(1);
   });
 });
