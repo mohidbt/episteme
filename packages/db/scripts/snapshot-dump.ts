@@ -15,10 +15,20 @@ const PG_DUMP_ARGS = [
 ];
 
 async function dump(databaseUrl: string): Promise<string> {
-  const { stdout } = await execFileP("pg_dump", [...PG_DUMP_ARGS, databaseUrl], {
-    maxBuffer: 64 * 1024 * 1024,
-  });
-  return stdout;
+  const pgDump = process.env.PG_DUMP_BIN ?? "pg_dump";
+  try {
+    const { stdout } = await execFileP(pgDump, [...PG_DUMP_ARGS, databaseUrl], {
+      maxBuffer: 64 * 1024 * 1024,
+    });
+    return stdout;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(redactUrl(msg, databaseUrl));
+  }
+}
+
+function redactUrl(message: string, url: string): string {
+  return message.split(url).join("[REDACTED_DATABASE_URL]");
 }
 
 async function main(): Promise<void> {

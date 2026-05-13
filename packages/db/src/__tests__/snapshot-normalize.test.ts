@@ -18,6 +18,15 @@ describe("normalizeDump", () => {
     );
   });
 
+  it("strips \\restrict / \\unrestrict tokens emitted by pg_dump 17", () => {
+    const input = [
+      "\\restrict XFx3xZKE9ZM1Sie5kXrbEQRKOWsTbVED9QAe351q0rYV",
+      "CREATE TABLE foo (id int);",
+      "\\unrestrict XFx3xZKE9ZM1Sie5kXrbEQRKOWsTbVED9QAe351q0rYV",
+    ].join("\n");
+    expect(normalizeDump(input)).toBe("CREATE TABLE foo (id int);\n");
+  });
+
   it("strips SET ...; lines emitted by pg_dump", () => {
     const input = [
       "SET statement_timeout = 0;",

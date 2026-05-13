@@ -54,6 +54,7 @@ export function normalizeDump(input: string): string {
     if (line.length === 0) continue;
     const trimmed = line.trimStart();
     if (trimmed.startsWith("--")) continue;
+    if (/^\\(?:restrict|unrestrict)\b/.test(trimmed) && !inBody(lineStart)) continue;
     if (/^SET\s[^;]*;$/i.test(trimmed) && !inBody(lineStart)) continue;
     out.push(line);
   }
