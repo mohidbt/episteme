@@ -384,6 +384,46 @@ async def test_highlight_attaches_run_id_per_invocation():
 
 
 @pytest.mark.asyncio
+async def test_highlight_returns_1based_page_in_result():
+    """G4: block_id :p2:41 (0-based DB page 2) → returned page == 3 (1-based),
+    matching paper_highlights.page persisted by KM."""
+    from tools.pdfs import highlight  # noqa: PLC0415
+    from deps import db as db_module  # noqa: PLC0415
+
+    class _Conn:
+        async def fetch(self, *_args, **_kwargs):
+            return [{"page": 2, "bbox": {"x0": 0, "y0": 0, "x1": 10, "y1": 10}, "order_index": 41}]
+
+    class _Acquire:
+        async def __aenter__(self):
+            return _Conn()
+        async def __aexit__(self, *_exc):
+            return False
+
+    class _Pool:
+        def acquire(self):
+            return _Acquire()
+
+    with patch("tools.pdfs.km_post", new_callable=AsyncMock) as mock_post:
+        prev_pool = db_module._pool
+        db_module._pool = _Pool()
+        mock_post.return_value = {"id": "hl-g4", "page": 3}
+        try:
+            result = await highlight.ainvoke(
+                {"pdf_id": "paper-x", "block_ids": ["paper-x:p2:41"]},
+                config=CFG,
+            )
+        finally:
+            db_module._pool = prev_pool
+
+    assert result.get("ok") is True
+    assert result.get("page") == 3, f"expected page=3, got {result.get('page')}"
+    # KM persists page=3 (1-based); verify the POST body also said page=3
+    body = mock_post.call_args.args[1]
+    assert body["page"] == 3
+
+
+@pytest.mark.asyncio
 async def test_extract_passages_stubbed():
     from tools.pdfs import extract_passages  # noqa: PLC0415
 

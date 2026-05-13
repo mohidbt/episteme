@@ -209,7 +209,13 @@ async def highlight(
         body["noteMd"] = note
     if color is not None:
         body["color"] = color
-    return await km_post("/api/paper-highlights", body, user_id=user_id)
+    result = await km_post("/api/paper-highlights", body, user_id=user_id)
+    highlight_id = result.get("id") if isinstance(result, dict) else None
+    return {
+        "ok": True,
+        "page": page_for_payload,
+        "highlight_ids": [highlight_id] if highlight_id else [],
+    }
 
 
 @tool
