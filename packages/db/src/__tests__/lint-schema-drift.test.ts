@@ -3,6 +3,7 @@ import {
   extractRiskyDDL,
   findViolations,
   hasMatchingCheck,
+  shouldSkipLint,
 } from "../../scripts/lint-schema-drift";
 
 describe("extractRiskyDDL", () => {
@@ -136,5 +137,17 @@ describe("findViolations", () => {
       { path: "0031.sql", sql: `ALTER TABLE beta DROP COLUMN col_y;` },
     ];
     expect(findViolations(files, schemaSrc)).toHaveLength(2);
+  });
+});
+
+describe("shouldSkipLint", () => {
+  it("returns true when PR body contains predeploy-lint:skip token", () => {
+    expect(shouldSkipLint("predeploy-lint:skip foo")).toBe(true);
+  });
+
+  it("returns false when PR body is undefined or lacks token", () => {
+    expect(shouldSkipLint(undefined)).toBe(false);
+    expect(shouldSkipLint("")).toBe(false);
+    expect(shouldSkipLint("some unrelated PR description")).toBe(false);
   });
 });

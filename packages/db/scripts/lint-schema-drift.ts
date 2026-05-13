@@ -133,9 +133,12 @@ async function listNewMigrationFiles(repoRoot: string): Promise<string[]> {
     .filter((s) => s.length > 0);
 }
 
+export function shouldSkipLint(prBody: string | undefined): boolean {
+  return typeof prBody === "string" && prBody.includes("predeploy-lint:skip");
+}
+
 async function main(): Promise<void> {
-  const prBody = process.env.PR_BODY ?? "";
-  if (prBody.includes("predeploy-lint:skip")) {
+  if (shouldSkipLint(process.env.PR_BODY)) {
     console.log("[lint-schema-drift] skip token present in PR body; exiting 0");
     return;
   }
