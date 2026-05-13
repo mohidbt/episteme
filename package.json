@@ -15,8 +15,9 @@
     "db:studio": "pnpm -F @episteme/db studio",
     "db:predeploy-check": "pnpm -F @episteme/db predeploy-check",
     "check:scalability": "tsx scripts/check-skill-addition.ts",
-    "test:scripts": "tsx --test scripts/check-skill-addition.test.ts",
-    "smoke:auth-hooks": "tsx scripts/smoke-auth-hooks.ts"
+    "test:scripts": "tsx --test scripts/check-skill-addition.test.ts scripts/post-deploy-smoke.test.ts",
+    "smoke:auth-hooks": "tsx scripts/smoke-auth-hooks.ts",
+    "smoke:post-deploy": "tsx scripts/post-deploy-smoke.ts"
   },
   "devDependencies": {
     "tsx": "^4.21.0"

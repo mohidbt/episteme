@@ -1,0 +1,45 @@
+name: post-deploy-smoke
+
+# Runs after every push to main, once Vercel has deployed. Hits a small set
+# of read-only public endpoints and asserts 200 + expected body substring.
+# Post-fact detection: deploy is already live; this alerts fast so a human
+# can roll back manually.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    name: post deploy smoke (prod)
+    runs-on: ubuntu-latest
+    concurrency:
+      group: post-deploy-smoke-${{ github.ref }}
+      cancel-in-progress: true
+    env:
+      SMOKE_BASE_URL: https://tryepisteme.com
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.12.0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install deps
+        run: pnpm install --frozen-lockfile
+
+      # Vercel main deploys typically finish within 60-90s. The smoke script
+      # already retries on transient failures, so a fixed sleep here is the
+      # simplest robust option without pulling in a third-party action.
+      - name: Wait for Vercel deploy
+        run: sleep 120
+
+      - name: Run smoke
+        run: pnpm exec tsx scripts/post-deploy-smoke.ts
