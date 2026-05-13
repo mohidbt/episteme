@@ -109,7 +109,7 @@ describe("G8: one tab per run — runId grouping", () => {
     expect(screen.queryByText("user-text-10")).toBeNull();
 
     // Switch to User segment.
-    fireEvent.click(screen.getByRole("button", { name: /^User$/i }));
+    fireEvent.click(screen.getByRole("tab", { name: /^User$/i }));
 
     // User segment: 3 items, no AI run rows.
     expect(screen.getByText("user-text-10")).toBeDefined();
@@ -134,12 +134,59 @@ describe("G8: segment persistence in localStorage", () => {
     );
 
     // Switch to User segment.
-    fireEvent.click(screen.getByRole("button", { name: /^User$/i }));
+    fireEvent.click(screen.getByRole("tab", { name: /^User$/i }));
     expect(fakeStorage.getItem("reader-highlights-segment:paper-xyz")).toBe("user");
 
     // Switch back to AI segment.
-    fireEvent.click(screen.getByRole("button", { name: /^AI$/i }));
+    fireEvent.click(screen.getByRole("tab", { name: /^AI$/i }));
     expect(fakeStorage.getItem("reader-highlights-segment:paper-xyz")).toBe("ai");
+  });
+});
+
+// ─── New coverage (G8 codex review) ──────────────────────────────────────────
+
+describe("G8: edge cases", () => {
+  it("paper with no AI runs AND no user highlights → default segment is 'user', localStorage empty", () => {
+    vi.stubGlobal("localStorage", fakeStorage);
+
+    render(
+      <HighlightsSidebar
+        {...BASE_PROPS}
+        paperId="paper-empty"
+        aiHighlights={[]}
+        userHighlights={[]}
+        runs={[]}
+      />,
+    );
+
+    // Default segment should be "user" (no ai runs)
+    const userBtn = screen.getByRole("tab", { name: /^User$/i });
+    expect(userBtn.getAttribute("aria-pressed")).toBe("true");
+    // localStorage should not have been written
+    expect(fakeStorage.getItem("reader-highlights-segment:paper-empty")).toBeNull();
+  });
+
+  it("3 highlights with runId=null → AI segment shows exactly ONE 'Manual' tab containing 3 items", () => {
+    const highlights = [
+      makeAiHighlight("n1", null),
+      makeAiHighlight("n2", null),
+      makeAiHighlight("n3", null),
+    ];
+
+    render(
+      <HighlightsSidebar
+        {...BASE_PROPS}
+        aiHighlights={highlights}
+        userHighlights={[]}
+        runs={[]}
+      />,
+    );
+
+    // AI segment active because there are ai highlights (manual group).
+    // Exactly one "Manual AI highlights" row showing (3).
+    const manualBtns = screen.getAllByRole("button", { name: /Manual AI highlights/i });
+    expect(manualBtns).toHaveLength(1);
+    expect(manualBtns[0].textContent).toContain("(3)");
   });
 });
 

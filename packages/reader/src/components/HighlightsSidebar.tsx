@@ -1,6 +1,6 @@
 "use client";
 
-import { type ReactNode, useState, useCallback } from "react";
+import { type ReactNode, useState, useCallback, useEffect } from "react";
 import { Trash2, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "./ui/button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "./ui/empty";
@@ -98,6 +98,11 @@ export function HighlightsSidebar({
   // Per-run cursor for prev/next navigation — persisted only in component state.
   const [runCursors, setRunCursors] = useState<Record<string, number>>({});
 
+  // Reset cursors when the paper changes so stale positions don't bleed across.
+  useEffect(() => {
+    setRunCursors({});
+  }, [paperId]);
+
   const switchSegment = useCallback(
     (next: Segment) => {
       setSegment(next);
@@ -142,9 +147,11 @@ export function HighlightsSidebar({
       </div>
 
       {/* Segmented control */}
-      <div className="flex border-b px-4 pt-2">
+      <div role="tablist" className="flex border-b px-4 pt-2">
         <button
           type="button"
+          role="tab"
+          aria-pressed={segment === "user"}
           onClick={() => switchSegment("user")}
           className={[
             "mr-4 pb-2 text-xs font-medium transition-colors",
@@ -157,6 +164,8 @@ export function HighlightsSidebar({
         </button>
         <button
           type="button"
+          role="tab"
+          aria-pressed={segment === "ai"}
           onClick={() => switchSegment("ai")}
           className={[
             "pb-2 text-xs font-medium transition-colors",
@@ -219,7 +228,6 @@ export function HighlightsSidebar({
                   return (
                     <RunRow
                       key={id}
-                      runId={id}
                       label={label}
                       group={group}
                       cursor={cursor}
@@ -233,7 +241,6 @@ export function HighlightsSidebar({
                 {/* Manual / no-runId bucket — single collapsed row */}
                 {manualGroup.length > 0 && (
                   <RunRow
-                    runId=""
                     label="Manual AI highlights"
                     group={manualGroup}
                     cursor={runCursors[""] ?? 0}
@@ -254,7 +261,6 @@ export function HighlightsSidebar({
 // ─── Sub-components ────────────────────────────────────────────────────────────
 
 function RunRow({
-  runId,
   label,
   group,
   cursor,
@@ -262,7 +268,6 @@ function RunRow({
   onPrev,
   onNext,
 }: {
-  runId: string;
   label: string;
   group: AiHighlight[];
   cursor: number;
