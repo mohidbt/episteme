@@ -22,62 +22,148 @@ export type RiskyDDL = {
 
 export type Violation = RiskyDDL & { file: string };
 
+// Schema-qualifier prefix (non-capturing): optional `schema.` or `"schema".`
+const QUAL = `(?:(?:"[^"]+"|[A-Za-z_][A-Za-z0-9_]*)\\.)?`;
 const IDENT = `(?:"([^"]+)"|([A-Za-z_][A-Za-z0-9_]*))`;
+// Table identifier: optionally schema-qualified, but we only capture the table portion.
+const TABLE = `${QUAL}${IDENT}`;
 
-const PATTERNS: { kind: RiskyDDL["kind"]; re: RegExp }[] = [
+// Clauses that can be matched anywhere in an ALTER TABLE statement (we strip the
+// `ALTER TABLE <table>` prefix and scan the remaining clause-list with `g`).
+const CLAUSE_PATTERNS: { kind: RiskyDDL["kind"]; re: RegExp }[] = [
   {
     kind: "SET NOT NULL",
-    re: new RegExp(
-      `ALTER\\s+TABLE\\s+(?:ONLY\\s+)?${IDENT}\\s+ALTER\\s+COLUMN\\s+${IDENT}\\s+SET\\s+NOT\\s+NULL`,
-      "i",
-    ),
+    re: new RegExp(`ALTER\\s+COLUMN\\s+${IDENT}\\s+SET\\s+NOT\\s+NULL`, "gi"),
   },
   {
     kind: "ALTER COLUMN TYPE",
     re: new RegExp(
-      `ALTER\\s+TABLE\\s+(?:ONLY\\s+)?${IDENT}\\s+ALTER\\s+COLUMN\\s+${IDENT}\\s+(?:SET\\s+DATA\\s+)?TYPE\\s`,
-      "i",
+      `ALTER\\s+COLUMN\\s+${IDENT}\\s+(?:SET\\s+DATA\\s+)?TYPE\\s`,
+      "gi",
     ),
   },
   {
     kind: "DROP COLUMN",
-    re: new RegExp(
-      `ALTER\\s+TABLE\\s+(?:ONLY\\s+)?${IDENT}\\s+DROP\\s+COLUMN\\s+(?:IF\\s+EXISTS\\s+)?${IDENT}`,
-      "i",
-    ),
+    re: new RegExp(`DROP\\s+COLUMN\\s+(?:IF\\s+EXISTS\\s+)?${IDENT}`, "gi"),
   },
   {
     kind: "ADD COLUMN",
-    re: new RegExp(
-      `ALTER\\s+TABLE\\s+(?:ONLY\\s+)?${IDENT}\\s+ADD\\s+COLUMN\\s+(?:IF\\s+NOT\\s+EXISTS\\s+)?${IDENT}`,
-      "i",
-    ),
+    re: new RegExp(`ADD\\s+COLUMN\\s+(?:IF\\s+NOT\\s+EXISTS\\s+)?${IDENT}`, "gi"),
   },
   {
     kind: "ADD CONSTRAINT",
-    re: new RegExp(
-      `ALTER\\s+TABLE\\s+(?:ONLY\\s+)?${IDENT}\\s+ADD\\s+CONSTRAINT\\s+${IDENT}`,
-      "i",
-    ),
+    re: new RegExp(`ADD\\s+CONSTRAINT\\s+${IDENT}`, "gi"),
   },
 ];
+
+// Matches the `ALTER TABLE [ONLY] <table>` prefix and captures the table identifier.
+const ALTER_TABLE_PREFIX = new RegExp(
+  `ALTER\\s+TABLE\\s+(?:ONLY\\s+)?${TABLE}`,
+  "i",
+);
 
 function pickIdent(g1: string | undefined, g2: string | undefined): string {
   return (g1 ?? g2 ?? "").trim();
 }
 
+/**
+ * Strip SQL line comments (`-- ...`), block comments (`/* ... *\/`), and
+ * single-quoted string literals from `sql` while preserving newlines so line
+ * numbers remain valid for downstream reporting.
+ */
+export function stripCommentsAndStrings(sql: string): string {
+  let out = "";
+  let i = 0;
+  const n = sql.length;
+  while (i < n) {
+    const c = sql[i];
+    const next = sql[i + 1];
+    // line comment
+    if (c === "-" && next === "-") {
+      while (i < n && sql[i] !== "\n") {
+        i++;
+      }
+      continue;
+    }
+    // block comment
+    if (c === "/" && next === "*") {
+      i += 2;
+      while (i < n && !(sql[i] === "*" && sql[i + 1] === "/")) {
+        // keep newlines
+        if (sql[i] === "\n") out += "\n";
+        i++;
+      }
+      i += 2; // skip closing */
+      continue;
+    }
+    // single-quoted string literal (handles '' as escaped quote)
+    if (c === "'") {
+      out += " ";
+      i++;
+      while (i < n) {
+        if (sql[i] === "'" && sql[i + 1] === "'") {
+          i += 2;
+          continue;
+        }
+        if (sql[i] === "'") {
+          i++;
+          break;
+        }
+        if (sql[i] === "\n") out += "\n";
+        i++;
+      }
+      continue;
+    }
+    out += c;
+    i++;
+  }
+  return out;
+}
+
+type Statement = { text: string; startLine: number };
+
+/**
+ * Split a SQL string into statements on `;` boundaries. Comments and string
+ * literals must already be stripped (so we don't split inside them). Returns
+ * each statement's text plus the 1-based line number of its first non-empty
+ * character — used for reporting.
+ */
+function splitStatements(strippedSql: string): Statement[] {
+  const stmts: Statement[] = [];
+  const parts = strippedSql.split(";");
+  let lineCursor = 1;
+  for (const part of parts) {
+    const leadingMatch = part.match(/^(\s*)/);
+    const leading = leadingMatch ? leadingMatch[1] : "";
+    const newlinesBeforeContent = (leading.match(/\n/g) || []).length;
+    const startLine = lineCursor + newlinesBeforeContent;
+    const trimmed = part.trim();
+    if (trimmed.length > 0) {
+      stmts.push({ text: part, startLine });
+    }
+    lineCursor += (part.match(/\n/g) || []).length;
+    // account for the `;` itself (no newline contribution)
+  }
+  return stmts;
+}
+
 export function extractRiskyDDL(sql: string): RiskyDDL[] {
-  const lines = sql.split(/\r?\n/);
+  const cleaned = stripCommentsAndStrings(sql);
   const hits: RiskyDDL[] = [];
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    for (const { kind, re } of PATTERNS) {
-      const m = line.match(re);
-      if (!m) continue;
-      const table = pickIdent(m[1], m[2]);
-      const name = pickIdent(m[3], m[4]);
-      hits.push({ line: i + 1, kind, table, name, raw: line.trim() });
-      break;
+  for (const stmt of splitStatements(cleaned)) {
+    const prefixMatch = stmt.text.match(ALTER_TABLE_PREFIX);
+    if (!prefixMatch) continue;
+    const table = pickIdent(prefixMatch[1], prefixMatch[2]);
+    // Scan the clause-list (everything after the prefix) for risky operations.
+    const tail = stmt.text.slice(prefixMatch.index! + prefixMatch[0].length);
+    for (const { kind, re } of CLAUSE_PATTERNS) {
+      re.lastIndex = 0;
+      let m: RegExpExecArray | null;
+      while ((m = re.exec(tail)) !== null) {
+        const name = pickIdent(m[1], m[2]);
+        const raw = stmt.text.replace(/\s+/g, " ").trim();
+        hits.push({ line: stmt.startLine, kind, table, name, raw });
+      }
     }
   }
   return hits;
@@ -115,11 +201,13 @@ export function findViolations(
 }
 
 async function listNewMigrationFiles(repoRoot: string): Promise<string[]> {
+  const baseRef = (process.env.GITHUB_BASE_REF || "main").trim() || "main";
+  const diffRange = `origin/${baseRef}...HEAD`;
   const { stdout } = await execFileP(
     "git",
     [
       "diff",
-      "origin/main...HEAD",
+      diffRange,
       "--name-only",
       "--diff-filter=A",
       "--",

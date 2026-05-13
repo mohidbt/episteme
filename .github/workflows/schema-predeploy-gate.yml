@@ -99,13 +99,14 @@ jobs:
     env:
       # PR body is passed via env (not run-line interpolation) so it cannot be shell-injected.
       PR_BODY: ${{ github.event.pull_request.body }}
+      GITHUB_BASE_REF: ${{ github.base_ref }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
       - name: Fetch base ref
-        run: git fetch --no-tags origin main:refs/remotes/origin/main
+        run: git fetch --no-tags origin "${GITHUB_BASE_REF}:refs/remotes/origin/${GITHUB_BASE_REF}"
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4

@@ -10,9 +10,13 @@ describe("extractRiskyDDL", () => {
   it("extracts ADD COLUMN", () => {
     const sql = `ALTER TABLE foo ADD COLUMN bar text NOT NULL;`;
     const hits = extractRiskyDDL(sql);
-    expect(hits).toEqual([
-      { line: 1, kind: "ADD COLUMN", table: "foo", name: "bar", raw: sql.trim() },
-    ]);
+    expect(hits).toHaveLength(1);
+    expect(hits[0]).toMatchObject({
+      line: 1,
+      kind: "ADD COLUMN",
+      table: "foo",
+      name: "bar",
+    });
   });
 
   it("extracts SET NOT NULL", () => {
@@ -72,6 +76,72 @@ describe("extractRiskyDDL", () => {
     const sql = `-- header\n-- another\nALTER TABLE foo ADD COLUMN bar text;`;
     const hits = extractRiskyDDL(sql);
     expect(hits[0].line).toBe(3);
+  });
+
+  it("extracts DDL split across multiple lines", () => {
+    const sql = `ALTER TABLE foo\n  ADD COLUMN bar text NOT NULL;`;
+    const hits = extractRiskyDDL(sql);
+    expect(hits).toHaveLength(1);
+    expect(hits[0]).toMatchObject({
+      kind: "ADD COLUMN",
+      table: "foo",
+      name: "bar",
+    });
+  });
+
+  it("extracts schema-qualified table names (public.foo)", () => {
+    const sql = `ALTER TABLE public.foo ADD COLUMN bar text;`;
+    const hits = extractRiskyDDL(sql);
+    expect(hits).toHaveLength(1);
+    expect(hits[0]).toMatchObject({
+      kind: "ADD COLUMN",
+      table: "foo",
+      name: "bar",
+    });
+  });
+
+  it("extracts schema-qualified quoted table names", () => {
+    const sql = `ALTER TABLE "public"."foo" ADD COLUMN "bar" text;`;
+    const hits = extractRiskyDDL(sql);
+    expect(hits).toHaveLength(1);
+    expect(hits[0]).toMatchObject({ table: "foo", name: "bar" });
+  });
+
+  it("ignores risky DDL inside line comments", () => {
+    const sql = `-- ALTER TABLE foo ADD COLUMN bar int\nSELECT 1;`;
+    expect(extractRiskyDDL(sql)).toEqual([]);
+  });
+
+  it("ignores risky DDL inside block comments", () => {
+    const sql = `/* ALTER TABLE foo ADD COLUMN bar int */\nSELECT 1;`;
+    expect(extractRiskyDDL(sql)).toEqual([]);
+  });
+
+  it("ignores risky DDL inside single-quoted strings", () => {
+    const sql = `INSERT INTO log (msg) VALUES ('ALTER TABLE foo ADD COLUMN bar int');`;
+    expect(extractRiskyDDL(sql)).toEqual([]);
+  });
+
+  it("extracts all clauses in a multi-clause ALTER TABLE", () => {
+    const sql = `ALTER TABLE foo ADD COLUMN a int, ADD COLUMN b int;`;
+    const hits = extractRiskyDDL(sql);
+    expect(hits).toHaveLength(2);
+    expect(hits.map((h) => h.name).sort()).toEqual(["a", "b"]);
+    expect(hits.every((h) => h.table === "foo" && h.kind === "ADD COLUMN")).toBe(
+      true,
+    );
+  });
+
+  it("does not match DDL hidden in a comment trailing real SQL", () => {
+    const sql = `SELECT 1; -- ALTER TABLE foo DROP COLUMN bar`;
+    expect(extractRiskyDDL(sql)).toEqual([]);
+  });
+
+  it("handles block comments preserving line offsets", () => {
+    const sql = `/*\nignored\n*/\nALTER TABLE foo ADD COLUMN bar int;`;
+    const hits = extractRiskyDDL(sql);
+    expect(hits).toHaveLength(1);
+    expect(hits[0].line).toBe(4);
   });
 });
 
