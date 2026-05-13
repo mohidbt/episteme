@@ -45,16 +45,25 @@ jobs:
             echo "relevant=false" >> "$GITHUB_OUTPUT"
           fi
 
-      # Fork PRs can't see PROD_DATABASE_URL (secrets not propagated to forks).
-      # Pass-by-default: forks can't touch prod anyway and we don't want to
-      # block external contributions on a check they can't satisfy.
+      # Fork PRs can't see PROD_DATABASE_URL (secrets not propagated to forks),
+      # so we skip-with-warning for forks. Internal PRs and pushes to main MUST
+      # have the secret — empty secret there means real misconfiguration and we
+      # fail closed rather than silently pass.
       - name: Guard - secret available
         if: steps.changes.outputs.relevant == 'true'
+        env:
+          IS_FORK: ${{ github.event.pull_request.head.repo.fork }}
         run: |
-          if [ -z "${DATABASE_URL}" ]; then
-            echo "::warning::PROD_DATABASE_URL not available (fork PR?). Skipping prod gate."
-            echo "SKIP_PROD_CHECK=1" >> "$GITHUB_ENV"
+          if [ -n "${DATABASE_URL}" ]; then
+            exit 0
           fi
+          if [ "$IS_FORK" = "true" ]; then
+            echo "::warning::PROD_DATABASE_URL not available (fork PR). Skipping prod gate."
+            echo "SKIP_PROD_CHECK=1" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          echo "::error::PROD_DATABASE_URL is empty on an internal PR or push to main. This is a real misconfiguration — set the PROD_DATABASE_URL secret in repo settings."
+          exit 1
 
       - name: Setup pnpm
         if: steps.changes.outputs.relevant == 'true' && env.SKIP_PROD_CHECK != '1'

@@ -200,7 +200,7 @@ export function findViolations(
   return violations;
 }
 
-async function listNewMigrationFiles(repoRoot: string): Promise<string[]> {
+async function listChangedMigrationFiles(repoRoot: string): Promise<string[]> {
   const baseRef = (process.env.GITHUB_BASE_REF || "main").trim() || "main";
   const diffRange = `origin/${baseRef}...HEAD`;
   const { stdout } = await execFileP(
@@ -209,7 +209,7 @@ async function listNewMigrationFiles(repoRoot: string): Promise<string[]> {
       "diff",
       diffRange,
       "--name-only",
-      "--diff-filter=A",
+      "--diff-filter=AM",
       "--",
       "packages/db/drizzle/*.sql",
     ],
@@ -221,14 +221,33 @@ async function listNewMigrationFiles(repoRoot: string): Promise<string[]> {
     .filter((s) => s.length > 0);
 }
 
+const SKIP_TOKEN_RE = /predeploy-lint:skip[ \t]+(\S[^\n]*)/;
+
+export function parseSkipReason(prBody: string | undefined): string | null {
+  if (typeof prBody !== "string") return null;
+  const m = prBody.match(SKIP_TOKEN_RE);
+  if (!m) return null;
+  const reason = m[1].trim();
+  return reason.length > 0 ? reason : null;
+}
+
 export function shouldSkipLint(prBody: string | undefined): boolean {
-  return typeof prBody === "string" && prBody.includes("predeploy-lint:skip");
+  return parseSkipReason(prBody) !== null;
 }
 
 async function main(): Promise<void> {
-  if (shouldSkipLint(process.env.PR_BODY)) {
-    console.log("[lint-schema-drift] skip token present in PR body; exiting 0");
+  const prBody = process.env.PR_BODY;
+  const skipReason = parseSkipReason(prBody);
+  if (skipReason) {
+    console.log(
+      `[lint-schema-drift] skip token present in PR body (reason: ${skipReason}); exiting 0`,
+    );
     return;
+  }
+  if (typeof prBody === "string" && prBody.includes("predeploy-lint:skip")) {
+    console.warn(
+      "[lint-schema-drift] WARNING: predeploy-lint:skip requires a reason — ignoring bare token and proceeding with lint",
+    );
   }
 
   const here = dirname(fileURLToPath(import.meta.url));
@@ -236,19 +255,19 @@ async function main(): Promise<void> {
   const schemaPath = join(repoRoot, "packages/db/src/schema-drift.ts");
   const schemaSrc = readFileSync(schemaPath, "utf8");
 
-  const newPaths = await listNewMigrationFiles(repoRoot);
-  if (newPaths.length === 0) {
-    console.log("[lint-schema-drift] no new migration files in PR diff");
+  const changedPaths = await listChangedMigrationFiles(repoRoot);
+  if (changedPaths.length === 0) {
+    console.log("[lint-schema-drift] no changed migration files in PR diff");
     return;
   }
 
-  const files = newPaths
+  const files = changedPaths
     .filter((p) => existsSync(join(repoRoot, p)))
     .map((p) => ({ path: p, sql: readFileSync(join(repoRoot, p), "utf8") }));
 
   const violations = findViolations(files, schemaSrc);
   if (violations.length === 0) {
-    console.log(`[lint-schema-drift] OK (${files.length} new migration file(s) scanned)`);
+    console.log(`[lint-schema-drift] OK (${files.length} changed migration file(s) scanned)`);
     return;
   }
 
