@@ -961,6 +961,95 @@ describe("AgentTranscript", () => {
     expect(/\[&_p\]:leading-snug/.test(userResponse!.className)).toBe(false);
   });
 
+  it("G2 codex: non-object JSON in edit draft disables Save and shows error", async () => {
+    const events: AgentEvent[] = [
+      {
+        type: "interrupt",
+        id: "tc-nonobj",
+        tool: "make_public",
+        args: { note_id: "n1" },
+        allowed_decisions: ["approve", "reject"],
+      },
+    ];
+    const fetchMock = fetch as unknown as ReturnType<typeof vi.fn>;
+    fetchMock.mockResolvedValueOnce(streamResponse(events));
+
+    render(<AgentTranscript threadId="t-nonobj" />);
+    const ta = screen.getByLabelText("Message agent") as HTMLTextAreaElement;
+    fireEvent.change(ta, { target: { value: "go" } });
+    fireEvent.click(screen.getByRole("button", { name: /send/i }));
+
+    await waitFor(() => screen.getByTestId("card-interrupt"));
+    const card = screen.getByTestId("card-interrupt");
+    const editBtn = card.querySelector('[data-action="edit"]') as HTMLElement;
+    fireEvent.click(editBtn);
+
+    const editArea = screen.getByLabelText(/edit action args/i) as HTMLTextAreaElement;
+
+    // Test string primitive
+    fireEvent.change(editArea, { target: { value: '"foo"' } });
+    const saveBtn = screen.getByTestId("interrupt-edit-save");
+    expect((saveBtn as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByTestId("interrupt-edit-error").textContent).toContain("args must be a JSON object");
+
+    // Test array
+    fireEvent.change(editArea, { target: { value: "[]" } });
+    expect((saveBtn as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByTestId("interrupt-edit-error").textContent).toContain("args must be a JSON object");
+
+    // Test null
+    fireEvent.change(editArea, { target: { value: "null" } });
+    expect((saveBtn as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByTestId("interrupt-edit-error").textContent).toContain("args must be a JSON object");
+
+    // Fix to valid object — error clears and Save enabled
+    fireEvent.change(editArea, { target: { value: '{"note_id":"n1"}' } });
+    expect((saveBtn as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.queryByTestId("interrupt-edit-error")).toBeNull();
+  });
+
+  it("G2 codex: Cancel resets editDraft and error; reopen shows original args", async () => {
+    const events: AgentEvent[] = [
+      {
+        type: "interrupt",
+        id: "tc-cancel-reset",
+        tool: "make_public",
+        args: { note_id: "orig" },
+        allowed_decisions: ["approve", "reject"],
+      },
+    ];
+    const fetchMock = fetch as unknown as ReturnType<typeof vi.fn>;
+    fetchMock.mockResolvedValueOnce(streamResponse(events));
+
+    render(<AgentTranscript threadId="t-cancel-reset" />);
+    const ta = screen.getByLabelText("Message agent") as HTMLTextAreaElement;
+    fireEvent.change(ta, { target: { value: "go" } });
+    fireEvent.click(screen.getByRole("button", { name: /send/i }));
+
+    await waitFor(() => screen.getByTestId("card-interrupt"));
+    const card = screen.getByTestId("card-interrupt");
+    const editBtn = card.querySelector('[data-action="edit"]') as HTMLElement;
+
+    // Open, modify, then cancel
+    fireEvent.click(editBtn);
+    const editArea = screen.getByLabelText(/edit action args/i) as HTMLTextAreaElement;
+    fireEvent.change(editArea, { target: { value: "{ bad json" } });
+    expect(screen.getByTestId("interrupt-edit-error")).toBeTruthy();
+
+    const cancelBtn = screen.getByRole("button", { name: /cancel/i });
+    fireEvent.click(cancelBtn);
+
+    // Panel gone
+    expect(screen.queryByLabelText(/edit action args/i)).toBeNull();
+
+    // Reopen — should see original args, no error
+    fireEvent.click(editBtn);
+    const editArea2 = screen.getByLabelText(/edit action args/i) as HTMLTextAreaElement;
+    const reparsed = JSON.parse(editArea2.value);
+    expect(reparsed).toEqual({ note_id: "orig" });
+    expect(screen.queryByTestId("interrupt-edit-error")).toBeNull();
+  });
+
   it("clicking a Suggestion chip triggers a new send", async () => {
     const events: AgentEvent[] = [
       { type: "suggestion", items: ["Highlight more", "Open note"] },

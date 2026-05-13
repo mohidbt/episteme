@@ -1018,16 +1018,27 @@ function InterruptCardView({ card, onDecision }: InterruptCardViewProps) {
 
   // Edit state — only relevant for N=1
   const [editOpen, setEditOpen] = useState(false);
-  const [editDraft, setEditDraft] = useState(() =>
-    JSON.stringify(card.actions[0]?.args ?? {}, null, 2),
-  );
+  const originalArgsJson = JSON.stringify(card.actions[0]?.args ?? {}, null, 2);
+  const [editDraft, setEditDraft] = useState(originalArgsJson);
   const [editParseError, setEditParseError] = useState<string | null>(null);
+  const editTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  // Autofocus the textarea when edit panel opens
+  useEffect(() => {
+    if (editOpen) {
+      editTextareaRef.current?.focus();
+    }
+  }, [editOpen]);
 
   const handleEditChange = useCallback((val: string) => {
     setEditDraft(val);
     try {
-      JSON.parse(val);
-      setEditParseError(null);
+      const parsed: unknown = JSON.parse(val);
+      if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+        setEditParseError("args must be a JSON object");
+      } else {
+        setEditParseError(null);
+      }
     } catch {
       setEditParseError("Invalid JSON");
     }
@@ -1037,7 +1048,12 @@ function InterruptCardView({ card, onDecision }: InterruptCardViewProps) {
     if (editParseError || submitting || decided) return;
     let parsed: Record<string, unknown>;
     try {
-      parsed = JSON.parse(editDraft) as Record<string, unknown>;
+      const raw: unknown = JSON.parse(editDraft);
+      if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+        setEditParseError("args must be a JSON object");
+        return;
+      }
+      parsed = raw as Record<string, unknown>;
     } catch {
       setEditParseError("Invalid JSON");
       return;
@@ -1128,6 +1144,7 @@ function InterruptCardView({ card, onDecision }: InterruptCardViewProps) {
               {editOpen && (
                 <div className="mt-2 space-y-1.5" data-testid="interrupt-edit-panel">
                   <Textarea
+                    ref={editTextareaRef}
                     aria-label="Edit action args"
                     className="min-h-24 resize-y font-mono text-[11px]"
                     value={editDraft}
@@ -1143,7 +1160,11 @@ function InterruptCardView({ card, onDecision }: InterruptCardViewProps) {
                     <Button
                       size="xs"
                       variant="outline"
-                      onClick={() => setEditOpen(false)}
+                      onClick={() => {
+                        setEditOpen(false);
+                        setEditDraft(originalArgsJson);
+                        setEditParseError(null);
+                      }}
                       disabled={submitting}
                     >
                       Cancel
