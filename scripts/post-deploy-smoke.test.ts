@@ -6,7 +6,7 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { runProbe, runSmoke } from "./post-deploy-smoke.ts";
+import { runProbe, runSmoke, PROBES } from "./post-deploy-smoke.ts";
 
 function mkFetch(
   handler: (url: string, attempt: number) => Promise<Response> | Response,
@@ -115,6 +115,46 @@ test("runSmoke: empty probe list returns allOk=true", async () => {
   const r = await runSmoke("https://example.test", []);
   assert.equal(r.allOk, true);
   assert.deepEqual(r.results, []);
+});
+
+test("runProbe: array expectBodyContains requires ALL substrings", async () => {
+  const { fetchImpl } = mkFetch(
+    () =>
+      new Response('<html><form><input type="email" /></form></html>', {
+        status: 200,
+      }),
+  );
+  const r = await runProbe(
+    "https://example.test",
+    { path: "/sign-in", expectBodyContains: ["<form", 'type="email"'] },
+    { fetchImpl, sleep: noSleep },
+  );
+  assert.equal(r.ok, true);
+});
+
+test("runProbe: array expectBodyContains fails when any substring missing", async () => {
+  const { fetchImpl } = mkFetch(
+    () => new Response("<html><form>nope</form></html>", { status: 200 }),
+  );
+  const r = await runProbe(
+    "https://example.test",
+    { path: "/sign-in", expectBodyContains: ["<form", 'type="email"'] },
+    { fetchImpl, sleep: noSleep },
+  );
+  assert.equal(r.ok, false);
+  assert.match(r.error ?? "", /missing substring/);
+  assert.match(r.error ?? "", /type=\\"email\\"/);
+});
+
+test("PROBES: configured assertions are structural, not copy-based", () => {
+  const byPath = Object.fromEntries(PROBES.map((p) => [p.path, p]));
+  const signIn = byPath["/sign-in"]!.expectBodyContains;
+  assert.ok(Array.isArray(signIn) && signIn.includes("<form"));
+  assert.ok(Array.isArray(signIn) && signIn.includes('type="email"'));
+  const signUp = byPath["/sign-up"]!.expectBodyContains;
+  assert.ok(Array.isArray(signUp) && signUp.includes("<form"));
+  assert.ok(Array.isArray(signUp) && signUp.includes('type="email"'));
+  assert.equal(byPath["/sitemap.xml"]!.expectBodyContains, "<urlset");
 });
 
 test("runSmoke: aggregates pass + fail correctly", async () => {

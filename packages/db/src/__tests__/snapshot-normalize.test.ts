@@ -73,4 +73,54 @@ describe("normalizeDump", () => {
       "ALTER TABLE foo ALTER COLUMN x SET NOT NULL;\n",
     );
   });
+
+  it("preserves SET inside $$ function bodies", () => {
+    const input = [
+      "SET search_path = public;",
+      "CREATE FUNCTION f() RETURNS void AS $$",
+      "BEGIN",
+      "  SET search_path = public;",
+      "  PERFORM 1;",
+      "END",
+      "$$ LANGUAGE plpgsql;",
+    ].join("\n");
+    const out = normalizeDump(input);
+    expect(out).not.toMatch(/^SET search_path = public;$/m);
+    expect(out).toContain("  SET search_path = public;");
+    expect(out).toContain("CREATE FUNCTION f()");
+  });
+
+  it("preserves SET inside named $function$ delimited bodies", () => {
+    const input = [
+      "SET statement_timeout = 0;",
+      "CREATE FUNCTION g() RETURNS void AS $function$",
+      "BEGIN",
+      "  SET ROLE admin;",
+      "END",
+      "$function$ LANGUAGE plpgsql;",
+    ].join("\n");
+    const out = normalizeDump(input);
+    expect(out).not.toContain("SET statement_timeout = 0;");
+    expect(out).toContain("  SET ROLE admin;");
+  });
+
+  it("only strips top-level SETs across multiple function bodies", () => {
+    const input = [
+      "SET client_encoding = 'UTF8';",
+      "CREATE FUNCTION a() RETURNS void AS $$",
+      "BEGIN SET search_path = public; END",
+      "$$ LANGUAGE plpgsql;",
+      "SET timezone = 'UTC';",
+      "CREATE FUNCTION b() RETURNS void AS $body$",
+      "BEGIN SET search_path = audit; END",
+      "$body$ LANGUAGE plpgsql;",
+      "SET role = postgres;",
+    ].join("\n");
+    const out = normalizeDump(input);
+    expect(out).not.toContain("SET client_encoding");
+    expect(out).not.toContain("SET timezone");
+    expect(out).not.toMatch(/^SET role = postgres;$/m);
+    expect(out).toContain("BEGIN SET search_path = public; END");
+    expect(out).toContain("BEGIN SET search_path = audit; END");
+  });
 });

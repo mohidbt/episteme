@@ -19,7 +19,9 @@
 export type ProbeSpec = {
   path: string;
   expectStatus?: number;
-  expectBodyContains?: string;
+  // Body must contain ALL of these substrings. Prefer structural markers
+  // (tag names, attributes, XML shape) over user-visible copy.
+  expectBodyContains?: string | string[];
 };
 
 export type ProbeResult = {
@@ -31,11 +33,21 @@ export type ProbeResult = {
   error?: string;
 };
 
+// Assertions use structural markers (form tags, input types, XML root)
+// rather than user-visible copy, so the smoke survives i18n / copy edits.
 const PROBES: ProbeSpec[] = [
-  { path: "/sign-in", expectStatus: 200, expectBodyContains: "Sign in" },
-  { path: "/sign-up", expectStatus: 200, expectBodyContains: "Create account" },
+  {
+    path: "/sign-in",
+    expectStatus: 200,
+    expectBodyContains: ["<form", 'type="email"'],
+  },
+  {
+    path: "/sign-up",
+    expectStatus: 200,
+    expectBodyContains: ["<form", 'type="email"'],
+  },
   { path: "/robots.txt", expectStatus: 200, expectBodyContains: "sitemap" },
-  { path: "/sitemap.xml", expectStatus: 200, expectBodyContains: "tryepisteme.com" },
+  { path: "/sitemap.xml", expectStatus: 200, expectBodyContains: "<urlset" },
 ];
 
 const DEFAULT_BASE_URL = "https://tryepisteme.com";
@@ -94,14 +106,17 @@ export async function runProbe(
     try {
       const { status, body } = await fetchOnce(url, timeoutMs, fetchImpl);
       lastStatus = status;
+      const needles = probe.expectBodyContains === undefined
+        ? []
+        : Array.isArray(probe.expectBodyContains)
+          ? probe.expectBodyContains
+          : [probe.expectBodyContains];
+      const missing = needles.filter((n) => !body.includes(n));
       if (status !== expectStatus) {
         lastError = `status ${status} != ${expectStatus}; body=${truncate(body)}`;
-      } else if (
-        probe.expectBodyContains &&
-        !body.includes(probe.expectBodyContains)
-      ) {
+      } else if (missing.length > 0) {
         lastError = `body missing substring ${JSON.stringify(
-          probe.expectBodyContains,
+          missing.length === 1 ? missing[0] : missing,
         )}; body=${truncate(body)}`;
       } else {
         return {
