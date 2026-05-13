@@ -115,6 +115,10 @@ async def highlight(
 ) -> object:
     """Create a highlight annotation on a PDF, anchored to one or more blocks.
 
+    Use this tool whenever the user asks to highlight, mark, annotate, or save
+    a passage on the page. Do NOT respond with the quoted text alone — always
+    call this tool to persist the highlight in the reader.
+
     Pass `block_ids` returned by `read_paper` — the tool resolves each block
     to its page/bbox via document_segments and persists a single highlight
     spanning all blocks. The reader UI will draw a visible rectangle for each

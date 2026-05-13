@@ -21,5 +21,10 @@ You are given `{pdf_id}` (or, if not, search for the paper with `search_pdfs`).
 4. For structured extraction (e.g. doses, hyperparameters), call `read_paper` over the relevant scope and have the LLM extract structured fields directly. (`pdf_extract_data` is no longer wired to a backend.)
 5. To bring in cross-library context (related notes, other papers cited by the user), call `search_library(query=...)`.
 6. Highlight the most load-bearing passages — `highlight` is HITL-gated.
+   **Read-then-highlight ordering** (follow this exactly):
+   a. Call `pdf_read_text` or `read_paper` to retrieve the page text and block IDs.
+   b. Identify the target sentence(s) and their `block_ids` from the returned blocks.
+   c. Call `highlight(pdf_id=<id>, block_ids=[...])` — do NOT quote the sentence in prose
+      and stop there. The highlight tool must be called; a prose reply alone is incorrect.
 7. Write the final summary with `create_note`. Every claim must end in an anchor. If you can't find a page citation, say so explicitly — never fabricate.
 8. Save unresolved questions to `/.episteme/agents/memories/<pdf_id>.questions.md`.

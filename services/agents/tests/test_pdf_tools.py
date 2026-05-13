@@ -40,6 +40,35 @@ async def test_pdf_extract_data_is_unavailable():
     assert out == {"error": True, "status": None, "body": "tool unavailable in this build"}
 
 
+def test_highlight_docstring_has_imperative_language():
+    """G3 regression: highlight tool description must tell the model to call the
+    tool instead of quoting the passage in prose."""
+    from tools.pdfs import highlight
+
+    desc = highlight.description
+    assert "Use this tool whenever the user asks to highlight" in desc, (
+        f"highlight docstring missing imperative trigger clause: {desc!r}"
+    )
+    assert "Do NOT respond with the quoted text alone" in desc, (
+        f"highlight docstring missing anti-prose instruction: {desc!r}"
+    )
+
+
+def test_deep_read_skill_has_highlight_ordering_example():
+    """G3 regression: deep-read SKILL.md must contain a worked read→highlight
+    example so the model knows NOT to stop at a prose quote."""
+    import pathlib
+
+    skill_path = pathlib.Path(__file__).parent.parent / "skills" / "deep-read" / "SKILL.md"
+    text = skill_path.read_text()
+    assert "Read-then-highlight ordering" in text, (
+        f"deep-read SKILL.md missing read-then-highlight worked example"
+    )
+    assert "do NOT quote the sentence in prose" in text, (
+        f"deep-read SKILL.md missing anti-prose instruction in ordering example"
+    )
+
+
 @pytest.mark.asyncio
 async def test_read_paper_schema_array_branches_have_items():
     """Regression: strict OpenAI-style validators (OpenRouter Azure) reject
