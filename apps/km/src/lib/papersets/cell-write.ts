@@ -129,6 +129,48 @@ export function regenerateCsv(
   return lines.join("\n");
 }
 
+export interface CellClearInput {
+  row: number;
+  col: string;
+}
+
+export type CellClearError = "row_oob" | "unknown_col";
+
+export type CellClearResult =
+  | { ok: true; content: string; cellGrounding: CellGrounding }
+  | { ok: false; error: CellClearError };
+
+/**
+ * Clear a single cell's value and grounding. Idempotent — clearing an
+ * already-empty cell is a no-op success.
+ */
+export function applyCellClear(
+  paperset: PapersetSlice,
+  input: CellClearInput,
+): CellClearResult {
+  const { row, col } = input;
+  if (row < 0 || row >= paperset.rowRefs.length) return { ok: false, error: "row_oob" };
+  if (!paperset.columns.some((c) => c.name === col)) return { ok: false, error: "unknown_col" };
+
+  const cells = parseCsvCells(paperset.content, paperset.columns);
+  delete cells[`${row}:${col}`];
+  const content = regenerateCsv(paperset.rowRefs, paperset.columns, cells);
+
+  const rowKey = String(row);
+  const rowGrounding = paperset.cellGrounding[rowKey];
+  const nextCellGrounding: CellGrounding = { ...paperset.cellGrounding };
+  if (rowGrounding && col in rowGrounding) {
+    const { [col]: _, ...rest } = rowGrounding;
+    if (Object.keys(rest).length === 0) {
+      delete nextCellGrounding[rowKey];
+    } else {
+      nextCellGrounding[rowKey] = rest;
+    }
+  }
+
+  return { ok: true, content, cellGrounding: nextCellGrounding };
+}
+
 export function applyCellWrite(
   paperset: PapersetSlice,
   input: CellWriteInput,

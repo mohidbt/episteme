@@ -17,6 +17,7 @@ import {
   SheetTitle,
   SheetDescription,
 } from "@/components/ui/sheet";
+import { Button } from "@/components/ui/button";
 
 interface Props {
   id: string;
@@ -69,6 +70,7 @@ export function PapersetGrid({
 
   // #105: cell detail sheet state
   const [detailCell, setDetailCell] = useState<DetailCell | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const dragStartRef = useRef<{ row: number; col: string } | null>(null);
   const [hoveredCell, setHoveredCell] = useState<string | null>(null);
   const [hoverTrail, setHoverTrail] = useState<string[]>([]);
@@ -388,6 +390,42 @@ export function PapersetGrid({
           {detailCell?.pageAnchor != null && (
             <div className="border-t px-4 py-3 text-sm text-muted-foreground">
               See more on Page {detailCell.pageAnchor}
+            </div>
+          )}
+          {detailCell && (
+            <div className="border-t px-4 py-3">
+              <Button
+                variant="destructive"
+                size="sm"
+                disabled={deleting}
+                data-testid="cell-detail-delete"
+                onClick={async () => {
+                  if (!detailCell) return;
+                  setDeleting(true);
+                  try {
+                    const res = await fetch(`/api/papersets/${id}/cells`, {
+                      method: "DELETE",
+                      headers: { "content-type": "application/json" },
+                      body: JSON.stringify({
+                        row: detailCell.rowIdx,
+                        col: detailCell.colName,
+                      }),
+                    });
+                    if (!res.ok) {
+                      toast.error("Failed to delete cell");
+                      return;
+                    }
+                    const key = `${detailCell.rowIdx}:${detailCell.colName}`;
+                    onCellValuesPurge((k) => k === key);
+                    setDetailCell(null);
+                    router.refresh();
+                  } finally {
+                    setDeleting(false);
+                  }
+                }}
+              >
+                {deleting ? "Deleting…" : "Delete cell"}
+              </Button>
             </div>
           )}
         </SheetContent>

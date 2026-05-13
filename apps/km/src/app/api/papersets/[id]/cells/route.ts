@@ -5,6 +5,7 @@ import { papersets } from "@episteme/db/schema";
 import { getAuthedUserId, MissingInternalSecretError } from "@/lib/internal-auth";
 import { jsonError, requireOwned } from "@/lib/crud";
 import {
+  applyCellClear,
   applyCellWrite,
   type CellGrounding,
   type ColumnSpec,
@@ -56,6 +57,59 @@ export async function PATCH(req: Request, { params }: Ctx) {
   if (!owned.ok) return jsonError(owned.status, owned.status === 404 ? "not_found" : "forbidden");
 
   const result = applyCellWrite(
+    {
+      columns: owned.row.columns as ColumnSpec[],
+      rowRefs: owned.row.rowRefs as RowRef[],
+      content: owned.row.content,
+      cellGrounding: owned.row.cellGrounding as CellGrounding,
+    },
+    parsed.data,
+  );
+  if (!result.ok) return jsonError(400, result.error);
+
+  const [row] = await db
+    .update(papersets)
+    .set({
+      content: result.content,
+      cellGrounding: result.cellGrounding,
+      updatedAt: new Date(),
+    })
+    .where(eq(papersets.id, id))
+    .returning();
+  return Response.json(row);
+}
+
+const DeleteBody = z.object({
+  row: z.number().int().nonnegative(),
+  col: z.string().min(1),
+});
+
+export async function DELETE(req: Request, { params }: Ctx) {
+  const rawBody = await req.text();
+  let authed;
+  try {
+    authed = await getAuthedUserId(req, rawBody);
+  } catch (e) {
+    if (e instanceof MissingInternalSecretError) return misconfiguredResponse();
+    throw e;
+  }
+  if (!authed) return jsonError(401, "unauthorized");
+  const userId = authed.userId;
+  const { id } = await params;
+
+  let body: unknown = null;
+  try {
+    body = JSON.parse(rawBody);
+  } catch {
+    /* leaves body=null */
+  }
+  const parsed = DeleteBody.safeParse(body);
+  if (!parsed.success) return jsonError(400, "validation", { issues: parsed.error.issues });
+
+  const owned = await requireOwned<PapersetRow>(papersets, id, userId);
+  if (!owned.ok) return jsonError(owned.status, owned.status === 404 ? "not_found" : "forbidden");
+
+  const result = applyCellClear(
     {
       columns: owned.row.columns as ColumnSpec[],
       rowRefs: owned.row.rowRefs as RowRef[],
