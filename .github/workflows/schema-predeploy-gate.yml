@@ -124,3 +124,31 @@ jobs:
 
       - name: Lint risky DDL against schema-drift checks
         run: pnpm --filter @episteme/db db:lint-drift
+
+  predeploy-check-prod:
+    name: db predeploy check (prod)
+    runs-on: ubuntu-latest
+    concurrency:
+      group: predeploy-prod-${{ github.ref }}
+      cancel-in-progress: true
+    env:
+      DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.12.0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Predeploy check against prod
+        run: pnpm db:predeploy-check
