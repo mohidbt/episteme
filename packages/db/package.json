@@ -17,7 +17,8 @@
     "migrate": "drizzle-kit migrate",
     "generate": "drizzle-kit generate",
     "studio": "drizzle-kit studio",
-    "predeploy-check": "tsx scripts/predeploy-check.ts"
+    "predeploy-check": "tsx scripts/predeploy-check.ts",
+    "db:record-applied": "tsx scripts/record-applied.ts"
   },
   "dependencies": {
     "drizzle-orm": "^0.45.2",
