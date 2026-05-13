@@ -1,0 +1,78 @@
+name: schema-predeploy-prod
+
+# Always triggers so it can be marked as a required check without
+# deadlocking PRs that don't touch DB code. The job itself skips the
+# actual predeploy-check when no relevant paths changed.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  predeploy-check-prod:
+    name: db predeploy check (prod)
+    runs-on: ubuntu-latest
+    concurrency:
+      group: predeploy-prod-${{ github.ref }}
+      cancel-in-progress: true
+    env:
+      DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for relevant changes
+        id: changes
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [ "$EVENT_NAME" = "push" ]; then
+            echo "relevant=true" >> "$GITHUB_OUTPUT"
+            echo "push to main, always running prod gate"
+            exit 0
+          fi
+          git fetch --no-tags origin "$BASE_SHA" || true
+          CHANGED=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")
+          echo "changed files:"
+          echo "$CHANGED"
+          if echo "$CHANGED" | grep -E '^(packages/db/|\.github/workflows/schema-predeploy-prod\.yml$|pnpm-lock\.yaml$)' >/dev/null; then
+            echo "relevant=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "no DB-related changes, skipping prod gate"
+            echo "relevant=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Fork PRs can't see PROD_DATABASE_URL (secrets not propagated to forks).
+      # Pass-by-default: forks can't touch prod anyway and we don't want to
+      # block external contributions on a check they can't satisfy.
+      - name: Guard - secret available
+        if: steps.changes.outputs.relevant == 'true'
+        run: |
+          if [ -z "${DATABASE_URL}" ]; then
+            echo "::warning::PROD_DATABASE_URL not available (fork PR?). Skipping prod gate."
+            echo "SKIP_PROD_CHECK=1" >> "$GITHUB_ENV"
+          fi
+
+      - name: Setup pnpm
+        if: steps.changes.outputs.relevant == 'true' && env.SKIP_PROD_CHECK != '1'
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.12.0
+
+      - name: Setup Node
+        if: steps.changes.outputs.relevant == 'true' && env.SKIP_PROD_CHECK != '1'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install deps
+        if: steps.changes.outputs.relevant == 'true' && env.SKIP_PROD_CHECK != '1'
+        run: pnpm install --frozen-lockfile
+
+      - name: Predeploy check against prod
+        if: steps.changes.outputs.relevant == 'true' && env.SKIP_PROD_CHECK != '1'
+        run: pnpm db:predeploy-check
