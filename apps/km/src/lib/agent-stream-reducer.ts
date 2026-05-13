@@ -400,7 +400,20 @@ export function agentStreamReducer(
     }
 
     case "done": {
-      return { ...state, terminated: true, pdfExtractProgress: undefined };
+      // G1: sweep any tool cards still in input-available → output-error.
+      // Belt-and-suspenders: producer emits synthetic tool_result frames, but
+      // we also handle any clean-EOF gap that slips through.
+      const swept = state.cards.map((c) => {
+        if (c.kind === "tool" && c.state === "input-available") {
+          return {
+            ...c,
+            state: "output-error" as const,
+            errorText: "stream ended",
+          };
+        }
+        return c;
+      });
+      return { ...state, cards: swept, terminated: true, pdfExtractProgress: undefined };
     }
 
     case "recursion_step": {

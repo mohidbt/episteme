@@ -507,6 +507,9 @@ async def invoke(req: Request, auth: InternalAuthDep):
         step = 0
         thread_id = body["thread_id"]
         pending_citations: list[dict] = []
+        # G1: track run_ids from on_tool_start so we can emit synthetic
+        # output-error frames for any tool that never received on_tool_end.
+        active_tool_run_ids: set[str] = set()
         configurable = _build_configurable(
             thread_id=thread_id,
             user_id=user_id,
@@ -514,70 +517,94 @@ async def invoke(req: Request, auth: InternalAuthDep):
             active_paper_id=active_paper_id,
         )
         try:
-            async for ev in agent.astream_events(
-                {"messages": [{"role": "user", "content": user_message}]},
-                config={
-                    "configurable": configurable,
-                    "recursion_limit": _AGENT_RECURSION_LIMIT,
-                },
-                version="v2",
-            ):
-                if ev.get("event") == "on_chain_end":
-                    step += 1
-                    if step % _RECURSION_LOG_INTERVAL == 0:
-                        logger.info(
-                            "agent recursion step=%d thread_id=%s",
-                            step, thread_id,
-                        )
-                    if step % _RECURSION_STEP_INTERVAL == 0:
-                        yield format_typed(
-                            "recursion_step",
-                            {"step": step, "limit": _AGENT_RECURSION_LIMIT},
-                        )
-                mapped = _map_event(ev)
-                if mapped:
-                    extracted = _extract_rag_citations_from_tool_result(ev, mapped)
-                    if extracted:
-                        pending_citations = extracted
-                    if mapped[0] == "text" and pending_citations:
-                        payload = dict(mapped[1])
-                        payload["citations"] = pending_citations
-                        yield format_typed(mapped[0], payload)
-                        yield format_typed("sources", {
-                            "message_id": payload["id"],
-                            "citations": pending_citations,
-                        })
-                        pending_citations = []
-                    else:
-                        yield format_typed(mapped[0], mapped[1])
-                    for extra in _extra_events(ev, mapped):
-                        yield format_typed(extra[0], extra[1])
-            for ev_type, payload in await _flush_pending_interrupts(agent, thread_id):
-                yield format_typed(ev_type, payload)
-        except openai.RateLimitError as e:
-            logger.warning("agent stream rate-limited: %s", e)
-            is_free = isinstance(model_pref, str) and model_pref.endswith(":free")
-            if is_free:
-                message = (
-                    "OpenRouter's free-tier limit for this model has been reached. "
-                    "You can wait until the daily quota resets, or switch to a paid "
-                    "model in Settings → Agent."
+            try:
+                async for ev in agent.astream_events(
+                    {"messages": [{"role": "user", "content": user_message}]},
+                    config={
+                        "configurable": configurable,
+                        "recursion_limit": _AGENT_RECURSION_LIMIT,
+                    },
+                    version="v2",
+                ):
+                    if ev.get("event") == "on_chain_end":
+                        step += 1
+                        if step % _RECURSION_LOG_INTERVAL == 0:
+                            logger.info(
+                                "agent recursion step=%d thread_id=%s",
+                                step, thread_id,
+                            )
+                        if step % _RECURSION_STEP_INTERVAL == 0:
+                            yield format_typed(
+                                "recursion_step",
+                                {"step": step, "limit": _AGENT_RECURSION_LIMIT},
+                            )
+                    # G1: track in-flight tool run_ids
+                    ev_name = ev.get("event", "")
+                    ev_run_id = ev.get("run_id", "")
+                    if ev_name == "on_tool_start" and ev_run_id:
+                        active_tool_run_ids.add(ev_run_id)
+                    elif ev_name == "on_tool_end" and ev_run_id:
+                        active_tool_run_ids.discard(ev_run_id)
+                    mapped = _map_event(ev)
+                    if mapped:
+                        extracted = _extract_rag_citations_from_tool_result(ev, mapped)
+                        if extracted:
+                            pending_citations = extracted
+                        if mapped[0] == "text" and pending_citations:
+                            payload = dict(mapped[1])
+                            payload["citations"] = pending_citations
+                            yield format_typed(mapped[0], payload)
+                            yield format_typed("sources", {
+                                "message_id": payload["id"],
+                                "citations": pending_citations,
+                            })
+                            pending_citations = []
+                        else:
+                            yield format_typed(mapped[0], mapped[1])
+                        for extra in _extra_events(ev, mapped):
+                            yield format_typed(extra[0], extra[1])
+                for ev_type, payload in await _flush_pending_interrupts(agent, thread_id):
+                    yield format_typed(ev_type, payload)
+            except asyncio.CancelledError:
+                logger.info("agent stream cancelled thread_id=%s", thread_id)
+                raise
+            except openai.RateLimitError as e:
+                logger.warning("agent stream rate-limited: %s", e)
+                is_free = isinstance(model_pref, str) and model_pref.endswith(":free")
+                if is_free:
+                    message = (
+                        "OpenRouter's free-tier limit for this model has been reached. "
+                        "You can wait until the daily quota resets, or switch to a paid "
+                        "model in Settings → Agent."
+                    )
+                else:
+                    message = _extract_error_message(e)
+                yield format_typed("error", {
+                    "code": "rate_limited",
+                    "message": message,
+                    "retriable": True,
+                })
+            except Exception as e:  # noqa: BLE001
+                logger.exception("agent stream failed")
+                yield format_typed("error", {
+                    "code": "internal_error",
+                    "message": str(e),
+                    "retriable": False,
+                })
+        finally:
+            # G1: emit synthetic output-error for any tool that started but
+            # never completed (covers CancelledError + any other early exit).
+            for orphan_run_id in active_tool_run_ids:
+                logger.warning(
+                    "agent stream ended before tool completed run_id=%s thread_id=%s",
+                    orphan_run_id, thread_id,
                 )
-            else:
-                message = _extract_error_message(e)
-            yield format_typed("error", {
-                "code": "rate_limited",
-                "message": message,
-                "retriable": True,
-            })
-        except Exception as e:  # noqa: BLE001
-            logger.exception("agent stream failed")
-            yield format_typed("error", {
-                "code": "internal_error",
-                "message": str(e),
-                "retriable": False,
-            })
-        yield format_sse("done", {"thread_id": thread_id})
+                yield format_typed("tool_result", {
+                    "id": orphan_run_id,
+                    "state": "output-error",
+                    "errorText": "stream ended before tool completed",
+                })
+            yield format_sse("done", {"thread_id": thread_id})
 
     return StreamingResponse(
         gen(),

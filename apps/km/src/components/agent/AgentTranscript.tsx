@@ -345,6 +345,9 @@ export function AgentTranscript({
         const decoder = new TextDecoder();
         let buf = "";
         let mutated = false;
+        // G1: track whether we saw a proper SSE `done` frame before the
+        // reader closes so we can surface an unexpected-EOF toast.
+        let sawDone = false;
         // 60s idle watchdog: TCP can die silently (Mac sleep, NAT timeout) and
         // reader.read() will hang forever. Race each read against a timeout
         // so we surface a stalled stream instead of the spinner running
@@ -371,13 +374,24 @@ export function AgentTranscript({
             break;
           }
           const { value, done } = result;
-          if (done) break;
+          if (done) {
+            // G1: clean EOF without a `done` frame — sweep stuck tool cards
+            // and show a toast so the user knows to retry.
+            if (!sawDone) {
+              dispatch({ type: "done", thread_id: "" });
+              toast.error("Connection ended unexpectedly — retry?");
+            }
+            break;
+          }
           buf += decoder.decode(value, { stream: true });
           const { events, rest } = parseSseChunk(buf);
           buf = rest;
           for (const ev of events) {
             if (ev.type === "tool_call" && MUTATING_TOOLS.has(ev.name)) {
               mutated = true;
+            }
+            if (ev.type === "done") {
+              sawDone = true;
             }
             dispatch(ev);
           }

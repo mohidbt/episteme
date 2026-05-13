@@ -478,3 +478,54 @@ describe("agentStreamReducer — fixture replay", () => {
     expect(Object.keys(s.sourcesByMessage).length).toBeGreaterThan(0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// G1 — stream-terminal sweep tests
+// ---------------------------------------------------------------------------
+
+describe("agentStreamReducer — G1 done-sweep (stuck input-available cards)", () => {
+  it("flips input-available tool card to output-error on done", () => {
+    const s = fold([
+      { type: "tool_call", id: "tc-1", name: "km_get", args: { key: "foo" }, state: "input-available" },
+      { type: "done", thread_id: "t1" },
+    ]);
+    expect(s.terminated).toBe(true);
+    const card = s.cards.find((c) => c.kind === "tool") as ToolCard | undefined;
+    expect(card).toBeDefined();
+    expect(card?.state).toBe("output-error");
+    expect(card?.errorText).toBe("stream ended");
+  });
+
+  it("leaves already-completed tool cards untouched on done", () => {
+    const s = fold([
+      { type: "tool_call", id: "tc-2", name: "km_get", args: {}, state: "input-available" },
+      { type: "tool_result", id: "tc-2", state: "output-available", output: "ok" },
+      { type: "done", thread_id: "t1" },
+    ]);
+    const card = s.cards.find((c) => c.kind === "tool") as ToolCard | undefined;
+    expect(card?.state).toBe("output-available");
+  });
+
+  it("sweeps multiple stuck tool cards at once", () => {
+    const s = fold([
+      { type: "tool_call", id: "tc-a", name: "pdf_read_text", args: {}, state: "input-available" },
+      { type: "tool_call", id: "tc-b", name: "km_get", args: {}, state: "input-available" },
+      { type: "done", thread_id: "t1" },
+    ]);
+    const tools = s.cards.filter((c) => c.kind === "tool") as ToolCard[];
+    expect(tools).toHaveLength(2);
+    expect(tools.every((c) => c.state === "output-error")).toBe(true);
+  });
+
+  it("does not sweep tool cards that are already output-error", () => {
+    const s = fold([
+      { type: "tool_call", id: "tc-3", name: "km_get", args: {}, state: "input-available" },
+      { type: "tool_result", id: "tc-3", state: "output-error", errorText: "prior error" },
+      { type: "done", thread_id: "t1" },
+    ]);
+    const card = s.cards.find((c) => c.kind === "tool") as ToolCard | undefined;
+    expect(card?.state).toBe("output-error");
+    // errorText should be the original, not overwritten by the sweep
+    expect(card?.errorText).toBe("prior error");
+  });
+});
