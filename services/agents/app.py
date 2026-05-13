@@ -87,6 +87,14 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
+
+
+@app.get("/health", tags=["health"])
+async def public_health() -> dict:
+    """Public liveness probe — used by Vercel cron warmer (no auth required)."""
+    return {"ok": True}
+
+
 app.include_router(health.router)
 app.include_router(embeddings.router)
 app.include_router(outline.router)
