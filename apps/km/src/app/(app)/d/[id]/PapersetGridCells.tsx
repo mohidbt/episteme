@@ -110,6 +110,14 @@ export function RowView({
       <ContextMenuContent>
         <ContextMenuItem
           onClick={() => {
+            window.open(`/p/${paper.id}`, "_blank", "noopener,noreferrer");
+          }}
+          data-testid={`open-paper-${rowIdx}`}
+        >
+          Open paper
+        </ContextMenuItem>
+        <ContextMenuItem
+          onClick={() => {
             if (confirm("Remove this row from the paperset?")) onRemoveRow();
           }}
           className="text-destructive"
