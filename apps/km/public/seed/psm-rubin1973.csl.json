@@ -1,0 +1,14 @@
+{
+  "id": "10.2307/2529685",
+  "type": "article-journal",
+  "DOI": "10.2307/2529685",
+  "title": "Matching to remove bias in observational studies",
+  "author": [
+    { "family": "Rubin", "given": "Donald B." }
+  ],
+  "issued": { "date-parts": [[1973]] },
+  "container-title": "Biometrics",
+  "volume": "29",
+  "issue": "1",
+  "page": "159-183"
+}

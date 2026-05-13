@@ -1,0 +1,15 @@
+{
+  "id": "10.1162/003465302317331982",
+  "type": "article-journal",
+  "DOI": "10.1162/003465302317331982",
+  "title": "Propensity score-matching methods for nonexperimental causal studies",
+  "author": [
+    { "family": "Dehejia", "given": "Rajeev H." },
+    { "family": "Wahba", "given": "Sadek" }
+  ],
+  "issued": { "date-parts": [[2002]] },
+  "container-title": "The Review of Economics and Statistics",
+  "volume": "84",
+  "issue": "1",
+  "page": "151-161"
+}

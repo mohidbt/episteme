@@ -16,6 +16,7 @@ import { ByTypeNav } from "./ByTypeNav";
 import { SidebarAgentSection } from "./SidebarAgentSection";
 import { SidebarSettingsSection } from "./SidebarSettingsSection";
 import type { TreeResponse } from "@/lib/tree-server";
+import { useTreeInvalidation } from "@/lib/tree-invalidate";
 
 interface SidebarShellProps {
   library: { id: number; name: string };
@@ -62,7 +63,11 @@ function CollapseHandle({ collapsed, toggle }: { collapsed: boolean; toggle: () 
 
 export function SidebarShell({ library, tree, isAnonymous }: SidebarShellProps) {
   const router = useRouter();
-  const onMutate = () => router.refresh();
+  const onMutate = React.useCallback(() => router.refresh(), [router]);
+  // Subscribe to global tree-invalidation events fired by mutations elsewhere
+  // in the app (DOI import, .bib upload, paper upload, …) so the sidebar
+  // refreshes on trigger instead of polling.
+  useTreeInvalidation(onMutate);
   const trashFolder = tree.folders.find((f) => f.isTrash) ?? null;
 
   // Guest accounts created before the "Example Library" rename still have

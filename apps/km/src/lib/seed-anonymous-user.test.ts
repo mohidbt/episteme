@@ -98,7 +98,7 @@ describe("seedAnonymousUser", () => {
       .select()
       .from(papers)
       .where(eq(papers.userId, userId));
-    // 1 RAG seed paper at root + 3 PCA folder PDFs.
+    // 1 RAG seed paper at root + 3 PSM folder PDFs + 2 Bio folder PDFs.
     expect(paperRows).toHaveLength(6);
     const ragPaper = paperRows.find((p) => p.filename === "2005.11401.pdf");
     expect(ragPaper).toBeDefined();
@@ -120,12 +120,12 @@ describe("seedAnonymousUser", () => {
     );
     expect(coverHead.status).toBe(200);
 
-    // The 3 PCA papers all live in the PCA folder, with PDF source uploaded.
-    const pcaPapers = paperRows.filter((p) =>
-      p.filename.startsWith("pca-paper-"),
+    // The 3 PSM papers all live in the PSM folder, with PDF source uploaded.
+    const psmPapers = paperRows.filter((p) =>
+      p.filename.startsWith("psm-paper-"),
     );
-    expect(pcaPapers).toHaveLength(3);
-    for (const p of pcaPapers) {
+    expect(psmPapers).toHaveLength(3);
+    for (const p of psmPapers) {
       expect(p.title).toBeTruthy();
       const head = await fetch(
         await storage.getPresignedHead(paperSourceKey(p.id), 30),
@@ -138,21 +138,23 @@ describe("seedAnonymousUser", () => {
       .select()
       .from(references_)
       .where(eq(references_.userId, userId));
-    // 5 original demo refs + 6 PCA references seeded into a "PCA" folder.
+    // 5 original demo refs + 6 PSM references seeded into a "PSM" folder
+    // + 1 Bio reference (fungi).
     expect(refRows).toHaveLength(12);
     const dois = refRows.map((r) => (r.cslJson as CslItem).DOI).sort();
     expect(dois).toContain("10.1038/s41586-021-03819-2");
     expect(dois).toContain("10.48550/arXiv.1706.03762");
-    // PCA canon
-    expect(dois).toContain("10.1080/14786440109462720"); // Pearson 1901
-    expect(dois).toContain("10.1037/h0071325"); // Hotelling 1933
-    expect(dois).toContain("10.1111/1467-9868.00196"); // Tipping & Bishop 1999
-    expect(dois).toContain("10.1038/nature07331"); // Novembre et al. 2008
-    expect(dois).toContain("10.1162/jocn.1991.3.1.71"); // Turk & Pentland 1991
-    const pcaFolder = allFolders.find((f) => f.name === "PSM");
-    expect(pcaFolder).toBeDefined();
-    const pcaRefs = refRows.filter((r) => r.folderId === pcaFolder!.id);
-    expect(pcaRefs).toHaveLength(6);
+    // PSM canon
+    expect(dois).toContain("10.1093/biomet/70.1.41"); // Rosenbaum & Rubin 1983
+    expect(dois).toContain("10.1080/00031305.1985.10479383"); // Rosenbaum & Rubin 1985
+    expect(dois).toContain("10.2307/2529685"); // Rubin 1973
+    expect(dois).toContain("10.2307/1912352"); // Heckman 1979
+    expect(dois).toContain("10.1162/003465302317331982"); // Dehejia & Wahba 2002
+    expect(dois).toContain("10.1080/00273171.2011.568786"); // Austin 2011
+    const psmFolder = allFolders.find((f) => f.name === "PSM");
+    expect(psmFolder).toBeDefined();
+    const psmRefs = refRows.filter((r) => r.folderId === psmFolder!.id);
+    expect(psmRefs).toHaveLength(6);
     const rootRef = refRows.find(
       (r) => (r.cslJson as CslItem).DOI === "10.1038/s41586-021-03819-2",
     );
@@ -163,26 +165,26 @@ describe("seedAnonymousUser", () => {
     expect(nestedRef!.folderPath).toBe("Reading List/Foundations");
     expect(nestedRef!.folderId).toBe(foundations!.id);
 
-    // PCA paperset CSV is seeded inside the PCA folder, with two columns
-    // ("Uses PCA" + "Variables matched on") and one row per PCA reference.
+    // PSM paperset CSV is seeded inside the PSM folder, with two columns
+    // ("Uses PSM" + "Variables matched on") and one row per PSM paper.
     const psRows = await db
       .select()
       .from(papersets)
       .where(eq(papersets.userId, userId));
     expect(psRows).toHaveLength(1);
     expect(psRows[0].filename).toMatch(/\.csv$/);
-    expect(psRows[0].folderId).toBe(pcaFolder!.id);
+    expect(psRows[0].folderId).toBe(psmFolder!.id);
     expect(psRows[0].columns).toHaveLength(2);
     const colNames = psRows[0].columns.map((c) => c.name);
-    expect(colNames).toContain("Uses PCA");
+    expect(colNames).toContain("Uses PSM");
     expect(colNames).toContain("Variables matched on");
     expect(psRows[0].rowRefs).toHaveLength(3);
     for (const row of psRows[0].rowRefs) {
       expect(typeof row.paper_id).toBe("string");
       expect(row.paper_id.length).toBeGreaterThan(0);
     }
-    // All seeded rowRefs reference real PCA paper IDs (no reference-only rows).
-    const paperIds = new Set(pcaPapers.map((p) => p.id));
+    // All seeded rowRefs reference real PSM paper IDs (no reference-only rows).
+    const paperIds = new Set(psmPapers.map((p) => p.id));
     const rowRefIds = psRows[0].rowRefs.map((r) => r.paper_id);
     const matchedPaperIds = rowRefIds.filter((id) => paperIds.has(id));
     expect(matchedPaperIds).toHaveLength(3);

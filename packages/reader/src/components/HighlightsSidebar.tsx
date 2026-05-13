@@ -4,6 +4,7 @@ import { type ReactNode } from "react";
 import { Trash2 } from "lucide-react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "./ui/button";
+import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "./ui/empty";
 
 interface Highlight {
   id: number | string;
@@ -70,10 +71,12 @@ export function HighlightsSidebar({
         {loading && <p className="text-xs text-muted-foreground">Loading...</p>}
         {error && <p className="text-xs text-destructive">{error}</p>}
         {!loading && !error && highlights.length === 0 && (
-          <div className="flex flex-col gap-2">
-            <p className="text-sm font-medium text-muted-foreground">No highlights yet</p>
-            <p className="text-xs text-muted-foreground/70">Select text to create one.</p>
-          </div>
+          <Empty>
+            <EmptyHeader>
+              <EmptyTitle>No highlights yet</EmptyTitle>
+              <EmptyDescription className="text-xs text-muted-foreground/70">Select text to create one.</EmptyDescription>
+            </EmptyHeader>
+          </Empty>
         )}
         {!loading && !error && highlights.length > 0 && (
           <div className="space-y-3">

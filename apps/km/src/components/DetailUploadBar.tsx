@@ -14,6 +14,7 @@ import {
   type FolderRow,
 } from "@/lib/folders";
 import { FolderDestinationPicker } from "./FolderDestinationPicker";
+import { invalidateTree } from "@/lib/tree-invalidate";
 
 export type DetailUploadKind = "paper" | "note" | "reference";
 
@@ -225,6 +226,7 @@ export function DetailUploadBar({
       } finally {
         setBusy(false);
         router.refresh();
+        invalidateTree();
       }
     },
     [isAnonymous, kind, router, uploadOne],

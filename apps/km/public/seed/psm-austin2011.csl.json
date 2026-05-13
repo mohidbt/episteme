@@ -1,0 +1,14 @@
+{
+  "id": "10.1080/00273171.2011.568786",
+  "type": "article-journal",
+  "DOI": "10.1080/00273171.2011.568786",
+  "title": "An introduction to propensity score methods for reducing the effects of confounding in observational studies",
+  "author": [
+    { "family": "Austin", "given": "Peter C." }
+  ],
+  "issued": { "date-parts": [[2011]] },
+  "container-title": "Multivariate Behavioral Research",
+  "volume": "46",
+  "issue": "3",
+  "page": "399-424"
+}

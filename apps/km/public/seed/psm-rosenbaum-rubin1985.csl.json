@@ -1,0 +1,15 @@
+{
+  "id": "10.1080/00031305.1985.10479383",
+  "type": "article-journal",
+  "DOI": "10.1080/00031305.1985.10479383",
+  "title": "Constructing a control group using multivariate matched sampling methods that incorporate the propensity score",
+  "author": [
+    { "family": "Rosenbaum", "given": "Paul R." },
+    { "family": "Rubin", "given": "Donald B." }
+  ],
+  "issued": { "date-parts": [[1985]] },
+  "container-title": "The American Statistician",
+  "volume": "39",
+  "issue": "1",
+  "page": "33-38"
+}

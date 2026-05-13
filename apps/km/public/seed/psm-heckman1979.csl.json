@@ -1,0 +1,14 @@
+{
+  "id": "10.2307/1912352",
+  "type": "article-journal",
+  "DOI": "10.2307/1912352",
+  "title": "Sample selection bias as a specification error",
+  "author": [
+    { "family": "Heckman", "given": "James J." }
+  ],
+  "issued": { "date-parts": [[1979]] },
+  "container-title": "Econometrica",
+  "volume": "47",
+  "issue": "1",
+  "page": "153-161"
+}

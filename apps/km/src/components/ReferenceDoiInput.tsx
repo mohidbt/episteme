@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { denormaliseForList, type CslItem } from "@/lib/csl";
+import { invalidateTree } from "@/lib/tree-invalidate";
 
 interface ReferenceDoiInputProps {
   libraryId: number;
@@ -73,6 +74,7 @@ export function ReferenceDoiInput({ libraryId, folderPath }: ReferenceDoiInputPr
         setValue("");
         setState({ kind: "idle" });
         router.refresh();
+        invalidateTree();
         return;
       }
       const body = await res.json().catch(() => null);

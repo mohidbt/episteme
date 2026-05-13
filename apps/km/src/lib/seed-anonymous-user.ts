@@ -51,7 +51,7 @@ const SEED_REFERENCES = [
 
 const READING_LIST_FOLDER = "Reading List";
 const FOUNDATIONS_FOLDER = "Foundations";
-const PCA_FOLDER = "PSM";
+const PSM_FOLDER = "PSM";
 const BIO_FOLDER = "Bio";
 
 const BIO_REFERENCE_FILE = "bio-fungi.csl.json";
@@ -100,25 +100,24 @@ const BIO_NOTE_ECOLI_MD = `# E. coli chemotaxis — scratchpad
 - Contrast with hyphal foraging in [[Fungal]]: same goal (climb gradient), wildly different machinery + timescale.
 `;
 
-// Real PCA references (Principal Component Analysis canon). Citation keys are
+// Real PSM references (Propensity-Score Matching canon). Citation keys are
 // derived automatically; no fabrication — every entry below has a verifiable
-// publication. The accompanying paperset rows (see SEED_PCA_PAPERSET) ARE
+// publication. The accompanying paperset rows (see SEED_PSM_PAPERSET) ARE
 // fabricated demo data, marked accordingly.
-const SEED_PCA_REFERENCES = [
-  "pca-pearson1901.csl.json",
-  "pca-hotelling1933.csl.json",
-  "pca-jolliffe2002.csl.json",
-  "pca-tipping-bishop1999.csl.json",
-  "pca-novembre2008.csl.json",
-  "pca-turk-pentland1991.csl.json",
+const SEED_PSM_REFERENCES = [
+  "psm-rosenbaum-rubin1983.csl.json",
+  "psm-rosenbaum-rubin1985.csl.json",
+  "psm-rubin1973.csl.json",
+  "psm-heckman1979.csl.json",
+  "psm-dehejia-wahba2002.csl.json",
+  "psm-austin2011.csl.json",
 ];
 
-// PCA-folder demo PDFs. NOTE: these test PDFs are propensity-score-matching
-// papers used as stand-in content for the demo — they are NOT the canonical
-// PCA references above. The seed pairs each with a plausible title/authors
-// extracted from the PDF, so the guest can experience "paper-with-PDF" rows
-// in a paperset alongside reference-only rows.
-const SEED_PCA_PAPERS: Array<{
+// PSM-folder demo PDFs. The accompanying paperset rows demonstrate the
+// research-survey workflow on guest accounts. The seed pairs each PDF with
+// its title/authors so the guest can experience "paper-with-PDF" rows in a
+// paperset alongside reference-only rows.
+const SEED_PSM_PAPERS: Array<{
   filename: string;
   title: string;
   authors: string[];
@@ -126,7 +125,7 @@ const SEED_PCA_PAPERS: Array<{
   doi: string | null;
 }> = [
   {
-    filename: "pca-paper-1.pdf",
+    filename: "psm-paper-1.pdf",
     title:
       "Using Propensity-Score Matched Cohorts to Evaluate Career Outcomes for Medical Students Completing the Underserved Pathway",
     authors: [
@@ -144,7 +143,7 @@ const SEED_PCA_PAPERS: Array<{
     doi: null,
   },
   {
-    filename: "pca-paper-2.pdf",
+    filename: "psm-paper-2.pdf",
     title:
       "Propensity-score matching with GAN-generated observations from electronic health records: simulation study and application to the evaluation of prone positioning in COVID-19 patients under mechanical ventilation",
     authors: [
@@ -157,7 +156,7 @@ const SEED_PCA_PAPERS: Array<{
     doi: null,
   },
   {
-    filename: "pca-paper-3.pdf",
+    filename: "psm-paper-3.pdf",
     title:
       "Propensity score matching–difference-in-differences analysis of the casual effect of opening intermediate high-speed railway stations on employment status in surrounding municipalities",
     authors: ["Jikang Fan", "Shintaro Terabe", "Hideki Yaginuma"],
@@ -167,49 +166,49 @@ const SEED_PCA_PAPERS: Array<{
 ];
 
 // DUMMY DATA — fabricated for the guest-mode demo. NOT real research findings
-// for any of the cited papers. Kept in lockstep order with SEED_PCA_PAPERS
+// for any of the cited papers. Kept in lockstep order with SEED_PSM_PAPERS
 // (only the paper-backed rows; reference-only rows that produced "(missing
 // paper)" entries have been removed — see #110).
-const SEED_PCA_PAPERSET_FILENAME = "pca-survey.csv";
-const SEED_PCA_PAPERSET_COLUMNS = [
+const SEED_PSM_PAPERSET_FILENAME = "psm-survey.csv";
+const SEED_PSM_PAPERSET_COLUMNS = [
   {
-    name: "Uses PCA",
+    name: "Uses PSM",
     description:
-      "Whether and how PCA is used in the paper (yes/no plus extent).",
+      "Whether and how propensity-score matching is used in the paper (yes/no plus extent).",
   },
   {
     name: "Variables matched on",
     description:
-      "Which variables or features the analysis is performed over.",
+      "Which covariates the matching is performed over.",
   },
 ] as const;
-const SEED_PCA_PAPERSET_ROWS = [
+const SEED_PSM_PAPERSET_ROWS = [
   {
-    "Uses PCA": "Yes, foundational derivation",
-    "Variables matched on": "n-dimensional point coordinates",
+    "Uses PSM": "Yes, primary analysis",
+    "Variables matched on": "demographics, prior training experience, financial-aid status",
   },
   {
-    "Uses PCA": "",
-    "Variables matched on": "",
+    "Uses PSM": "Yes, with GAN-augmented controls",
+    "Variables matched on": "baseline EHR vitals and comorbidities",
   },
   {
-    "Uses PCA": "Yes, comprehensive treatment (book)",
-    "Variables matched on": "general multivariate observations",
+    "Uses PSM": "Yes, PSM + difference-in-differences",
+    "Variables matched on": "municipal population, employment, distance to nearest station",
   },
 ] as const;
 
 function dummyPapersetCsv(
   rowRefs: Array<{ citationKey: string; title: string }>,
 ): string {
-  const header = ["Reference", ...SEED_PCA_PAPERSET_COLUMNS.map((c) => c.name)];
+  const header = ["Reference", ...SEED_PSM_PAPERSET_COLUMNS.map((c) => c.name)];
   const lines = [header.map(csvEscape).join(",")];
   for (let i = 0; i < rowRefs.length; i++) {
     const ref = rowRefs[i];
-    const row = SEED_PCA_PAPERSET_ROWS[i];
+    const row = SEED_PSM_PAPERSET_ROWS[i];
     lines.push(
       [
         `${ref.citationKey} — ${ref.title}`,
-        row["Uses PCA"],
+        row["Uses PSM"],
         row["Variables matched on"],
       ]
         .map(csvEscape)
@@ -258,7 +257,7 @@ export async function seedAnonymousUser(userId: string): Promise<void> {
     await db.delete(libraries).where(eq(libraries.userId, userId));
   }
 
-  const { lib, foundationsFolder, pcaFolder, bioFolder } = await db.transaction(async (tx) => {
+  const { lib, foundationsFolder, psmFolder, bioFolder } = await db.transaction(async (tx) => {
     const [created] = await tx
       .insert(libraries)
       .values({ userId, name: "Example Library" })
@@ -288,13 +287,13 @@ export async function seedAnonymousUser(userId: string): Promise<void> {
         name: FOUNDATIONS_FOLDER,
       })
       .returning();
-    const [pca] = await tx
+    const [psm] = await tx
       .insert(folders)
       .values({
         libraryId: created.id,
         userId,
         parentId: null,
-        name: PCA_FOLDER,
+        name: PSM_FOLDER,
       })
       .returning();
     const [bio] = await tx
@@ -306,7 +305,7 @@ export async function seedAnonymousUser(userId: string): Promise<void> {
         name: BIO_FOLDER,
       })
       .returning();
-    return { lib: created, foundationsFolder: foundations, pcaFolder: pca, bioFolder: bio };
+    return { lib: created, foundationsFolder: foundations, psmFolder: psm, bioFolder: bio };
   });
 
   const noteMdPath = path.join(process.cwd(), SEED_DIR, WELCOME_NOTE_FILE);
@@ -387,14 +386,14 @@ export async function seedAnonymousUser(userId: string): Promise<void> {
     });
   }
 
-  // PCA folder — real references + a dummy paperset that demonstrates the
+  // PSM folder — real references + a dummy paperset that demonstrates the
   // research-survey workflow on guest accounts without requiring uploads.
-  const pcaInsertedRefs: Array<{
+  const psmInsertedRefs: Array<{
     id: string;
     citationKey: string;
     title: string;
   }> = [];
-  for (const file of SEED_PCA_REFERENCES) {
+  for (const file of SEED_PSM_REFERENCES) {
     const cslPath = path.join(process.cwd(), SEED_DIR, file);
     const cslRaw = JSON.parse(await fs.readFile(cslPath, "utf8")) as CslItem;
     const cslJson = validateCslJson(cslRaw);
@@ -404,25 +403,24 @@ export async function seedAnonymousUser(userId: string): Promise<void> {
       .values({
         libraryId: lib.id,
         userId,
-        folderPath: PCA_FOLDER,
-        folderId: pcaFolder.id,
+        folderPath: PSM_FOLDER,
+        folderId: psmFolder.id,
         citationKey,
         cslJson,
         paperId: null,
       })
       .returning();
-    pcaInsertedRefs.push({
+    psmInsertedRefs.push({
       id: inserted.id,
       citationKey,
       title: typeof cslJson.title === "string" ? cslJson.title : citationKey,
     });
   }
 
-  // Insert PCA-folder PDFs as actual paper rows. The first 3 paperset rows
-  // will reference these paper IDs (paper-backed rows); the remaining 3 stay
-  // as reference-only rows so the demo shows both shapes side-by-side.
-  const pcaInsertedPapers: Array<{ id: string; title: string }> = [];
-  for (const meta of SEED_PCA_PAPERS) {
+  // Insert PSM-folder PDFs as actual paper rows. The 3 paperset rows reference
+  // these paper IDs (paper-backed rows) so the demo shows real survey content.
+  const psmInsertedPapers: Array<{ id: string; title: string }> = [];
+  for (const meta of SEED_PSM_PAPERS) {
     const pdfFsPath = path.join(process.cwd(), SEED_DIR, meta.filename);
     const buf = await fs.readFile(pdfFsPath);
     const [inserted] = await db
@@ -430,8 +428,8 @@ export async function seedAnonymousUser(userId: string): Promise<void> {
       .values({
         libraryId: lib.id,
         userId,
-        folderPath: PCA_FOLDER,
-        folderId: pcaFolder.id,
+        folderPath: PSM_FOLDER,
+        folderId: psmFolder.id,
         filename: meta.filename,
         title: meta.title,
         authors: meta.authors,
@@ -453,26 +451,26 @@ export async function seedAnonymousUser(userId: string): Promise<void> {
       await storage.uploadObject(paperCoverKey(inserted.id), cover, "image/png");
     } catch (err) {
       console.warn(
-        `seed: cover extraction failed for PCA paper ${inserted.id}`,
+        `seed: cover extraction failed for PSM paper ${inserted.id}`,
         err,
       );
     }
-    pcaInsertedPapers.push({ id: inserted.id, title: meta.title });
+    psmInsertedPapers.push({ id: inserted.id, title: meta.title });
   }
 
   // #110: Only paper-backed rows — reference-only rows that produced
   // "(missing paper)" have been removed.
-  const rowRefs = pcaInsertedPapers.map((p) => ({ paper_id: p.id }));
-  const rowLabels = pcaInsertedPapers.map((p) => ({
+  const rowRefs = psmInsertedPapers.map((p) => ({ paper_id: p.id }));
+  const rowLabels = psmInsertedPapers.map((p) => ({
     citationKey: "paper",
     title: p.title,
   }));
   await db.insert(papersets).values({
     libraryId: lib.id,
     userId,
-    folderId: pcaFolder.id,
-    filename: SEED_PCA_PAPERSET_FILENAME,
-    columns: SEED_PCA_PAPERSET_COLUMNS.map((c) => ({
+    folderId: psmFolder.id,
+    filename: SEED_PSM_PAPERSET_FILENAME,
+    columns: SEED_PSM_PAPERSET_COLUMNS.map((c) => ({
       name: c.name,
       description: c.description,
     })),

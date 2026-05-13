@@ -1,0 +1,15 @@
+{
+  "id": "10.1093/biomet/70.1.41",
+  "type": "article-journal",
+  "DOI": "10.1093/biomet/70.1.41",
+  "title": "The central role of the propensity score in observational studies for causal effects",
+  "author": [
+    { "family": "Rosenbaum", "given": "Paul R." },
+    { "family": "Rubin", "given": "Donald B." }
+  ],
+  "issued": { "date-parts": [[1983]] },
+  "container-title": "Biometrika",
+  "volume": "70",
+  "issue": "1",
+  "page": "41-55"
+}

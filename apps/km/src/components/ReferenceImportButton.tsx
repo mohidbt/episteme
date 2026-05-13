@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { invalidateTree } from "@/lib/tree-invalidate";
 
 interface Props {
   libraryId: number;
@@ -41,6 +42,7 @@ export function ReferenceImportButton({ libraryId, folderPath }: Props) {
       if (r.skipped > 0) parts.push(`${r.skipped} skipped`);
       toast.success(parts.join(", "));
       router.refresh();
+      invalidateTree();
     } finally {
       setBusy(false);
       if (inputRef.current) inputRef.current.value = "";
