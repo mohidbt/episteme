@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 import { X, Star, ExternalLink, Folder } from "lucide-react";
@@ -390,43 +391,45 @@ export function CitationCard({
                 >
                   <Folder className="size-3.5" aria-hidden />
                 </Button>
-                {folderMenuOpen && folderMenuPos && (
-                  <div
-                    role="menu"
-                    data-folder-menu="true"
-                    style={{ top: folderMenuPos.top, left: folderMenuPos.left }}
-                    className="fixed z-[60] max-h-64 w-56 overflow-y-auto rounded-md border bg-background p-1 shadow-lg"
-                  >
-                    <button
-                      type="button"
-                      role="menuitem"
-                      onClick={() => {
-                        setFolderMenuOpen(false);
-                        onSaveToLibrary(null);
-                      }}
-                      className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs hover:bg-muted"
+                {folderMenuOpen && folderMenuPos && typeof document !== "undefined" &&
+                  createPortal(
+                    <div
+                      role="menu"
+                      data-folder-menu="true"
+                      style={{ top: folderMenuPos.top, left: folderMenuPos.left }}
+                      className="fixed z-[100] max-h-64 w-56 overflow-y-auto rounded-md border bg-background p-1 shadow-lg"
                     >
-                      <span className="flex-1 truncate">Library root</span>
-                    </button>
-                    {folders.map((f) => (
                       <button
-                        key={f.id}
                         type="button"
                         role="menuitem"
                         onClick={() => {
                           setFolderMenuOpen(false);
-                          onSaveToLibrary(f.id);
+                          onSaveToLibrary(null);
                         }}
                         className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs hover:bg-muted"
                       >
-                        <Folder className="size-3 shrink-0 text-muted-foreground" aria-hidden />
-                        <span className="flex-1 truncate" title={f.path ?? f.name}>
-                          {f.path ?? f.name}
-                        </span>
+                        <span className="flex-1 truncate">Library root</span>
                       </button>
-                    ))}
-                  </div>
-                )}
+                      {folders.map((f) => (
+                        <button
+                          key={f.id}
+                          type="button"
+                          role="menuitem"
+                          onClick={() => {
+                            setFolderMenuOpen(false);
+                            onSaveToLibrary(f.id);
+                          }}
+                          className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs hover:bg-muted"
+                        >
+                          <Folder className="size-3 shrink-0 text-muted-foreground" aria-hidden />
+                          <span className="flex-1 truncate" title={f.path ?? f.name}>
+                            {f.path ?? f.name}
+                          </span>
+                        </button>
+                      ))}
+                    </div>,
+                    document.body,
+                  )}
               </div>
             )}
           </div>

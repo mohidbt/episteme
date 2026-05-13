@@ -191,9 +191,11 @@ const SEED_PSM_PAPERSET_ROWS = [
     "Uses PSM": "Yes, with GAN-augmented controls",
     "Variables matched on": "baseline EHR vitals and comorbidities",
   },
+  // Last row left empty so the user can fill cells themselves and try the
+  // AI-fill workflow on a real paperset row.
   {
-    "Uses PSM": "Yes, PSM + difference-in-differences",
-    "Variables matched on": "municipal population, employment, distance to nearest station",
+    "Uses PSM": "",
+    "Variables matched on": "",
   },
 ] as const;
 
