@@ -244,7 +244,7 @@ function CellView({
       {state.kind === "running" && (
         <span className="flex items-center gap-1 text-muted-foreground">
           <Loader2 className="size-3 animate-spin" aria-hidden />
-          <span className="text-xs">running…</span>
+          <span className="text-xs">Agent analyzing…</span>
         </span>
       )}
       {state.kind === "failed" && (
