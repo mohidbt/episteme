@@ -400,11 +400,14 @@ export function agentStreamReducer(
     }
 
     case "done": {
-      // G1: sweep any tool cards still in input-available → output-error.
-      // Belt-and-suspenders: producer emits synthetic tool_result frames, but
-      // we also handle any clean-EOF gap that slips through.
+      // G1: sweep any tool cards still in a non-terminal state → output-error.
+      // Terminal states are "output-available" and "output-error"; everything
+      // else (currently "input-available") was never resolved before the stream
+      // ended. Belt-and-suspenders: producer emits synthetic tool_result frames,
+      // but we also handle any clean-EOF gap that slips through.
+      const TERMINAL_TOOL_STATES = new Set(["output-available", "output-error"]);
       const swept = state.cards.map((c) => {
-        if (c.kind === "tool" && c.state === "input-available") {
+        if (c.kind === "tool" && !TERMINAL_TOOL_STATES.has(c.state)) {
           return {
             ...c,
             state: "output-error" as const,

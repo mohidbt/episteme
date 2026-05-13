@@ -319,6 +319,15 @@ async def test_gen_emits_tool_result_error_and_done_on_cancelled_error():
     on_tool_start (but before on_tool_end), the SSE gen() must:
       - emit tool_result with state=output-error for the orphan run_id
       - always emit done as the last frame
+
+    Trade-off vs exercising the real gen() path:
+    The production gen() is a closure inside a FastAPI route handler and
+    requires a full agent, saver, and HTTP request context to instantiate.
+    Wiring all of that for a single cancellation path would add ~100 lines of
+    mock scaffolding for marginal benefit — the try/finally logic being tested
+    is only 10 lines and is replicated verbatim in the hand-rolled gen below.
+    We accept the duplication and guard it with a comment so future readers
+    know to keep both in sync if the finally block changes.
     """
     import asyncio  # noqa: PLC0415
     from unittest.mock import AsyncMock, MagicMock, patch  # noqa: PLC0415
@@ -389,7 +398,7 @@ async def test_gen_emits_tool_result_error_and_done_on_cancelled_error():
     assert event_type == "tool_result"
     assert data["id"] == RUN_ID
     assert data["state"] == "output-error"
-    assert "stream ended before tool completed" in data["errorText"]
+    assert "stream ended" in data["errorText"]
 
     done_frame = frames[-1]
     event_type, data = _parse_sse(done_frame)

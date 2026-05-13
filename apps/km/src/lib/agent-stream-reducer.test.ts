@@ -528,4 +528,40 @@ describe("agentStreamReducer — G1 done-sweep (stuck input-available cards)", (
     // errorText should be the original, not overwritten by the sweep
     expect(card?.errorText).toBe("prior error");
   });
+
+  // NOTE: "input-streaming" is a ToolUIPartState used by AI Elements components
+  // (_ai-types.ts) but is NOT part of the reducer's ToolCard.state union
+  // ("input-available" | "output-available" | "output-error"). The reducer never
+  // produces an "input-streaming" card, so no sweep test is needed — the Set-based
+  // terminal guard already catches any future non-terminal state added to the union.
+  it("sweeps a card whose state is not a known terminal (guard is non-terminal, not input-available)", () => {
+    // Force an unknown intermediate state through type assertion to verify
+    // the Set-based guard is truly inclusive of any non-terminal state.
+    const forceNonTerminal = (
+      cards: ToolCard[],
+      id: string,
+    ): ToolCard[] =>
+      cards.map((c) =>
+        c.id === id
+          ? ({ ...c, state: "input-streaming" as ToolCard["state"] })
+          : c,
+      );
+
+    // Build state: tool_call then manually push card to a synthetic intermediate state
+    const base = fold([
+      { type: "tool_call", id: "tc-ns", name: "km_get", args: {}, state: "input-available" },
+    ]);
+    const withNonTerminal: typeof base = {
+      ...base,
+      cards: forceNonTerminal(
+        base.cards.filter((c): c is ToolCard => c.kind === "tool"),
+        "tc-ns",
+      ),
+    };
+    // Now apply done
+    const final = agentStreamReducer(withNonTerminal, { type: "done", thread_id: "t1" });
+    const card = final.cards.find((c) => c.kind === "tool") as ToolCard | undefined;
+    expect(card?.state).toBe("output-error");
+    expect(card?.errorText).toBe("stream ended");
+  });
 });

@@ -602,8 +602,17 @@ async def invoke(req: Request, auth: InternalAuthDep):
                 yield format_typed("tool_result", {
                     "id": orphan_run_id,
                     "state": "output-error",
-                    "errorText": "stream ended before tool completed",
+                    "errorText": "stream ended",
                 })
+            # yield-in-finally trade-off: Python async-gen spec says that
+            # yielding inside finally is undefined behaviour when the generator
+            # is closed via aclose() / GeneratorExit — the frame may or may not
+            # be delivered. In our SSE context this is acceptable: aclose() is
+            # only triggered when the HTTP client disconnects, at which point
+            # there is no consumer left to receive the bytes anyway. We keep
+            # the yield here so clean-EOF paths (no cancellation) always get a
+            # terminal "done" frame. If the client is gone, the silent drop is
+            # harmless.
             yield format_sse("done", {"thread_id": thread_id})
 
     return StreamingResponse(
