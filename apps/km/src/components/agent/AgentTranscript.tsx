@@ -70,6 +70,7 @@ import {
   ConfirmationActions,
   ConfirmationAction,
 } from "@/components/ai-elements/confirmation";
+import { Button } from "@/components/ui/button";
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import {
   Task,
@@ -92,10 +93,12 @@ import {
 import { FileDiffCard } from "./FileDiffCard";
 import { SkillLoadCard } from "./SkillLoadCard";
 import { ChatCodePre } from "./ChatCodePre";
+import { ChatTable } from "./ChatTable";
 
 // #21 — replace Streamdown's built-in code-block toolbar (copy + download)
-// with our own renderer that exposes Copy + Add to library.
-const chatStreamdownComponents = { pre: ChatCodePre };
+// with our own renderer that exposes Copy + Add to library. Tables get a
+// matching hover toolbar (Copy as TSV + Download as CSV).
+const chatStreamdownComponents = { pre: ChatCodePre, table: ChatTable };
 
 export interface AgentTranscriptProps {
   threadId: string;
@@ -475,8 +478,9 @@ export function AgentTranscript({
   const sendDecision = useCallback(
     async (
       _cardId: string,
-      type: "approve" | "reject",
+      type: "approve" | "reject" | "edit",
       actions: InterruptAction[],
+      editedAction?: { name: string; args: Record<string, unknown> },
     ): Promise<boolean> => {
       abortRef.current?.abort();
       const controller = new AbortController();
@@ -485,10 +489,19 @@ export function AgentTranscript({
       setStreaming(true);
       // POST N decisions so langchain HITL middleware's count matches the
       // N hanging tool calls bundled into this interrupt.
-      const decisions = actions.map((a) => ({
-        tool_call_id: a.toolCallId,
-        type,
-      }));
+      const decisions =
+        type === "edit" && editedAction && actions.length === 1
+          ? [
+              {
+                tool_call_id: actions[0].toolCallId,
+                type: "edit" as const,
+                edited_action: editedAction,
+              },
+            ]
+          : actions.map((a) => ({
+              tool_call_id: a.toolCallId,
+              type: type as "approve" | "reject",
+            }));
       try {
         const res = await fetch("/api/agents/km/resume", {
           method: "POST",
@@ -694,8 +707,9 @@ interface CardViewProps {
   threadId: string;
   onDecision: (
     cardId: string,
-    type: "approve" | "reject",
+    type: "approve" | "reject" | "edit",
     actions: InterruptAction[],
+    editedAction?: { name: string; args: Record<string, unknown> },
   ) => Promise<boolean>;
   onForkSubmit: (messageId: string, editedText: string) => void;
   citationsByMessage: Record<string, Citation[]>;
@@ -991,15 +1005,55 @@ interface InterruptCardViewProps {
   threadId: string;
   onDecision: (
     cardId: string,
-    type: "approve" | "reject",
+    type: "approve" | "reject" | "edit",
     actions: InterruptAction[],
+    editedAction?: { name: string; args: Record<string, unknown> },
   ) => Promise<boolean>;
 }
 
 function InterruptCardView({ card, onDecision }: InterruptCardViewProps) {
-  const [decided, setDecided] = useState<"approve" | "reject" | null>(null);
+  const [decided, setDecided] = useState<"approve" | "reject" | "edit" | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const isBatch = card.actions.length > 1;
+
+  // Edit state — only relevant for N=1
+  const [editOpen, setEditOpen] = useState(false);
+  const [editDraft, setEditDraft] = useState(() =>
+    JSON.stringify(card.actions[0]?.args ?? {}, null, 2),
+  );
+  const [editParseError, setEditParseError] = useState<string | null>(null);
+
+  const handleEditChange = useCallback((val: string) => {
+    setEditDraft(val);
+    try {
+      JSON.parse(val);
+      setEditParseError(null);
+    } catch {
+      setEditParseError("Invalid JSON");
+    }
+  }, []);
+
+  const handleEditSave = useCallback(async () => {
+    if (editParseError || submitting || decided) return;
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = JSON.parse(editDraft) as Record<string, unknown>;
+    } catch {
+      setEditParseError("Invalid JSON");
+      return;
+    }
+    setSubmitting(true);
+    setDecided("edit");
+    const ok = await onDecision(card.id, "edit", card.actions, {
+      name: card.actions[0].tool,
+      args: parsed,
+    });
+    if (!ok) {
+      setDecided(null);
+      toast.error("Failed to send decision. Try again.");
+    }
+    setSubmitting(false);
+  }, [editParseError, submitting, decided, editDraft, onDecision, card]);
 
   const decide = useCallback(
     async (type: "approve" | "reject") => {
@@ -1021,14 +1075,17 @@ function InterruptCardView({ card, onDecision }: InterruptCardViewProps) {
   //   undecided  → state="approval-requested", approval={id}
   //   approve    → state="approval-responded", approval={id, approved:true}
   //   reject     → state="output-denied",      approval={id, approved:false}
+  //   edit       → treat as "approved" for display purposes
   const approval =
-    decided === null
-      ? { id: card.id }
+    decided === null || decided === "edit"
+      ? decided === "edit"
+        ? { id: card.id, approved: true }
+        : { id: card.id }
       : { id: card.id, approved: decided === "approve" };
   const confState: "approval-requested" | "approval-responded" | "output-denied" =
     decided === null
       ? "approval-requested"
-      : decided === "approve"
+      : decided === "approve" || decided === "edit"
         ? "approval-responded"
         : "output-denied";
 
@@ -1068,16 +1125,62 @@ function InterruptCardView({ card, onDecision }: InterruptCardViewProps) {
               <pre className="whitespace-pre-wrap break-words font-mono text-[11px] rounded bg-muted/40 p-2 max-h-48 overflow-auto">
                 {JSON.stringify(card.args, null, 2)}
               </pre>
+              {editOpen && (
+                <div className="mt-2 space-y-1.5" data-testid="interrupt-edit-panel">
+                  <Textarea
+                    aria-label="Edit action args"
+                    className="min-h-24 resize-y font-mono text-[11px]"
+                    value={editDraft}
+                    onChange={(e) => handleEditChange(e.target.value)}
+                    spellCheck={false}
+                  />
+                  {editParseError && (
+                    <p className="text-sm text-destructive" data-testid="interrupt-edit-error">
+                      {editParseError}
+                    </p>
+                  )}
+                  <div className="flex gap-2">
+                    <Button
+                      size="xs"
+                      variant="outline"
+                      onClick={() => setEditOpen(false)}
+                      disabled={submitting}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      size="xs"
+                      onClick={handleEditSave}
+                      disabled={!!editParseError || submitting}
+                      data-testid="interrupt-edit-save"
+                    >
+                      Save
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </ConfirmationRequest>
         <ConfirmationAccepted>
-          <span data-testid="interrupt-decided">Approved</span>
+          <span data-testid="interrupt-decided">
+            {decided === "edit" ? "Edited & approved" : "Approved"}
+          </span>
         </ConfirmationAccepted>
         <ConfirmationRejected>
           <span data-testid="interrupt-decided">Rejected</span>
         </ConfirmationRejected>
         <ConfirmationActions>
+          {!isBatch && (
+            <ConfirmationAction
+              variant="outline"
+              data-action="edit"
+              disabled={submitting}
+              onClick={() => setEditOpen((o) => !o)}
+            >
+              Edit
+            </ConfirmationAction>
+          )}
           <ConfirmationAction
             variant="outline"
             data-action="reject"

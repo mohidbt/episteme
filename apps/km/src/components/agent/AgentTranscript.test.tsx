@@ -532,6 +532,164 @@ describe("AgentTranscript", () => {
     });
   });
 
+  // G2: N=1 interrupt Edit button tests
+  it("G2: N=1 interrupt renders Edit, Reject, and Approve buttons", async () => {
+    const events: AgentEvent[] = [
+      {
+        type: "interrupt",
+        id: "tc-n1",
+        tool: "make_public",
+        args: { note_id: "n1" },
+        allowed_decisions: ["approve", "reject"],
+      },
+    ];
+    const fetchMock = fetch as unknown as ReturnType<typeof vi.fn>;
+    fetchMock.mockResolvedValueOnce(streamResponse(events));
+
+    render(<AgentTranscript threadId="t-n1-edit" />);
+    const ta = screen.getByLabelText("Message agent") as HTMLTextAreaElement;
+    fireEvent.change(ta, { target: { value: "go" } });
+    fireEvent.click(screen.getByRole("button", { name: /send/i }));
+
+    await waitFor(() => screen.getByTestId("card-interrupt"));
+    const card = screen.getByTestId("card-interrupt");
+    expect(card.querySelector('[data-action="approve"]')).toBeTruthy();
+    expect(card.querySelector('[data-action="reject"]')).toBeTruthy();
+    expect(card.querySelector('[data-action="edit"]')).toBeTruthy();
+  });
+
+  it("G2: clicking Edit on N=1 interrupt reveals textarea prefilled with action args JSON", async () => {
+    const events: AgentEvent[] = [
+      {
+        type: "interrupt",
+        id: "tc-n1-ed",
+        tool: "make_public",
+        args: { note_id: "n1" },
+        allowed_decisions: ["approve", "reject"],
+      },
+    ];
+    const fetchMock = fetch as unknown as ReturnType<typeof vi.fn>;
+    fetchMock.mockResolvedValueOnce(streamResponse(events));
+
+    render(<AgentTranscript threadId="t-n1-edit2" />);
+    const ta = screen.getByLabelText("Message agent") as HTMLTextAreaElement;
+    fireEvent.change(ta, { target: { value: "go" } });
+    fireEvent.click(screen.getByRole("button", { name: /send/i }));
+
+    await waitFor(() => screen.getByTestId("card-interrupt"));
+    const card = screen.getByTestId("card-interrupt");
+    const editBtn = card.querySelector('[data-action="edit"]') as HTMLElement;
+    fireEvent.click(editBtn);
+
+    const editArea = screen.getByLabelText(/edit action args/i) as HTMLTextAreaElement;
+    expect(editArea).toBeTruthy();
+    const parsed = JSON.parse(editArea.value);
+    expect(parsed).toEqual({ note_id: "n1" });
+  });
+
+  it("G2: Edit save POSTs edit decision; invalid JSON disables Save and shows inline error", async () => {
+    const events: AgentEvent[] = [
+      {
+        type: "interrupt",
+        id: "tc-n1-save",
+        tool: "make_public",
+        args: { note_id: "n1" },
+        allowed_decisions: ["approve", "reject"],
+      },
+    ];
+    const fetchMock = fetch as unknown as ReturnType<typeof vi.fn>;
+    fetchMock
+      .mockResolvedValueOnce(streamResponse(events)) // /invoke
+      .mockResolvedValueOnce(
+        new Response("", { status: 200, headers: { "content-type": "text/event-stream" } }),
+      ); // /resume
+
+    render(<AgentTranscript threadId="t-n1-save" />);
+    const ta = screen.getByLabelText("Message agent") as HTMLTextAreaElement;
+    fireEvent.change(ta, { target: { value: "go" } });
+    fireEvent.click(screen.getByRole("button", { name: /send/i }));
+
+    await waitFor(() => screen.getByTestId("card-interrupt"));
+    const card = screen.getByTestId("card-interrupt");
+    const editBtn = card.querySelector('[data-action="edit"]') as HTMLElement;
+    fireEvent.click(editBtn);
+
+    const editArea = screen.getByLabelText(/edit action args/i) as HTMLTextAreaElement;
+
+    // Enter invalid JSON — Save should be disabled and error shown
+    fireEvent.change(editArea, { target: { value: "{ bad json" } });
+    const saveBtn = screen.getByTestId("interrupt-edit-save");
+    expect(saveBtn.getAttribute("disabled") !== null || (saveBtn as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByTestId("interrupt-edit-error").textContent).toContain("Invalid JSON");
+
+    // Fix JSON and save — should POST edit decision
+    fireEvent.change(editArea, { target: { value: JSON.stringify({ note_id: "n2" }) } });
+    expect(screen.queryByTestId("interrupt-edit-error")).toBeNull();
+    fireEvent.click(saveBtn);
+
+    await waitFor(() => {
+      const calls = fetchMock.mock.calls;
+      const resumeCall = calls.find(
+        (c) => typeof c[0] === "string" && c[0].includes("/api/agents/km/resume"),
+      );
+      expect(resumeCall).toBeTruthy();
+      const body = JSON.parse((resumeCall![1] as RequestInit).body as string);
+      expect(body).toEqual({
+        thread_id: "t-n1-save",
+        decisions: [
+          {
+            tool_call_id: "tc-n1-save",
+            type: "edit",
+            edited_action: { name: "make_public", args: { note_id: "n2" } },
+          },
+        ],
+      });
+    });
+  });
+
+  it("G2: N=3 batch interrupt does NOT render Edit button", async () => {
+    const events: AgentEvent[] = [
+      {
+        type: "interrupt",
+        id: "int-batch-noedit",
+        tool: "highlight",
+        args: { page: 1 },
+        allowed_decisions: ["approve", "reject"],
+        actions: [
+          {
+            tool_call_id: "tc-a",
+            tool: "highlight",
+            args: { page: 1 },
+            allowed_decisions: ["approve", "reject"],
+          },
+          {
+            tool_call_id: "tc-b",
+            tool: "highlight",
+            args: { page: 2 },
+            allowed_decisions: ["approve", "reject"],
+          },
+          {
+            tool_call_id: "tc-c",
+            tool: "highlight",
+            args: { page: 3 },
+            allowed_decisions: ["approve", "reject"],
+          },
+        ],
+      },
+    ];
+    const fetchMock = fetch as unknown as ReturnType<typeof vi.fn>;
+    fetchMock.mockResolvedValueOnce(streamResponse(events));
+
+    render(<AgentTranscript threadId="t-batch-noedit" />);
+    const ta = screen.getByLabelText("Message agent") as HTMLTextAreaElement;
+    fireEvent.change(ta, { target: { value: "go" } });
+    fireEvent.click(screen.getByRole("button", { name: /send/i }));
+
+    await waitFor(() => screen.getByTestId("card-interrupt"));
+    const card = screen.getByTestId("card-interrupt");
+    expect(card.querySelector('[data-action="edit"]')).toBeNull();
+  });
+
   it("forwards pageContext in the invoke body so the agent grounds to the open note (Task #27)", async () => {
     const fetchMock = fetch as unknown as ReturnType<typeof vi.fn>;
     fetchMock.mockResolvedValueOnce(
