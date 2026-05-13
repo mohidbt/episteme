@@ -91,3 +91,35 @@ jobs:
             echo "expected predeploy check to fail for missing papers.storage_url"
             exit 1
           fi
+
+  schema-drift-lint:
+    name: schema drift lint
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    env:
+      # PR body is passed via env (not run-line interpolation) so it cannot be shell-injected.
+      PR_BODY: ${{ github.event.pull_request.body }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch base ref
+        run: git fetch --no-tags origin main:refs/remotes/origin/main
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.12.0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint risky DDL against schema-drift checks
+        run: pnpm --filter @episteme/db db:lint-drift

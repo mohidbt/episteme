@@ -18,7 +18,8 @@
     "generate": "drizzle-kit generate",
     "studio": "drizzle-kit studio",
     "predeploy-check": "tsx scripts/predeploy-check.ts",
-    "db:record-applied": "tsx scripts/record-applied.ts"
+    "db:record-applied": "tsx scripts/record-applied.ts",
+    "db:lint-drift": "tsx scripts/lint-schema-drift.ts"
   },
   "dependencies": {
     "drizzle-orm": "^0.45.2",
