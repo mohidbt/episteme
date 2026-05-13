@@ -744,6 +744,12 @@ describe("AgentTranscript", () => {
         },
         state: "input-available",
       },
+      {
+        type: "tool_result",
+        id: "mem-w",
+        output: "",
+        state: "output-available",
+      },
       { type: "done", thread_id: "t-mem" },
     ];
     (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
@@ -757,8 +763,9 @@ describe("AgentTranscript", () => {
 
     await waitFor(() => {
       // After result, read tool moves to output-available -> "Recalled memory"
+      // After tool_result, write tool moves to output-available -> "Saved memory"
       expect(screen.getByText(/recalled memory/i)).toBeTruthy();
-      expect(screen.getByText(/saving memory/i)).toBeTruthy();
+      expect(screen.getByText(/saved memory/i)).toBeTruthy();
     });
 
     // Raw payload (memory contents) NOT in DOM by default — Task is collapsed.
