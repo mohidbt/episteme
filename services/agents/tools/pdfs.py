@@ -28,8 +28,10 @@ _UNAVAILABLE = {
 async def list_pdfs(libraryId: int | None = None, *, config: RunnableConfig) -> object:
     """List individual PDF files / papers in the user's library.
 
-    USE THIS when the user asks to enumerate, list, show all, or count
-    PDFs/papers — do NOT use search_pdfs for that.
+    This is the DEFAULT tool when the user asks to browse / show my papers /
+    list my library / "which papers do I have" / "what's in my library" — use
+    this UNLESS the user explicitly named a specific paper title or keyword
+    to look up (in which case use search_pdfs).
 
     DO NOT USE THIS for papersets, spreadsheets, CSVs, extraction tables, or
     any tabular/structured data — those are a different concept. Use
@@ -67,15 +69,20 @@ async def list_pdfs(libraryId: int | None = None, *, config: RunnableConfig) -> 
 
 @tool
 async def search_pdfs(query: str, *, config: RunnableConfig) -> object:
-    """Search across ALL of the user's PDFs/papers by title or filename.
+    """Search across the user's PDFs/papers by title or filename.
 
-    Use ONLY when the user asks to find a specific paper by a query term
-    (e.g. "find the attention paper"). For listing every PDF in a library,
-    use list_pdfs instead.
+    Use ONLY when the user mentions a specific paper title or keyword
+    (e.g. "open the BERT paper", "find papers about diffusion",
+    "find the attention paper"). Do NOT use as a fallback or default when
+    the user just wants to browse / list / see their library — call
+    `list_pdfs` for that instead.
+
     Returns up to 20 matches (id, title, filename, year, doi).
 
     Args:
-        query: Substring to match against title/filename.
+        query: Substring to match against title/filename. Must be a
+            non-empty, specific term — never call this with an empty string
+            or a generic placeholder.
     """
     user_id = user_id_from_config(config)
     return await km_get(f"/api/pdfs/search?q={quote_plus(query)}", user_id=user_id)
@@ -199,10 +206,14 @@ async def highlight(
     if not bbox_list or page_for_payload is None:
         return {"error": True, "message": "matched blocks have no bbox data"}
 
-    # Generate a fresh runId per tool invocation so the reader sidebar can
-    # group multiple highlights produced by one call (and distinguish runs
-    # across calls within a single chat session).
-    run_id = str(uuid.uuid4())
+    # B5 — stable run_id per agent run. The KM agent router injects
+    # ``configurable.run_id`` for the duration of one /invoke call so multiple
+    # highlight() invocations within that single turn share one runId and
+    # collapse into a single reader-sidebar entry. Fall back to a fresh UUID
+    # only when no run_id was plumbed through (e.g. ad-hoc invocations).
+    configurable = config.get("configurable") if isinstance(config, dict) else None
+    ctx_run_id = configurable.get("run_id") if isinstance(configurable, dict) else None
+    run_id = ctx_run_id if isinstance(ctx_run_id, str) and ctx_run_id else str(uuid.uuid4())
     body: dict = {
         "paperId": pdf_id,
         "page": page_for_payload,

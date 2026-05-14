@@ -16,6 +16,7 @@ enough for legitimate runs while still bounding pathological loops
 import asyncio
 import json
 import logging
+import uuid
 from functools import cache as _fn_cache
 
 import openai
@@ -473,6 +474,7 @@ def _build_configurable(
     user_id: str,
     auth: dict,
     active_paper_id: str | None,
+    run_id: str | None = None,
 ) -> dict:
     """Build the ``configurable`` dict for ``RunnableConfig``.
 
@@ -487,6 +489,11 @@ def _build_configurable(
     configurable: dict = {"thread_id": thread_id, "user_id": user_id}
     if active_paper_id:
         configurable["paper_id"] = active_paper_id
+    if run_id:
+        # B5 — stable run_id scoped to this single /invoke (or /resume) call.
+        # Tools (e.g. tools/pdfs.py::highlight) read it via RunnableConfig so
+        # multiple highlight() invocations within one turn share a runId.
+        configurable["run_id"] = run_id
     ocr_key = auth.get("ocr_key") if isinstance(auth, dict) else None
     if not ocr_key and isinstance(auth, dict):
         # Defensive fallback: older callers may only send llm_key. read_paper
@@ -533,20 +540,29 @@ async def invoke(req: Request, auth: InternalAuthDep):
     )
 
     # Page context (paperId/noteId/...) — when set, propagate via configurable
-    # so tools can default to the active resource and prepend a context line
-    # to the user message so the model picks paper-scoped tools (read_paper /
-    # pdf_read_text / pdf_explain_passage / search_pdfs / list_pdfs) — see
-    # ``_build_reader_context_prefix`` for the exact tool list named to the LLM.
+    # so tools can default to the active resource, AND prepend the reader
+    # context as a SystemMessage so the model picks paper-scoped tools
+    # (read_paper / pdf_read_text / pdf_explain_passage / search_pdfs /
+    # list_pdfs) — see ``_build_reader_context_prefix`` for the exact tool
+    # list named to the LLM.
+    #
+    # Round 4 / B10: the reader-context MUST NOT be concatenated onto the
+    # user's text. Doing so persisted the preamble into the human message via
+    # the checkpointer and the transcript UI replayed it on every hydration.
+    # System role keeps it out of the visible history while still steering
+    # tool selection.
     page_context = body.get("page_context") or {}
     if not isinstance(page_context, dict):
         page_context = {}
     active_paper_id = page_context.get("paperId") if isinstance(page_context.get("paperId"), str) else None
     user_message = body["message"]
+    input_messages: list[dict] = []
     if active_paper_id:
-        user_message = (
-            f"{_build_reader_context_prefix(active_paper_id)}\n\n"
-            f"{user_message}"
-        )
+        input_messages.append({
+            "role": "system",
+            "content": _build_reader_context_prefix(active_paper_id),
+        })
+    input_messages.append({"role": "user", "content": user_message})
 
     async def gen():
         step = 0
@@ -555,16 +571,21 @@ async def invoke(req: Request, auth: InternalAuthDep):
         # G1: track run_ids from on_tool_start so we can emit synthetic
         # output-error frames for any tool that never received on_tool_end.
         active_tool_run_ids: set[str] = set()
+        # B5 — one stable run_id per /invoke call. Shared across every tool
+        # invocation in this turn so highlight() rows group under a single
+        # reader-sidebar run.
+        invoke_run_id = str(uuid.uuid4())
         configurable = _build_configurable(
             thread_id=thread_id,
             user_id=user_id,
             auth=auth,
             active_paper_id=active_paper_id,
+            run_id=invoke_run_id,
         )
         try:
             try:
                 async for ev in agent.astream_events(
-                    {"messages": [{"role": "user", "content": user_message}]},
+                    {"messages": input_messages},
                     config={
                         "configurable": configurable,
                         "recursion_limit": _AGENT_RECURSION_LIMIT,
