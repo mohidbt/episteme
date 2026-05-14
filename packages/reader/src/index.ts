@@ -20,3 +20,13 @@ export type { ReaderPlugin, ReaderMode } from "./plugins/types";
 
 export { useExplainPassage } from "./hooks/use-explain-passage";
 export type { UseExplainPassageOptions, ExplainPassageArgs } from "./hooks/use-explain-passage";
+
+export {
+  computeSegmentScrollTop,
+  scrollContainerToSegment,
+} from "./lib/scroll-to-segment";
+export type {
+  SegmentBbox,
+  ScrollToSegmentArgs,
+  ComputeScrollInput,
+} from "./lib/scroll-to-segment";

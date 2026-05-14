@@ -352,6 +352,56 @@ describe("AgentTranscript", () => {
     window.removeEventListener("episteme:reader-jump", jumpListener);
   });
 
+  it("R6 B4: in-reader pill click dispatches reader-jump with chunkId, orderIndex, and structured bbox in detail", async () => {
+    mockPathname.mockReturnValue("/papers/paper-9/read");
+    let lastDetail: unknown = null;
+    const jumpListener = ((ev: Event) => {
+      lastDetail = (ev as CustomEvent).detail;
+    }) as EventListener;
+    window.addEventListener("episteme:reader-jump", jumpListener);
+
+    const events: AgentEvent[] = [
+      {
+        type: "text",
+        id: "msg-cite-scroll",
+        delta: "Ref [c1].",
+        citations: [
+          {
+            chunk_id: "paper-9:p3:5",
+            paper_id: "paper-9",
+            page: 3,
+            bbox: { x0: 100, y0: 200, x1: 200, y1: 240 },
+            snippet: "S",
+          },
+        ],
+      },
+      { type: "done", thread_id: "t1" },
+    ];
+    (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+      streamResponse(events),
+    );
+
+    render(<AgentTranscript threadId="t1" />);
+    const ta = screen.getByLabelText("Message agent") as HTMLTextAreaElement;
+    fireEvent.change(ta, { target: { value: "go" } });
+    fireEvent.click(screen.getByRole("button", { name: /send/i }));
+
+    const pill = await screen.findByTestId(
+      "inline-citation-pill-paper-9:p3:5",
+    );
+    fireEvent.click(pill);
+
+    expect(lastDetail).toMatchObject({
+      page: 3,
+      bbox: "100,200,200,240",
+      chunkId: "paper-9:p3:5",
+      orderIndex: "5",
+      bboxRect: { x0: 100, y0: 200, x1: 200, y1: 240 },
+    });
+
+    window.removeEventListener("episteme:reader-jump", jumpListener);
+  });
+
   it("renders Task tool label as Subagent in tool header", () => {
     render(
       <AgentTranscript

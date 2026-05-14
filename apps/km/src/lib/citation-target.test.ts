@@ -40,7 +40,42 @@ describe("resolveCitationTarget", () => {
       paperId: "abc",
       page: 4,
       bbox: "1,2,3,4",
+      chunkId: null,
+      orderIndex: null,
     });
+  });
+
+  it("parses orderIndex + chunkId from chunk_id `{paperId}:p{page}:{orderIndex}` on in-place targets (R6 B4)", () => {
+    const t = resolveCitationTarget({
+      pathname: "/papers/abc/read",
+      paperId: "abc",
+      page: 3,
+      bbox: "10,20,30,40",
+      chunkId: "abc:p3:5",
+    });
+    expect(t).toEqual({
+      kind: "in-place",
+      paperId: "abc",
+      page: 3,
+      bbox: "10,20,30,40",
+      chunkId: "abc:p3:5",
+      orderIndex: "5",
+    });
+  });
+
+  it("in-place target tolerates chunkId without an orderIndex segment", () => {
+    const t = resolveCitationTarget({
+      pathname: "/papers/abc/read",
+      paperId: "abc",
+      page: 3,
+      bbox: null,
+      chunkId: "legacy-id",
+    });
+    expect(t.kind).toBe("in-place");
+    if (t.kind === "in-place") {
+      expect(t.chunkId).toBe("legacy-id");
+      expect(t.orderIndex).toBe(null);
+    }
   });
 
   it("returns navigate target to the reader (NOT /p/) when invoked outside it", () => {

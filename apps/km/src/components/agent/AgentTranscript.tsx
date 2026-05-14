@@ -577,20 +577,32 @@ export function AgentTranscript({
       const bbox = citation.bbox
         ? `${citation.bbox.x0},${citation.bbox.y0},${citation.bbox.x1},${citation.bbox.y1}`
         : null;
+      const chunkId = citation.chunkId ?? citation.chunk_id ?? null;
       // B7 — when the transcript is mounted inside the reader, scroll the
       // existing reader in place via the `episteme:reader-jump` window event
       // (Reader.tsx listens for it). Navigating to /p/{id} or even /papers/
       // {id}/read would unmount the reader, killing the chat panel mid-flow.
+      //
+      // R6 B4 — extend the detail with the structured bbox + parsed
+      // orderIndex so Reader can scroll-to-segment and pulse a highlight,
+      // not just jump to the right page.
       const target = resolveCitationTarget({
         pathname,
         paperId,
         page,
         bbox,
+        chunkId,
       });
       if (target.kind === "in-place") {
         window.dispatchEvent(
           new CustomEvent("episteme:reader-jump", {
-            detail: { page: target.page, bbox: target.bbox },
+            detail: {
+              page: target.page,
+              bbox: target.bbox,
+              chunkId: target.chunkId,
+              orderIndex: target.orderIndex,
+              bboxRect: citation.bbox ?? null,
+            },
           }),
         );
         return;
