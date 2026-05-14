@@ -777,6 +777,9 @@ async def resume(req: Request, auth: InternalAuthDep):
             active_paper_id=None,
             run_id=resume_run_id,
         )
+        # Match /invoke citation handling so a resumed RAG tool call still
+        # emits the `sources` event consumed by the UI. (Codex senior review.)
+        pending_citations: list[dict] = []
         try:
             async for ev in agent.astream_events(
                 Command(resume=resume_payload),
@@ -800,7 +803,20 @@ async def resume(req: Request, auth: InternalAuthDep):
                         )
                 mapped = _map_event(ev)
                 if mapped:
-                    yield format_typed(mapped[0], mapped[1])
+                    extracted = _extract_rag_citations_from_tool_result(ev, mapped)
+                    if extracted:
+                        pending_citations = extracted
+                    if mapped[0] == "text" and pending_citations:
+                        payload = dict(mapped[1])
+                        payload["citations"] = pending_citations
+                        yield format_typed(mapped[0], payload)
+                        yield format_typed("sources", {
+                            "message_id": payload["id"],
+                            "citations": pending_citations,
+                        })
+                        pending_citations = []
+                    else:
+                        yield format_typed(mapped[0], mapped[1])
                     for extra in _extra_events(ev, mapped):
                         yield format_typed(extra[0], extra[1])
             for ev_type, payload in await _flush_pending_interrupts(agent, thread_id):

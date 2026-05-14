@@ -49,6 +49,11 @@ export function InlineCitationPills({
                 sources={[citation.url ?? "https://example.com"]}
                 label={label}
                 title={citation.title}
+                aria-label={
+                  citation.title
+                    ? `Citation ${label}: ${citation.title}`
+                    : `Citation ${label}`
+                }
                 onClick={() => onCitationClick(citation)}
               />
             </InlineCitationCard>

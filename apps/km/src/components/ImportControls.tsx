@@ -57,7 +57,10 @@ export function ImportControls({
       <input
         ref={inputRef}
         type="file"
-        accept=".md,.pdf,.bib,.ris,.csl-json,.csljson,.csv,.jpg,.jpeg,.png,.webp"
+        // Server allowlist covers more kinds, but only .md has an end-to-end
+        // import handler wired today (Codex senior review). Expand here when
+        // pdf / reference / csv / image handlers ship.
+        accept=".md"
         className="hidden"
         onChange={(e) => setFile(e.target.files?.[0] ?? null)}
       />
