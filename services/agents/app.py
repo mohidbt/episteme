@@ -56,6 +56,7 @@ async def lifespan(app: FastAPI):
     await _reap_orphan_runs(datetime.now(timezone.utc))
 
     url = os.environ.get("EPISTEME_AGENTS_PG_URL")
+    auto_setup = os.environ.get("EPISTEME_AGENTS_AUTO_SETUP", "1") == "1"
     if url:
         try:
             from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver  # noqa: PLC0415
@@ -64,11 +65,17 @@ async def lifespan(app: FastAPI):
             import store as store_mod  # noqa: PLC0415
 
             async with AsyncPostgresSaver.from_conn_string(url) as saver:
-                await saver.setup()
+                if auto_setup:
+                    await saver.setup()
+                else:
+                    logger.info("skipping AsyncPostgresSaver setup (EPISTEME_AGENTS_AUTO_SETUP=0)")
                 chk_mod._CACHED_SAVER = saver
 
                 async with AsyncPostgresStore.from_conn_string(url) as store_obj:
-                    await store_obj.setup()
+                    if auto_setup:
+                        await store_obj.setup()
+                    else:
+                        logger.info("skipping AsyncPostgresStore setup (EPISTEME_AGENTS_AUTO_SETUP=0)")
                     store_mod._CACHED_STORE = store_obj
 
                     logger.info("AsyncPostgresSaver + AsyncPostgresStore opened for process lifetime")

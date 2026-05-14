@@ -125,6 +125,53 @@ update both the GH secret and the Vercel env var. CI assertions
 (`role-perms-audit.yml`) pick up the new value automatically — they read
 the secret, not a cached connection.
 
+### Langgraph checkpointer setup
+
+`services/agents/app.py` opens `AsyncPostgresSaver` + `AsyncPostgresStore`
+against `EPISTEME_AGENTS_PG_URL` and calls `setup()` to ensure the
+checkpoint + store tables exist. `setup()` issues `CREATE TABLE IF NOT
+EXISTS`, which requires DDL — incompatible with the `app_runtime` role.
+
+To run the agents service under `app_runtime`:
+
+1. **One-shot table creation** as `migrate_only`:
+
+   ```bash
+   EPISTEME_AGENTS_PG_URL="$MIGRATE_DATABASE_URL" \
+     python services/agents/scripts/setup_checkpointer.py
+   ```
+
+2. **Disable auto-setup on prod**: set `EPISTEME_AGENTS_AUTO_SETUP=0` on
+   the Vercel env for the agents service. With this flag, the lifespan
+   hook opens the saver + store without calling `setup()`, so no DDL is
+   issued at cold start.
+
+3. **After a langgraph upgrade**: if the upgrade adds new checkpoint
+   tables, re-run step 1 from a `migrate_only` shell before redeploying.
+
+### Rollback B3 cutover
+
+1. Apps still reading `APP_RUNTIME_DATABASE_URL` — instant rollback:
+
+   ```bash
+   cd apps/km && vercel env rm APP_RUNTIME_DATABASE_URL production -y
+   cd services/agents && vercel env rm APP_RUNTIME_DATABASE_URL production -y
+   # Triggers redeploy; apps fall back to DATABASE_URL (owner) within ~90s
+   ```
+
+2. If owner password already rotated (post-step-8), the only recovery is
+   to provision a new `app_runtime` password and re-set the env var.
+
+3. Verify rollback: tail Vercel logs for `B3 cutover incomplete` warning
+   from `packages/db/src/client.ts` — that confirms apps are on owner
+   again.
+
+Success criteria for rollback:
+
+- Post-deploy smoke green
+- No `permission_denied` errors in app logs
+- Verified test write succeeds (e.g. open paper modal)
+
 ### Why not `neon roles create`?
 
 The Neon CLI/dashboard role-create flow auto-grants `neon_superuser` to new

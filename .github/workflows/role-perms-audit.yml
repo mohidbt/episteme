@@ -142,3 +142,52 @@ jobs:
             exit 1
           fi
           echo "OK: app_runtime has full DML on every public table"
+
+      - name: app_runtime scoped to public schema only
+        env:
+          PGURL: ${{ secrets.HUMANS_RO_DATABASE_URL }}
+        run: |
+          set -e
+          EXTRA=$(/usr/lib/postgresql/17/bin/psql "$PGURL" -tA -c "
+            select n.nspname
+            from pg_namespace n
+            where has_schema_privilege('app_runtime', n.nspname, 'USAGE')
+              and n.nspname not in ('public', 'pg_catalog', 'information_schema');
+          ")
+          if [ -n "$EXTRA" ]; then
+            echo "FAIL: app_runtime has USAGE on unexpected schemas: $EXTRA"
+            exit 1
+          fi
+          echo "OK: app_runtime scoped to public schema only"
+
+      - name: SECURITY DEFINER function inventory (informational)
+        env:
+          PGURL: ${{ secrets.HUMANS_RO_DATABASE_URL }}
+        run: |
+          set -e
+          echo "SECURITY DEFINER functions in public (informational only):"
+          /usr/lib/postgresql/17/bin/psql "$PGURL" -tA -c "
+            select p.proname, r.rolname as owner
+            from pg_proc p
+            join pg_namespace n on n.oid = p.pronamespace
+            join pg_roles r on r.oid = p.proowner
+            where n.nspname = 'public' and p.prosecdef = true
+            order by p.proname;
+          "
+
+      - name: neondb_owner is member of migrate_only
+        env:
+          PGURL: ${{ secrets.HUMANS_RO_DATABASE_URL }}
+        run: |
+          set -e
+          HAS=$(/usr/lib/postgresql/17/bin/psql "$PGURL" -tA -c "
+            select count(*) from pg_auth_members am
+            join pg_roles parent on parent.oid = am.roleid
+            join pg_roles child on child.oid = am.member
+            where parent.rolname = 'migrate_only' and child.rolname = 'neondb_owner';
+          ")
+          if [ "$HAS" != "1" ]; then
+            echo "FAIL: neondb_owner is not a member of migrate_only — SET ROLE pattern broken"
+            exit 1
+          fi
+          echo "OK: neondb_owner -> migrate_only membership intact"

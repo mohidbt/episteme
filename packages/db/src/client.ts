@@ -13,8 +13,13 @@ import * as schema from "./schema";
 //     ...ann query...
 //   });
 // Today no TS code issues ANN queries (Python agents-svc uses its own conn).
-const queryClient = postgres(
-  process.env.APP_RUNTIME_DATABASE_URL ?? process.env.DATABASE_URL!,
-);
+const appUrl = process.env.APP_RUNTIME_DATABASE_URL;
+const fallbackUrl = process.env.DATABASE_URL;
+if (!appUrl && fallbackUrl) {
+  console.warn(
+    "[@episteme/db] APP_RUNTIME_DATABASE_URL not set — falling back to DATABASE_URL (owner role). B3 cutover incomplete in this environment.",
+  );
+}
+const queryClient = postgres(appUrl ?? fallbackUrl!);
 
 export const db = drizzle({ client: queryClient, schema });
