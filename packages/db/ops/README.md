@@ -86,6 +86,45 @@ git add packages/db/schema-snapshot.sql
 git commit -m "chore(db): refresh schema snapshot after <migration>"
 ```
 
+## split-roles.sql + split-roles-hardening.sql
+
+Three application roles. Replaces the pattern where `neondb_owner` was used
+by apps, humans (manual psql), and migrations all at once — which let
+manual psql writes silently drift the schema (root cause of 3 incidents
+in 14 days, 2026-05).
+
+- `app_runtime` — DML on `public` only. NO DDL. NO `drizzle` schema. Used by
+  apps/km, apps/reader, services/agents at runtime via
+  `APP_RUNTIME_DATABASE_URL`. Falls back to `DATABASE_URL` if the new env
+  var is unset (transition compatibility).
+- `migrate_only` — full DDL on `public` + `drizzle`. Used by the operator
+  running `pnpm db:migrate` against prod via `MIGRATE_DATABASE_URL`.
+  **Always set this — never use the owner role for migrations.**
+- `humans_ro` — `SELECT` only on `public` + `drizzle`. Used for ad-hoc
+  psql shells.
+
+Hardening (`split-roles-hardening.sql`) additionally:
+- Revokes ambient `PUBLIC` grants on both schemas
+- Revokes `CREATE` on database from `PUBLIC` (closes new-schema bypass)
+- Sets `ALTER DEFAULT PRIVILEGES` as `migrate_only` so future migration
+  tables auto-grant to `app_runtime` + `humans_ro`
+
+### Running a migration against prod
+
+```bash
+DATABASE_URL="$MIGRATE_DATABASE_URL" pnpm db:migrate
+DATABASE_URL="$MIGRATE_DATABASE_URL" pnpm --filter @episteme/db db:snapshot-update
+git add packages/db/schema-snapshot.sql
+git commit -m "chore(db): refresh schema snapshot after <name>"
+```
+
+### Rotating role passwords
+
+Connect as `neondb_owner`, run `ALTER ROLE <role> WITH PASSWORD '<new>';`,
+update both the GH secret and the Vercel env var. CI assertions
+(`role-perms-audit.yml`) pick up the new value automatically — they read
+the secret, not a cached connection.
+
 ### Why not `neon roles create`?
 
 The Neon CLI/dashboard role-create flow auto-grants `neon_superuser` to new

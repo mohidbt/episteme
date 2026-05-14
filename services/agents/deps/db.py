@@ -9,7 +9,7 @@ _pool: asyncpg.Pool | None = None
 
 async def init_pool() -> None:
     global _pool
-    dsn = os.environ.get("DATABASE_URL")
+    dsn = os.environ.get("APP_RUNTIME_DATABASE_URL") or os.environ.get("DATABASE_URL")
     if not dsn:
         return
     _pool = await asyncpg.create_pool(dsn=dsn, min_size=1, max_size=10, init=register_vector)
