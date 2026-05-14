@@ -177,7 +177,7 @@ jobs:
 
       - name: neondb_owner is member of migrate_only
         env:
-          PGURL: ${{ secrets.HUMANS_RO_DATABASE_URL }}
+          PGURL: ${{ secrets.MIGRATE_DATABASE_URL }}
         run: |
           set -e
           HAS=$(/usr/lib/postgresql/17/bin/psql "$PGURL" -tA -c "
