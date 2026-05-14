@@ -93,3 +93,52 @@ jobs:
             drop table public.audit_migrate_only_temp;
           SQL
           echo "OK: migrate_only CREATE+DROP works"
+
+      - name: PUBLIC has no grants on public/drizzle schemas
+        env:
+          PGURL: ${{ secrets.HUMANS_RO_DATABASE_URL }}
+        run: |
+          set -e
+          COUNT=$(/usr/lib/postgresql/17/bin/psql "$PGURL" -tA -c "select count(*) from information_schema.role_table_grants where grantee = 'PUBLIC' and table_schema in ('public', 'drizzle');")
+          if [ "$COUNT" != "0" ]; then
+            echo "FAIL: PUBLIC has $COUNT grants on public/drizzle"
+            exit 1
+          fi
+          echo "OK: PUBLIC has zero grants on public/drizzle"
+
+      - name: app_runtime cannot CREATE SCHEMA
+        env:
+          PGURL: ${{ secrets.APP_RUNTIME_DATABASE_URL }}
+        run: |
+          set -e
+          if /usr/lib/postgresql/17/bin/psql "$PGURL" -v ON_ERROR_STOP=1 -c "create schema audit_schema_should_fail;" 2>/dev/null; then
+            echo "FAIL: app_runtime created schema"
+            /usr/lib/postgresql/17/bin/psql "$PGURL" -c "drop schema if exists audit_schema_should_fail;" 2>/dev/null || true
+            exit 1
+          fi
+          echo "OK: app_runtime denied CREATE SCHEMA"
+
+      - name: app_runtime has DML on ALL public tables
+        env:
+          PGURL: ${{ secrets.APP_RUNTIME_DATABASE_URL }}
+        run: |
+          set -e
+          GAPS=$(/usr/lib/postgresql/17/bin/psql "$PGURL" -tA <<'SQL'
+            select t.table_schema || '.' || t.table_name
+            from information_schema.tables t
+            where t.table_schema = 'public'
+              and t.table_type = 'BASE TABLE'
+              and not (
+                has_table_privilege('app_runtime', t.table_schema || '.' || t.table_name, 'SELECT')
+                and has_table_privilege('app_runtime', t.table_schema || '.' || t.table_name, 'INSERT')
+                and has_table_privilege('app_runtime', t.table_schema || '.' || t.table_name, 'UPDATE')
+                and has_table_privilege('app_runtime', t.table_schema || '.' || t.table_name, 'DELETE')
+              );
+SQL
+          )
+          if [ -n "$GAPS" ]; then
+            echo "FAIL: app_runtime missing DML on these tables:"
+            echo "$GAPS"
+            exit 1
+          fi
+          echo "OK: app_runtime has full DML on every public table"
