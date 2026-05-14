@@ -192,7 +192,7 @@ export function PdfViewer({ url, containerRef: externalRef, markers = [], userHi
   const renderEnd = Math.min(totalPages, firstVisible + visibleCount - 1 + BUFFER_PAGES);
 
   return (
-    <div ref={containerRef} className="h-full min-h-0 flex-1 overflow-auto bg-muted/30 p-6">
+    <div ref={containerRef} data-pdf-container className="h-full min-h-0 flex-1 overflow-auto bg-muted/30 p-6">
       <div className="mx-auto flex flex-col items-center">
         {loading && !loadError && (
           <div className="flex flex-col items-center justify-center gap-3 py-20">

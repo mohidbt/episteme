@@ -8,7 +8,8 @@ import {
   useRef,
   useState,
 } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
+import { resolveCitationTarget } from "@/lib/citation-target";
 import { toast } from "sonner";
 import {
   agentStreamReducer,
@@ -300,6 +301,7 @@ export function AgentTranscript({
   const defaultSendRef = useRef<((text: string) => Promise<void>) | null>(null);
   const initialSkillRef = useRef(initialSkill);
   const router = useRouter();
+  const pathname = usePathname();
 
   const defaultSend = useCallback(
     async (text: string) => {
@@ -575,10 +577,27 @@ export function AgentTranscript({
       const bbox = citation.bbox
         ? `${citation.bbox.x0},${citation.bbox.y0},${citation.bbox.x1},${citation.bbox.y1}`
         : null;
-      const hl = bbox ? `&hl=${encodeURIComponent(bbox)}` : "";
-      router.push(`/p/${paperId}?p=${page}${hl}`);
+      // B7 — when the transcript is mounted inside the reader, scroll the
+      // existing reader in place via the `episteme:reader-jump` window event
+      // (Reader.tsx listens for it). Navigating to /p/{id} or even /papers/
+      // {id}/read would unmount the reader, killing the chat panel mid-flow.
+      const target = resolveCitationTarget({
+        pathname,
+        paperId,
+        page,
+        bbox,
+      });
+      if (target.kind === "in-place") {
+        window.dispatchEvent(
+          new CustomEvent("episteme:reader-jump", {
+            detail: { page: target.page, bbox: target.bbox },
+          }),
+        );
+        return;
+      }
+      router.push(target.url);
     },
-    [router],
+    [router, pathname],
   );
 
   return (

@@ -67,9 +67,14 @@ export function useUserHighlights(paperId: string, refreshKey: number = 0): Resu
     url: `/api/user-highlights?paperId=${paperId}`,
   });
 
+  // B6 (defense in depth) — the GET handler now filters out source='ai-auto'
+  // rows server-side. Mirror the filter here so older/cached responses or any
+  // future caller of this hook can't smuggle ai-auto highlights back in.
+  const userOnly = highlights.filter((h) => h.source !== "ai-auto");
+
   return {
-    highlights,
-    userHighlights: highlights.map(toUserHighlight),
+    highlights: userOnly,
+    userHighlights: userOnly.map(toUserHighlight),
     loading,
     error,
   };

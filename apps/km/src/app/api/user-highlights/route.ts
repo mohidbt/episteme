@@ -5,7 +5,7 @@
  * Ports the reader app's documents/[id]/highlights + pdfs/[id]/highlights routes
  * onto the post-A2 schema (paper_id uuid).
  */
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, ne } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { papers, userHighlights } from "@episteme/db/schema";
@@ -56,6 +56,10 @@ export async function GET(req: Request) {
 
   let rows;
   try {
+    // B6 — GET returns only user-authored highlights. AI-generated rows
+    // (source = 'ai-auto') are exposed via /api/paper-highlights for the
+    // reader sidebar's runs surface; serving them here causes duplicate
+    // entries and breaks per-run grouping.
     rows = await db
       .select()
       .from(userHighlights)
@@ -63,6 +67,7 @@ export async function GET(req: Request) {
         and(
           eq(userHighlights.paperId, paperId),
           eq(userHighlights.userId, userId),
+          ne(userHighlights.source, "ai-auto"),
         ),
       )
       .orderBy(asc(userHighlights.createdAt));

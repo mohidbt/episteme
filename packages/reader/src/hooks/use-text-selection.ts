@@ -36,6 +36,13 @@ export function useTextSelection() {
       range.startContainer.nodeType === Node.ELEMENT_NODE
         ? (range.startContainer as Element)
         : range.startContainer.parentElement;
+    // B16 — only react to selections that originate inside the PDF surface.
+    // The floating toolbar uses position:fixed z-50 which would otherwise
+    // pop up over arbitrary chat / sidebar text selections too.
+    if (!startEl?.closest<HTMLElement>("[data-pdf-container]")) {
+      setSelection(null);
+      return;
+    }
     const pageEl =
       startEl?.closest<HTMLElement>("[data-natural-width][data-page-number]") ??
       startEl?.closest<HTMLElement>("[data-page-number]") ??

@@ -23,6 +23,7 @@ import { useCitationClick } from "../hooks/use-citation-click";
 import { useUserHighlights } from "../hooks/use-user-highlights";
 import { usePaperHighlights } from "../hooks/use-paper-highlights";
 import { postHighlightsChange } from "../lib/highlights-channel";
+import { deriveChatAgentRuns } from "../lib/derive-chat-agent-runs";
 import type { ReaderMode } from "../plugins/types";
 
 type DocProcessingStatus = "pending" | "processing" | "ready" | "failed";
@@ -313,23 +314,10 @@ export function Reader({
   // Derive runs from chat-agent highlights (paper_highlights.runId) so each
   // tool invocation that produced highlights shows up as a sidebar entry,
   // even when no ai_highlight_runs row exists (chat-agent highlight tool path).
-  const chatAgentRuns = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const h of paperHighlights) {
-      const rid = h.runId ?? null;
-      if (!rid) continue;
-      counts.set(rid, (counts.get(rid) ?? 0) + 1);
-    }
-    const known = new Set(autoRuns.map((r) => r.id));
-    return Array.from(counts.entries())
-      .filter(([id]) => !known.has(id))
-      .map(([id, n]) => ({
-        id,
-        instruction: "AI highlight",
-        summary: null,
-        highlightCount: n,
-      }));
-  }, [paperHighlights, autoRuns]);
+  const chatAgentRuns = useMemo(
+    () => deriveChatAgentRuns(paperHighlights, autoRuns.map((r) => r.id)),
+    [paperHighlights, autoRuns],
+  );
   const allRuns = [...autoRuns, ...chatAgentRuns];
   const highlightsSidebarError = mergedSidebarHighlights.length === 0 ? (highlightsError ?? aiHighlightsError) : null;
   const commentsSidebarError = sidebarHighlights.length === 0 ? highlightsError : null;

@@ -17,10 +17,11 @@ vi.mock("next/navigation", () => ({
     forward: vi.fn(),
     prefetch: vi.fn(),
   }),
-  usePathname: () => "/",
+  usePathname: () => mockPathname(),
 }));
 
 const mockRouterPush = vi.fn();
+const mockPathname = vi.fn<() => string>(() => "/");
 
 import { AgentTranscript } from "./AgentTranscript";
 import type { AgentEvent } from "@/lib/agent-events";
@@ -51,6 +52,8 @@ function streamResponse(events: AgentEvent[]): Response {
 beforeEach(() => {
   vi.stubGlobal("fetch", vi.fn());
   mockRouterPush.mockReset();
+  mockPathname.mockReset();
+  mockPathname.mockReturnValue("/");
 });
 
 afterEach(() => {
@@ -302,7 +305,51 @@ describe("AgentTranscript", () => {
 
     const pill = await screen.findByTestId("inline-citation-pill-c1");
     fireEvent.click(pill);
-    expect(mockRouterPush).toHaveBeenCalledWith("/p/paper-9?p=3&hl=1%2C2%2C3%2C4");
+    // B7 — citation clicks from outside the reader route to the reader
+    // (/papers/[id]/read), not the public viewer (/p/[id]). The public
+    // viewer unmounts the chat panel, breaking the read-with-agent flow.
+    expect(mockRouterPush).toHaveBeenCalledWith(
+      "/papers/paper-9/read?p=3&hl=1%2C2%2C3%2C4",
+    );
+  });
+
+  it("clicking citation pill from inside the reader dispatches reader-jump (no navigation)", async () => {
+    mockPathname.mockReturnValue("/papers/paper-9/read");
+    const jumpListener = vi.fn();
+    window.addEventListener("episteme:reader-jump", jumpListener);
+
+    const events: AgentEvent[] = [
+      {
+        type: "text",
+        id: "msg-cite-3",
+        delta: "One ref [c1].",
+        citations: [
+          {
+            chunk_id: "c1",
+            paper_id: "paper-9",
+            page: 3,
+            bbox: { x0: 1, y0: 2, x1: 3, y1: 4 },
+            snippet: "Snippet",
+          },
+        ],
+      },
+      { type: "done", thread_id: "t1" },
+    ];
+    (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+      streamResponse(events),
+    );
+
+    render(<AgentTranscript threadId="t1" />);
+    const ta = screen.getByLabelText("Message agent") as HTMLTextAreaElement;
+    fireEvent.change(ta, { target: { value: "go" } });
+    fireEvent.click(screen.getByRole("button", { name: /send/i }));
+
+    const pill = await screen.findByTestId("inline-citation-pill-c1");
+    fireEvent.click(pill);
+    expect(jumpListener).toHaveBeenCalledTimes(1);
+    expect(mockRouterPush).not.toHaveBeenCalled();
+
+    window.removeEventListener("episteme:reader-jump", jumpListener);
   });
 
   it("renders Task tool label as Subagent in tool header", () => {

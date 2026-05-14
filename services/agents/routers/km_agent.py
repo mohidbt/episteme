@@ -320,6 +320,10 @@ def _extract_rag_citations_from_tool_result(ev: dict, mapped: tuple[str, dict]) 
     # Round 2 (B3) — similarity floor + hard cap + dedup by
     # (paper_id, page, order_index). The block_id format is
     # ``{paper_id}:p{page}:{order_index}`` so it doubles as the dedup key.
+    # Order is intentional: floor → dedup → cap. Applying the floor before
+    # dedup avoids letting a low-score duplicate occupy the seen-set slot
+    # when a subsequent block with the same key has a passing score. Dedup
+    # first would drop the higher-quality block. (Codex R2 review.)
     similarity_floor = 0.35
     hard_cap = 12
 
@@ -765,11 +769,13 @@ async def resume(req: Request, auth: InternalAuthDep):
     async def gen():
         step = 0
         thread_id = body["thread_id"]
+        resume_run_id = str(uuid.uuid4())
         configurable = _build_configurable(
             thread_id=thread_id,
             user_id=user_id,
             auth=auth,
             active_paper_id=None,
+            run_id=resume_run_id,
         )
         try:
             async for ev in agent.astream_events(
