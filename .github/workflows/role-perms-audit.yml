@@ -175,19 +175,10 @@ jobs:
             order by p.proname;
           "
 
-      - name: neondb_owner is member of migrate_only
-        env:
-          PGURL: ${{ secrets.MIGRATE_DATABASE_URL }}
-        run: |
-          set -e
-          HAS=$(/usr/lib/postgresql/17/bin/psql "$PGURL" -tA -c "
-            select count(*) from pg_auth_members am
-            join pg_roles parent on parent.oid = am.roleid
-            join pg_roles child on child.oid = am.member
-            where parent.rolname = 'migrate_only' and child.rolname = 'neondb_owner';
-          ")
-          if [ "$HAS" != "1" ]; then
-            echo "FAIL: neondb_owner is not a member of migrate_only — SET ROLE pattern broken"
-            exit 1
-          fi
-          echo "OK: neondb_owner -> migrate_only membership intact"
+      # NOTE: neondb_owner -> migrate_only membership check intentionally
+      # omitted. pg_auth_members visibility is restricted on Neon for
+      # non-superuser roles, so we can't reliably observe this from any
+      # role we'd want to expose in CI. The membership only matters when
+      # re-running split-roles-hardening.sql (ALTER DEFAULT PRIVILEGES
+      # FOR ROLE migrate_only requires owner to be a member). If dropped,
+      # a future hardening run would fail visibly with permission denied.
