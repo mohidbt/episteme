@@ -1,0 +1,95 @@
+name: role-perms-audit
+
+on:
+  pull_request:
+    paths:
+      - "packages/db/ops/split-roles.sql"
+      - ".github/workflows/role-perms-audit.yml"
+  push:
+    branches: [main]
+    paths:
+      - "packages/db/ops/split-roles.sql"
+      - ".github/workflows/role-perms-audit.yml"
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+
+jobs:
+  perms-audit:
+    name: role permissions audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install postgresql-client-17
+        run: |
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+            https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          sudo sh -c 'echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-17
+
+      - name: app_runtime cannot DDL
+        env:
+          PGURL: ${{ secrets.APP_RUNTIME_DATABASE_URL }}
+        run: |
+          set -e
+          if /usr/lib/postgresql/17/bin/psql "$PGURL" -v ON_ERROR_STOP=1 -c "create table public.audit_should_fail (x int);" 2>/dev/null; then
+            echo "FAIL: app_runtime was able to CREATE TABLE"
+            /usr/lib/postgresql/17/bin/psql "$PGURL" -c "drop table if exists public.audit_should_fail;" 2>/dev/null || true
+            exit 1
+          fi
+          echo "OK: app_runtime denied CREATE TABLE"
+
+      - name: app_runtime cannot read drizzle schema
+        env:
+          PGURL: ${{ secrets.APP_RUNTIME_DATABASE_URL }}
+        run: |
+          set -e
+          if /usr/lib/postgresql/17/bin/psql "$PGURL" -v ON_ERROR_STOP=1 -c "select count(*) from drizzle.__drizzle_migrations;" 2>/dev/null; then
+            echo "FAIL: app_runtime was able to read drizzle.__drizzle_migrations"
+            exit 1
+          fi
+          echo "OK: app_runtime denied drizzle schema access"
+
+      - name: app_runtime can DML on public
+        env:
+          PGURL: ${{ secrets.APP_RUNTIME_DATABASE_URL }}
+        run: |
+          set -e
+          /usr/lib/postgresql/17/bin/psql "$PGURL" -v ON_ERROR_STOP=1 -c "select count(*) from public.papers;" > /dev/null
+          /usr/lib/postgresql/17/bin/psql "$PGURL" -v ON_ERROR_STOP=1 -tA <<'SQL'
+            do $$ begin
+              if not (has_table_privilege('app_runtime', 'public.papers', 'SELECT')
+                  and has_table_privilege('app_runtime', 'public.papers', 'INSERT')
+                  and has_table_privilege('app_runtime', 'public.papers', 'UPDATE')
+                  and has_table_privilege('app_runtime', 'public.papers', 'DELETE')) then
+                raise exception 'app_runtime missing DML on public.papers';
+              end if;
+            end $$;
+          SQL
+          echo "OK: app_runtime has full DML on public.papers"
+
+      - name: humans_ro cannot write
+        env:
+          PGURL: ${{ secrets.HUMANS_RO_DATABASE_URL }}
+        run: |
+          set -e
+          /usr/lib/postgresql/17/bin/psql "$PGURL" -v ON_ERROR_STOP=1 -c "select count(*) from public.papers;" > /dev/null
+          if /usr/lib/postgresql/17/bin/psql "$PGURL" -v ON_ERROR_STOP=1 -c "delete from public.papers where id = '00000000-0000-0000-0000-000000000000';" 2>/dev/null; then
+            echo "FAIL: humans_ro was able to DELETE"
+            exit 1
+          fi
+          echo "OK: humans_ro denied DELETE"
+
+      - name: migrate_only retains DDL
+        env:
+          PGURL: ${{ secrets.MIGRATE_DATABASE_URL }}
+        run: |
+          set -e
+          /usr/lib/postgresql/17/bin/psql "$PGURL" -v ON_ERROR_STOP=1 <<'SQL'
+            create table public.audit_migrate_only_temp (x int);
+            drop table public.audit_migrate_only_temp;
+          SQL
+          echo "OK: migrate_only CREATE+DROP works"
