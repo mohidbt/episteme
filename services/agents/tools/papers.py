@@ -34,6 +34,27 @@ from lib.chandra import ChandraParseFailed, ensure_parsed
 
 logger = logging.getLogger(__name__)
 
+# Small in-process cache for paper titles. Titles rarely change; agent runs
+# may issue several ``read_paper`` calls per turn — caching avoids N uncached
+# SELECTs. Capped to keep memory bounded; FIFO eviction.
+_PAPER_TITLE_CACHE: dict[str, str | None] = {}
+_PAPER_TITLE_CACHE_MAX = 256
+
+
+async def _get_paper_title(conn, paper_id: str) -> str | None:
+    cached = _PAPER_TITLE_CACHE.get(paper_id)
+    if cached is not None or paper_id in _PAPER_TITLE_CACHE:
+        return cached
+    row = await conn.fetchrow("SELECT title FROM papers WHERE id = $1", paper_id)
+    title = row["title"] if row else None
+    if len(_PAPER_TITLE_CACHE) >= _PAPER_TITLE_CACHE_MAX:
+        try:
+            _PAPER_TITLE_CACHE.pop(next(iter(_PAPER_TITLE_CACHE)))
+        except StopIteration:
+            pass
+    _PAPER_TITLE_CACHE[paper_id] = title
+    return title
+
 
 # ---------------------------------------------------------------------------
 # Public types (per spec §9.2).
@@ -396,11 +417,9 @@ async def read_paper(
 
         # Round 2 (B3) — title and per-block similarity so the agent service
         # can label sources without re-querying and apply a similarity floor.
-        title_row = await conn.fetchrow(
-            "SELECT title FROM papers WHERE id = $1",
-            paper_id,
-        )
-        paper_title: str | None = title_row["title"] if title_row else None
+        # Title is cached process-wide to amortize across multiple tool calls
+        # in the same turn (Codex R2 review).
+        paper_title: str | None = await _get_paper_title(conn, paper_id)
 
     # Normalize FTS rank to [0, 1] within the result set; non-rag rows default
     # to 1.0 so the score floor at the agent service is a no-op for them.
