@@ -134,7 +134,7 @@ jobs:
                 and has_table_privilege('app_runtime', t.table_schema || '.' || t.table_name, 'UPDATE')
                 and has_table_privilege('app_runtime', t.table_schema || '.' || t.table_name, 'DELETE')
               );
-SQL
+          SQL
           )
           if [ -n "$GAPS" ]; then
             echo "FAIL: app_runtime missing DML on these tables:"
