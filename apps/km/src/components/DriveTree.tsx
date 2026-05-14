@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ChevronRight, Folder as FolderIcon, FolderTree, Trash2 } from "lucide-react";
+import { getFileTypeIcon, type FileTypeKind } from "@/lib/file-type-icon";
 import {
   DndContext,
   DragOverlay,
@@ -77,6 +78,27 @@ export interface SidebarDragOver {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+function leafIconKind(kind: ItemKind): FileTypeKind | null {
+  if (kind === "paper") return "paper";
+  if (kind === "reference") return "reference";
+  if (kind === "note") return "note";
+  // papersets don't have a file-type icon — they render the folder chevron.
+  return null;
+}
+
+function LeafIcon({ kind }: { kind: ItemKind }) {
+  const fileKind = leafIconKind(kind);
+  if (!fileKind) return null;
+  const Icon = getFileTypeIcon(fileKind);
+  return (
+    <Icon
+      aria-hidden
+      data-testid={`drive-icon-${fileKind}`}
+      className="size-3.5 shrink-0 text-[var(--fg-muted)]"
+    />
+  );
+}
 
 function itemHrefFor(item: TreeItem): string {
   if (item.kind === "paper") return `/p/${item.id}`;
@@ -519,6 +541,7 @@ function DriveLeafRow({ item }: { item: TreeItem }) {
           isDragging && "opacity-50",
         )}
       >
+        <LeafIcon kind={item.kind as ItemKind} />
         <span>{itemLabel(item)}</span>
       </SidebarMenuButton>
     </SidebarMenuItem>
@@ -564,6 +587,7 @@ function DriveSubLeaf({ item }: { item: TreeItem }) {
         isDragging && "opacity-50",
       )}
     >
+      <LeafIcon kind={item.kind as ItemKind} />
       <span>{itemLabel(item)}</span>
     </SidebarMenuSubButton>
   );

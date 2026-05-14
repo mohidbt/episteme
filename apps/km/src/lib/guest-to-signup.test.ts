@@ -125,7 +125,7 @@ describe("guest → real signup discard flow (integration)", () => {
       .from(libraries)
       .where(eq(libraries.userId, realId));
     expect(realLibs).toHaveLength(1);
-    expect(realLibs[0].name).toBe("My Library");
+    expect(realLibs[0].name).toBe("Real's Library");
 
     const realFolders = await db
       .select()
@@ -182,7 +182,7 @@ describe("guest → real signup discard flow (integration)", () => {
       await db.select().from(libraries).where(eq(libraries.userId, survivorId))
     )[0];
     expect(survivorLibAfter.id).toBe(survivorLibBefore.id);
-    expect(survivorLibAfter.name).toBe("My Library");
+    expect(survivorLibAfter.name).toBe("Real's Library");
 
     // === ASSERT: anon gone ===
     expect(

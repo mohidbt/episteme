@@ -4,16 +4,61 @@ import { getUserIdFromRequest } from "@/lib/auth";
 import { jsonError, requireOwned, resolveNoteSlug } from "@/lib/crud";
 import { toSlug } from "@/lib/slug";
 import { parseFrontmatter } from "@/lib/io/md-frontmatter";
-import { importLibraryZip, ZipImportError } from "@/lib/io/zip-import";
 
-// pdfjs (via extractMetadata) + archiver require the Node runtime.
+// pdfjs (via extractMetadata) requires the Node runtime.
 export const runtime = "nodejs";
 
 type Ctx = { params: Promise<{ id: string }> };
 type LibraryRow = typeof libraries.$inferSelect;
 
-const MAX_ZIP_BYTES = 200 * 1024 * 1024;
-const MAX_MD_BYTES = 2 * 1024 * 1024;
+// B12: per-tier byte caps. .zip import was removed; uploads are now
+// scoped to one of the supported single-file kinds.
+const MB = 1024 * 1024;
+const MAX_MD_BYTES = 5 * MB;
+const MAX_PDF_BYTES = 50 * MB;
+const MAX_REFERENCE_BYTES = 5 * MB;
+const MAX_CSV_BYTES = 1 * MB;
+const MAX_IMAGE_BYTES = 5 * MB;
+
+type AllowedKind = "md" | "pdf" | "reference" | "csv" | "image";
+
+function classifyUpload(
+  file: File,
+): { kind: AllowedKind; maxBytes: number } | null {
+  const name = file.name.toLowerCase();
+  const type = (file.type ?? "").toLowerCase();
+
+  if (name.endsWith(".md") || type === "text/markdown") {
+    return { kind: "md", maxBytes: MAX_MD_BYTES };
+  }
+  if (name.endsWith(".pdf") || type === "application/pdf") {
+    return { kind: "pdf", maxBytes: MAX_PDF_BYTES };
+  }
+  if (
+    name.endsWith(".bib") ||
+    name.endsWith(".ris") ||
+    name.endsWith(".csl-json") ||
+    name.endsWith(".csljson") ||
+    type === "application/x-bibtex" ||
+    type === "application/x-research-info-systems" ||
+    type === "application/vnd.citationstyles.csl+json"
+  ) {
+    return { kind: "reference", maxBytes: MAX_REFERENCE_BYTES };
+  }
+  if (name.endsWith(".csv") || type === "text/csv") {
+    return { kind: "csv", maxBytes: MAX_CSV_BYTES };
+  }
+  if (
+    name.endsWith(".jpg") ||
+    name.endsWith(".jpeg") ||
+    name.endsWith(".png") ||
+    name.endsWith(".webp") ||
+    type.startsWith("image/")
+  ) {
+    return { kind: "image", maxBytes: MAX_IMAGE_BYTES };
+  }
+  return null;
+}
 
 export async function POST(req: Request, { params }: Ctx) {
   const userId = await getUserIdFromRequest(req);
@@ -45,24 +90,18 @@ export async function POST(req: Request, { params }: Ctx) {
     ? rawFolderId
     : null;
 
-  const lowerName = file.name.toLowerCase();
-
-  if (lowerName.endsWith(".zip")) {
-    if (file.size > MAX_ZIP_BYTES) return jsonError(413, "file_too_large");
-    const buf = Buffer.from(await file.arrayBuffer());
-    try {
-      const result = await importLibraryZip(userId, libId, buf, folderId);
-      return Response.json(result);
-    } catch (err) {
-      if (err instanceof ZipImportError) {
-        return jsonError(400, err.code, { path: err.path });
-      }
-      throw err;
-    }
+  const classified = classifyUpload(file);
+  if (!classified) {
+    return jsonError(415, "unsupported_file_type", { name: file.name });
+  }
+  if (file.size > classified.maxBytes) {
+    return jsonError(413, "file_too_large", {
+      kind: classified.kind,
+      max: classified.maxBytes,
+    });
   }
 
-  if (lowerName.endsWith(".md")) {
-    if (file.size > MAX_MD_BYTES) return jsonError(413, "file_too_large");
+  if (classified.kind === "md") {
     const rawFolderPath = form.get("folder_path");
     const folderPath = typeof rawFolderPath === "string" ? rawFolderPath : "";
     const raw = await file.text();
@@ -92,5 +131,10 @@ export async function POST(req: Request, { params }: Ctx) {
     return Response.json({ imported: 1, skipped: 0, conflicts: [] });
   }
 
-  return jsonError(400, "unsupported_file_type", { name: file.name });
+  // PDF / reference / csv / image kinds pass size+type validation but do not
+  // yet have a server-side import handler — surface a clear 415 so the
+  // client knows the file is recognised but the pipeline isn't wired.
+  return jsonError(415, "import_handler_not_implemented", {
+    kind: classified.kind,
+  });
 }

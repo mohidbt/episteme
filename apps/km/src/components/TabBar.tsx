@@ -29,6 +29,7 @@ import {
 } from "@dnd-kit/sortable";
 import { X, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { fileTypeKindFromHref, getFileTypeIcon } from "@/lib/file-type-icon";
 
 const STORAGE_KEY = "app-tabs-v1";
 const DEFAULT_HREF = "/";
@@ -305,6 +306,19 @@ function titleFromHref(href: string): string {
   return lastSegment(href) || href;
 }
 
+function TabIcon({ href }: { href: string }) {
+  const kind = fileTypeKindFromHref(href);
+  if (!kind) return null;
+  const Icon = getFileTypeIcon(kind);
+  return (
+    <Icon
+      aria-hidden
+      data-testid={`tab-icon-${kind}`}
+      className="size-3.5 shrink-0 text-[var(--fg-muted)]"
+    />
+  );
+}
+
 function lastSegment(href: string): string {
   const seg = href.split("/").filter(Boolean).pop();
   return seg ? decodeURIComponent(seg) : "";
@@ -412,10 +426,11 @@ function SortableTab({
       <button
         type="button"
         onClick={() => onActivate(tab.href)}
-        className="min-w-0 flex-1 truncate text-left"
+        className="flex min-w-0 flex-1 items-center gap-1.5 truncate text-left"
         title={tab.href}
       >
-        {tab.title}
+        <TabIcon href={tab.href} />
+        <span className="min-w-0 flex-1 truncate">{tab.title}</span>
       </button>
       <button
         type="button"

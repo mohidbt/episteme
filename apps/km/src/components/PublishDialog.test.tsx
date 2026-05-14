@@ -34,8 +34,11 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("PublishDialog", () => {
-  it("opens dialog on trigger click", async () => {
+// B11: publish flow is paused. The dialog still renders so users see the
+// shape of what's coming, but actions are disabled and a banner explains
+// the status. These tests pin the under-construction contract.
+describe("PublishDialog (under construction)", () => {
+  it("opens dialog and shows the under-construction banner", async () => {
     mockFetch(() => new Response("nope", { status: 404 }));
     render(
       <PublishDialog
@@ -48,9 +51,11 @@ describe("PublishDialog", () => {
     );
     openDialog();
     await waitFor(() => expect(screen.getByRole("dialog")).toBeTruthy());
+    const banner = screen.getByTestId("publish-under-construction");
+    expect(banner.textContent ?? "").toMatch(/under construction/i);
   });
 
-  it("shows username-claim form when initialUsername is null", async () => {
+  it("shows username-claim form when initialUsername is null, but Claim is disabled", async () => {
     mockFetch(() => new Response("nope", { status: 404 }));
     render(
       <PublishDialog
@@ -64,38 +69,8 @@ describe("PublishDialog", () => {
     openDialog();
     await waitFor(() => expect(screen.getByRole("dialog")).toBeTruthy());
     expect(screen.getByTestId("username-input")).toBeTruthy();
-    expect(screen.getByRole("button", { name: /claim/i })).toBeTruthy();
-    expect(screen.queryByTestId("public-toggle")).toBeNull();
-    expect(screen.queryByTestId("slug-input")).toBeNull();
-  });
-
-  it("claims username on submit and shows publish controls", async () => {
-    mockFetch((url, init) => {
-      if (url === "/api/users/username" && init?.method === "POST") {
-        return new Response(JSON.stringify({ username: "alice" }), {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        });
-      }
-      return new Response("nope", { status: 404 });
-    });
-    render(
-      <PublishDialog
-        noteId="n-1"
-        initialUsername={null}
-        initialIsPublic={false}
-        initialPublicSlug={null}
-        defaultSlug="hello"
-      />,
-    );
-    openDialog();
-    const input = screen.getByTestId("username-input") as HTMLInputElement;
-    fireEvent.change(input, { target: { value: "alice" } });
-    fireEvent.click(screen.getByRole("button", { name: /claim/i }));
-    await waitFor(() => {
-      expect(screen.getByTestId("public-toggle")).toBeTruthy();
-    });
-    expect(screen.getByTestId("slug-input")).toBeTruthy();
+    const claim = screen.getByTestId("claim-username") as HTMLButtonElement;
+    expect(claim.disabled).toBe(true);
   });
 
   it("renders URL preview from username + publicSlug", async () => {
@@ -117,21 +92,8 @@ describe("PublishDialog", () => {
     });
   });
 
-  it("toggle to public: POSTs with isPublic=true + publicSlug, updates state on 200", async () => {
-    let patchBody: string | null = null;
-    mockFetch((url, init) => {
-      if (url === "/api/notes/n-1/publish" && init?.method === "POST") {
-        patchBody = String(init.body);
-        return new Response(
-          JSON.stringify({ isPublic: true, publicSlug: "hello" }),
-          {
-            status: 200,
-            headers: { "content-type": "application/json" },
-          },
-        );
-      }
-      return new Response("nope", { status: 404 });
-    });
+  it("disables the public toggle so users cannot trigger a publish request", async () => {
+    const fetchFn = mockFetch(() => new Response("nope", { status: 404 }));
     render(
       <PublishDialog
         noteId="n-1"
@@ -145,32 +107,14 @@ describe("PublishDialog", () => {
     const toggle = (await waitFor(() =>
       screen.getByTestId("public-toggle"),
     )) as HTMLInputElement;
+    expect(toggle.disabled).toBe(true);
+    // Disabled checkbox should not fire onChange when clicked.
     fireEvent.click(toggle);
-    await waitFor(() => expect(patchBody).not.toBeNull());
-    const parsed = JSON.parse(patchBody!) as {
-      isPublic: boolean;
-      publicSlug: string;
-    };
-    expect(parsed.isPublic).toBe(true);
-    expect(parsed.publicSlug).toBe("hello");
-    await waitFor(() =>
-      expect(screen.getByTestId("copy-url")).toBeTruthy(),
-    );
+    expect(fetchFn).not.toHaveBeenCalled();
   });
 
-  it("Copy URL writes to clipboard", async () => {
-    mockFetch((url, init) => {
-      if (url === "/api/notes/n-1/publish" && init?.method === "POST") {
-        return new Response(
-          JSON.stringify({ isPublic: true, publicSlug: "hello" }),
-          {
-            status: 200,
-            headers: { "content-type": "application/json" },
-          },
-        );
-      }
-      return new Response("nope", { status: 404 });
-    });
+  it("still surfaces Copy URL when a note was already public before the freeze", async () => {
+    mockFetch(() => new Response("nope", { status: 404 }));
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, "clipboard", {
       configurable: true,
@@ -191,39 +135,5 @@ describe("PublishDialog", () => {
     await waitFor(() => {
       expect(writeText).toHaveBeenCalledWith("https://alice.tryepisteme.com/hello");
     });
-  });
-
-  it("shows 'slug taken' message on 409", async () => {
-    mockFetch((url, init) => {
-      if (url === "/api/notes/n-1/publish" && init?.method === "POST") {
-        return new Response(JSON.stringify({ error: "slug_taken" }), {
-          status: 409,
-          headers: { "content-type": "application/json" },
-        });
-      }
-      return new Response("nope", { status: 404 });
-    });
-    render(
-      <PublishDialog
-        noteId="n-1"
-        initialUsername="alice"
-        initialIsPublic={false}
-        initialPublicSlug="hello"
-        defaultSlug="hello"
-      />,
-    );
-    openDialog();
-    const toggle = (await waitFor(() =>
-      screen.getByTestId("public-toggle"),
-    )) as HTMLInputElement;
-    fireEvent.click(toggle);
-    await waitFor(() => {
-      expect(screen.getByTestId("publish-error").textContent).toMatch(
-        /slug is taken/i,
-      );
-    });
-    const toggleAfter = screen.getByTestId("public-toggle") as HTMLInputElement;
-    expect(toggleAfter.checked).toBe(false);
-    expect(screen.queryByTestId("copy-url")).toBeNull();
   });
 });

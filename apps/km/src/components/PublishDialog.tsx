@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { GlobeIcon } from "lucide-react";
+import { GlobeIcon, Construction } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -9,9 +9,15 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { isValidUsername } from "@/lib/username";
+
+// B11: publishing pipeline is paused for soak. Dialog renders read-only with a
+// prominent banner; submit actions are disabled so users see the panel they
+// know but can't trigger a publish round-trip.
+const PUBLISHING_DISABLED = true;
 
 // The public URL is cosmetic in the client; the functional host mapping is
 // done server-side via EPISTEME_PUBLISH_DOMAIN + the proxy. In dev the URL may
@@ -44,6 +50,7 @@ export function PublishDialog({
   const url = username ? `${username}.${PUBLISH_DOMAIN}/${publicSlug}` : "";
 
   async function claimUsername() {
+    if (PUBLISHING_DISABLED) return;
     setClaimError(null);
     const name = usernameDraft.trim().toLowerCase();
     if (!isValidUsername(name)) {
@@ -73,6 +80,7 @@ export function PublishDialog({
   }
 
   async function togglePublish(next: boolean) {
+    if (PUBLISHING_DISABLED) return;
     setPublishError(null);
     setBusy(true);
     try {
@@ -120,6 +128,14 @@ export function PublishDialog({
         <DialogHeader>
           <DialogTitle>Publish</DialogTitle>
         </DialogHeader>
+        <Alert data-testid="publish-under-construction">
+          <Construction />
+          <AlertTitle>Publishing is under construction</AlertTitle>
+          <AlertDescription>
+            Coming soon — we&apos;re polishing the publish flow. You can still
+            see the panel, but submitting is disabled for now.
+          </AlertDescription>
+        </Alert>
         <div className="flex flex-col gap-3 p-1">
           {!username ? (
             <div className="flex flex-col gap-2">
@@ -133,7 +149,11 @@ export function PublishDialog({
                   placeholder="yourname"
                   data-testid="username-input"
                 />
-                <Button onClick={claimUsername} disabled={busy}>
+                <Button
+                  onClick={claimUsername}
+                  disabled={busy || PUBLISHING_DISABLED}
+                  data-testid="claim-username"
+                >
                   Claim
                 </Button>
               </div>
@@ -153,7 +173,7 @@ export function PublishDialog({
                   type="checkbox"
                   checked={isPublic}
                   onChange={(e) => togglePublish(e.target.checked)}
-                  disabled={busy}
+                  disabled={busy || PUBLISHING_DISABLED}
                   data-testid="public-toggle"
                 />
                 Public

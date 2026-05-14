@@ -7,13 +7,14 @@ import {
   libraries,
   notes,
   TRASH_FOLDER_NAME,
+  user,
 } from "@episteme/db/schema";
 import { resolveNoteSlug } from "@/lib/crud";
+import { deriveLibraryName } from "@/lib/library-name";
 
 const SEED_DIR = "public/seed";
 const WELCOME_NOTE_FILE = "welcome-note.md";
 const WELCOME_NOTE_TITLE = "Welcome to Episteme";
-const REAL_USER_LIBRARY_NAME = "My Library";
 
 /**
  * Seed minimal workspace for a freshly-created real (non-anonymous) user:
@@ -39,11 +40,21 @@ export async function seedRealUser(userId: string): Promise<void> {
   const contentMd = await fs.readFile(noteMdPath, "utf8");
   const slug = await resolveNoteSlug(userId, WELCOME_NOTE_TITLE);
 
+  // Resolve library name from the user's display name when available.
+  // Anonymous users get a generated name (e.g. "anon-…") which is harmless
+  // but ugly; the SidebarShell already rewrites that label to "Demo Workspace".
+  const [userRow] = await db
+    .select({ name: user.name })
+    .from(user)
+    .where(eq(user.id, userId))
+    .limit(1);
+  const libraryName = deriveLibraryName({ name: userRow?.name ?? null });
+
   try {
     await db.transaction(async (tx) => {
       const [created] = await tx
         .insert(libraries)
-        .values({ userId, name: REAL_USER_LIBRARY_NAME })
+        .values({ userId, name: libraryName })
         .returning();
       await tx.insert(folders).values({
         libraryId: created.id,

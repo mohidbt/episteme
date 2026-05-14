@@ -1,5 +1,4 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import archiver from "archiver";
 import { eq, and } from "drizzle-orm";
 import { POST } from "./route";
 import { POST as POST_LIB } from "../../route";
@@ -13,22 +12,6 @@ import {
   type TestUser,
 } from "../../../_test-utils";
 import { ensureMinIOReady } from "../../../_minio-setup";
-
-async function buildZip(
-  entries: Array<{ name: string; body: Buffer | string }>,
-): Promise<Buffer> {
-  const archive = archiver("zip", { zlib: { level: 9 } });
-  const chunks: Buffer[] = [];
-  archive.on("data", (c) => chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c)));
-  const done = new Promise<void>((resolve, reject) => {
-    archive.on("end", resolve);
-    archive.on("error", reject);
-  });
-  for (const e of entries) archive.append(e.body, { name: e.name });
-  await archive.finalize();
-  await done;
-  return Buffer.concat(chunks);
-}
 
 function formRequest(
   url: string,
@@ -131,25 +114,11 @@ describe("POST /api/libraries/:id/import", () => {
     expect(rows[0].filename).toBe("quick-idea.md");
   });
 
-  it("200 uploads a zip and returns counts", async () => {
-    const zipBuf = await buildZip([
-      {
-        name: "Import Lib/notes/welcome.md",
-        body: "# welcome body",
-      },
-      {
-        name: "Import Lib/references/classics/smith2020.json",
-        body: JSON.stringify({
-          id: "smith2020",
-          type: "article-journal",
-          title: "Example",
-        }),
-      },
-    ]);
+  it("415 rejects a .zip upload (zip pipeline removed)", async () => {
     const form = new FormData();
     form.set(
       "file",
-      new File([new Uint8Array(zipBuf)], "import.zip", {
+      new File([new Uint8Array([0x50, 0x4b])], "archive.zip", {
         type: "application/zip",
       }),
     );
@@ -157,27 +126,51 @@ describe("POST /api/libraries/:id/import", () => {
       formRequest(`/api/libraries/${libraryId}/import`, form, u.cookie),
       params({ id: String(libraryId) }),
     );
-    expect(r.status).toBe(200);
-    const body = await r.json();
-    expect(body.imported).toBe(2);
-  }, 30_000);
+    expect(r.status).toBe(415);
+  });
 
-  it("400 on path-traversal zip", async () => {
-    const zipBuf = await buildZip([
-      { name: "Import Lib/notes/../etc/passwd", body: "evil" },
-    ]);
+  it("413 rejects a .pdf > 50 MB", async () => {
+    // Use a fake-size File whose `size` is forced past the cap.
+    const tiny = new File([new Uint8Array([0x25, 0x50, 0x44, 0x46])], "huge.pdf", {
+      type: "application/pdf",
+    });
+    Object.defineProperty(tiny, "size", { value: 51 * 1024 * 1024 });
+    const form = new FormData();
+    form.set("file", tiny);
+    const r = await POST(
+      formRequest(`/api/libraries/${libraryId}/import`, form, u.cookie),
+      params({ id: String(libraryId) }),
+    );
+    expect(r.status).toBe(413);
+  });
+
+  it("413 rejects a .csv > 1 MB", async () => {
+    const tiny = new File([new Uint8Array([0x61])], "big.csv", {
+      type: "text/csv",
+    });
+    Object.defineProperty(tiny, "size", { value: 2 * 1024 * 1024 });
+    const form = new FormData();
+    form.set("file", tiny);
+    const r = await POST(
+      formRequest(`/api/libraries/${libraryId}/import`, form, u.cookie),
+      params({ id: String(libraryId) }),
+    );
+    expect(r.status).toBe(413);
+  });
+
+  it("415 rejects a .exe upload", async () => {
     const form = new FormData();
     form.set(
       "file",
-      new File([new Uint8Array(zipBuf)], "evil.zip", {
-        type: "application/zip",
+      new File([new Uint8Array([0x4d, 0x5a])], "evil.exe", {
+        type: "application/octet-stream",
       }),
     );
     const r = await POST(
       formRequest(`/api/libraries/${libraryId}/import`, form, u.cookie),
       params({ id: String(libraryId) }),
     );
-    expect(r.status).toBe(400);
+    expect(r.status).toBe(415);
   });
 
   it("200 .md import with folderId sets note's folderId", async () => {

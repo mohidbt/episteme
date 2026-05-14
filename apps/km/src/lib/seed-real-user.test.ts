@@ -33,7 +33,7 @@ afterAll(async () => {
 });
 
 describe("seedRealUser", () => {
-  it("creates 'My Library' + Trash folder + welcome note ONLY (no demo papers/refs/papersets)", { timeout: 30_000 }, async () => {
+  it("creates '{first}'s Library' + Trash folder + welcome note ONLY (no demo papers/refs/papersets)", { timeout: 30_000 }, async () => {
     const userId = await insertRealUser();
     await seedRealUser(userId);
 
@@ -42,7 +42,8 @@ describe("seedRealUser", () => {
       .from(libraries)
       .where(eq(libraries.userId, userId));
     expect(libs).toHaveLength(1);
-    expect(libs[0].name).toBe("My Library");
+    // Test user name is "Real Test User" → first token → "Real's Library".
+    expect(libs[0].name).toBe("Real's Library");
 
     const allFolders = await db
       .select()

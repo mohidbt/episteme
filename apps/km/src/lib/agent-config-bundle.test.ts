@@ -79,7 +79,7 @@ describe("serializeAgentConfig — OAuth strip", () => {
 });
 
 describe("buildBundleFromSnapshot + parseBundle — round trip", () => {
-  it("round-trips snapshot through zip", async () => {
+  it("round-trips snapshot through zip — system skills filtered out on export (B13)", async () => {
     const s = snap();
     const zip = await buildBundleFromSnapshot(s);
     expect(zip).toBeInstanceOf(Uint8Array);
@@ -88,12 +88,27 @@ describe("buildBundleFromSnapshot + parseBundle — round trip", () => {
     const parsed = await parseBundle(zip);
     expect(parsed.agent_config.enabledSkills).toEqual(["lit-triage"]);
     expect(parsed.agent_config.modelPreference).toBe("anthropic/claude-3.5-sonnet");
-    expect(parsed.skills).toHaveLength(1);
-    expect(parsed.skills[0].path).toBe(".episteme/agents/skills/lit-triage/SKILL.md");
-    expect(parsed.skills[0].body.trim()).toBe("# triage\nbody1");
+    // B13: system skills (.episteme/agents/skills/*) are stripped on export.
+    expect(parsed.skills).toHaveLength(0);
     expect(parsed.memories).toHaveLength(1);
     expect(parsed.memories[0].path).toBe(".episteme/agents/memories/foo.md");
     expect(parsed.memories[0].body.trim()).toBe("remember foo");
+  });
+
+  it("filters all system-scoped skills from the exported zip (B13)", async () => {
+    const zipBytes = await buildBundleFromSnapshot(
+      snap({
+        skills: [
+          { path: ".episteme/agents/skills/a/SKILL.md", body: "alpha" },
+          { path: ".episteme/agents/skills/b/SKILL.md", body: "beta" },
+        ],
+      }),
+    );
+    const zip = await JSZip.loadAsync(zipBytes);
+    expect(zip.file(".episteme/agents/skills/a/SKILL.md")).toBeNull();
+    expect(zip.file(".episteme/agents/skills/b/SKILL.md")).toBeNull();
+    const parsed = await parseBundle(zipBytes);
+    expect(parsed.skills).toEqual([]);
   });
 
   it("does not include skills.md in exported zip", async () => {
@@ -128,7 +143,7 @@ describe("buildBundleFromSnapshot + parseBundle — round trip", () => {
     expect(parsed.memories).toEqual([]);
   });
 
-  it("preserves multiple skill bodies as structured entries", async () => {
+  it("strips system skills even when multiple are present (B13)", async () => {
     const zip = await buildBundleFromSnapshot(
       snap({
         skills: [
@@ -138,11 +153,7 @@ describe("buildBundleFromSnapshot + parseBundle — round trip", () => {
       }),
     );
     const parsed = await parseBundle(zip);
-    expect(parsed.skills.map((s) => s.path)).toEqual([
-      ".episteme/agents/skills/a/SKILL.md",
-      ".episteme/agents/skills/b/SKILL.md",
-    ]);
-    expect(parsed.skills[1].body.trim()).toBe("beta\nbeta-line2");
+    expect(parsed.skills).toEqual([]);
   });
 });
 

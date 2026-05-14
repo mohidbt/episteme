@@ -140,6 +140,17 @@ function decodeNotes(blob: string): Array<{ path: string; body: string }> {
   return out;
 }
 
+/**
+ * B13: skill export filter — system skills (those rooted under the
+ * `.episteme/agents/skills/` prefix, which the DriveSkillsLoader seeds
+ * from disk) are stripped from the exported bundle. Personal skills
+ * survive via `personalSkills`. Tests in `agent-config-bundle.test.ts`
+ * pin the contract.
+ */
+export function filterExportableSkills(skills: SkillNote[]): SkillNote[] {
+  return skills.filter((s) => !s.path.startsWith(SKILLS_PREFIX));
+}
+
 export async function buildBundleFromSnapshot(
   s: AgentConfigSnapshot,
 ): Promise<Uint8Array> {
@@ -147,8 +158,10 @@ export async function buildBundleFromSnapshot(
   zip.file("agent_config.json", JSON.stringify(s.agentConfig, null, 2));
   zip.file("memory.md", encodeNotes(s.memories));
   zip.file("settings.json", JSON.stringify(s.agentConfig.settingsJson, null, 2));
-  // System skills as structured .md entries
-  for (const sk of s.skills) {
+  // Skip system skills (`.episteme/agents/skills/...`) on export — they
+  // live in the agent service and shouldn't ship in user-bundle exports.
+  const exportableSkills = filterExportableSkills(s.skills);
+  for (const sk of exportableSkills) {
     zip.file(sk.path, sk.body);
   }
   // Personal skills as structured .json entries
