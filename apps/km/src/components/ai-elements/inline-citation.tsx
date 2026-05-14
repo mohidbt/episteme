@@ -55,14 +55,23 @@ export const InlineCitationCard = (props: InlineCitationCardProps) => (
 
 export type InlineCitationCardTriggerProps = ComponentProps<typeof Badge> & {
   sources: string[];
+  /**
+   * Round 2 (B2) — when provided, the badge renders `[label]` (enumerated
+   * index) instead of the source URL's hostname. Hover tooltip is driven by
+   * the standard `title` prop on the Badge.
+   */
+  label?: string;
 };
 
 export const InlineCitationCardTrigger = ({
   sources,
   className,
+  label,
   ...props
 }: InlineCitationCardTriggerProps) => (
-  <HoverCardTrigger render={<Badge className={cn("ml-1 rounded-full", className)} variant="secondary" {...props} />}>{sources[0] ? (
+  <HoverCardTrigger render={<Badge className={cn("ml-1 rounded-full", className)} variant="secondary" {...props} />}>{label !== undefined ? (
+            label
+          ) : sources[0] ? (
             <>
               {new URL(sources[0]).hostname}{" "}
               {sources.length > 1 && `+${sources.length - 1}`}

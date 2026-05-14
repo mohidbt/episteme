@@ -311,9 +311,18 @@ def _extract_rag_citations_from_tool_result(ev: dict, mapped: tuple[str, dict]) 
     paper_id = output.get("paper_id")
     if not isinstance(paper_id, str) or not paper_id:
         return []
+    paper_title = output.get("paper_title") if isinstance(output.get("paper_title"), str) else None
     blocks = output.get("blocks")
     if not isinstance(blocks, list):
         return []
+
+    # Round 2 (B3) — similarity floor + hard cap + dedup by
+    # (paper_id, page, order_index). The block_id format is
+    # ``{paper_id}:p{page}:{order_index}`` so it doubles as the dedup key.
+    similarity_floor = 0.35
+    hard_cap = 12
+
+    seen: set[tuple[str, int | None, str]] = set()
     citations: list[dict] = []
     for block in blocks:
         if not isinstance(block, dict):
@@ -322,10 +331,44 @@ def _extract_rag_citations_from_tool_result(ev: dict, mapped: tuple[str, dict]) 
         page = block.get("page")
         if not isinstance(chunk_id, str):
             continue
+        score = block.get("score")
+        if not isinstance(score, (int, float)):
+            continue
+        if score < similarity_floor:
+            continue
+
+        # order_index trails the final ':' in block_id.
+        try:
+            order_index = chunk_id.rsplit(":", 1)[-1]
+        except Exception:  # noqa: BLE001
+            order_index = chunk_id
+        dedup_key = (
+            paper_id,
+            page if isinstance(page, int) else None,
+            order_index,
+        )
+        if dedup_key in seen:
+            continue
+        seen.add(dedup_key)
+
+        # Title: paper-kind citations use ``{paper_title} - Page {page}``.
+        # Falls back to chunk_id when title or page is missing — keeps the
+        # sidebar from rendering blanks.
+        if paper_title and isinstance(page, int):
+            title = f"{paper_title} - Page {page}"
+        elif paper_title:
+            title = paper_title
+        else:
+            title = chunk_id
+
         citation: dict = {
             "chunk_id": chunk_id,
             "paper_id": paper_id,
-            "snippet": (block.get("text") or "")[:280] if isinstance(block.get("text"), str) else "",
+            "title": title,
+            "score": float(score),
+            "snippet": (block.get("text") or "")[:280]
+            if isinstance(block.get("text"), str)
+            else "",
         }
         if isinstance(page, int):
             citation["page"] = page
@@ -333,6 +376,8 @@ def _extract_rag_citations_from_tool_result(ev: dict, mapped: tuple[str, dict]) 
         if isinstance(bbox, dict):
             citation["bbox"] = bbox
         citations.append(citation)
+        if len(citations) >= hard_cap:
+            break
     return citations
 
 

@@ -60,10 +60,17 @@ class PaperBlock(TypedDict):
     page: int
     text: str
     bbox: dict[str, float] | None
+    # Round 2 (B3) — similarity score. 1.0 for non-rag scopes; FTS rank
+    # normalized to [0, 1] for ``kind="rag"`` so the agent service can apply
+    # a uniform similarity floor.
+    score: float
 
 
 class PaperSlice(TypedDict):
     paper_id: str
+    # Round 2 (B3) — title needed by the agent service to label sources in
+    # the chat sidebar without re-querying the DB.
+    paper_title: str | None
     blocks: list[PaperBlock]
     truncated: bool
     token_count: int
@@ -114,7 +121,12 @@ def _payload_text(kind: str, payload: dict[str, Any]) -> str:
     return payload.get("text", "") or ""
 
 
-def _row_to_block(row, paper_id: str, header_lookup: dict[int, str]) -> PaperBlock:
+def _row_to_block(
+    row,
+    paper_id: str,
+    header_lookup: dict[int, str],
+    score: float = 1.0,
+) -> PaperBlock:
     payload_raw = row["payload"]
     payload = json.loads(payload_raw) if isinstance(payload_raw, str) else payload_raw
     kind = row["kind"]
@@ -135,6 +147,7 @@ def _row_to_block(row, paper_id: str, header_lookup: dict[int, str]) -> PaperBlo
         "page": row["page"],
         "text": text,
         "bbox": row.get("bbox"),
+        "score": score,
     }
 
 
@@ -381,12 +394,39 @@ async def read_paper(
 
         header_lookup = await _load_header_lookup(conn, paper_id)
 
-    blocks = [_row_to_block(r, paper_id, header_lookup) for r in rows]
+        # Round 2 (B3) — title and per-block similarity so the agent service
+        # can label sources without re-querying and apply a similarity floor.
+        title_row = await conn.fetchrow(
+            "SELECT title FROM papers WHERE id = $1",
+            paper_id,
+        )
+        paper_title: str | None = title_row["title"] if title_row else None
+
+    # Normalize FTS rank to [0, 1] within the result set; non-rag rows default
+    # to 1.0 so the score floor at the agent service is a no-op for them.
+    scores: list[float] = []
+    if kind == "rag" and rows:
+        ranks: list[float] = []
+        for r in rows:
+            try:
+                ranks.append(float(r["rank"]))
+            except (KeyError, TypeError, ValueError):
+                ranks.append(0.0)
+        max_rank = max(ranks) if ranks else 0.0
+        scores = [r / max_rank if max_rank > 0 else 1.0 for r in ranks]
+    else:
+        scores = [1.0] * len(rows)
+
+    blocks = [
+        _row_to_block(r, paper_id, header_lookup, score=scores[i])
+        for i, r in enumerate(rows)
+    ]
     cap = MAX_FULL_TOKENS if kind == "full" else MAX_TOKENS_DEFAULT
     blocks, truncated, token_count = _truncate_to_cap(blocks, cap)
 
     return {
         "paper_id": paper_id,
+        "paper_title": paper_title,
         "blocks": blocks,
         "truncated": truncated,
         "token_count": token_count,

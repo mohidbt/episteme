@@ -20,6 +20,8 @@ export interface Citation {
   page?: number;
   snippet?: string;
   bbox?: { x0: number; y0: number; x1: number; y1: number } | null;
+  /** Round 2 (B3) — similarity score from the agent service. */
+  score?: number;
 }
 
 export type AgentEvent =

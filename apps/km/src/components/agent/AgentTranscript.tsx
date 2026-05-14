@@ -39,10 +39,9 @@ import {
   MessageResponse,
 } from "@/components/ai-elements/message";
 import {
-  InlineCitation,
-  InlineCitationCard,
-  InlineCitationCardTrigger,
-} from "@/components/ai-elements/inline-citation";
+  AllSourcesList,
+  InlineCitationPills,
+} from "./CitationsBlock";
 import {
   Reasoning,
   ReasoningTrigger,
@@ -56,12 +55,6 @@ import {
   ToolOutput,
 } from "@/components/ai-elements/tool";
 import { Suggestions, Suggestion } from "@/components/ai-elements/suggestion";
-import {
-  Sources,
-  SourcesTrigger,
-  SourcesContent,
-  Source,
-} from "@/components/ai-elements/sources";
 import {
   Confirmation,
   ConfirmationRequest,
@@ -656,22 +649,7 @@ export function AgentTranscript({
             </div>
           ) : null}
           {allCitations.length > 0 ? (
-            <div data-testid="all-citations">
-              <Sources>
-                <SourcesTrigger count={allCitations.length} />
-                <SourcesContent>
-                  {allCitations.map((c, i) => (
-                    <Source
-                      key={`${c.chunk_id}-${i}`}
-                      href={c.url ?? "#"}
-                      title={`${c.title ?? c.chunk_id}${
-                        c.page ? ` · p${c.page}` : ""
-                      }`}
-                    />
-                  ))}
-                </SourcesContent>
-              </Sources>
-            </div>
+            <AllSourcesList citations={allCitations} />
           ) : null}
           {streaming ? (
             <div
@@ -851,22 +829,7 @@ function TextCardView({
         </MessageContent>
       </Message>
       {card.role === "assistant" && citations.length > 0 ? (
-        <div className="mt-1 flex flex-wrap gap-2">
-          {citations.map((citation, idx) => {
-            const chunkId = citation.chunkId ?? citation.chunk_id ?? `citation-${idx}`;
-            return (
-              <InlineCitation key={`${chunkId}-${idx}`}>
-                <InlineCitationCard>
-                  <InlineCitationCardTrigger
-                    data-testid={`inline-citation-pill-${chunkId}`}
-                    sources={[citation.url ?? "https://example.com"]}
-                    onClick={() => onCitationClick(citation)}
-                  />
-                </InlineCitationCard>
-              </InlineCitation>
-            );
-          })}
-        </div>
+        <InlineCitationPills citations={citations} onCitationClick={onCitationClick} />
       ) : null}
       {isUser ? (
         <button

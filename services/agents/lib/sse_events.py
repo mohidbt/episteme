@@ -71,6 +71,9 @@ class Citation(TypedDict):
     page: NotRequired[int]
     snippet: NotRequired[str]
     bbox: NotRequired[dict[str, float] | None]
+    # Round 2 (B3) — populated by the RAG extractor; consumers that ignore
+    # these keep working (backward compat).
+    score: NotRequired[float]
 
 
 class SourcesEvent(TypedDict):

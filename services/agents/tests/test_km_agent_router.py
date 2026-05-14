@@ -90,31 +90,41 @@ def test_build_configurable_omits_empty_keys():
 
 
 def test_extract_rag_citations_accepts_json_string_tool_output():
+    """Round 2 — extractor consumes ``score`` + ``paper_title`` and emits
+    ``title`` + ``score`` on each citation."""
     ev = {"name": "read_paper"}
     payload = {
         "paper_id": "p-1",
-        "blocks": [{"block_id": "p-1:7", "page": 7, "text": "snippet"}],
+        "paper_title": "Some Paper",
+        "blocks": [{"block_id": "p-1:p7:42", "page": 7, "text": "snippet", "score": 0.9}],
     }
     mapped = ("tool_result", {"output": json.dumps(payload)})
     citations = _extract_rag_citations_from_tool_result(ev, mapped)
     assert citations == [{
-        "chunk_id": "p-1:7",
+        "chunk_id": "p-1:p7:42",
         "paper_id": "p-1",
+        "title": "Some Paper - Page 7",
+        "score": 0.9,
         "page": 7,
         "snippet": "snippet",
     }]
 
 
 def test_extract_rag_citations_accepts_content_block_list_tool_output():
+    """Round 2 — content-block list output path still resolves to a citation
+    with the new ``title``/``score`` fields and falls back to chunk_id title
+    when ``paper_title`` is missing."""
     ev = {"name": "read_paper"}
     payload = {
         "paper_id": "p-2",
-        "blocks": [{"block_id": "p-2:3", "text": "x"}],
+        "blocks": [{"block_id": "p-2:p1:3", "text": "x", "score": 0.8}],
     }
     mapped = ("tool_result", {"output": [{"type": "text", "text": json.dumps(payload)}]})
     citations = _extract_rag_citations_from_tool_result(ev, mapped)
     assert citations == [{
-        "chunk_id": "p-2:3",
+        "chunk_id": "p-2:p1:3",
         "paper_id": "p-2",
+        "title": "p-2:p1:3",
+        "score": 0.8,
         "snippet": "x",
     }]
