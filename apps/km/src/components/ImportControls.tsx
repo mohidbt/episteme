@@ -57,7 +57,7 @@ export function ImportControls({
       <input
         ref={inputRef}
         type="file"
-        accept=".md,.pdf,.bib,.ris,.csl-json,.csv,.jpg,.jpeg,.png,.webp"
+        accept=".md,.pdf,.bib,.ris,.csl-json,.csljson,.csv,.jpg,.jpeg,.png,.webp"
         className="hidden"
         onChange={(e) => setFile(e.target.files?.[0] ?? null)}
       />

@@ -50,7 +50,7 @@ export function PublishDialog({
   const url = username ? `${username}.${PUBLISH_DOMAIN}/${publicSlug}` : "";
 
   async function claimUsername() {
-    if (PUBLISHING_DISABLED) return;
+    if (PUBLISHING_DISABLED || busy) return;
     setClaimError(null);
     const name = usernameDraft.trim().toLowerCase();
     if (!isValidUsername(name)) {
@@ -80,7 +80,7 @@ export function PublishDialog({
   }
 
   async function togglePublish(next: boolean) {
-    if (PUBLISHING_DISABLED) return;
+    if (PUBLISHING_DISABLED || busy) return;
     setPublishError(null);
     setBusy(true);
     try {

@@ -27,7 +27,7 @@ import {
   horizontalListSortingStrategy,
   sortableKeyboardCoordinates,
 } from "@dnd-kit/sortable";
-import { X, Plus } from "lucide-react";
+import { X, Plus, File } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { fileTypeKindFromHref, getFileTypeIcon } from "@/lib/file-type-icon";
 
@@ -308,7 +308,15 @@ function titleFromHref(href: string): string {
 
 function TabIcon({ href }: { href: string }) {
   const kind = fileTypeKindFromHref(href);
-  if (!kind) return null;
+  if (!kind) {
+    return (
+      <File
+        aria-hidden
+        data-testid="tab-icon-unknown"
+        className="size-3.5 shrink-0 text-[var(--fg-muted)]"
+      />
+    );
+  }
   const Icon = getFileTypeIcon(kind);
   return (
     <Icon

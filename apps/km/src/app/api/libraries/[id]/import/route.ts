@@ -22,40 +22,77 @@ const MAX_IMAGE_BYTES = 5 * MB;
 
 type AllowedKind = "md" | "pdf" | "reference" | "csv" | "image";
 
+type Rule = {
+  kind: AllowedKind;
+  maxBytes: number;
+  exts: readonly string[];
+  // MIME types that are allowed for this kind. Empty MIME from the browser
+  // is tolerated (some OSes do not stamp a Content-Type on form uploads),
+  // but a *present* MIME must be in this list — defends vs spoofed types
+  // claiming application/octet-stream is a PDF, etc.
+  mimes: readonly string[];
+  mimePrefixes?: readonly string[];
+};
+
+const UPLOAD_RULES: readonly Rule[] = [
+  {
+    kind: "md",
+    maxBytes: MAX_MD_BYTES,
+    exts: [".md"],
+    mimes: ["text/markdown", "text/x-markdown", "text/plain"],
+  },
+  {
+    kind: "pdf",
+    maxBytes: MAX_PDF_BYTES,
+    exts: [".pdf"],
+    mimes: ["application/pdf"],
+  },
+  {
+    kind: "reference",
+    maxBytes: MAX_REFERENCE_BYTES,
+    exts: [".bib", ".ris", ".csl-json", ".csljson", ".json"],
+    mimes: [
+      "application/x-bibtex",
+      "application/x-research-info-systems",
+      "application/vnd.citationstyles.csl+json",
+      "application/json",
+      "text/plain",
+    ],
+  },
+  {
+    kind: "csv",
+    maxBytes: MAX_CSV_BYTES,
+    exts: [".csv"],
+    mimes: ["text/csv", "application/csv", "text/plain"],
+  },
+  {
+    kind: "image",
+    maxBytes: MAX_IMAGE_BYTES,
+    exts: [".jpg", ".jpeg", ".png", ".webp"],
+    mimes: [],
+    mimePrefixes: ["image/"],
+  },
+];
+
 function classifyUpload(
   file: File,
 ): { kind: AllowedKind; maxBytes: number } | null {
   const name = file.name.toLowerCase();
   const type = (file.type ?? "").toLowerCase();
 
-  if (name.endsWith(".md") || type === "text/markdown") {
-    return { kind: "md", maxBytes: MAX_MD_BYTES };
-  }
-  if (name.endsWith(".pdf") || type === "application/pdf") {
-    return { kind: "pdf", maxBytes: MAX_PDF_BYTES };
-  }
-  if (
-    name.endsWith(".bib") ||
-    name.endsWith(".ris") ||
-    name.endsWith(".csl-json") ||
-    name.endsWith(".csljson") ||
-    type === "application/x-bibtex" ||
-    type === "application/x-research-info-systems" ||
-    type === "application/vnd.citationstyles.csl+json"
-  ) {
-    return { kind: "reference", maxBytes: MAX_REFERENCE_BYTES };
-  }
-  if (name.endsWith(".csv") || type === "text/csv") {
-    return { kind: "csv", maxBytes: MAX_CSV_BYTES };
-  }
-  if (
-    name.endsWith(".jpg") ||
-    name.endsWith(".jpeg") ||
-    name.endsWith(".png") ||
-    name.endsWith(".webp") ||
-    type.startsWith("image/")
-  ) {
-    return { kind: "image", maxBytes: MAX_IMAGE_BYTES };
+  for (const rule of UPLOAD_RULES) {
+    const extMatch = rule.exts.some((e) => name.endsWith(e));
+    if (!extMatch) continue;
+
+    // No MIME stamped by the browser → trust the extension.
+    if (!type) return { kind: rule.kind, maxBytes: rule.maxBytes };
+
+    const mimeMatch =
+      rule.mimes.includes(type) ||
+      (rule.mimePrefixes?.some((p) => type.startsWith(p)) ?? false);
+    if (mimeMatch) return { kind: rule.kind, maxBytes: rule.maxBytes };
+    // Extension agrees but MIME doesn't — treat as spoofed and reject.
+    return null;
   }
   return null;
 }
