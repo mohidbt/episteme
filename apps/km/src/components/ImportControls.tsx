@@ -34,7 +34,11 @@ export function ImportControls({
       });
       const json = await res.json();
       if (!res.ok) {
-        toast.error(json.error ?? "Import failed");
+        if (res.status === 413 && json?.error === "over_limit") {
+          toast.error("Library is over the 100 MB limit");
+        } else {
+          toast.error(json.error ?? "Import failed");
+        }
         return;
       }
       toast.success(
