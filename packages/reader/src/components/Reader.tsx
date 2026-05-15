@@ -224,7 +224,7 @@ export function Reader({
   const [citationsRefreshKey, setCitationsRefreshKey] = useState(0);
   const [folderOptions, setFolderOptions] = useState<FolderOption[]>([]);
   const [autoRuns, setAutoRuns] = useState<AutoHighlightRun[]>([]);
-  const [focusHighlightId, setFocusHighlightId] = useState<number | string | null>(null);
+  const [pendingScrollHighlightId, setPendingScrollHighlightId] = useState<number | string | null>(null);
 
   // Folder list for the citation-card "Save to Library" picker. KM exposes
   // /api/folders; non-fatal on failure.
@@ -298,20 +298,30 @@ export function Reader({
     error: aiHighlightsError,
   } = usePaperHighlights(paperId, refreshKey);
   const combinedUserHighlights = [...userHighlights, ...aiHighlights];
-  const aiSidebarHighlights = paperHighlights.map((h) => ({
-    id: h.id,
-    pageNumber: h.page,
-    textContent: h.noteMd ?? "AI highlight",
-    color: "amber",
-    note: h.noteMd,
-    comment: null,
-    createdAt: h.createdAt,
-    source: "ai-auto" as const,
-    runId: h.runId ?? null,
-    toolCallId: h.toolCallId ?? null,
-    rects: aiHighlights.find((x) => x.id === h.id)?.rects ?? null,
-  }));
-  const mergedSidebarHighlights = [...aiSidebarHighlights, ...sidebarHighlights.map((h) => ({ ...h, source: h.source ?? "user" as const }))];
+  const aiSidebarHighlights = useMemo(
+    () =>
+      paperHighlights.map((h) => ({
+        id: h.id,
+        pageNumber: h.page,
+        textContent: h.noteMd ?? "AI highlight",
+        color: "amber",
+        note: h.noteMd,
+        comment: null,
+        createdAt: h.createdAt,
+        source: "ai-auto" as const,
+        runId: h.runId ?? null,
+        toolCallId: h.toolCallId ?? null,
+        rects: aiHighlights.find((x) => x.id === h.id)?.rects ?? null,
+      })),
+    [paperHighlights, aiHighlights],
+  );
+  const mergedSidebarHighlights = useMemo(
+    () => [
+      ...aiSidebarHighlights,
+      ...sidebarHighlights.map((h) => ({ ...h, source: h.source ?? ("user" as const) })),
+    ],
+    [aiSidebarHighlights, sidebarHighlights],
+  );
   // Derive runs from chat-agent highlights (paper_highlights.runId) so each
   // tool invocation that produced highlights shows up as a sidebar entry,
   // even when no ai_highlight_runs row exists (chat-agent highlight tool path).
@@ -593,15 +603,19 @@ export function Reader({
   }, []);
 
   useEffect(() => {
-    if (!focusHighlightId) return;
-    const target = mergedSidebarHighlights.find((h) => h.id === focusHighlightId);
+    if (!pendingScrollHighlightId) return;
+    const target = mergedSidebarHighlights.find((h) => h.id === pendingScrollHighlightId);
     const page = target?.rects?.[0]?.page ?? target?.pageNumber;
     if (page) useReaderState.getState().setScrollTargetPage(page);
+    const id = pendingScrollHighlightId;
     requestAnimationFrame(() => {
-      const el = document.querySelector<HTMLElement>(`[data-highlight-id="${focusHighlightId}"]`);
+      const el = document.querySelector<HTMLElement>(`[data-highlight-id="${id}"]`);
       el?.scrollIntoView({ behavior: "smooth", block: "center" });
     });
-  }, [focusHighlightId, mergedSidebarHighlights]);
+    // Consume-once: clear immediately so unrelated re-renders (e.g.,
+    // mergedSidebarHighlights getting a fresh ref) don't re-fire the scroll.
+    setPendingScrollHighlightId(null);
+  }, [pendingScrollHighlightId, mergedSidebarHighlights]);
 
   // Extract native PDF outline (bookmarks) when pdfDoc loads.
   useEffect(() => {
@@ -665,7 +679,7 @@ export function Reader({
           loading={highlightsLoading || aiHighlightsLoading}
           error={highlightsSidebarError}
           paperId={paperId}
-          onNavigateHighlight={(id) => setFocusHighlightId(id)}
+          onNavigateHighlight={(id) => setPendingScrollHighlightId(id)}
           dockControl={
             <DockMenu
               dock={highlightsDock}
