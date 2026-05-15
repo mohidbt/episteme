@@ -77,6 +77,77 @@ def _mock_conn(paper_exists=True):
     return conn
 
 
+def test_auto_highlight_selects_storage_url_not_file_path():
+    """Regression: papers table has `storage_url`, not `file_path`. Round F prod 500 fix.
+
+    Asserts the auto_highlight handler's SQL queries the correct column and that
+    the resulting dict key access matches. Mocks DB conn and captures the query.
+    """
+    captured_queries: list[str] = []
+    conn = AsyncMock()
+
+    async def fetchrow(query, *args):
+        captured_queries.append(query)
+        q = query.strip().upper()
+        if "FROM PAPERS" in q:
+            return {"id": PAPER_ID, "storage_url": "/tmp/fake.pdf"}
+        if "AGENT_CONVERSATIONS" in q and "INSERT" in q:
+            return {"id": 42}
+        if "AI_HIGHLIGHT_RUNS" in q and "INSERT" in q:
+            return {"id": "11111111-1111-1111-1111-111111111111"}
+        return None
+
+    conn.fetchrow.side_effect = fetchrow
+    conn.execute.return_value = None
+    conn.fetchval.return_value = 0
+
+    async def override():
+        yield conn
+
+    app.dependency_overrides[deps.db.get_conn] = override
+
+    fake = MagicMock()
+
+    async def astream(_input, _config=None, *, stream_mode=None, **kwargs):
+        from langchain_core.messages import AIMessage
+
+        yield {
+            "model": {
+                "messages": [
+                    AIMessage(
+                        content="",
+                        tool_calls=[
+                            {
+                                "name": "finish",
+                                "args": {"summary": "done"},
+                                "id": "c1",
+                                "type": "tool_call",
+                            }
+                        ],
+                    )
+                ]
+            }
+        }
+
+    fake.astream = astream
+
+    try:
+        with patch("routers.auto_highlight.create_agent", return_value=fake):
+            body = json.dumps({"instruction": "x"}).encode()
+            r = client.post(PATH, content=body, headers=_signed_headers("POST", PATH, body))
+            assert r.status_code == 200
+            # consume stream
+            _ = r.text
+
+        papers_queries = [q for q in captured_queries if "FROM papers" in q]
+        assert papers_queries, "expected at least one SELECT ... FROM papers"
+        for q in papers_queries:
+            assert "storage_url" in q, f"query must select storage_url, got: {q}"
+            assert "file_path" not in q, f"query must NOT reference file_path, got: {q}"
+    finally:
+        app.dependency_overrides.clear()
+
+
 def test_unauthenticated():
     body = json.dumps({"instruction": "highlight losses"}).encode()
     r = client.post(PATH, content=body)
