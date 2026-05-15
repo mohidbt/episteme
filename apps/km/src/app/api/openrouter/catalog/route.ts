@@ -1,14 +1,16 @@
 import { desc } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { openrouterCatalog } from "@episteme/db/schema";
+import { signRequest } from "@/lib/agents/sign-request";
 
 // Public endpoint — OpenRouter model catalog is public data, served from a
 // 24h-TTL cache populated by the Python agents service.
 //
 // Self-healing: if the table is empty or the oldest row is past TTL, we
 // fire-and-forget a refresh to the agents service. The current response
-// still serves whatever we have (stale-while-revalidate). Endpoint requires
-// no auth on the agents side — it just upserts public OpenRouter data.
+// still serves whatever we have (stale-while-revalidate). The refresh call
+// is HMAC-signed for consistency with every other KM→agents call (Codex A1
+// follow-up), even though the populator endpoint itself is currently open.
 const TTL_MS = 24 * 60 * 60 * 1000;
 
 export async function GET() {
@@ -33,12 +35,24 @@ export async function GET() {
   if (stale) {
     const agentsUrl = process.env.AGENTS_URL;
     if (agentsUrl) {
-      // Fire-and-forget — do NOT await. Failures are swallowed; next request
-      // will retry. The agents service de-dupes concurrent refreshes via a
-      // module-level in-flight flag.
-      void fetch(`${agentsUrl}/openrouter/catalog/refresh`, {
-        method: "POST",
-      }).catch(() => {});
+      try {
+        const { headers } = signRequest({
+          method: "POST",
+          path: "/openrouter/catalog/refresh",
+          body: "",
+          userId: "system",
+          llmKey: "",
+        });
+        // Fire-and-forget — do NOT await. Failures are swallowed; next request
+        // will retry. The agents service de-dupes concurrent refreshes via a
+        // module-level in-flight flag.
+        void fetch(`${agentsUrl}/openrouter/catalog/refresh`, {
+          method: "POST",
+          headers,
+        }).catch(() => {});
+      } catch {
+        // Missing INHALE_INTERNAL_SECRET — skip refresh, log nothing.
+      }
     }
   }
 

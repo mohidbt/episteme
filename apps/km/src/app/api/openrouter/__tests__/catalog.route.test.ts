@@ -5,7 +5,20 @@ vi.mock("@/lib/db", () => ({
   db: { select: vi.fn() },
 }));
 
+vi.mock("@/lib/agents/sign-request", () => ({
+  signRequest: vi.fn(() => ({
+    headers: {
+      "X-Inhale-User-Id": "system",
+      "X-Inhale-LLM-Key": "",
+      "X-Inhale-Ts": "1700000000",
+      "X-Inhale-Sig": "deadbeef",
+    },
+    ts: "1700000000",
+  })),
+}));
+
 import { db } from "@/lib/db";
+import { signRequest } from "@/lib/agents/sign-request";
 import { GET } from "../catalog/route";
 
 const AGENTS_URL = "http://agents.test";
@@ -56,6 +69,16 @@ describe("GET /api/openrouter/catalog", () => {
       .calls[0] as [string, RequestInit];
     expect(url).toBe(`${AGENTS_URL}/openrouter/catalog/refresh`);
     expect(init.method).toBe("POST");
+    expect(signRequest).toHaveBeenCalledWith({
+      method: "POST",
+      path: "/openrouter/catalog/refresh",
+      body: "",
+      userId: "system",
+      llmKey: "",
+    });
+    expect((init.headers as Record<string, string>)["X-Inhale-Sig"]).toBe(
+      "deadbeef",
+    );
   });
 
   it("fresh rows (<24h) → no fetch fired, stale:false", async () => {
