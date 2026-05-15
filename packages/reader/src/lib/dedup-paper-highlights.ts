@@ -26,6 +26,10 @@ export interface PaperHighlightRowLite {
   createdAt: string;
 }
 
+// Bbox coordinate contract: rects are raw PDF user-space coordinates as
+// emitted by the chat-agent `highlight()` tool. The ±2 px tolerance below
+// assumes producers normalize to the same coordinate space; sub-pixel drift
+// across repeated tool calls is the only expected source of variation.
 const BBOX_TOLERANCE_PX = 2;
 const NOTE_SEPARATOR = " · ";
 
@@ -77,8 +81,26 @@ function bboxEquivalent(a: BBoxLite | null, b: BBoxLite | null, tol = BBOX_TOLER
 
 export function dedupPaperHighlights<T extends PaperHighlightRowLite>(rows: T[]): T[] {
   const out: T[] = [];
+  // For each merged output slot, accumulate notes in order with a Set guarding
+  // duplicates. Joining once at the end avoids ever splitting on the display
+  // separator — so a real note that happens to contain " · " round-trips intact.
+  const notesByIdx = new Map<number, { order: string[]; seen: Set<string> }>();
   // Track index in `out` of each runId's groups so we can merge.
   const groupIdx = new Map<string, number[]>();
+
+  const pushNote = (idx: number, note: string | null) => {
+    const trimmed = (note ?? "").trim();
+    if (!trimmed) return;
+    let bucket = notesByIdx.get(idx);
+    if (!bucket) {
+      bucket = { order: [], seen: new Set() };
+      notesByIdx.set(idx, bucket);
+    }
+    if (!bucket.seen.has(trimmed)) {
+      bucket.seen.add(trimmed);
+      bucket.order.push(trimmed);
+    }
+  };
 
   for (const row of rows) {
     const rid = row.runId ?? null;
@@ -89,32 +111,29 @@ export function dedupPaperHighlights<T extends PaperHighlightRowLite>(rows: T[])
     const key = `${rid}::${row.page}`;
     const candidates = groupIdx.get(key) ?? [];
     const rowParsed = parseBBox(row.bbox);
-    let merged = false;
+    let mergedIdx: number | null = null;
     for (const i of candidates) {
-      const existing = out[i];
-      if (bboxesEquivalent(parseBBox(existing.bbox), rowParsed)) {
-        // Merge notes: dedupe, preserve order.
-        const existingNotes = existing.noteMd
-          ? existing.noteMd.split(NOTE_SEPARATOR)
-          : [];
-        const newNote = (row.noteMd ?? "").trim();
-        if (newNote && !existingNotes.includes(newNote)) {
-          existingNotes.push(newNote);
-        }
-        const filtered = existingNotes.map((s) => s.trim()).filter(Boolean);
-        out[i] = {
-          ...existing,
-          noteMd: filtered.length > 0 ? filtered.join(NOTE_SEPARATOR) : existing.noteMd,
-        } as T;
-        merged = true;
+      if (bboxesEquivalent(parseBBox(out[i].bbox), rowParsed)) {
+        mergedIdx = i;
         break;
       }
     }
-    if (!merged) {
+    if (mergedIdx === null) {
       const idx = out.length;
       out.push(row);
       groupIdx.set(key, [...candidates, idx]);
+      pushNote(idx, row.noteMd);
+    } else {
+      pushNote(mergedIdx, row.noteMd);
     }
+  }
+
+  for (const [idx, bucket] of notesByIdx) {
+    if (bucket.order.length === 0) continue;
+    out[idx] = {
+      ...out[idx],
+      noteMd: bucket.order.join(NOTE_SEPARATOR),
+    } as T;
   }
 
   return out;
