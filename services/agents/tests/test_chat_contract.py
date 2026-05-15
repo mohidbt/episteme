@@ -47,7 +47,7 @@ def _mock_conn(processing_status="ready"):
     conn.fetchrow.return_value = {
         "id": 1,
         "processing_status": processing_status,
-        "file_path": "/tmp/fake.pdf",
+        "storage_url": "/tmp/fake.pdf",
     }
     conn.execute.return_value = None
     return conn
@@ -225,7 +225,7 @@ def test_chat_create_highlights_tool_call_inserts_run_and_finalizes():
         if "agent_conversations" in sql:
             return {"id": 1}
         # documents lookup
-        return {"id": 1, "processing_status": "ready", "file_path": "/tmp/fake.pdf"}
+        return {"id": 1, "processing_status": "ready", "storage_url": "/tmp/fake.pdf"}
 
     mock_conn.fetchrow.side_effect = fetchrow_side_effect
 
@@ -293,7 +293,7 @@ def test_chat_emits_highlight_progress_and_done_events():
             return {"id": run_uuid}
         if "agent_conversations" in sql:
             return {"id": 1}
-        return {"id": 1, "processing_status": "ready", "file_path": "/tmp/fake.pdf"}
+        return {"id": 1, "processing_status": "ready", "storage_url": "/tmp/fake.pdf"}
 
     mock_conn.fetchrow.side_effect = fetchrow_side_effect
 

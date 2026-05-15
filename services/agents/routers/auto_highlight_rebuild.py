@@ -35,7 +35,7 @@ async def rebuild_run(run_id: str, auth: InternalAuthDep, conn: ConnDep) -> dict
         raise HTTPException(status_code=400, detail="missing paper_id")
 
     run = await conn.fetchrow(
-        "SELECT r.id, p.file_path FROM ai_highlight_runs r "
+        "SELECT r.id, p.storage_url FROM ai_highlight_runs r "
         "JOIN papers p ON p.id = r.paper_id "
         "WHERE r.id = $1::uuid AND r.user_id = $2 AND r.paper_id = $3",
         run_id,
@@ -44,7 +44,7 @@ async def rebuild_run(run_id: str, auth: InternalAuthDep, conn: ConnDep) -> dict
     )
     if not run:
         raise HTTPException(status_code=404, detail="Not found")
-    pdf_path = run["file_path"]
+    pdf_path = run["storage_url"]
 
     rows = await conn.fetch(
         "SELECT id, page_number, text_content, start_offset "

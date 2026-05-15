@@ -36,16 +36,16 @@ async def outline(
     if rows:
         return OutlineResponse(sections=[_row_to_section(r) for r in rows])
 
-    # 2. Get paper file_path
+    # 2. Get paper storage_url
     paper = await conn.fetchrow(
-        "SELECT file_path FROM papers WHERE id = $1 AND user_id = $2",
+        "SELECT storage_url FROM papers WHERE id = $1 AND user_id = $2",
         paperId, auth["user_id"],
     )
     if not paper:
         raise HTTPException(status_code=404, detail="Paper not found")
 
     # 3. Extract PDF text (first 30 pages) — blocking I/O in thread
-    pages = await anyio.to_thread.run_sync(lambda: extract_pages(paper["file_path"]))
+    pages = await anyio.to_thread.run_sync(lambda: extract_pages(paper["storage_url"]))
     sample = "\n\n".join(
         f"[Page {p['page_number']}]\n{p['text']}"
         for p in pages[:30]

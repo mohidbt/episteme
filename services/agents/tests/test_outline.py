@@ -70,7 +70,7 @@ def test_outline_generates_via_llm():
     # First call: fetch cached sections -> empty
     mock_conn.fetch.return_value = []
     # Second call: fetchrow for paper -> found
-    paper_row = {"file_path": "/tmp/test.pdf"}
+    paper_row = {"storage_url": "/tmp/test.pdf"}
     insert_row = _make_row()
 
     async def fetchrow_side_effect(query, *args):

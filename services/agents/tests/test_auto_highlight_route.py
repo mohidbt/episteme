@@ -55,7 +55,7 @@ def _mock_conn(paper_exists=True):
     conn = AsyncMock()
 
     # SELECT papers -> paper row
-    paper_row = {"id": PAPER_ID, "file_path": "/tmp/fake.pdf"} if paper_exists else None
+    paper_row = {"id": PAPER_ID, "storage_url": "/tmp/fake.pdf"} if paper_exists else None
     # INSERT agent_conversations ... RETURNING id
     conv_row = {"id": 42}
     # INSERT ai_highlight_runs ... RETURNING id

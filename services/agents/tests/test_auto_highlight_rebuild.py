@@ -55,9 +55,9 @@ def test_rebuild_replaces_sliver_with_clean_rect():
     conn = AsyncMock()
 
     async def fetchrow(query, *args):
-        # SELECT run + file_path
+        # SELECT run + storage_url
         if "AI_HIGHLIGHT_RUNS" in query.upper():
-            return {"id": RUN_ID, "file_path": str(FIXTURE)}
+            return {"id": RUN_ID, "storage_url": str(FIXTURE)}
         return None
 
     async def fetch(query, *args):

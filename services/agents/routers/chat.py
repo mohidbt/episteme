@@ -62,7 +62,7 @@ async def chat(body: ChatBody, auth: InternalAuthDep, conn: ConnDep):
 
     # Verify document exists + belongs to user
     paper = await conn.fetchrow(
-        "SELECT id, processing_status, file_path FROM papers WHERE id = $1 AND user_id = $2",
+        "SELECT id, processing_status, storage_url FROM papers WHERE id = $1 AND user_id = $2",
         paper_id, user_id,
     )
     if not paper:
@@ -133,7 +133,7 @@ async def chat(body: ChatBody, auth: InternalAuthDep, conn: ConnDep):
     # Lazy highlight-run context: populated only if the agent calls create_highlights.
     hl_ctx: dict = {"run_id": None, "highlights_inserted": 0, "summary": None}
 
-    pdf_path = paper["file_path"]
+    pdf_path = paper["storage_url"]
 
     # Shared lock serializes all conn usage across tools + router paths, since
     # OpenRouter may still emit parallel tool calls despite the kwarg hint and

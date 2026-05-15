@@ -69,7 +69,7 @@ async def auto_highlight(body: AutoHighlightBody, auth: InternalAuthDep, conn: C
         raise HTTPException(status_code=400, detail="missing paper_id")
 
     paper = await conn.fetchrow(
-        "SELECT id, file_path FROM papers WHERE id = $1 AND user_id = $2",
+        "SELECT id, storage_url FROM papers WHERE id = $1 AND user_id = $2",
         paper_id,
         user_id,
     )
@@ -77,7 +77,7 @@ async def auto_highlight(body: AutoHighlightBody, auth: InternalAuthDep, conn: C
         raise HTTPException(status_code=404, detail="Not found")
 
     instruction = body.instruction.strip()
-    pdf_path = paper["file_path"]
+    pdf_path = paper["storage_url"]
 
     conv_id = await _upsert_auto_highlight_conv(
         conn,
