@@ -225,6 +225,7 @@ export function Reader({
   const [folderOptions, setFolderOptions] = useState<FolderOption[]>([]);
   const [autoRuns, setAutoRuns] = useState<AutoHighlightRun[]>([]);
   const [pendingScrollHighlightId, setPendingScrollHighlightId] = useState<number | string | null>(null);
+  const [pendingScrollRectIndex, setPendingScrollRectIndex] = useState<number>(0);
 
   // Folder list for the citation-card "Save to Library" picker. KM exposes
   // /api/folders; non-fatal on failure.
@@ -605,17 +606,36 @@ export function Reader({
   useEffect(() => {
     if (!pendingScrollHighlightId) return;
     const target = mergedSidebarHighlights.find((h) => h.id === pendingScrollHighlightId);
-    const page = target?.rects?.[0]?.page ?? target?.pageNumber;
+    // Use the requested rect index — multi-rect highlights need to iterate
+    // beyond rect[0] (Bug 2c). Fall back to rect[0] / pageNumber when no
+    // rects are wired up so behaviour stays sane for legacy data.
+    const rect = target?.rects?.[pendingScrollRectIndex] ?? target?.rects?.[0];
+    const page = rect?.page ?? target?.pageNumber;
     if (page) useReaderState.getState().setScrollTargetPage(page);
     const id = pendingScrollHighlightId;
-    requestAnimationFrame(() => {
-      const el = document.querySelector<HTMLElement>(`[data-highlight-id="${id}"]`);
-      el?.scrollIntoView({ behavior: "smooth", block: "center" });
-    });
+    const rIdx = pendingScrollRectIndex;
     // Consume-once: clear immediately so unrelated re-renders (e.g.,
     // mergedSidebarHighlights getting a fresh ref) don't re-fire the scroll.
     setPendingScrollHighlightId(null);
-  }, [pendingScrollHighlightId, mergedSidebarHighlights]);
+    setPendingScrollRectIndex(0);
+    // The target page may not be mounted yet (virtualized PdfViewer). rAF
+    // poll for the rect-indexed element so we land on the right rect even
+    // when the page mounts late. Capped to ~500 ms.
+    let attempts = 0;
+    const MAX_ATTEMPTS = 30;
+    const tryScroll = () => {
+      attempts += 1;
+      const el = document.querySelector<HTMLElement>(
+        `[data-highlight-id="${id}"][data-rect-index="${rIdx}"]`,
+      );
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        return;
+      }
+      if (attempts < MAX_ATTEMPTS) requestAnimationFrame(tryScroll);
+    };
+    requestAnimationFrame(tryScroll);
+  }, [pendingScrollHighlightId, pendingScrollRectIndex, mergedSidebarHighlights]);
 
   // Extract native PDF outline (bookmarks) when pdfDoc loads.
   useEffect(() => {
@@ -679,7 +699,10 @@ export function Reader({
           loading={highlightsLoading || aiHighlightsLoading}
           error={highlightsSidebarError}
           paperId={paperId}
-          onNavigateHighlight={(id) => setPendingScrollHighlightId(id)}
+          onNavigateHighlight={(id, rectIndex) => {
+            setPendingScrollHighlightId(id);
+            setPendingScrollRectIndex(rectIndex ?? 0);
+          }}
           dockControl={
             <DockMenu
               dock={highlightsDock}

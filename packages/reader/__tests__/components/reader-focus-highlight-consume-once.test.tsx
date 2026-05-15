@@ -120,6 +120,7 @@ describe("Bug 4: focusHighlightId is consumed once", () => {
     // on a real element — mirrors what UserHighlightLayer renders in prod.
     const target = document.createElement("div");
     target.setAttribute("data-highlight-id", "ai-1");
+    target.setAttribute("data-rect-index", "0");
     document.body.appendChild(target);
 
     // Click chip → sets focusHighlightId → effect schedules scrollIntoView.
