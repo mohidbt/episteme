@@ -2,6 +2,8 @@
 episteme-km-prd.md
 docs/
 **/CLAUDE.md
+.obsidian/
+temp/
 
 node_modules
 .pnpm-store
