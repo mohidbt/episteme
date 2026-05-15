@@ -139,9 +139,16 @@ export function HighlightsSidebar({
       if (group.length === 0) return;
       setRunCursors((prev) => {
         const cur = prev[runId] ?? { highlightIndex: 0, rectIndex: 0 };
-        let hIdx = cur.highlightIndex;
-        let rIdx = cur.rectIndex + delta;
         const groupLen = group.length;
+        // Normalize stale cursor: group may have shrunk (refresh/delete) since
+        // the cursor was last set, leaving highlightIndex out-of-bounds. Wrap
+        // to a valid slot and clamp rectIndex to that highlight's rect count
+        // before stepping. Without this, group[hIdx] is undefined and
+        // rectCount throws (codex R-B review).
+        let hIdx = ((cur.highlightIndex % groupLen) + groupLen) % groupLen;
+        const curRectCount = rectCount(group[hIdx]);
+        const safeRIdx = cur.rectIndex >= 0 && cur.rectIndex < curRectCount ? cur.rectIndex : 0;
+        let rIdx = safeRIdx + delta;
         // Walk forward / backward over rect boundaries until we land in range.
         // The loop is bounded — each iteration either consumes the delta or
         // moves the highlight cursor, which itself wraps.
@@ -316,9 +323,17 @@ function RunRow({
   const truncated = label.length > 60 ? `${label.slice(0, 60)}…` : label;
   // Total rects across all highlights in the group, and the cursor's flat
   // position. Highlights without rect data count as 1 navigable target each.
+  // Normalize the cursor — if the group shrank since the cursor was set,
+  // highlightIndex can be out-of-bounds, which would crash rectCount when it
+  // dereferences h.rects (codex R-B review).
   const totalRects = group.reduce((sum, h) => sum + rectCount(h), 0);
-  let flatPos = cursor.rectIndex;
-  for (let i = 0; i < cursor.highlightIndex; i++) flatPos += rectCount(group[i]);
+  const groupLen = group.length;
+  const safeHIdx = groupLen > 0 ? ((cursor.highlightIndex % groupLen) + groupLen) % groupLen : 0;
+  const safeRectCount = groupLen > 0 ? rectCount(group[safeHIdx]) : 1;
+  const safeRIdx =
+    cursor.rectIndex >= 0 && cursor.rectIndex < safeRectCount ? cursor.rectIndex : 0;
+  let flatPos = safeRIdx;
+  for (let i = 0; i < safeHIdx; i++) flatPos += rectCount(group[i]);
   return (
     <div className="rounded border p-2">
       <button
