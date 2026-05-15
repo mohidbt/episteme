@@ -6,6 +6,7 @@ import { getAuthedUserId, MissingInternalSecretError } from "@/lib/internal-auth
 import { noteCreateSchema } from "@/lib/validators";
 import { jsonError, requireOwned, resolveNoteSlug } from "@/lib/crud";
 import { resolveUnresolvedNoteLinks, createRevisionIfNeeded } from "@episteme/notes-core";
+import { assertWithinLibraryLimit } from "@/lib/library-usage";
 
 function misconfiguredResponse(): Response {
   return jsonError(500, "internal auth misconfigured");
@@ -87,10 +88,21 @@ export async function POST(req: Request) {
   if (!parsed.success) return jsonError(400, "validation", { issues: parsed.error.issues });
   const lib = await requireOwned<any>(libraries, parsed.data.libraryId, userId);
   if (!lib.ok) return jsonError(lib.status, lib.status === 404 ? "not_found" : "forbidden");
+  // Byte length of the markdown body — matches the migration backfill rule
+  // (octet_length(content_md)). Empty body → 0 bytes counted toward the cap.
+  const contentMd = (parsed.data as { contentMd?: string }).contentMd ?? "";
+  const sizeBytes = Buffer.byteLength(contentMd, "utf8");
+  const cap = await assertWithinLibraryLimit(parsed.data.libraryId, sizeBytes);
+  if (!cap.ok) {
+    return jsonError(413, "over_limit", {
+      usedBytes: cap.usedBytes,
+      limitBytes: cap.limitBytes,
+    });
+  }
   const slug = await resolveNoteSlug(userId, parsed.data.title);
   const [row] = await db
     .insert(notes)
-    .values({ ...parsed.data, userId, slug })
+    .values({ ...parsed.data, userId, slug, sizeBytes })
     .returning();
   // Retro-resolve any previously-unresolved [[title]] note-links whose raw
   // identifier now matches this new note. Scoped to note-kind only; paper

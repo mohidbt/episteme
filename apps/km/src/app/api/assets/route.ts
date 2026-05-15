@@ -6,6 +6,7 @@ import { assetUploadInitSchema } from "@/lib/validators";
 import { jsonError, requireOwned } from "@/lib/crud";
 import { storage, assetSourceKey } from "@/lib/storage";
 import { sanitizeFilename } from "@/lib/filename";
+import { assertWithinLibraryLimit } from "@/lib/library-usage";
 
 export const runtime = "nodejs";
 
@@ -44,6 +45,14 @@ export async function POST(req: Request) {
   if (!parsed.success) return jsonError(400, "validation", { issues: parsed.error.issues });
   const lib = await requireOwned<any>(libraries, parsed.data.libraryId, userId);
   if (!lib.ok) return jsonError(lib.status, lib.status === 404 ? "not_found" : "forbidden");
+
+  const cap = await assertWithinLibraryLimit(parsed.data.libraryId, parsed.data.sizeBytes);
+  if (!cap.ok) {
+    return jsonError(413, "over_limit", {
+      usedBytes: cap.usedBytes,
+      limitBytes: cap.limitBytes,
+    });
+  }
 
   const cleanFilename = sanitizeFilename(parsed.data.filename);
 

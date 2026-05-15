@@ -3,6 +3,7 @@ import { notes, libraries } from "@episteme/db/schema";
 import { getUserIdFromRequest } from "@/lib/auth";
 import { jsonError, requireOwned, resolveNoteSlug } from "@/lib/crud";
 import { resolveUnresolvedNoteLinks, createRevisionIfNeeded } from "@episteme/notes-core";
+import { assertWithinLibraryLimit } from "@/lib/library-usage";
 
 export const runtime = "nodejs";
 
@@ -69,6 +70,15 @@ export async function POST(req: Request) {
 
   const slug = await resolveNoteSlug(userId, title);
 
+  const sizeBytes = Buffer.byteLength(contentMd, "utf8");
+  const cap = await assertWithinLibraryLimit(libraryId, sizeBytes);
+  if (!cap.ok) {
+    return jsonError(413, "over_limit", {
+      usedBytes: cap.usedBytes,
+      limitBytes: cap.limitBytes,
+    });
+  }
+
   const [row] = await db
     .insert(notes)
     .values({
@@ -79,6 +89,7 @@ export async function POST(req: Request) {
       title,
       slug,
       contentMd,
+      sizeBytes,
     })
     .returning();
 

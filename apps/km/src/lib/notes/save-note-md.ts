@@ -37,9 +37,13 @@ export async function saveNoteMd(
   // the update below, otherwise the delta gate always sees delta=0 and only
   // the age gate (>5min) can trigger an autosave revision.
   await createRevisionIfNeeded({ noteId: id, authorId: userId, newMd: contentMd, reason });
+  // Keep size_bytes in sync with content_md so the per-library cap reflects
+  // edits, not just the initial create. Byte length matches the migration
+  // backfill rule (octet_length).
+  const sizeBytes = Buffer.byteLength(contentMd, "utf8");
   await db
     .update(notes)
-    .set({ contentMd, contentJson, updatedAt: new Date() })
+    .set({ contentMd, contentJson, sizeBytes, updatedAt: new Date() })
     .where(eq(notes.id, id));
   await rebuildLinks(id, contentMd, userId);
   try {

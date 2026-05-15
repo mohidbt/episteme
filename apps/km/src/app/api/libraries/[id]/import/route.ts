@@ -4,6 +4,7 @@ import { getUserIdFromRequest } from "@/lib/auth";
 import { jsonError, requireOwned, resolveNoteSlug } from "@/lib/crud";
 import { toSlug } from "@/lib/slug";
 import { parseFrontmatter } from "@/lib/io/md-frontmatter";
+import { assertWithinLibraryLimit } from "@/lib/library-usage";
 
 // pdfjs (via extractMetadata) requires the Node runtime.
 export const runtime = "nodejs";
@@ -154,6 +155,15 @@ export async function POST(req: Request, { params }: Ctx) {
         : undefined;
     const slug = await resolveNoteSlug(userId, slugHint ?? title);
 
+    const sizeBytes = Buffer.byteLength(content, "utf8");
+    const cap = await assertWithinLibraryLimit(libId, sizeBytes);
+    if (!cap.ok) {
+      return jsonError(413, "over_limit", {
+        usedBytes: cap.usedBytes,
+        limitBytes: cap.limitBytes,
+      });
+    }
+
     await db.insert(notes).values({
       libraryId: libId,
       userId,
@@ -163,6 +173,7 @@ export async function POST(req: Request, { params }: Ctx) {
       slug,
       filename: file.name,
       contentMd: content,
+      sizeBytes,
     });
 
     return Response.json({ imported: 1, skipped: 0, conflicts: [] });
