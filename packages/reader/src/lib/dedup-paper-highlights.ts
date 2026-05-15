@@ -45,7 +45,9 @@ function firstRect(bbox: unknown): BBoxLite | null {
 }
 
 function bboxEquivalent(a: BBoxLite | null, b: BBoxLite | null, tol = BBOX_TOLERANCE_PX): boolean {
-  if (!a || !b) return a === b;
+  // Null / malformed rects carry no positional evidence — treat as NOT
+  // equivalent so we don't collapse unrelated rows that happen to lack bbox.
+  if (!a || !b) return false;
   return (
     Math.abs(a.x0 - b.x0) <= tol &&
     Math.abs(a.y0 - b.y0) <= tol &&
