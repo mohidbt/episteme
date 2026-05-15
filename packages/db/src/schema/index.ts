@@ -34,3 +34,4 @@ export * from "./papersets";
 export * from "./semantic-edges";
 export * from "./reference-embeddings";
 export * from "./pending-recompute";
+export * from "./openrouter-usage";
