@@ -30,6 +30,18 @@ export interface ExtractionResult {
 // ---------------------------------------------------------------------------
 
 const MARKER_RE = /\[(\d{1,3})\]/g;
+// Inline numeric markers used by Vancouver/AMA/Nature: a sentence terminator
+// (`.`, `,`, `;`, `:`, `)`, `]`) immediately followed by 1–3 digits, then
+// whitespace or sentence punctuation. The preceding char must not be a digit
+// or another period so we skip versions ("v1.6"), decimals, and run-ons
+// ("Fig.2.3"). Capture group 1 is the numeric index.
+const INLINE_NUMERIC_MARKER_RE = /(?:^|[^\d.])[.,;:)\]](\d{1,3})(?=\s|[.,;:!?)\]]|$)/g;
+// Unicode superscript digits (²⁶, ⁵, etc). One or more consecutive.
+const SUPERSCRIPT_MARKER_RE = /[⁰-⁹²³¹]+/g;
+const SUPERSCRIPT_DIGIT_MAP: Record<string, string> = {
+  "⁰": "0", "¹": "1", "²": "2", "³": "3", "⁴": "4",
+  "⁵": "5", "⁶": "6", "⁷": "7", "⁸": "8", "⁹": "9",
+};
 // Tolerate a leading PDF line-number prefix (e.g. "609 References") that some
 // journal PDFs render on every line.
 const BIB_HEADER_RE = /^(?:\d{1,5}\s+)?(references|bibliography|works cited|literature cited|references and notes)\s*$/im;
@@ -51,18 +63,24 @@ export function extractCitations(pages: ExtractedPage[]): ExtractionResult {
 function extractMarkers(pages: ExtractedPage[]): CitationMarker[] {
   const seen = new Map<number, CitationMarker>();
 
+  const record = (idx: number, markerText: string, pageNumber: number) => {
+    if (idx < 1 || idx > 300) return;
+    if (!seen.has(idx)) {
+      seen.set(idx, { markerText, markerIndex: idx, pageNumber });
+    }
+  };
+
   for (const page of pages) {
-    const matches = page.text.matchAll(MARKER_RE);
-    for (const match of matches) {
-      const idx = parseInt(match[1], 10);
-      if (idx < 1 || idx > 999) continue;
-      if (!seen.has(idx)) {
-        seen.set(idx, {
-          markerText: `[${idx}]`,
-          markerIndex: idx,
-          pageNumber: page.pageNumber,
-        });
-      }
+    for (const match of page.text.matchAll(MARKER_RE)) {
+      record(parseInt(match[1], 10), `[${match[1]}]`, page.pageNumber);
+    }
+    for (const match of page.text.matchAll(INLINE_NUMERIC_MARKER_RE)) {
+      record(parseInt(match[1], 10), match[1], page.pageNumber);
+    }
+    for (const match of page.text.matchAll(SUPERSCRIPT_MARKER_RE)) {
+      const digits = match[0].split("").map((c) => SUPERSCRIPT_DIGIT_MAP[c]).join("");
+      if (!digits) continue;
+      record(parseInt(digits, 10), match[0], page.pageNumber);
     }
   }
 

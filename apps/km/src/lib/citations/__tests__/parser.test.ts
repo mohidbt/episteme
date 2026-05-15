@@ -1,0 +1,100 @@
+import { describe, it, expect } from "vitest";
+import { extractCitations } from "../parser";
+import type { ExtractedPage } from "@/lib/ai/pdf-text";
+
+function page(text: string, pageNumber = 1): ExtractedPage {
+  return { pageNumber, text } as ExtractedPage;
+}
+
+describe("extractCitations marker extraction", () => {
+  describe("bracketed markers (existing behavior)", () => {
+    it("finds [n] markers", () => {
+      const { markers } = extractCitations([
+        page("As shown in [1] and later in [2], this works."),
+      ]);
+      expect(markers.map((m) => m.markerIndex)).toEqual([1, 2]);
+    });
+
+    it("deduplicates [n] markers across pages", () => {
+      const { markers } = extractCitations([
+        page("See [3].", 1),
+        page("Also [3] and [4].", 2),
+      ]);
+      expect(markers.map((m) => m.markerIndex)).toEqual([3, 4]);
+      expect(markers.find((m) => m.markerIndex === 3)?.pageNumber).toBe(1);
+    });
+  });
+
+  describe("Vancouver/AMA/Nature inline numeric markers", () => {
+    it("finds marker after sentence-ending period (society.26)", () => {
+      const { markers } = extractCitations([
+        page("a race-conscious society.26 As medical students…"),
+      ]);
+      expect(markers.map((m) => m.markerIndex)).toContain(26);
+    });
+
+    it("finds marker after period (requirement.27)", () => {
+      const { markers } = extractCitations([
+        page("to that requirement.27 The next sentence."),
+      ]);
+      expect(markers.map((m) => m.markerIndex)).toContain(27);
+    });
+
+    it("finds marker after closing parenthesis ((2020).12)", () => {
+      const { markers } = extractCitations([
+        page("studied this (2020).12 Subsequent work…"),
+      ]);
+      expect(markers.map((m) => m.markerIndex)).toContain(12);
+    });
+
+    it("finds marker after comma (foo,5 bar)", () => {
+      const { markers } = extractCitations([
+        page("such as Smith,5 and others"),
+      ]);
+      expect(markers.map((m) => m.markerIndex)).toContain(5);
+    });
+
+    it("finds Unicode superscript markers", () => {
+      const { markers } = extractCitations([
+        page("over the past years.⁵ Smith found…"),
+      ]);
+      expect(markers.map((m) => m.markerIndex)).toContain(5);
+    });
+
+    it("finds multi-digit Unicode superscript markers", () => {
+      const { markers } = extractCitations([
+        page("reported earlier.²⁶ The"),
+      ]);
+      expect(markers.map((m) => m.markerIndex)).toContain(26);
+    });
+  });
+
+  describe("negative cases", () => {
+    it("does NOT match version numbers like v1.6", () => {
+      const { markers } = extractCitations([page("v1.6 release notes")]);
+      expect(markers.map((m) => m.markerIndex)).not.toContain(6);
+    });
+
+    it("does NOT match years like 'in 2024 we'", () => {
+      const { markers } = extractCitations([
+        page("in 2024 we updated this"),
+      ]);
+      expect(markers).toEqual([]);
+    });
+
+    it("does NOT match when followed immediately by another digit/letter (Fig.2a)", () => {
+      const { markers } = extractCitations([page("see Fig.2a below")]);
+      expect(markers).toEqual([]);
+    });
+
+    it("does NOT match 4-digit numbers", () => {
+      const { markers } = extractCitations([page("ended.2024 was the year")]);
+      expect(markers).toEqual([]);
+    });
+
+    it("does NOT match decimal like 'rate.5%'", () => {
+      const { markers } = extractCitations([page("rate.5% growth")]);
+      expect(markers).toEqual([]);
+    });
+  });
+});
