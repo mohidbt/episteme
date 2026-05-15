@@ -1,6 +1,6 @@
 "use client";
 
-import { type ReactNode, useState, useCallback, useEffect, useRef } from "react";
+import { type ReactNode, useState, useCallback, useEffect } from "react";
 import { Trash2, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "./ui/button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "./ui/empty";
@@ -115,17 +115,9 @@ export function HighlightsSidebar({
     [paperId],
   );
 
-  // Keep grouped in a ref so functional setState below can read the latest
-  // groups without forcing `navigate` to be recreated on every render (which
-  // would defeat the stable-callback contract callers rely on).
-  const groupedRef = useRef(grouped);
-  useEffect(() => {
-    groupedRef.current = grouped;
-  });
-
   const navigate = useCallback(
     (runId: string, delta: number) => {
-      const group = groupedRef.current[runId] ?? [];
+      const group = grouped[runId] ?? [];
       if (group.length === 0) return;
       setRunCursors((prev) => {
         const current = prev[runId] ?? 0;
@@ -134,7 +126,7 @@ export function HighlightsSidebar({
         return { ...prev, [runId]: next };
       });
     },
-    [onNavigateHighlight],
+    [grouped, onNavigateHighlight],
   );
 
   if (!open) return null;
