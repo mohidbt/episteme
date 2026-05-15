@@ -42,4 +42,37 @@ describe("GET /api/papers/[id]/citations", () => {
     const res = await GET(buildReq(), routeParams);
     expect(res.status).toBe(403);
   });
+
+  it("returns citations sorted by numeric markerIndex ascending", async () => {
+    vi.mocked(auth.api.getSession).mockResolvedValue({ user: { id: "u1" } } as never);
+    // Ownership check
+    vi.mocked(db.select).mockReturnValueOnce({
+      from: () => ({ where: () => ({ limit: async () => [{ id: PAPER_ID, userId: "u1" }] }) }),
+    } as never);
+    // Citations query: unsorted rows in; expect orderBy clause to be invoked
+    // and the route to return them sorted by markerIndex ascending.
+    const unsortedRows = [
+      { id: 1, markerIndex: 3, markerText: "[3]", rawText: "C" },
+      { id: 2, markerIndex: 1, markerText: "[1]", rawText: "A" },
+      { id: 3, markerIndex: 10, markerText: "[10]", rawText: "D" },
+      { id: 4, markerIndex: 2, markerText: "[2]", rawText: "B" },
+    ];
+    // Simulate DB ORDER BY: route delegates sort to DB, mock returns rows in
+    // the order the route asked for (numeric ascending by markerIndex).
+    const sortedRows = [...unsortedRows].sort((a, b) => a.markerIndex - b.markerIndex);
+    const orderByMock = vi.fn().mockResolvedValue(sortedRows);
+    vi.mocked(db.select).mockReturnValueOnce({
+      from: () => ({
+        leftJoin: () => ({
+          where: () => ({ orderBy: orderByMock }),
+        }),
+      }),
+    } as never);
+
+    const res = await GET(buildReq(), routeParams);
+    expect(res.status).toBe(200);
+    expect(orderByMock).toHaveBeenCalled();
+    const body = (await res.json()) as { citations: Array<{ markerIndex: number }> };
+    expect(body.citations.map((c) => c.markerIndex)).toEqual([1, 2, 3, 10]);
+  });
 });

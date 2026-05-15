@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { papers, documentReferences, keptCitations } from "@episteme/db/schema";
-import { eq, and } from "drizzle-orm";
+import { eq, and, asc } from "drizzle-orm";
 import { getUserIdFromRequest } from "@/lib/auth";
 import { jsonError, requireOwned } from "@/lib/crud";
 
@@ -49,7 +49,8 @@ export async function GET(request: NextRequest, { params }: Ctx) {
           eq(keptCitations.userId, userId),
         ),
       )
-      .where(eq(documentReferences.paperId, paperId));
+      .where(eq(documentReferences.paperId, paperId))
+      .orderBy(asc(documentReferences.markerIndex), asc(documentReferences.rawText));
 
     return NextResponse.json({ citations });
   } catch {
