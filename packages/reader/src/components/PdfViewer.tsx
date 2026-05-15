@@ -162,10 +162,13 @@ export function PdfViewer({ url, containerRef: externalRef, markers = [], userHi
           );
           if (bestPage !== null) setCurrentPage(bestPage);
         },
-        // Single threshold (vs the previous [0.25, 0.5, 0.75]) shrinks the
-        // race window for Bug 1. The page counter only needs to know which
-        // page is "most visible" — one trip-wire at 50% is sufficient.
-        { root: el, threshold: 0.5 }
+        // Graduated threshold set: a single 0.5 threshold misses page
+        // changes on tall pages / high zoom where a page may never reach
+        // 50% visibility. Race-window control comes from the generation
+        // guard above (stale callbacks are discarded regardless of how
+        // many trip-wires fire), so threshold density no longer matters
+        // for correctness.
+        { root: el, threshold: [0, 0.25, 0.5, 0.75, 1] }
       );
       currentIo = io;
       const pageEls = el.querySelectorAll("[data-page-number]");
