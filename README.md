@@ -10,13 +10,13 @@ You're writing methods and need that one detail from a paper you skimmed weeks a
 
 Researchers today live in a duct-taped stack:
 
-|  | Obsidian | Zotero | Acrobat | ChatGPT | **Episteme** |
-|---|---|---|---|---|---|
-| Notes & ideas | ✅ | ❌ | ❌ | ❌ | ✅ |
-| References | ❌ | ✅ | ❌ | ❌ | ✅ |
-| PDF reader + highlights | ❌ | ⚠️ | ✅ | ❌ | ✅ |
-| Agents with full CRUD | ❌ | ❌ | ❌ | ⚠️ chatbot only | ✅ |
-| Unified context | ❌ | ❌ | ❌ | ❌ | ✅ |
+|  | Obsidian | Zotero | Acrobat | ChatGPT | AI PDF Readers | **Episteme** |
+|---|---|---|---|---|---|---|
+| Notes & ideas | ✅ | ❌ | ❌ | ❌ | ❌ | ✅ |
+| References | ❌ | ✅ | ❌ | ❌ | ✅ | ✅ |
+| PDF reader + highlights | ❌ | ⚠️ | ✅ | ❌ | ✅ | ✅ |
+| Agents with full CRUD | ❌ | ❌ | ❌ | ⚠️ chatbot only | ⚠️ chatbot only | ✅ |
+| Unified context | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
 
 Most "AI for research" tools are RAG chatbots stuck answering questions. Episteme gives agents tools, so they *do* the work across your whole knowledge graph.
 
