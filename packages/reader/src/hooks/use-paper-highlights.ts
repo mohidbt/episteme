@@ -1,6 +1,7 @@
 "use client";
 
 import type { UserHighlight } from "../components/UserHighlightLayer";
+import { dedupPaperHighlights } from "../lib/dedup-paper-highlights";
 import { useHighlightsResource } from "./use-highlights-resource";
 
 export interface PaperHighlightRow {
@@ -82,9 +83,11 @@ export function usePaperHighlights(paperId: string, refreshKey: number = 0): Res
     url: `/api/paper-highlights?paperId=${paperId}`,
   });
 
+  const deduped = dedupPaperHighlights(state.data);
+
   return {
-    highlights: state.data,
-    userHighlights: state.data.map(toUserHighlight),
+    highlights: deduped,
+    userHighlights: deduped.map(toUserHighlight),
     loading: state.loading,
     error: state.error,
   };
