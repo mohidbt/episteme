@@ -25,9 +25,13 @@ export async function getOrApiKey(userId: string | null): Promise<string> {
   if (userId) {
     try {
       return await getDecryptedApiKey(userId);
-    } catch {
-      // Fall through to env fallback. BYOK helper throws "NO_LLM_KEY" when
-      // the user has no row; we treat any error here as "no BYOK".
+    } catch (err) {
+      // Only the "no BYOK row" case should fall through to env fallback.
+      // DB connectivity or decrypt errors must NOT silently degrade to env
+      // — they indicate a real problem the caller should know about.
+      // (Codex Round C RISK follow-up.)
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg !== "NO_LLM_KEY") throw err;
     }
   }
   const envKey = process.env.OPENROUTER_API_KEY;

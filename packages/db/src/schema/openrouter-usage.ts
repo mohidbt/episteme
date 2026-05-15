@@ -7,6 +7,7 @@ import {
   text,
   timestamp,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { user } from "./auth";
 
 // Per-identity OpenRouter call audit log. See drizzle/0034_openrouter_usage.sql
@@ -31,9 +32,11 @@ export const openrouterUsage = pgTable(
   },
   (t) => ({
     userTsIdx: index("idx_or_usage_user_ts").on(t.userId, t.createdAt.desc()),
-    guestTsIdx: index("idx_or_usage_guest_ts").on(
-      t.guestSessionId,
-      t.createdAt.desc(),
-    ),
+    // Partial index — mirrors `WHERE "guest_session_id" IS NOT NULL` in
+    // drizzle/0034_openrouter_usage.sql so future drift-generated migrations
+    // don't disagree with hand-rolled SQL (Codex Round C RISK follow-up).
+    guestTsIdx: index("idx_or_usage_guest_ts")
+      .on(t.guestSessionId, t.createdAt.desc())
+      .where(sql`${t.guestSessionId} IS NOT NULL`),
   }),
 );

@@ -66,4 +66,14 @@ describe("getOrApiKey", () => {
     delete process.env.OPENROUTER_API_KEY;
     await expect(getOrApiKey(null)).rejects.toBeInstanceOf(OpenRouterKeyMissing);
   });
+
+  it("re-throws non-NO_LLM_KEY errors instead of silently falling back (Codex C-fix)", async () => {
+    // DB connectivity error must surface, not silently degrade to env fallback.
+    vi.mocked(getDecryptedApiKey).mockRejectedValue(
+      new Error("ECONNREFUSED postgres"),
+    );
+    process.env.OPENROUTER_API_KEY = "server-env-key";
+
+    await expect(getOrApiKey("user_123")).rejects.toThrow("ECONNREFUSED postgres");
+  });
 });
