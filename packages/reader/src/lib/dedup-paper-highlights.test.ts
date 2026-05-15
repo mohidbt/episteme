@@ -117,4 +117,112 @@ describe("dedupPaperHighlights", () => {
     expect(out).toHaveLength(1);
     expect(out[0].noteMd).toBe("a · b");
   });
+
+  // Codex R-E Important 1 — null/malformed bbox must NOT collapse together.
+  // Without a parseable rect we have no positional evidence of duplication.
+  it("does not merge rows when both bboxes are null", () => {
+    const out = dedupPaperHighlights([
+      row({ id: "a", runId: "r1", bbox: null, noteMd: "a" }),
+      row({ id: "b", runId: "r1", bbox: null, noteMd: "b" }),
+    ]);
+    expect(out).toHaveLength(2);
+  });
+
+  it("does not merge rows when both bboxes are malformed objects", () => {
+    const out = dedupPaperHighlights([
+      row({ id: "a", runId: "r1", bbox: { junk: 1 }, noteMd: "a" }),
+      row({ id: "b", runId: "r1", bbox: { junk: 2 }, noteMd: "b" }),
+    ]);
+    expect(out).toHaveLength(2);
+  });
+
+  it("does not merge when one bbox is parseable and the other is null", () => {
+    const out = dedupPaperHighlights([
+      row({ id: "a", runId: "r1", bbox: null, noteMd: "a" }),
+      row({
+        id: "b",
+        runId: "r1",
+        bbox: { x0: 10, y0: 20, x1: 100, y1: 40, page: 1 },
+        noteMd: "b",
+      }),
+    ]);
+    expect(out).toHaveLength(2);
+  });
+
+  // Codex R-E Important 2 — multi-rect arrays must compare the full set,
+  // not just bbox[0]. Otherwise extra rects on later rows are silently hidden.
+  it("keeps rows distinct when array bboxes share first rect but differ in extras", () => {
+    const out = dedupPaperHighlights([
+      row({
+        id: "a",
+        runId: "r1",
+        bbox: [{ x0: 10, y0: 20, x1: 100, y1: 40, page: 1 }],
+        noteMd: "single",
+      }),
+      row({
+        id: "b",
+        runId: "r1",
+        bbox: [
+          { x0: 10, y0: 20, x1: 100, y1: 40, page: 1 },
+          { x0: 10, y0: 60, x1: 100, y1: 80, page: 1 },
+        ],
+        noteMd: "double",
+      }),
+    ]);
+    expect(out).toHaveLength(2);
+  });
+
+  it("keeps rows distinct when one bbox is array and the other is single object", () => {
+    const out = dedupPaperHighlights([
+      row({
+        id: "a",
+        runId: "r1",
+        bbox: { x0: 10, y0: 20, x1: 100, y1: 40, page: 1 },
+        noteMd: "single",
+      }),
+      row({
+        id: "b",
+        runId: "r1",
+        bbox: [{ x0: 10, y0: 20, x1: 100, y1: 40, page: 1 }],
+        noteMd: "array",
+      }),
+    ]);
+    expect(out).toHaveLength(2);
+  });
+
+  it("merges multi-rect arrays of equal length when every rect pair is within tolerance", () => {
+    const out = dedupPaperHighlights([
+      row({
+        id: "a",
+        runId: "r1",
+        bbox: [
+          { x0: 10, y0: 20, x1: 100, y1: 40, page: 1 },
+          { x0: 10, y0: 60, x1: 100, y1: 80, page: 1 },
+        ],
+        noteMd: "first",
+      }),
+      row({
+        id: "b",
+        runId: "r1",
+        bbox: [
+          { x0: 11, y0: 21, x1: 101, y1: 41, page: 1 },
+          { x0: 11, y0: 61, x1: 101, y1: 81, page: 1 },
+        ],
+        noteMd: "second",
+      }),
+    ]);
+    expect(out).toHaveLength(1);
+    expect(out[0].noteMd).toBe("first · second");
+  });
+
+  // Codex R-E Nit 2 — real notes can contain the display separator " · ".
+  // Set-based merging in a single group pass must not re-split them.
+  it("treats a note containing the display separator as a single token", () => {
+    const out = dedupPaperHighlights([
+      row({ id: "a", runId: "r1", noteMd: "alpha · beta" }),
+      row({ id: "b", runId: "r1", noteMd: "alpha · beta" }),
+    ]);
+    expect(out).toHaveLength(1);
+    expect(out[0].noteMd).toBe("alpha · beta");
+  });
 });
