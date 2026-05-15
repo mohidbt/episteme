@@ -189,6 +189,10 @@ export function Reader({
     [agentOpenProp, onAgentOpenChange],
   );
   const pdfScrollRef = useRef<HTMLDivElement>(null);
+  // Token for cancelling stale rAF poll loops on rapid scroll-to-highlight
+  // clicks. Incremented per scheduled scroll; the polling closure aborts when
+  // the ref no longer matches its captured token (codex R-B review).
+  const scrollTokenRef = useRef(0);
   const { selection, clearSelection } = useTextSelection();
 
   type ActiveSelection = NonNullable<typeof selection>;
@@ -621,9 +625,16 @@ export function Reader({
     // The target page may not be mounted yet (virtualized PdfViewer). rAF
     // poll for the rect-indexed element so we land on the right rect even
     // when the page mounts late. Capped to ~500 ms.
+    //
+    // Rapid A→B clicks must invalidate A's in-flight poll, otherwise A and B
+    // both fire scrollIntoView (codex R-B review). Increment the shared token
+    // and capture it; the closure aborts whenever the ref drifts (newer
+    // scroll, or unmount sentinel -1).
+    const myToken = ++scrollTokenRef.current;
     let attempts = 0;
     const MAX_ATTEMPTS = 30;
     const tryScroll = () => {
+      if (scrollTokenRef.current !== myToken) return;
       attempts += 1;
       const el = document.querySelector<HTMLElement>(
         `[data-highlight-id="${id}"][data-rect-index="${rIdx}"]`,
@@ -636,6 +647,14 @@ export function Reader({
     };
     requestAnimationFrame(tryScroll);
   }, [pendingScrollHighlightId, pendingScrollRectIndex, mergedSidebarHighlights]);
+
+  // Unmount cleanup: invalidate any in-flight scroll-to-highlight rAF poll
+  // (codex R-B review).
+  useEffect(() => {
+    return () => {
+      scrollTokenRef.current = -1;
+    };
+  }, []);
 
   // Extract native PDF outline (bookmarks) when pdfDoc loads.
   useEffect(() => {
