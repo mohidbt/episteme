@@ -24,7 +24,7 @@ import { useUserHighlights } from "../hooks/use-user-highlights";
 import { usePaperHighlights } from "../hooks/use-paper-highlights";
 import { postHighlightsChange } from "../lib/highlights-channel";
 import { deriveChatAgentRuns } from "../lib/derive-chat-agent-runs";
-import { scrollContainerToSegment, type SegmentBbox } from "../lib/scroll-to-segment";
+import { scrollContainerToSegmentWithRetry, type SegmentBbox } from "../lib/scroll-to-segment";
 import type { ReaderMode } from "../plugins/types";
 
 type DocProcessingStatus = "pending" | "processing" | "ready" | "failed";
@@ -577,31 +577,24 @@ export function Reader({
       if (!bbox) return;
       const container = pdfScrollRef.current;
       if (!container) return;
-      let attempts = 0;
-      const MAX_ATTEMPTS = 30; // ~500 ms at 60 fps
-      const tryScroll = () => {
-        attempts += 1;
-        const ok = scrollContainerToSegment(container, {
-          page: detail.page!,
-          bbox,
-        });
-        if (!ok && attempts < MAX_ATTEMPTS) {
-          requestAnimationFrame(tryScroll);
-          return;
-        }
-        if (!ok) return;
-        // Pulse highlight: tag the container with a data-attr keyed on the
-        // chunk id so CSS / overlay can flash. Cleared after 1.2s.
-        if (detail.chunkId) {
-          container.setAttribute("data-segment-flash", detail.chunkId);
-          setTimeout(() => {
-            if (container.getAttribute("data-segment-flash") === detail.chunkId) {
-              container.removeAttribute("data-segment-flash");
+      scrollContainerToSegmentWithRetry(
+        container,
+        { page: detail.page!, bbox },
+        {
+          onSuccess: () => {
+            // Pulse highlight: tag the container with a data-attr keyed on the
+            // chunk id so CSS / overlay can flash. Cleared after 1.2s.
+            if (detail.chunkId) {
+              container.setAttribute("data-segment-flash", detail.chunkId);
+              setTimeout(() => {
+                if (container.getAttribute("data-segment-flash") === detail.chunkId) {
+                  container.removeAttribute("data-segment-flash");
+                }
+              }, 1200);
             }
-          }, 1200);
-        }
-      };
-      requestAnimationFrame(tryScroll);
+          },
+        },
+      );
     };
     window.addEventListener("episteme:reader-jump", onJump as EventListener);
     return () => window.removeEventListener("episteme:reader-jump", onJump as EventListener);

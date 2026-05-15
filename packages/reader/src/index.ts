@@ -24,9 +24,11 @@ export type { UseExplainPassageOptions, ExplainPassageArgs } from "./hooks/use-e
 export {
   computeSegmentScrollTop,
   scrollContainerToSegment,
+  scrollContainerToSegmentWithRetry,
 } from "./lib/scroll-to-segment";
 export type {
   SegmentBbox,
   ScrollToSegmentArgs,
   ComputeScrollInput,
+  ScrollWithRetryOptions,
 } from "./lib/scroll-to-segment";

@@ -90,3 +90,50 @@ export function scrollContainerToSegment(
   container.scrollTop = target;
   return true;
 }
+
+export interface ScrollWithRetryOptions {
+  /** rAF retry budget. Defaults to 30 (~500ms at 60fps). */
+  maxAttempts?: number;
+  /** Invoked on successful scroll. */
+  onSuccess?: () => void;
+}
+
+/**
+ * A4 — wraps `scrollContainerToSegment` in a rAF retry loop. If the page DOM
+ * (or its natural dimensions) hasn't landed yet, we retry until we either
+ * succeed or exhaust the attempt budget. On exhaustion we dispatch
+ * `episteme:reader-toast` on `window` so the host app (KM) can surface a
+ * user-visible Sonner toast — without it the failed scroll is silent.
+ */
+export function scrollContainerToSegmentWithRetry(
+  container: HTMLElement,
+  args: ScrollToSegmentArgs,
+  opts: ScrollWithRetryOptions = {},
+): void {
+  const maxAttempts = opts.maxAttempts ?? 30;
+  let attempts = 0;
+  const tryScroll = () => {
+    attempts += 1;
+    const ok = scrollContainerToSegment(container, args);
+    if (ok) {
+      opts.onSuccess?.();
+      return;
+    }
+    if (attempts < maxAttempts) {
+      requestAnimationFrame(tryScroll);
+      return;
+    }
+    // Exhausted — surface a toast so the user knows the jump failed.
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(
+        new CustomEvent("episteme:reader-toast", {
+          detail: {
+            kind: "error",
+            message: "Couldn't locate citation in this document.",
+          },
+        }),
+      );
+    }
+  };
+  requestAnimationFrame(tryScroll);
+}

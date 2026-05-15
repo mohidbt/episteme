@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef } from "react";
 import dynamic from "next/dynamic";
+import { toast } from "sonner";
 import { AgentTranscript } from "@/components/agent/AgentTranscript";
 import { useAgentBallStore } from "@/state/agent-ball";
 
@@ -66,6 +67,21 @@ export function ReaderShell({ paperId }: { paperId: string }) {
       threadCtlRef.current?.abort();
       useAgentBallStore.getState().close();
     };
+  }, []);
+
+  // A4 — Reader dispatches `episteme:reader-toast` when scroll-to-segment
+  // exhausts its rAF retry budget. Surface it via Sonner so the user sees
+  // why the citation jump did nothing.
+  useEffect(() => {
+    const onToast = (ev: Event) => {
+      const detail = (ev as CustomEvent<{ kind?: "error" | "info"; message?: string }>).detail;
+      const message = detail?.message;
+      if (!message) return;
+      if (detail?.kind === "error") toast.error(message);
+      else toast(message);
+    };
+    window.addEventListener("episteme:reader-toast", onToast as EventListener);
+    return () => window.removeEventListener("episteme:reader-toast", onToast as EventListener);
   }, []);
 
   const handleAgentOpenChange = useCallback(
