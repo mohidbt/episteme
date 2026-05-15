@@ -41,39 +41,42 @@ export function UserHighlightLayer({ highlights, pageNumber, naturalWidth, natur
     <div style={{ position: "absolute", inset: 0, pointerEvents: "none" }} aria-hidden="true">
       {visible.flatMap((h) =>
         (h.rects ?? [])
-          .filter((r) => r.page === pageNumber)
-          .map((r, idx) => (
-            (() => {
-              const isNormalized =
-                [r.x0, r.y0, r.x1, r.y1].every((v) => Number.isFinite(v) && v >= 0 && v <= 1);
-              const top = isNormalized
-                ? r.y0 * naturalHeight * scale
-                : (naturalHeight - r.y1) * scale;
-              const left = isNormalized ? r.x0 * naturalWidth * scale : r.x0 * scale;
-              const width = isNormalized
-                ? (r.x1 - r.x0) * naturalWidth * scale
-                : (r.x1 - r.x0) * scale;
-              const height = isNormalized
-                ? (r.y1 - r.y0) * naturalHeight * scale
-                : (r.y1 - r.y0) * scale;
-              return (
-            <div
-              key={`${h.id}-${idx}`}
-              data-highlight-id={h.id}
-              className="absolute rounded-sm"
-              style={{
-                top,
-                left,
-                width,
-                height,
-                background: COLOR_BG[h.color],
-                pointerEvents: "auto",
-                cursor: "pointer",
-              }}
-            />
-              );
-            })()
-          ))
+          // Preserve original index so `data-rect-index` stays in sync with
+          // h.rects (Reader.tsx scrolls via the global rect index, not the
+          // per-page filtered index).
+          .map((r, idx) => ({ r, idx }))
+          .filter(({ r }) => r.page === pageNumber)
+          .map(({ r, idx }) => {
+            const isNormalized =
+              [r.x0, r.y0, r.x1, r.y1].every((v) => Number.isFinite(v) && v >= 0 && v <= 1);
+            const top = isNormalized
+              ? r.y0 * naturalHeight * scale
+              : (naturalHeight - r.y1) * scale;
+            const left = isNormalized ? r.x0 * naturalWidth * scale : r.x0 * scale;
+            const width = isNormalized
+              ? (r.x1 - r.x0) * naturalWidth * scale
+              : (r.x1 - r.x0) * scale;
+            const height = isNormalized
+              ? (r.y1 - r.y0) * naturalHeight * scale
+              : (r.y1 - r.y0) * scale;
+            return (
+              <div
+                key={`${h.id}-${idx}`}
+                data-highlight-id={h.id}
+                data-rect-index={idx}
+                className="absolute rounded-sm"
+                style={{
+                  top,
+                  left,
+                  width,
+                  height,
+                  background: COLOR_BG[h.color],
+                  pointerEvents: "auto",
+                  cursor: "pointer",
+                }}
+              />
+            );
+          })
       )}
     </div>
   );
