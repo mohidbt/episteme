@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from typing import Any, Literal, TypedDict
 
 from langchain_core.runnables import RunnableConfig
@@ -34,17 +35,25 @@ from lib.chandra import ChandraParseFailed, ensure_parsed
 
 logger = logging.getLogger(__name__)
 
-# Small in-process cache for paper titles. Titles rarely change; agent runs
-# may issue several ``read_paper`` calls per turn — caching avoids N uncached
-# SELECTs. Capped to keep memory bounded; FIFO eviction.
-_PAPER_TITLE_CACHE: dict[str, str | None] = {}
+# Small in-process cache for paper titles. Titles rarely change but they DO
+# change (user rename in KM); without a TTL the cached title can be stale for
+# the life of the process. Entries carry a monotonic insert timestamp and
+# expire after ``_PAPER_TITLE_CACHE_TTL`` seconds. Capped to keep memory
+# bounded; FIFO eviction at the cap.
+_PAPER_TITLE_CACHE: dict[str, tuple[str | None, float]] = {}
 _PAPER_TITLE_CACHE_MAX = 256
+_PAPER_TITLE_CACHE_TTL = 60.0  # seconds
 
 
 async def _get_paper_title(conn, paper_id: str) -> str | None:
-    cached = _PAPER_TITLE_CACHE.get(paper_id)
-    if cached is not None or paper_id in _PAPER_TITLE_CACHE:
-        return cached
+    entry = _PAPER_TITLE_CACHE.get(paper_id)
+    now = time.monotonic()
+    if entry is not None:
+        title, inserted_at = entry
+        if now - inserted_at <= _PAPER_TITLE_CACHE_TTL:
+            return title
+        # Expired — evict and fall through to re-fetch.
+        _PAPER_TITLE_CACHE.pop(paper_id, None)
     row = await conn.fetchrow("SELECT title FROM papers WHERE id = $1", paper_id)
     title = row["title"] if row else None
     if len(_PAPER_TITLE_CACHE) >= _PAPER_TITLE_CACHE_MAX:
@@ -52,7 +61,7 @@ async def _get_paper_title(conn, paper_id: str) -> str | None:
             _PAPER_TITLE_CACHE.pop(next(iter(_PAPER_TITLE_CACHE)))
         except StopIteration:
             pass
-    _PAPER_TITLE_CACHE[paper_id] = title
+    _PAPER_TITLE_CACHE[paper_id] = (title, now)
     return title
 
 
