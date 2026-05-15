@@ -96,5 +96,33 @@ describe("extractCitations marker extraction", () => {
       const { markers } = extractCitations([page("rate.5% growth")]);
       expect(markers).toEqual([]);
     });
+
+    // Codex R2 review — false positives observed in the wild.
+    it("does NOT match figure labels (Fig.2 shows)", () => {
+      const { markers } = extractCitations([page("Fig.2 shows the result")]);
+      expect(markers).toEqual([]);
+    });
+
+    it("does NOT match page-header references (p.12)", () => {
+      const { markers } = extractCitations([page("see p.12 for context")]);
+      expect(markers).toEqual([]);
+    });
+
+    it("does NOT match equation labels (Eq.3)", () => {
+      const { markers } = extractCitations([page("substitute into Eq.3 above")]);
+      expect(markers).toEqual([]);
+    });
+
+    it("does NOT match section labels (Sec.4)", () => {
+      const { markers } = extractCitations([page("discussed in Sec.4 below")]);
+      expect(markers).toEqual([]);
+    });
+
+    it("accepts large markers up to 999 (meta-analyses)", () => {
+      const { markers } = extractCitations([
+        page("Per recent work.500 the finding holds"),
+      ]);
+      expect(markers.map((m) => m.markerIndex)).toContain(500);
+    });
   });
 });

@@ -32,10 +32,16 @@ export interface ExtractionResult {
 const MARKER_RE = /\[(\d{1,3})\]/g;
 // Inline numeric markers used by Vancouver/AMA/Nature: a sentence terminator
 // (`.`, `,`, `;`, `:`, `)`, `]`) immediately followed by 1–3 digits, then
-// whitespace or sentence punctuation. The preceding char must not be a digit
-// or another period so we skip versions ("v1.6"), decimals, and run-ons
-// ("Fig.2.3"). Capture group 1 is the numeric index.
-const INLINE_NUMERIC_MARKER_RE = /(?:^|[^\d.])[.,;:)\]](\d{1,3})(?=\s|[.,;:!?)\]]|$)/g;
+// whitespace or sentence punctuation. Defenses against false positives:
+//   - require ≥4 lowercase letters before the terminator → drops "Fig.2",
+//     "p.12", "Eq.3", "Sec.4", "Ref.5" (abbreviations are short / capitalized).
+//   - exclude when the prior char is a digit or another period → drops
+//     versions ("v1.6"), decimals, run-ons ("Fig.2.3").
+//   - bracket / paren forms `])` are accepted regardless of preceding word.
+//   - Codex R2 review: prior naive regex matched figure/page labels.
+// Capture group 1 is the numeric index.
+const INLINE_NUMERIC_MARKER_RE =
+  /(?:[a-z]{4,}[.,;:]|[)\]][.,;:])(\d{1,3})(?=\s|[.,;:!?)\]]|$)/g;
 // Unicode superscript digits (²⁶, ⁵, etc). One or more consecutive.
 const SUPERSCRIPT_MARKER_RE = /[⁰-⁹²³¹]+/g;
 const SUPERSCRIPT_DIGIT_MAP: Record<string, string> = {
@@ -64,7 +70,7 @@ function extractMarkers(pages: ExtractedPage[]): CitationMarker[] {
   const seen = new Map<number, CitationMarker>();
 
   const record = (idx: number, markerText: string, pageNumber: number) => {
-    if (idx < 1 || idx > 300) return;
+    if (idx < 1 || idx > 999) return;
     if (!seen.has(idx)) {
       seen.set(idx, { markerText, markerIndex: idx, pageNumber });
     }
