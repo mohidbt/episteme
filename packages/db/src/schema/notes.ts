@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, uuid, text, timestamp, integer, boolean, jsonb, customType, pgEnum, uniqueIndex, index } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, timestamp, integer, bigint, boolean, jsonb, customType, pgEnum, uniqueIndex, index } from "drizzle-orm/pg-core";
 import { libraries } from "./libraries";
 import { folders } from "./folders";
 import { user } from "./auth";
@@ -34,6 +34,7 @@ export const notes = pgTable(
     title: text("title").notNull(),
     slug: text("slug").notNull(),
     contentMd: text("content_md").default("").notNull(),
+    sizeBytes: bigint("size_bytes", { mode: "number" }).notNull().default(0),
     contentJson: jsonb("content_json").$type<ProseMirrorJSON>(),
     yjsState: bytea("yjs_state"),
     noteType: noteTypeEnum("note_type").default("md").notNull(),

@@ -232,6 +232,13 @@
       "when": 1779744000000,
       "tag": "0032_backfill_library_names",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1779840000000,
+      "tag": "0033_size_bytes_papers_notes",
+      "breakpoints": true
     }
   ]
 }

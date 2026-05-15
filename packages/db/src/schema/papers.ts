@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, timestamp, integer, index } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, timestamp, integer, bigint, index } from "drizzle-orm/pg-core";
 import { libraries } from "./libraries";
 import { folders } from "./folders";
 import { user } from "./auth";
@@ -14,6 +14,7 @@ export const papers = pgTable(
     prevFolderId: uuid("prev_folder_id").references(() => folders.id, { onDelete: "set null" }),
     filename: text("filename").notNull(),
     storageUrl: text("storage_url"),
+    sizeBytes: bigint("size_bytes", { mode: "number" }).notNull().default(0),
     title: text("title"),
     authors: text("authors").array(),
     year: integer("year"),
