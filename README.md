@@ -46,7 +46,7 @@ The point isn't tool consolidation. It's that **unified context = agents that ca
 
 ### Status
 
-Alpha shipped. Onboarding PhDs in biochem / biophys daily. Beta next.
+Alpha shipped. Onboarding PhDs gradually. Beta next.
 
 Try it at [app.tryepisteme.com](https://app.tryepisteme.com). Landing at [tryepisteme.com](https://tryepisteme.com).
 
