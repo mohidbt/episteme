@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import type { UserHighlight } from "../components/UserHighlightLayer";
 import { dedupPaperHighlights } from "../lib/dedup-paper-highlights";
 import { useHighlightsResource } from "./use-highlights-resource";
@@ -83,11 +84,12 @@ export function usePaperHighlights(paperId: string, refreshKey: number = 0): Res
     url: `/api/paper-highlights?paperId=${paperId}`,
   });
 
-  const deduped = dedupPaperHighlights(state.data);
+  const deduped = useMemo(() => dedupPaperHighlights(state.data), [state.data]);
+  const userHighlights = useMemo(() => deduped.map(toUserHighlight), [deduped]);
 
   return {
     highlights: deduped,
-    userHighlights: deduped.map(toUserHighlight),
+    userHighlights,
     loading: state.loading,
     error: state.error,
   };
