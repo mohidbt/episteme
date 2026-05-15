@@ -268,6 +268,7 @@ describe("HighlightsSidebar run navigation (existing)", () => {
       />,
     );
     fireEvent.click(screen.getByRole("button", { name: /sum/i }));
-    expect(onNavigateHighlight).toHaveBeenCalledWith(1);
+    // Row click navigates to the first highlight's first rect.
+    expect(onNavigateHighlight).toHaveBeenCalledWith(1, 0);
   });
 });

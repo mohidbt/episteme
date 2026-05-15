@@ -15,6 +15,22 @@ export interface AiHighlight {
   createdAt: string;
   runId?: string | null;
   toolCallId?: string | null;
+  /**
+   * Rects backing this highlight. A single logical highlight may have rects on
+   * multiple pages; the chip cursor iterates these (Bug 2c).
+   */
+  rects?: { page: number; x0: number; y0: number; x1: number; y1: number }[] | null;
+}
+
+interface RunCursor {
+  highlightIndex: number;
+  rectIndex: number;
+}
+
+function rectCount(h: AiHighlight): number {
+  // Treat any highlight with zero rects as a single navigable target so the
+  // sidebar still works when rects haven't been wired up.
+  return Math.max(1, h.rects?.length ?? 0);
 }
 
 export interface UserHighlightItem {
@@ -50,7 +66,7 @@ interface HighlightsSidebarProps {
   paperId: string;
   onAskAi?: (text: string, pageNumber: number) => void;
   onDelete?: (highlightId: number | string) => void;
-  onNavigateHighlight?: (highlightId: number | string) => void;
+  onNavigateHighlight?: (highlightId: number | string, rectIndex?: number) => void;
   dockControl?: ReactNode;
 }
 
@@ -96,7 +112,9 @@ export function HighlightsSidebar({
     readPersistedSegment(paperId, hasAiRuns),
   );
   // Per-run cursor for prev/next navigation — persisted only in component state.
-  const [runCursors, setRunCursors] = useState<Record<string, number>>({});
+  // Cursor tracks BOTH highlight index and rect index within that highlight so
+  // multi-rect highlights iterate per-rect (Bug 2c).
+  const [runCursors, setRunCursors] = useState<Record<string, RunCursor>>({});
 
   // Reset cursors when the paper changes so stale positions don't bleed across.
   useEffect(() => {
@@ -120,10 +138,28 @@ export function HighlightsSidebar({
       const group = grouped[runId] ?? [];
       if (group.length === 0) return;
       setRunCursors((prev) => {
-        const current = prev[runId] ?? 0;
-        const next = (current + delta + group.length) % group.length;
-        onNavigateHighlight?.(group[next].id);
-        return { ...prev, [runId]: next };
+        const cur = prev[runId] ?? { highlightIndex: 0, rectIndex: 0 };
+        let hIdx = cur.highlightIndex;
+        let rIdx = cur.rectIndex + delta;
+        const groupLen = group.length;
+        // Walk forward / backward over rect boundaries until we land in range.
+        // The loop is bounded — each iteration either consumes the delta or
+        // moves the highlight cursor, which itself wraps.
+        // (Math is straightforward for |delta| = 1; we keep a small loop so
+        // future callers using larger deltas still terminate.)
+        while (true) {
+          const count = rectCount(group[hIdx]);
+          if (rIdx >= 0 && rIdx < count) break;
+          if (rIdx >= count) {
+            rIdx -= count;
+            hIdx = (hIdx + 1) % groupLen;
+          } else {
+            hIdx = (hIdx - 1 + groupLen) % groupLen;
+            rIdx += rectCount(group[hIdx]);
+          }
+        }
+        onNavigateHighlight?.(group[hIdx].id, rIdx);
+        return { ...prev, [runId]: { highlightIndex: hIdx, rectIndex: rIdx } };
       });
     },
     [grouped, onNavigateHighlight],
@@ -226,14 +262,14 @@ export function HighlightsSidebar({
               <div className="space-y-3">
                 {namedRunEntries.map(({ id, label, group }) => {
                   if (group.length === 0) return null;
-                  const cursor = runCursors[id] ?? 0;
+                  const cursor = runCursors[id] ?? { highlightIndex: 0, rectIndex: 0 };
                   return (
                     <RunRow
                       key={id}
                       label={label}
                       group={group}
                       cursor={cursor}
-                      onNavigateFirst={() => onNavigateHighlight?.(group[0].id)}
+                      onNavigateFirst={() => onNavigateHighlight?.(group[0].id, 0)}
                       onPrev={() => navigate(id, -1)}
                       onNext={() => navigate(id, 1)}
                     />
@@ -245,8 +281,8 @@ export function HighlightsSidebar({
                   <RunRow
                     label="Manual AI highlights"
                     group={manualGroup}
-                    cursor={runCursors[""] ?? 0}
-                    onNavigateFirst={() => onNavigateHighlight?.(manualGroup[0].id)}
+                    cursor={runCursors[""] ?? { highlightIndex: 0, rectIndex: 0 }}
+                    onNavigateFirst={() => onNavigateHighlight?.(manualGroup[0].id, 0)}
                     onPrev={() => navigate("", -1)}
                     onNext={() => navigate("", 1)}
                   />
@@ -272,12 +308,17 @@ function RunRow({
 }: {
   label: string;
   group: AiHighlight[];
-  cursor: number;
+  cursor: RunCursor;
   onNavigateFirst: () => void;
   onPrev: () => void;
   onNext: () => void;
 }) {
   const truncated = label.length > 60 ? `${label.slice(0, 60)}…` : label;
+  // Total rects across all highlights in the group, and the cursor's flat
+  // position. Highlights without rect data count as 1 navigable target each.
+  const totalRects = group.reduce((sum, h) => sum + rectCount(h), 0);
+  let flatPos = cursor.rectIndex;
+  for (let i = 0; i < cursor.highlightIndex; i++) flatPos += rectCount(group[i]);
   return (
     <div className="rounded border p-2">
       <button
@@ -290,7 +331,7 @@ function RunRow({
           {truncated} ({group.length})
         </p>
         <p className="mt-0.5 text-[10px] text-muted-foreground">
-          {cursor + 1} / {group.length}
+          {flatPos + 1} / {totalRects}
         </p>
       </button>
       <div className="mt-1 flex items-center gap-1">
