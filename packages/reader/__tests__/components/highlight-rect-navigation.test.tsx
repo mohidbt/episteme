@@ -120,4 +120,59 @@ describe("HighlightsSidebar rect-aware navigation (Bug 2c)", () => {
       ["h-1", 0],
     ]);
   });
+
+  it("normalizes stale cursor when group shrinks beneath highlightIndex (codex R-B)", () => {
+    const onNavigateHighlight = vi.fn();
+    const makeH = (id: string, page: number) => ({
+      id,
+      pageNumber: page,
+      textContent: id,
+      color: "amber",
+      note: null,
+      comment: null,
+      createdAt: "",
+      runId: "run-shrink",
+      toolCallId: null,
+      rects: [{ page, x0: 0, y0: 0, x1: 10, y1: 10 }],
+    });
+    const runs = [
+      { id: "run-shrink", instruction: "x", summary: "x", highlightCount: 3 },
+    ];
+
+    const { rerender } = render(
+      <HighlightsSidebar
+        {...BASE_PROPS}
+        aiHighlights={[makeH("a", 1), makeH("b", 2), makeH("c", 3)]}
+        userHighlights={[]}
+        runs={runs}
+        onNavigateHighlight={onNavigateHighlight}
+      />,
+    );
+
+    // Move cursor to highlight index 2 (last) by clicking Next twice.
+    const next = screen.getByRole("button", { name: "Next highlight" });
+    fireEvent.click(next);
+    fireEvent.click(next);
+    expect(onNavigateHighlight.mock.calls[onNavigateHighlight.mock.calls.length - 1]).toEqual([
+      "c",
+      0,
+    ]);
+
+    // Now group shrinks to a single highlight — index 2 is out-of-bounds.
+    rerender(
+      <HighlightsSidebar
+        {...BASE_PROPS}
+        aiHighlights={[makeH("a", 1)]}
+        userHighlights={[]}
+        runs={runs}
+        onNavigateHighlight={onNavigateHighlight}
+      />,
+    );
+
+    // Clicking Next must not throw "cannot read .rects of undefined" and must
+    // land on a valid highlight (id "a").
+    expect(() => fireEvent.click(screen.getByRole("button", { name: "Next highlight" }))).not.toThrow();
+    const lastCall = onNavigateHighlight.mock.calls[onNavigateHighlight.mock.calls.length - 1];
+    expect(lastCall?.[0]).toBe("a");
+  });
 });
