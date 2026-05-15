@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { eq } from "drizzle-orm";
-import { getDecryptedApiKey } from "@episteme/auth/byok";
 import { getSessionInfo } from "@/lib/auth";
+import { getOrApiKey, OpenRouterKeyMissing } from "@/lib/openrouter-key";
 import { db } from "@/lib/db";
 import { agentConfigs } from "@episteme/db/schema";
 import { signRequest } from "@/lib/agents/sign-request";
@@ -25,11 +25,19 @@ export async function POST(req: Request) {
   const session = await getSessionInfo(req);
   if (!session) return Response.json({ error: "unauthorized" }, { status: 401 });
 
+  // Round C: BYOK first, then server env fallback (also covers anonymous).
+  // Usage instrumentation is deferred for this streaming path until the
+  // agents service forwards OR's final usage chunk (it currently drops it
+  // — see services/agents/lib/sse_events.py). Tracking the gap in the
+  // round-C report.
   let llmKey: string;
   try {
-    llmKey = await getDecryptedApiKey(session.userId);
-  } catch {
-    return Response.json({ error: OPENROUTER_KEY_MISSING }, { status: 400 });
+    llmKey = await getOrApiKey(session.userId);
+  } catch (err) {
+    if (err instanceof OpenRouterKeyMissing) {
+      return Response.json({ error: OPENROUTER_KEY_MISSING }, { status: 400 });
+    }
+    throw err;
   }
   const bodyText = await req.text();
   let body: z.infer<typeof InvokeBody>;
