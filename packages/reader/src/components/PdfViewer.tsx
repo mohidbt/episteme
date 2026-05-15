@@ -5,6 +5,7 @@ import { Document, pdfjs } from "react-pdf";
 import "react-pdf/dist/Page/TextLayer.css";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import { PdfPage } from "./PdfPage";
+import { pickCurrentPageFromEntries } from "./pdf-viewer-io";
 import type { UserHighlight } from "./UserHighlightLayer";
 import { useReaderState } from "../hooks/use-reader-state";
 import { usePdfTextSelection } from "../hooks/use-pdf-text-selection";
@@ -57,6 +58,10 @@ export function PdfViewer({ url, containerRef: externalRef, markers = [], userHi
   const internalRef = useRef<HTMLDivElement>(null);
   const containerRef = externalRef ?? internalRef;
   const isAnimatingRef = useRef(false);
+  // Generation counter for IntersectionObserver staleness guard (Bug 1).
+  // Incremented every time the IO is (re)created; callbacks compare their
+  // captured value to this ref and skip if stale.
+  const ioGenerationRef = useRef(0);
   const [scrollTop, setScrollTop] = useState(0);
 
   const onDocumentLoadSuccess = useCallback(
@@ -139,29 +144,27 @@ export function PdfViewer({ url, containerRef: externalRef, markers = [], userHi
     const el = containerRef.current;
     if (!el || totalPages <= 0) return;
 
-    const io = new IntersectionObserver(
-      (entries) => {
-        // Suppress IO updates during programmatic smooth scroll
-        if (isAnimatingRef.current) return;
-        let bestRatio = 0;
-        let bestPage = 0;
-        for (const entry of entries) {
-          if (entry.intersectionRatio > bestRatio) {
-            bestRatio = entry.intersectionRatio;
-            const n = Number(
-              (entry.target as HTMLElement).dataset.pageNumber
-            );
-            if (Number.isFinite(n)) bestPage = n;
-          }
-        }
-        if (bestPage > 0) setCurrentPage(bestPage);
-      },
-      { root: el, threshold: [0.25, 0.5, 0.75] }
-    );
-
-    // Observe all elements with data-page-number anywhere within the container
+    // Each call to observe() creates a fresh IO with a bumped generation.
+    // Any IO callbacks still queued from the previous generation will see
+    // their captured gen !== current gen and bail out (Bug 1 fix).
+    let currentIo: IntersectionObserver | null = null;
     const observe = () => {
-      io.disconnect();
+      currentIo?.disconnect();
+      const myGeneration = ++ioGenerationRef.current;
+      const io = new IntersectionObserver(
+        (entries) => {
+          // Suppress IO updates during programmatic smooth scroll
+          if (isAnimatingRef.current) return;
+          const bestPage = pickCurrentPageFromEntries(
+            entries,
+            myGeneration,
+            ioGenerationRef.current
+          );
+          if (bestPage !== null) setCurrentPage(bestPage);
+        },
+        { root: el, threshold: [0.25, 0.5, 0.75] }
+      );
+      currentIo = io;
       const pageEls = el.querySelectorAll("[data-page-number]");
       pageEls.forEach((pageEl) => io.observe(pageEl));
     };
@@ -175,7 +178,7 @@ export function PdfViewer({ url, containerRef: externalRef, markers = [], userHi
     observe();
 
     return () => {
-      io.disconnect();
+      currentIo?.disconnect();
       mo.disconnect();
     };
   }, [totalPages, containerRef, setCurrentPage]);
