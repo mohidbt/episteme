@@ -147,7 +147,7 @@ export function HighlightsSidebar({
         // rectCount throws (codex R-B review).
         let hIdx = ((cur.highlightIndex % groupLen) + groupLen) % groupLen;
         const curRectCount = rectCount(group[hIdx]);
-        const safeRIdx = cur.rectIndex >= 0 && cur.rectIndex < curRectCount ? cur.rectIndex : 0;
+        const safeRIdx = Math.max(0, Math.min(cur.rectIndex, curRectCount - 1));
         let rIdx = safeRIdx + delta;
         // Walk forward / backward over rect boundaries until we land in range.
         // The loop is bounded — each iteration either consumes the delta or
@@ -330,8 +330,7 @@ function RunRow({
   const groupLen = group.length;
   const safeHIdx = groupLen > 0 ? ((cursor.highlightIndex % groupLen) + groupLen) % groupLen : 0;
   const safeRectCount = groupLen > 0 ? rectCount(group[safeHIdx]) : 1;
-  const safeRIdx =
-    cursor.rectIndex >= 0 && cursor.rectIndex < safeRectCount ? cursor.rectIndex : 0;
+  const safeRIdx = Math.max(0, Math.min(cursor.rectIndex, safeRectCount - 1));
   let flatPos = safeRIdx;
   for (let i = 0; i < safeHIdx; i++) flatPos += rectCount(group[i]);
   return (
