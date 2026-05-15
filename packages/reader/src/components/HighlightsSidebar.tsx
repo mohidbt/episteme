@@ -333,6 +333,7 @@ function RunRow({
   const safeRIdx = Math.max(0, Math.min(cursor.rectIndex, safeRectCount - 1));
   let flatPos = safeRIdx;
   for (let i = 0; i < safeHIdx; i++) flatPos += rectCount(group[i]);
+  const isMulti = totalRects > 1;
   return (
     <div className="rounded border p-2">
       <button
@@ -341,33 +342,40 @@ function RunRow({
         aria-label={label}
         onClick={onNavigateFirst}
       >
-        <p className="text-xs font-medium">
-          {truncated} ({group.length})
-        </p>
-        <p className="mt-0.5 text-[10px] text-muted-foreground">
-          {flatPos + 1} / {totalRects}
-        </p>
+        <p className="text-xs font-medium">{truncated}</p>
+        {isMulti && (
+          <>
+            <p className="mt-0.5 text-[10px] text-muted-foreground">
+              {group.length} highlights
+            </p>
+            <p className="mt-0.5 text-[10px] text-muted-foreground">
+              {flatPos + 1} of {totalRects}
+            </p>
+          </>
+        )}
       </button>
-      <div className="mt-1 flex items-center gap-1">
-        <Button
-          size="sm"
-          variant="ghost"
-          className="h-6 px-1"
-          onClick={onPrev}
-          aria-label="Previous highlight"
-        >
-          <ChevronLeft className="size-3" />
-        </Button>
-        <Button
-          size="sm"
-          variant="ghost"
-          className="h-6 px-1"
-          onClick={onNext}
-          aria-label="Next highlight"
-        >
-          <ChevronRight className="size-3" />
-        </Button>
-      </div>
+      {isMulti && (
+        <div className="mt-1 flex items-center gap-1">
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-6 px-1"
+            onClick={onPrev}
+            aria-label="Previous highlight"
+          >
+            <ChevronLeft className="size-3" />
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-6 px-1"
+            onClick={onNext}
+            aria-label="Next highlight"
+          >
+            <ChevronRight className="size-3" />
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

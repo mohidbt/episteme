@@ -169,10 +169,14 @@ describe("HighlightsSidebar rect-aware navigation (Bug 2c)", () => {
       />,
     );
 
-    // Clicking Next must not throw "cannot read .rects of undefined" and must
-    // land on a valid highlight (id "a").
-    expect(() => fireEvent.click(screen.getByRole("button", { name: "Next highlight" }))).not.toThrow();
-    const lastCall = onNavigateHighlight.mock.calls[onNavigateHighlight.mock.calls.length - 1];
-    expect(lastCall?.[0]).toBe("a");
+    // Post Bug 3a chip UI redesign: single-highlight runs hide nav buttons, so
+    // the user can no longer trigger the stale-cursor click path. The render
+    // path still must not throw on the stale cursor — RunRow normalises
+    // safeHIdx/safeRectCount before dereferencing group[hIdx]. The successful
+    // rerender above is the assertion: if RunRow threw on render with stale
+    // cursor, rerender would have crashed. The chip should now show only the
+    // title (no nav buttons, no counter, no "(N)" suffix).
+    expect(screen.queryByRole("button", { name: "Next highlight" })).toBeNull();
+    expect(screen.getByRole("button", { name: /x/i })).toBeDefined();
   });
 });

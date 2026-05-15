@@ -86,7 +86,7 @@ describe("G8: one tab per run — runId grouping", () => {
     // There should be exactly one run row showing "(5)"
     const runButtons = screen.getAllByRole("button", { name: /Summarise key points/i });
     expect(runButtons).toHaveLength(1);
-    expect(runButtons[0].textContent).toContain("(5)");
+    expect(runButtons[0].textContent).toMatch(/5\s+highlights/);
   });
 
   it("3 user highlights + 1 AI run of 2 → segments are isolated, no overlap", () => {
@@ -104,7 +104,7 @@ describe("G8: one tab per run — runId grouping", () => {
     );
 
     // AI segment active (runs exist). Should show 1 run tab with (2).
-    expect(screen.getByRole("button", { name: /Deep read/i }).textContent).toContain("(2)");
+    expect(screen.getByRole("button", { name: /Deep read/i }).textContent).toMatch(/2\s+highlights/);
     // User highlights should NOT appear in AI segment.
     expect(screen.queryByText("user-text-10")).toBeNull();
 
@@ -186,7 +186,7 @@ describe("G8: edge cases", () => {
     // Exactly one "Manual AI highlights" row showing (3).
     const manualBtns = screen.getAllByRole("button", { name: /Manual AI highlights/i });
     expect(manualBtns).toHaveLength(1);
-    expect(manualBtns[0].textContent).toContain("(3)");
+    expect(manualBtns[0].textContent).toMatch(/3\s+highlights/);
   });
 });
 
