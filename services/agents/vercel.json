@@ -2,6 +2,6 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "fluid": true,
   "crons": [
-    { "path": "/health", "schedule": "*/5 * * * *" }
+    { "path": "/health", "schedule": "0 0 * * *" }
   ]
 }

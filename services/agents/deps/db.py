@@ -14,11 +14,6 @@ async def init_pool() -> None:
     global _pool
     app_dsn = os.environ.get("APP_RUNTIME_DATABASE_URL")
     legacy_dsn = os.environ.get("DATABASE_URL")
-    logger.info(
-        "init_pool env: APP_RUNTIME_DATABASE_URL_len=%d DATABASE_URL_len=%d",
-        len(app_dsn or ""),
-        len(legacy_dsn or ""),
-    )
     dsn = app_dsn or legacy_dsn
     if not dsn:
         return
