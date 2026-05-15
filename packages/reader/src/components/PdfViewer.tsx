@@ -181,6 +181,12 @@ export function PdfViewer({ url, containerRef: externalRef, markers = [], userHi
     observe();
 
     return () => {
+      // Bump the generation FIRST so any IO callback that's already queued
+      // (disconnect does not flush the microtask queue) sees its captured
+      // generation as stale and bails out. Without this, callbacks queued
+      // during effect re-run / unmount can still pass the guard and write
+      // to setCurrentPage after we no longer want updates.
+      ioGenerationRef.current++;
       currentIo?.disconnect();
       mo.disconnect();
     };
