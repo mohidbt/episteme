@@ -162,7 +162,10 @@ export function PdfViewer({ url, containerRef: externalRef, markers = [], userHi
           );
           if (bestPage !== null) setCurrentPage(bestPage);
         },
-        { root: el, threshold: [0.25, 0.5, 0.75] }
+        // Single threshold (vs the previous [0.25, 0.5, 0.75]) shrinks the
+        // race window for Bug 1. The page counter only needs to know which
+        // page is "most visible" — one trip-wire at 50% is sufficient.
+        { root: el, threshold: 0.5 }
       );
       currentIo = io;
       const pageEls = el.querySelectorAll("[data-page-number]");
