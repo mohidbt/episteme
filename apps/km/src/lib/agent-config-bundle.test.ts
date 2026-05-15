@@ -99,14 +99,14 @@ describe("buildBundleFromSnapshot + parseBundle — round trip", () => {
     const zipBytes = await buildBundleFromSnapshot(
       snap({
         skills: [
-          { path: ".episteme/agents/skills/a/SKILL.md", body: "alpha" },
-          { path: ".episteme/agents/skills/b/SKILL.md", body: "beta" },
+          { path: ".episteme/agents/skills/lit-triage/SKILL.md", body: "alpha" },
+          { path: ".episteme/agents/skills/deep-read/SKILL.md", body: "beta" },
         ],
       }),
     );
     const zip = await JSZip.loadAsync(zipBytes);
-    expect(zip.file(".episteme/agents/skills/a/SKILL.md")).toBeNull();
-    expect(zip.file(".episteme/agents/skills/b/SKILL.md")).toBeNull();
+    expect(zip.file(".episteme/agents/skills/lit-triage/SKILL.md")).toBeNull();
+    expect(zip.file(".episteme/agents/skills/deep-read/SKILL.md")).toBeNull();
     const parsed = await parseBundle(zipBytes);
     expect(parsed.skills).toEqual([]);
   });
@@ -147,8 +147,8 @@ describe("buildBundleFromSnapshot + parseBundle — round trip", () => {
     const zip = await buildBundleFromSnapshot(
       snap({
         skills: [
-          { path: ".episteme/agents/skills/a/SKILL.md", body: "alpha" },
-          { path: ".episteme/agents/skills/b/SKILL.md", body: "beta\nbeta-line2" },
+          { path: ".episteme/agents/skills/lit-triage/SKILL.md", body: "alpha" },
+          { path: ".episteme/agents/skills/synthesis/SKILL.md", body: "beta\nbeta-line2" },
         ],
       }),
     );

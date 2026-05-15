@@ -64,6 +64,23 @@ const SKILLS_PREFIX = ".episteme/agents/skills/";
 const PERSONAL_SKILLS_PREFIX = ".episteme/agents/skills-personal/";
 const MEMORIES_PREFIX = ".episteme/agents/memories/";
 
+// A5: source of truth is `services/agents/skills/*` on disk (seeded by DriveSkillsLoader). Add a new system skill there AND here.
+const SYSTEM_SKILL_SLUGS: ReadonlySet<string> = new Set([
+  "claim-verify",
+  "data-extract",
+  "deep-read",
+  "lit-triage",
+  "paper-search",
+  "synthesis",
+]);
+
+function extractSkillSlug(path: string): string | null {
+  if (!path.startsWith(SKILLS_PREFIX)) return null;
+  const rest = path.slice(SKILLS_PREFIX.length);
+  const slash = rest.indexOf("/");
+  return slash === -1 ? rest : rest.slice(0, slash);
+}
+
 const OAUTH_KEYS_TO_STRIP = new Set([
   "oauth_tokens",
   "oauth_token",
@@ -141,14 +158,18 @@ function decodeNotes(blob: string): Array<{ path: string; body: string }> {
 }
 
 /**
- * B13: skill export filter — system skills (those rooted under the
- * `.episteme/agents/skills/` prefix, which the DriveSkillsLoader seeds
- * from disk) are stripped from the exported bundle. Personal skills
- * survive via `personalSkills`. Tests in `agent-config-bundle.test.ts`
- * pin the contract.
+ * B13/A5: skill export filter — system skills (those whose slug appears in
+ * `SYSTEM_SKILL_SLUGS`, seeded from `services/agents/skills/*` on disk)
+ * are stripped from the exported bundle. Personal skills survive via
+ * `personalSkills`. The previous implementation used a brittle path-prefix
+ * check that also dropped personal skills sharing the `.episteme/agents/skills/`
+ * prefix; the allowlist is the explicit fix.
  */
 export function filterExportableSkills(skills: SkillNote[]): SkillNote[] {
-  return skills.filter((s) => !s.path.startsWith(SKILLS_PREFIX));
+  return skills.filter((s) => {
+    const slug = extractSkillSlug(s.path);
+    return slug === null || !SYSTEM_SKILL_SLUGS.has(slug);
+  });
 }
 
 export async function buildBundleFromSnapshot(
