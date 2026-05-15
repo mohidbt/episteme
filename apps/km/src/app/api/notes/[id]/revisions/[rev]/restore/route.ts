@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { notes, noteRevisions } from "@episteme/db/schema";
 import { getUserIdFromRequest } from "@/lib/auth";
 import { jsonError } from "@/lib/crud";
-import { saveNoteMd } from "@/lib/notes/save-note-md";
+import { saveNoteMd, NoteOverLimitError } from "@/lib/notes/save-note-md";
 
 type Ctx = { params: Promise<{ id: string; rev: string }> };
 
@@ -22,6 +22,20 @@ export async function POST(req: Request, { params }: Ctx) {
     .from(noteRevisions)
     .where(and(eq(noteRevisions.id, rev), eq(noteRevisions.noteId, id)));
   if (!row) return jsonError(404, "not_found");
-  await saveNoteMd(id, row.contentMd, userId, "manual");
+  try {
+    await saveNoteMd(id, row.contentMd, userId, "manual");
+  } catch (err) {
+    if (err instanceof NoteOverLimitError) {
+      return NextResponse.json(
+        {
+          error: "over_limit",
+          usedBytes: err.usedBytes,
+          limitBytes: err.limitBytes,
+        },
+        { status: 413 },
+      );
+    }
+    throw err;
+  }
   return new NextResponse(null, { status: 204 });
 }

@@ -4,7 +4,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { notes } from "@episteme/db/schema";
 import { getUserIdFromRequest } from "@/lib/auth";
-import { saveNoteMd } from "@/lib/notes/save-note-md";
+import { saveNoteMd, NoteOverLimitError } from "@/lib/notes/save-note-md";
 import { jsonError } from "@/lib/crud";
 
 const body = z.object({ contentMd: z.string() });
@@ -28,6 +28,20 @@ export async function PATCH(
   const reason = reasonRaw ?? "autosave";
   if (reason !== "autosave" && reason !== "manual")
     return jsonError(400, "validation", { message: "invalid reason" });
-  await saveNoteMd(id, parsed.data.contentMd, userId, reason);
+  try {
+    await saveNoteMd(id, parsed.data.contentMd, userId, reason);
+  } catch (err) {
+    if (err instanceof NoteOverLimitError) {
+      return NextResponse.json(
+        {
+          error: "over_limit",
+          usedBytes: err.usedBytes,
+          limitBytes: err.limitBytes,
+        },
+        { status: 413 },
+      );
+    }
+    throw err;
+  }
   return new NextResponse(null, { status: 204 });
 }

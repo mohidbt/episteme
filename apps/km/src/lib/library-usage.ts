@@ -60,6 +60,13 @@ export type LibraryLimitCheck =
  *
  * "Over" is strict: used + incoming <= limit is allowed. Equal-to-limit
  * is the boundary case (you can fit exactly 100 MB).
+ *
+ * TOCTOU note (Codex Round B): the gate sums-then-inserts at app level
+ * with no SQL-level constraint. Two concurrent uploads, each fitting
+ * individually but jointly exceeding, can both pass the check and land.
+ * Acceptable for a soft cap; tighten with a per-library row-level
+ * advisory lock or a CHECK on a materialized sum if usage ever needs
+ * exact billing-grade enforcement.
  */
 export async function assertWithinLibraryLimit(
   libraryId: number,

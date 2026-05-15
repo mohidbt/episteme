@@ -5,6 +5,21 @@ import { mdToProseMirror, type JSONContent } from "@episteme/markdown";
 import { rebuildLinks } from "@episteme/notes-core";
 import { createRevisionIfNeeded, type RevisionReason } from "@episteme/notes-core";
 import { embedOnSave } from "@/lib/ai/embed-on-save";
+import {
+  LIBRARY_BYTES_LIMIT,
+  getLibraryUsageBytes,
+} from "@/lib/library-usage";
+
+export class NoteOverLimitError extends Error {
+  readonly usedBytes: number;
+  readonly limitBytes: number;
+  constructor(usedBytes: number, limitBytes: number) {
+    super("over_limit");
+    this.name = "NoteOverLimitError";
+    this.usedBytes = usedBytes;
+    this.limitBytes = limitBytes;
+  }
+}
 
 // TODO(phase-0.2 follow-up): Tiptap's `new Editor(...)` requires a DOM (reads
 // `document` at construction), and Next.js Node route handlers have no DOM.
@@ -41,6 +56,25 @@ export async function saveNoteMd(
   // edits, not just the initial create. Byte length matches the migration
   // backfill rule (octet_length).
   const sizeBytes = Buffer.byteLength(contentMd, "utf8");
+
+  // Cap check on edits (Codex Round B follow-up): an edit can grow a note
+  // past 100 MB even if the create path was gated. Read the prior row size
+  // + library, recompute usage minus the old contribution, then test the
+  // new size. Throw NoteOverLimitError so callers map to HTTP 413.
+  const [existing] = await db
+    .select({ libraryId: notes.libraryId, sizeBytes: notes.sizeBytes })
+    .from(notes)
+    .where(eq(notes.id, id))
+    .limit(1);
+  if (existing) {
+    const usage = await getLibraryUsageBytes(existing.libraryId);
+    const projected =
+      usage.total - Number(existing.sizeBytes ?? 0) + sizeBytes;
+    if (projected > LIBRARY_BYTES_LIMIT) {
+      throw new NoteOverLimitError(usage.total, LIBRARY_BYTES_LIMIT);
+    }
+  }
+
   await db
     .update(notes)
     .set({ contentMd, contentJson, sizeBytes, updatedAt: new Date() })
