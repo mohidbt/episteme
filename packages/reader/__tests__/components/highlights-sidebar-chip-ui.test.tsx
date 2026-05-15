@@ -64,6 +64,36 @@ describe("Bug 3a: single-highlight run hides nav controls + suffix", () => {
   });
 });
 
+describe("Bug 3a: single highlight with multi-rects shows '1 highlight' (singular)", () => {
+  it("renders '1 highlight' (singular) not '1 highlights' when one logical highlight spans multiple rects", () => {
+    const h = {
+      ...makeAiHighlight(1, "run-multi-rect"),
+      rects: [
+        { page: 1, x0: 0, y0: 0, x1: 10, y1: 10 },
+        { page: 2, x0: 0, y0: 0, x1: 10, y1: 10 },
+      ],
+    };
+    const runs = [
+      { id: "run-multi-rect", instruction: "Cross-page claim", summary: "Cross-page claim", highlightCount: 1 },
+    ];
+
+    render(
+      <HighlightsSidebar
+        {...BASE_PROPS}
+        aiHighlights={[h]}
+        userHighlights={[]}
+        runs={runs}
+      />,
+    );
+
+    const chipBtn = screen.getByRole("button", { name: /Cross-page claim/i });
+    expect(chipBtn.textContent).toMatch(/1\s+highlight(?!s)/);
+    expect(chipBtn.textContent).not.toMatch(/1\s+highlights/);
+    // Counter should still appear because totalRects > 1
+    expect(chipBtn.textContent).toMatch(/1\s+of\s+2/);
+  });
+});
+
 describe("Bug 3a: multi-highlight run shows secondary line + counter", () => {
   it("renders '3 highlights' secondary line and '1 of 3' counter, no '(3)' suffix", () => {
     const highlights = [1, 2, 3].map((i) => makeAiHighlight(i, "run-2"));

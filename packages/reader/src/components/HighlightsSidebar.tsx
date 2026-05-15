@@ -346,7 +346,7 @@ function RunRow({
         {isMulti && (
           <>
             <p className="mt-0.5 text-[10px] text-muted-foreground">
-              {group.length} highlights
+              {group.length} {group.length === 1 ? "highlight" : "highlights"}
             </p>
             <p className="mt-0.5 text-[10px] text-muted-foreground">
               {flatPos + 1} of {totalRects}
