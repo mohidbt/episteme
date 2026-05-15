@@ -1,19 +1,36 @@
-import { getCurrentUserId } from "@/lib/session";
+import { getCurrentSession } from "@/lib/session";
 import { getDefaultLibrary } from "@/lib/default-library";
 import { listAllFolders } from "@/lib/folders-server";
 import { getLibraryUsageBytes } from "@/lib/library-usage";
+import {
+  getRecentSpendUsd,
+  OR_GUEST_SOFT_LIMIT_USD,
+  OR_USER_SOFT_LIMIT_USD,
+} from "@/lib/openrouter-usage";
 import { ExportControls } from "@/components/ExportControls";
 import { ImportControls } from "@/components/ImportControls";
 import { DriveUsage } from "./DriveUsage";
+import { OrUsage } from "./OrUsage";
 
 export default async function DataSettingsPage() {
-  const userId = (await getCurrentUserId())!;
+  const session = (await getCurrentSession())!;
+  const userId = session.userId;
   const lib = await getDefaultLibrary(userId);
   const folders = lib ? await listAllFolders(lib.id, userId) : [];
   // One-library-per-user invariant (enforced at POST /api/libraries) means
   // "active library" === getDefaultLibrary. Multi-library users would need
   // a picker here; safe to revisit when the invariant lifts.
-  const usage = lib ? await getLibraryUsageBytes(lib.id) : null;
+  // Round B + C usage panels run in parallel — independent reads, no waterfall.
+  const [usage, orSpend] = await Promise.all([
+    lib ? getLibraryUsageBytes(lib.id) : Promise.resolve(null),
+    getRecentSpendUsd(
+      session.isAnonymous ? null : userId,
+      session.isAnonymous ? userId : null,
+    ),
+  ]);
+  const orLimitUsd = session.isAnonymous
+    ? OR_GUEST_SOFT_LIMIT_USD
+    : OR_USER_SOFT_LIMIT_USD;
 
   return (
     <div className="mx-auto max-w-lg px-6 py-10">
@@ -34,6 +51,17 @@ export default async function DataSettingsPage() {
               <DriveUsage usage={usage} />
             </div>
           )}
+          <div className="px-4 py-4">
+            <div className="text-sm font-medium mb-3">AI usage</div>
+            <OrUsage
+              usage={{
+                totalUsd: orSpend.totalUsd,
+                byModel: orSpend.byModel,
+                isGuest: session.isAnonymous,
+                limitUsd: orLimitUsd,
+              }}
+            />
+          </div>
           <div className="flex items-center justify-between gap-4 px-4 py-4">
             <div>
               <div className="text-sm font-medium">Export library</div>
