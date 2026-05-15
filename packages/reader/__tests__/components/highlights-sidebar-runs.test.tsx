@@ -1,5 +1,5 @@
 import { afterEach, describe, it, expect, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { HighlightsSidebar } from "../../src/components/HighlightsSidebar";
 
 // ─── localStorage mock ────────────────────────────────────────────────────────
@@ -214,6 +214,45 @@ describe("HighlightsSidebar run navigation (existing)", () => {
     fireEvent.click(next);
     fireEvent.click(next);
     fireEvent.click(next);
+    expect(onNavigateHighlight.mock.calls.map((c) => c[0])).toEqual([2, 3, 1]);
+  });
+
+  // ─── Bug 2a — stale closure under rapid clicks ────────────────────────────
+  //
+  // navigate() reads `runCursors[runId]` directly from the closure, then calls
+  // `setRunCursors({ ...prev, [runId]: next })` with a static object. When
+  // multiple Next clicks land in the same render pass (no intermediate flush),
+  // every click reads the same stale cursor value and only the last setState
+  // wins → onNavigateHighlight gets called with duplicate IDs instead of
+  // cycling. The fix is to use functional setState so each update reads the
+  // latest cursor.
+  //
+  // happy-dom + React 19 fireEvent.click flushes between clicks, which hides
+  // the bug under the existing "cycles through highlights" test above. To
+  // expose the bug we batch all three clicks inside a single act() so React
+  // sees them as concurrent updates from a single event tick.
+  it("rapid Next clicks (batched in one act) still cycle [id2, id3, id1] (Bug 2a)", () => {
+    const onNavigateHighlight = vi.fn();
+    render(
+      <HighlightsSidebar
+        {...BASE_PROPS}
+        aiHighlights={highlights}
+        userHighlights={[]}
+        runs={runs}
+        onNavigateHighlight={onNavigateHighlight}
+      />,
+    );
+    const next = screen.getByRole("button", { name: "Next highlight" });
+
+    // Batch 3 clicks in the same act so React updates them in one render pass.
+    // Functional setState must yield [2, 3, 1]; the closure-based current
+    // implementation reads stale cursor=0 for all three → [2, 2, 2].
+    act(() => {
+      next.click();
+      next.click();
+      next.click();
+    });
+
     expect(onNavigateHighlight.mock.calls.map((c) => c[0])).toEqual([2, 3, 1]);
   });
 
