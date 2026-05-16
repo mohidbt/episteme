@@ -85,12 +85,10 @@ export async function matchRefToPapers(
     if (hits.length > 0) {
       return { paperId: hits[0].id, matchMethod: "doi" };
     }
-    return null;
   }
   if (title) {
     const hit = await findFuzzyTitleHitForUser(title, userId);
     if (hit) return { paperId: hit.id, matchMethod: "title-fuzzy" };
-    return null;
   }
   return null;
 }
@@ -113,6 +111,17 @@ export async function autoConnectReference(
 ): Promise<MatchResult | null> {
   try {
     const match = await matchRefToPapers(signals, userId);
+    // Overwrite semantics (plan §3.1): drop any prior ref→paper edges for
+    // this ref so an edited DOI/title doesn't leave a stale edge behind.
+    await db
+      .delete(paperCitations)
+      .where(
+        and(
+          eq(paperCitations.citerKind, "reference"),
+          eq(paperCitations.citerId, refId),
+          eq(paperCitations.citedKind, "paper"),
+        ),
+      );
     if (!match) return null;
     await db
       .insert(paperCitations)
