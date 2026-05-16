@@ -157,15 +157,31 @@ _REF_FIELD_RE = re.compile(
 )
 
 
+# Bare-hex-ID destination: the entire /Dest is a 1-2 char lowercase hex
+# token ("5", "a", "10", "1a"). Observed in Family Medicine `psm-paper-1.pdf`
+# where citation links use hex-encoded anchor names that the named-dests
+# table only resolves to (page, /XYZ, x, y) — the string itself is the
+# only signal of which citation index this is. Capped at 2 hex chars
+# (covers 1..255) to avoid mistaking word-anchors like "abstract" or
+# "fig1" — those are 3+ chars or mixed case. Pure digits also match so
+# decimal-only bare IDs like "10" (which is hex 0x10 = 16) are decoded
+# the same way the rest of the document numbers them.
+_BARE_HEX_ID_RE = re.compile(r"^[0-9a-f]{1,2}$")
+
+
 def _marker_from_dest(dest: object) -> tuple[int | None, str | None, dict | None]:
     """Return (markerIndex, rawText, parsed) for a /Link annotation destination.
 
-    Two destination dialects observed:
+    Three destination dialects observed:
       1. Plain anchor strings: "cite.foo3.", "ref-12.", "bib7." — the ONLY
          "<digits>." token is the citation index.
       2. Springer/Nature embedded refs:
          "filename.indd:1.<bom><tab>Shin, Y. & ... J Cell. 2017.:79"
          where the filename has its own ".<digits>." we must skip.
+      3. Bare-hex-ID anchors: the entire string is a short hex token
+         ("5", "a", "10") that IS the citation index in hex. The named-
+         destinations table only carries page+coords for these so we
+         have to decode the string itself.
     """
     if not isinstance(dest, str):
         return None, None, None
@@ -176,13 +192,21 @@ def _marker_from_dest(dest: object) -> tuple[int | None, str | None, dict | None
         body = (rich.group("body") or "").strip().strip("﻿").strip()
         return idx, dest, {"rawText": body or dest}
 
-    # Fallback: simple "<word><digits>." anchor (e.g. "cite.foo3."). Take the
-    # LAST digits-dot token so a leading filename like "3158.indd" doesn't win.
+    # Fallback 1: simple "<word><digits>." anchor (e.g. "cite.foo3."). Take
+    # the LAST digits-dot token so a leading filename like "3158.indd"
+    # doesn't win.
     matches = list(re.finditer(r"(?<![\d.])(\d{1,3})\.", dest))
-    if not matches:
-        return None, dest, None
-    idx = int(matches[-1].group(1))
-    return idx, dest, None
+    if matches:
+        idx = int(matches[-1].group(1))
+        return idx, dest, None
+
+    # Fallback 2: bare-hex-ID anchor (follow-up #40). Only the whole-string
+    # match — partial matches would re-introduce false positives from
+    # rich-string segments the earlier dialects already handle.
+    if _BARE_HEX_ID_RE.match(dest):
+        return int(dest, 16), dest, None
+
+    return None, dest, None
 
 
 @router.post("/annotations")
