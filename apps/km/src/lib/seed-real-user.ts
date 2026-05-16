@@ -44,11 +44,14 @@ export async function seedRealUser(userId: string): Promise<void> {
   // Anonymous users get a generated name (e.g. "anon-…") which is harmless
   // but ugly; the SidebarShell already rewrites that label to "Demo Workspace".
   const [userRow] = await db
-    .select({ name: user.name })
+    .select({ name: user.name, firstname: user.firstname })
     .from(user)
     .where(eq(user.id, userId))
     .limit(1);
-  const libraryName = deriveLibraryName({ name: userRow?.name ?? null });
+  const libraryName = deriveLibraryName({
+    name: userRow?.name ?? null,
+    firstname: userRow?.firstname ?? null,
+  });
 
   try {
     await db.transaction(async (tx) => {
