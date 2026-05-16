@@ -12,6 +12,7 @@ import { jsonError, requireOwned } from "@/lib/crud";
 import { deriveCitationKey, validateCslJson, type CslItem } from "@/lib/csl";
 import { fetchCrossRef } from "@/lib/crossref";
 import { isUniqueViolation, suggestNextCitationKey } from "@/lib/references";
+import { autoConnectReference, extractRefSignals } from "@/lib/citations/match-ref-to-papers";
 
 export async function GET(req: Request) {
   // Dual-auth: cookie session OR HMAC (for agent tools like list_references).
@@ -171,5 +172,6 @@ export async function POST(req: Request) {
 
   const result = await insertReference({ libraryId, folderPath, citationKey, cslJson, paperId, userId });
   if (!result.ok) return Response.json(result.conflict, { status: 409 });
+  await autoConnectReference(result.row.id, userId, extractRefSignals(cslJson));
   return Response.json(result.row, { status: 201 });
 }

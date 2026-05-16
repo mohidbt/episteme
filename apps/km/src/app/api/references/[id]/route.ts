@@ -6,6 +6,7 @@ import { referenceUpdateSchema } from "@/lib/validators";
 import { jsonError, requireOwned } from "@/lib/crud";
 import { getTrashFolderId, moveItemToFolder } from "@/lib/folders-server";
 import { isUniqueViolation, suggestNextCitationKey } from "@/lib/references";
+import { autoConnectReference, extractRefSignals } from "@/lib/citations/match-ref-to-papers";
 
 function misconfiguredResponse(): Response {
   return jsonError(500, "internal auth misconfigured");
@@ -55,6 +56,9 @@ export async function PATCH(req: Request, { params }: Ctx) {
   try {
     if (hasOtherUpdates) {
       const [row] = await db.update(references_).set(rest).where(eq(references_.id, id)).returning();
+      if ("cslJson" in rest) {
+        await autoConnectReference(id, userId, extractRefSignals(rest.cslJson));
+      }
       return Response.json(row);
     }
     const [row] = await db.select().from(references_).where(eq(references_.id, id));
