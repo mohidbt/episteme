@@ -8,9 +8,13 @@ on:
         required: true
         default: 'NO'
       role:
-        description: 'Which DSN secret to use: migrate (default) or owner'
+        description: 'DSN secret: migrate (default) or owner'
         required: false
         default: 'migrate'
+      mode:
+        description: 'apply (default) or record-only (after manual Neon-dashboard apply)'
+        required: false
+        default: 'apply'
 
 jobs:
   apply:
@@ -19,6 +23,7 @@ jobs:
     env:
       CONFIRM: ${{ inputs.confirm }}
       ROLE: ${{ inputs.role }}
+      MODE: ${{ inputs.mode }}
       MIGRATE_DSN: ${{ secrets.MIGRATE_DATABASE_URL }}
       OWNER_DSN: ${{ secrets.PROD_DATABASE_URL }}
     steps:
@@ -28,12 +33,13 @@ jobs:
             echo "::error::confirm must be APPLY (got '$CONFIRM')"; exit 1
           fi
           if [ "$ROLE" = "owner" ]; then
-            echo "Using PROD_DATABASE_URL (presumed owner)"
+            echo "Using PROD_DATABASE_URL (NOTE: this is predeploy_ro, read-only)"
             echo "DSN=$OWNER_DSN" >> "$GITHUB_ENV"
           else
-            echo "Using MIGRATE_DATABASE_URL"
+            echo "Using MIGRATE_DATABASE_URL (migrate_only role)"
             echo "DSN=$MIGRATE_DSN" >> "$GITHUB_ENV"
           fi
+          echo "mode=$MODE"
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
         with:
@@ -50,24 +56,32 @@ jobs:
         continue-on-error: true
         run: |
           set +e
-          echo "=== role ==="
-          psql "$DSN" -c "SELECT current_user, session_user;"
-          echo "=== papers owner ==="
+          psql "$DSN" -c "SELECT current_user;"
           psql "$DSN" -c "SELECT tableowner FROM pg_tables WHERE tablename IN ('papers','notes','assets');"
-          echo "=== drizzle.__drizzle_migrations max id (pre) ==="
           psql "$DSN" -c "SELECT MAX(id) FROM drizzle.__drizzle_migrations;"
-          echo "=== papers.size_bytes (pre) ==="
           psql "$DSN" -c "SELECT column_name FROM information_schema.columns WHERE table_name='papers' AND column_name='size_bytes';"
-          echo "=== openrouter_usage (pre) ==="
           psql "$DSN" -c "SELECT to_regclass('public.openrouter_usage');"
       - name: Apply 0033_size_bytes_papers_notes
+        if: env.MODE == 'apply'
         run: psql -v ON_ERROR_STOP=1 "$DSN" -f packages/db/drizzle/0033_size_bytes_papers_notes.sql
+      - name: Apply 0034_openrouter_usage
+        if: env.MODE == 'apply'
+        run: psql -v ON_ERROR_STOP=1 "$DSN" -f packages/db/drizzle/0034_openrouter_usage.sql
+      - name: Verify columns present (gate before recording)
+        run: |
+          set -e
+          have_papers=$(psql -tA "$DSN" -c "SELECT COUNT(*) FROM information_schema.columns WHERE table_name='papers' AND column_name='size_bytes';")
+          have_notes=$(psql -tA "$DSN" -c "SELECT COUNT(*) FROM information_schema.columns WHERE table_name='notes' AND column_name='size_bytes';")
+          have_oru=$(psql -tA "$DSN" -c "SELECT (to_regclass('public.openrouter_usage') IS NOT NULL)::int;")
+          echo "papers.size_bytes=$have_papers notes.size_bytes=$have_notes openrouter_usage=$have_oru"
+          if [ "$have_papers" != "1" ] || [ "$have_notes" != "1" ] || [ "$have_oru" != "1" ]; then
+            echo "::error::Pre-record gate failed — required schema not present. Apply via Neon dashboard SQL editor first, then re-run with mode=record-only."
+            exit 1
+          fi
       - name: Record 0033
         env:
           DATABASE_URL: ${{ env.DSN }}
         run: pnpm --filter @episteme/db db:record-applied 0033_size_bytes_papers_notes
-      - name: Apply 0034_openrouter_usage
-        run: psql -v ON_ERROR_STOP=1 "$DSN" -f packages/db/drizzle/0034_openrouter_usage.sql
       - name: Record 0034
         env:
           DATABASE_URL: ${{ env.DSN }}
