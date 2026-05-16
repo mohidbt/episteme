@@ -54,9 +54,24 @@ export async function GET(request: NextRequest, { params }: Ctx) {
       .orderBy(asc(documentReferences.markerIndex), asc(documentReferences.rawText));
 
     // D7.4: per-ref enrichment — matchedPaperId + Cited-in/Citing counts.
-    const enriched = await enrichRefsWithPaperMatchAndEdges(citations, userId);
+    // Best-effort: enrichment failures fall back to raw refs (with null
+    // enrichment fields) so the refs panel stays functional if pg_trgm or
+    // paper_citations relation are missing in this env.
+    let enriched;
+    try {
+      enriched = await enrichRefsWithPaperMatchAndEdges(citations, userId);
+    } catch (err) {
+      console.error("[citations] enrichment failed for paper", paperId, err);
+      enriched = citations.map((c) => ({
+        ...c,
+        matchedPaperId: null,
+        citedInCount: 0,
+        citingCount: 0,
+      }));
+    }
     return NextResponse.json({ citations: enriched });
-  } catch {
+  } catch (err) {
+    console.error("[citations] GET failed for paper", paperId, err);
     return jsonError(500, "internal server error");
   }
 }
