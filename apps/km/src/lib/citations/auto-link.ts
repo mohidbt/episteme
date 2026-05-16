@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
   documentReferences,
@@ -11,26 +11,26 @@ import {
 // For each documentReferences row tied to `paperId`:
 //   1. If ref.doi → exact match against papers.doi; on hit → edge to that
 //      paper with match_method='doi'.
-//   2. Else if ref.title → fuzzy match against papers.title (normalized
-//      substring containment); on hit → match_method='title-fuzzy'.
+//   2. Else if ref.title → fuzzy match against papers.title via pg_trgm
+//      similarity (index: idx_papers_title_trgm, migration 0039); on hit
+//      above FUZZY_SIM_THRESHOLD → match_method='title-fuzzy'.
 //   3. Otherwise edge to the reference itself (cited_kind='reference').
 //
 // Idempotent via the (citer_kind,citer_id,cited_kind,cited_id) UNIQUE index
 // + ON CONFLICT DO NOTHING. Insert errors mentioning the table not existing
 // degrade to {linked:0} so the caller doesn't fail when migration lags
-// behind code deploy.
+// behind code deploy. pg_trgm operator-missing errors (extension not yet
+// installed) degrade silently to "no fuzzy hit" so the per-ref edge still
+// gets recorded.
 
 export interface AutoLinkResult {
   linked: number;
 }
 
-function normalizeTitle(s: string): string {
-  return s
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}\s]/gu, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
+// Minimum trigram similarity to accept as a title-fuzzy match. Tuned for
+// title strings — 0.6 is the empirical threshold where common short-title
+// false positives drop out while paraphrase/punctuation variants still pass.
+const FUZZY_SIM_THRESHOLD = 0.6;
 
 function isMissingRelationError(err: unknown): boolean {
   if (!(err instanceof Error)) return false;
@@ -39,6 +39,50 @@ function isMissingRelationError(err: unknown): boolean {
     msg.includes("paper_citations") &&
     (msg.includes("does not exist") || msg.includes("relation"))
   );
+}
+
+function isPgTrgmMissingError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  const msg = err.message.toLowerCase();
+  // PG raises "operator does not exist: text % text" when pg_trgm is absent.
+  // Also defensive on the function form "function similarity(...) does not
+  // exist" in case the operator was registered but the function wasn't.
+  return (
+    msg.includes("does not exist") &&
+    (msg.includes("operator") || msg.includes("similarity") || msg.includes("pg_trgm"))
+  );
+}
+
+async function findFuzzyTitleHit(
+  rawTitle: string,
+): Promise<{ id: string; sim: number } | undefined> {
+  try {
+    const result = await db.execute(sql`
+      SELECT id, similarity(title, ${rawTitle}) AS sim
+      FROM papers
+      WHERE title % ${rawTitle}
+      ORDER BY sim DESC
+      LIMIT 5
+    `);
+    // drizzle-orm's pg execute() returns { rows: [...] } shape (node-postgres
+    // and neon serverless both wrap this way). Defensive fallback to array.
+    const rows = (result as { rows?: unknown[] }).rows ?? (result as unknown as unknown[]);
+    const list = Array.isArray(rows) ? rows : [];
+    const top = list[0] as { id?: string; sim?: number | string } | undefined;
+    if (!top || top.id == null || top.sim == null) return undefined;
+    const sim = typeof top.sim === "string" ? parseFloat(top.sim) : top.sim;
+    if (!Number.isFinite(sim) || sim < FUZZY_SIM_THRESHOLD) return undefined;
+    return { id: String(top.id), sim };
+  } catch (err) {
+    if (isPgTrgmMissingError(err)) {
+      console.warn(
+        "[auto-link] pg_trgm not available; skipping fuzzy title match",
+        err instanceof Error ? err.message : err,
+      );
+      return undefined;
+    }
+    throw err;
+  }
 }
 
 export async function autoLinkPaperCitations(
@@ -75,49 +119,10 @@ export async function autoLinkPaperCitations(
       } else {
         citedKind = "reference";
         citedId = String(ref.id);
-        matchMethod = "manual"; // unresolved — placeholder method
+        matchMethod = "manual";
       }
     } else if (ref.title) {
-      // Fuzzy: scan recent papers, pick first with normalized substring overlap
-      // ≥ 80% of the shorter normalized title. Skip too-short normalized titles
-      // (≤ 15 chars) to avoid false matches on generic stubs like "AI" or
-      // "Deep Learning".
-      const norm = normalizeTitle(ref.title);
-      // Skip fuzzy match for too-short normalized titles to avoid false
-      // matches on generic stubs like "AI" or "Deep Learning"; fall through
-      // to "reference" fallback so the edge still gets recorded.
-      const FUZZY_CAP = 500;
-      const hit =
-        norm.length <= 15
-          ? undefined
-          : await (async () => {
-              const candidates = (await db
-                .select({ id: papers.id, title: papers.title })
-                .from(papers)
-                .limit(FUZZY_CAP)) as Array<{ id: string; title: string | null }>;
-              if (candidates.length === FUZZY_CAP) {
-                console.warn(
-                  "[auto-link] fuzzy candidate cap hit",
-                  FUZZY_CAP,
-                  "— some matches may be missed for paper",
-                  paperId,
-                );
-              }
-              return candidates.find((c) => {
-                if (!c.title) return false;
-                const cn = normalizeTitle(c.title);
-                if (cn.length === 0 || norm.length === 0) return false;
-                const shorter = cn.length < norm.length ? cn : norm;
-                const longer = cn.length < norm.length ? norm : cn;
-                if (
-                  longer.includes(shorter) &&
-                  shorter.length / longer.length >= 0.8
-                )
-                  return true;
-                return false;
-              });
-            })();
-
+      const hit = await findFuzzyTitleHit(ref.title);
       if (hit) {
         citedKind = "paper";
         citedId = hit.id;

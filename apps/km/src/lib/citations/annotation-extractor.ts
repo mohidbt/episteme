@@ -1,5 +1,9 @@
 import { signRequest } from "@/lib/agents/sign-request";
-import type { ParsedReference } from "@/lib/citations/parser";
+import {
+  reparseSanitizedRawText,
+  sanitizeRefField,
+  type ParsedReference,
+} from "@/lib/citations/parser";
 import type { AgentPdfRequestContext } from "@/lib/ai/pdf-text";
 
 export interface MarkerRect {
@@ -32,14 +36,44 @@ interface AgentAnnotationResponse {
 }
 
 function toParsedReference(ref: AgentReference): ParsedReference {
+  // Springer-Nature InDesign export corruption (".indd:" filename prefix + a
+  // shower of U+FEFF zero-width no-break spaces) leaks through the agents
+  // PDF annotation extractor on a per-reference basis: ref 1 may be clean
+  // while ref 2 carries the prefix + BOMs in `rawText` and an empty `title`.
+  // Apply the same sanitizer the text-regex path uses on every string field,
+  // then — when the agent gave us no title — re-parse the cleaned rawText so
+  // the title comes back instead of falling through to the corrupted rawText
+  // in the UI.
+  const cleanedRaw = sanitizeRefField(ref.rawText);
+  const cleanedTitle = sanitizeRefField(ref.title);
+  const cleanedAuthors = sanitizeRefField(ref.authors);
+  const cleanedYear = sanitizeRefField(ref.year);
+  const cleanedDoi = sanitizeRefField(ref.doi);
+  const cleanedUrl = sanitizeRefField(ref.url);
+
+  let title = cleanedTitle;
+  let authors = cleanedAuthors;
+  let year = cleanedYear;
+  let doi = cleanedDoi;
+  let url = cleanedUrl;
+
+  if (!title && cleanedRaw) {
+    const recovered = reparseSanitizedRawText(ref.markerIndex, cleanedRaw);
+    title = recovered.title ?? title;
+    authors = authors ?? recovered.authors;
+    year = year ?? recovered.year;
+    doi = doi ?? recovered.doi;
+    url = url ?? recovered.url;
+  }
+
   return {
     markerIndex: ref.markerIndex,
-    rawText: ref.rawText,
-    title: ref.title ?? undefined,
-    authors: ref.authors ?? undefined,
-    year: ref.year ?? undefined,
-    doi: ref.doi ?? undefined,
-    url: ref.url ?? undefined,
+    rawText: cleanedRaw ?? "",
+    title,
+    authors,
+    year,
+    doi,
+    url,
   };
 }
 
