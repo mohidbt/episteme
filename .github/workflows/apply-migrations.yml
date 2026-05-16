@@ -8,13 +8,17 @@ on:
         required: true
         default: 'NO'
       role:
-        description: 'DSN secret: migrate (default) or owner'
+        description: 'DSN: migrate (default) | owner-ro (PROD_DATABASE_URL predeploy_ro) | owner-real (OWNER_DATABASE_URL neondb_owner)'
         required: false
         default: 'migrate'
       mode:
-        description: 'apply (default) or record-only (after manual Neon-dashboard apply)'
+        description: 'apply (default) | record-only (after manual Neon-dashboard apply)'
         required: false
         default: 'apply'
+      tags:
+        description: 'Comma-separated migration tags to apply (default: auto-detect pending)'
+        required: false
+        default: ''
 
 jobs:
   apply:
@@ -24,30 +28,37 @@ jobs:
       CONFIRM: ${{ inputs.confirm }}
       ROLE: ${{ inputs.role }}
       MODE: ${{ inputs.mode }}
+      TAGS: ${{ inputs.tags }}
       MIGRATE_DSN: ${{ secrets.MIGRATE_DATABASE_URL }}
-      OWNER_DSN: ${{ secrets.PROD_DATABASE_URL }}
+      OWNER_RO_DSN: ${{ secrets.PROD_DATABASE_URL }}
+      OWNER_REAL_DSN: ${{ secrets.OWNER_DATABASE_URL }}
     steps:
       - name: Guard
         run: |
           if [ "$CONFIRM" != "APPLY" ]; then
             echo "::error::confirm must be APPLY (got '$CONFIRM')"; exit 1
           fi
-          if [ "$ROLE" = "owner" ]; then
-            echo "Using PROD_DATABASE_URL (NOTE: this is predeploy_ro, read-only)"
-            echo "DSN=$OWNER_DSN" >> "$GITHUB_ENV"
-          else
-            echo "Using MIGRATE_DATABASE_URL (migrate_only role)"
-            echo "DSN=$MIGRATE_DSN" >> "$GITHUB_ENV"
-          fi
-          echo "mode=$MODE"
+          case "$ROLE" in
+            owner-real)
+              if [ -z "$OWNER_REAL_DSN" ]; then echo "::error::OWNER_DATABASE_URL secret missing"; exit 1; fi
+              echo "Using OWNER_DATABASE_URL (neondb_owner — full ALTER privileges)"
+              echo "DSN=$OWNER_REAL_DSN" >> "$GITHUB_ENV"
+              ;;
+            owner-ro)
+              echo "Using PROD_DATABASE_URL (predeploy_ro — read-only, useful for probes)"
+              echo "DSN=$OWNER_RO_DSN" >> "$GITHUB_ENV"
+              ;;
+            *)
+              echo "Using MIGRATE_DATABASE_URL (migrate_only — limited on legacy tables)"
+              echo "DSN=$MIGRATE_DSN" >> "$GITHUB_ENV"
+              ;;
+          esac
+          echo "mode=$MODE tags=$TAGS"
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
-        with:
-          version: 9.12.0
+        with: { version: 9.12.0 }
       - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: pnpm
+        with: { node-version: 20, cache: pnpm }
       - name: Install postgres client
         run: sudo apt-get update -qq && sudo apt-get install -y postgresql-client
       - name: Install deps
@@ -57,43 +68,58 @@ jobs:
         run: |
           set +e
           psql "$DSN" -c "SELECT current_user;"
-          psql "$DSN" -c "SELECT tableowner FROM pg_tables WHERE tablename IN ('papers','notes','assets');"
           psql "$DSN" -c "SELECT MAX(id) FROM drizzle.__drizzle_migrations;"
-          psql "$DSN" -c "SELECT column_name FROM information_schema.columns WHERE table_name='papers' AND column_name='size_bytes';"
-          psql "$DSN" -c "SELECT to_regclass('public.openrouter_usage');"
-      - name: Apply 0033_size_bytes_papers_notes
-        if: env.MODE == 'apply'
-        run: psql -v ON_ERROR_STOP=1 "$DSN" -f packages/db/drizzle/0033_size_bytes_papers_notes.sql
-      - name: Apply 0034_openrouter_usage
-        if: env.MODE == 'apply'
-        run: psql -v ON_ERROR_STOP=1 "$DSN" -f packages/db/drizzle/0034_openrouter_usage.sql
-      - name: Verify columns present (gate before recording)
+      - name: Determine tags to apply
+        id: tags
         run: |
-          set -e
-          have_papers=$(psql -tA "$DSN" -c "SELECT COUNT(*) FROM information_schema.columns WHERE table_name='papers' AND column_name='size_bytes';")
-          have_notes=$(psql -tA "$DSN" -c "SELECT COUNT(*) FROM information_schema.columns WHERE table_name='notes' AND column_name='size_bytes';")
-          have_oru=$(psql -tA "$DSN" -c "SELECT (to_regclass('public.openrouter_usage') IS NOT NULL)::int;")
-          echo "papers.size_bytes=$have_papers notes.size_bytes=$have_notes openrouter_usage=$have_oru"
-          if [ "$have_papers" != "1" ] || [ "$have_notes" != "1" ] || [ "$have_oru" != "1" ]; then
-            echo "::error::Pre-record gate failed — required schema not present. Apply via Neon dashboard SQL editor first, then re-run with mode=record-only."
-            exit 1
+          if [ -n "$TAGS" ]; then
+            echo "list=$TAGS" >> "$GITHUB_OUTPUT"
+            echo "from input: $TAGS"
+          else
+            # default to anything in journal not in __drizzle_migrations by hash
+            cd packages/db
+            pending=$(node --input-type=module -e "
+              import { readFileSync } from 'node:fs';
+              import { createHash } from 'node:crypto';
+              import postgres from 'postgres';
+              const j = JSON.parse(readFileSync('drizzle/meta/_journal.json','utf8'));
+              const sql = postgres(process.env.DSN, { max: 1 });
+              const rows = await sql\`SELECT encode(hash,'hex') AS hash FROM drizzle.__drizzle_migrations\`;
+              const have = new Set(rows.map(r => r.hash));
+              const pending = j.entries.filter(e => {
+                const text = readFileSync(\`drizzle/\${e.tag}.sql\`).toString();
+                const h = createHash('sha256').update(text).digest('hex');
+                return !have.has(h);
+              }).map(e => e.tag);
+              process.stdout.write(pending.join(','));
+              await sql.end({ timeout: 5 });
+            ")
+            echo "list=$pending" >> "$GITHUB_OUTPUT"
+            echo "auto-detected: $pending"
           fi
-      - name: Record 0033
+      - name: Apply SQL (mode=apply)
+        if: env.MODE == 'apply' && steps.tags.outputs.list != ''
+        run: |
+          IFS=',' read -r -a tags <<< "${{ steps.tags.outputs.list }}"
+          for tag in "${tags[@]}"; do
+            f="packages/db/drizzle/$tag.sql"
+            echo "::group::apply $f"
+            psql -v ON_ERROR_STOP=1 "$DSN" -f "$f"
+            echo "::endgroup::"
+          done
+      - name: Record journal rows
+        if: steps.tags.outputs.list != ''
         env:
           DATABASE_URL: ${{ env.DSN }}
-        run: pnpm --filter @episteme/db db:record-applied 0033_size_bytes_papers_notes
-      - name: Record 0034
-        env:
-          DATABASE_URL: ${{ env.DSN }}
-        run: pnpm --filter @episteme/db db:record-applied 0034_openrouter_usage
+        run: |
+          IFS=',' read -r -a tags <<< "${{ steps.tags.outputs.list }}"
+          for tag in "${tags[@]}"; do
+            pnpm --filter @episteme/db db:record-applied "$tag"
+          done
       - name: Predeploy check (post)
         env:
           DATABASE_URL: ${{ env.DSN }}
         run: pnpm --filter @episteme/db predeploy-check
       - name: Post-state
         run: |
-          psql "$DSN" -c "SELECT id, encode(hash,'hex') as hash, created_at FROM drizzle.__drizzle_migrations ORDER BY id DESC LIMIT 5;" 2>/dev/null || \
-            psql "$DSN" -c "SELECT id, hash, created_at FROM drizzle.__drizzle_migrations ORDER BY id DESC LIMIT 5;"
-          psql "$DSN" -c "SELECT column_name, data_type, is_nullable FROM information_schema.columns WHERE table_name='papers' AND column_name='size_bytes';"
-          psql "$DSN" -c "SELECT column_name, data_type, is_nullable FROM information_schema.columns WHERE table_name='notes' AND column_name='size_bytes';"
-          psql "$DSN" -c "SELECT to_regclass('public.openrouter_usage');"
+          psql "$DSN" -c "SELECT id, encode(hash,'hex') AS hash, created_at FROM drizzle.__drizzle_migrations ORDER BY id DESC LIMIT 5;"
