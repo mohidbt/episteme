@@ -84,7 +84,7 @@ jobs:
               import postgres from 'postgres';
               const j = JSON.parse(readFileSync('drizzle/meta/_journal.json','utf8'));
               const sql = postgres(process.env.DSN, { max: 1 });
-              const rows = await sql\`SELECT encode(hash,'hex') AS hash FROM drizzle.__drizzle_migrations\`;
+              const rows = await sql\`SELECT hash FROM drizzle.__drizzle_migrations\`;
               const have = new Set(rows.map(r => r.hash));
               const pending = j.entries.filter(e => {
                 const text = readFileSync(\`drizzle/\${e.tag}.sql\`).toString();
@@ -122,4 +122,4 @@ jobs:
         run: pnpm --filter @episteme/db predeploy-check
       - name: Post-state
         run: |
-          psql "$DSN" -c "SELECT id, encode(hash,'hex') AS hash, created_at FROM drizzle.__drizzle_migrations ORDER BY id DESC LIMIT 5;"
+          psql "$DSN" -c "SELECT id, hash, created_at FROM drizzle.__drizzle_migrations ORDER BY id DESC LIMIT 5;"
