@@ -3,12 +3,6 @@ name: apply-migrations
 # Manual-only. Triggered via `gh workflow run apply-migrations.yml`.
 # Connects to prod Neon as the migrate_only role and applies any
 # pending drizzle migrations.
-#
-# Discipline (from feedback_db_migrations.md):
-#  - Migrate BEFORE code deploy. Reverse order = window of new-code-old-schema.
-#  - Predeploy-check first.
-#  - Show pre/post __drizzle_migrations state.
-#  - Required: refresh `packages/db/schema-snapshot.sql` afterwards.
 on:
   workflow_dispatch:
     inputs:
@@ -44,9 +38,12 @@ jobs:
       - name: Install deps
         run: pnpm install --frozen-lockfile
       - name: Pre-state
+        continue-on-error: true
         run: |
-          echo "=== __drizzle_migrations max id (pre) ==="
-          psql "$MIGRATE_DATABASE_URL" -c "SELECT MAX(id) FROM __drizzle_migrations;"
+          set +e
+          echo "=== drizzle.__drizzle_migrations max id (pre) ==="
+          psql "$MIGRATE_DATABASE_URL" -c "SELECT MAX(id) FROM drizzle.__drizzle_migrations;" || \
+            psql "$MIGRATE_DATABASE_URL" -c "SELECT MAX(id) FROM __drizzle_migrations;"
           echo "=== papers.size_bytes (pre) ==="
           psql "$MIGRATE_DATABASE_URL" -c "SELECT column_name FROM information_schema.columns WHERE table_name='papers' AND column_name='size_bytes';"
           echo "=== openrouter_usage (pre) ==="
@@ -61,8 +58,11 @@ jobs:
         run: pnpm --filter @episteme/db migrate
       - name: Post-state
         run: |
-          echo "=== __drizzle_migrations max id (post) ==="
-          psql "$MIGRATE_DATABASE_URL" -c "SELECT MAX(id) FROM __drizzle_migrations;"
+          set +e
+          echo "=== drizzle.__drizzle_migrations max id (post) ==="
+          psql "$MIGRATE_DATABASE_URL" -c "SELECT MAX(id) FROM drizzle.__drizzle_migrations;" || \
+            psql "$MIGRATE_DATABASE_URL" -c "SELECT MAX(id) FROM __drizzle_migrations;"
+          set -e
           echo "=== papers.size_bytes (post) ==="
           psql "$MIGRATE_DATABASE_URL" -c "SELECT column_name, data_type, is_nullable FROM information_schema.columns WHERE table_name='papers' AND column_name='size_bytes';"
           echo "=== notes.size_bytes (post) ==="
