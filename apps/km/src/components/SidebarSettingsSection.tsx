@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Cog, Database as DataIcon, Palette, ShieldCheck } from "lucide-react";
+import { Cog, Database as DataIcon, Palette, ShieldCheck, UserCog } from "lucide-react";
 import {
   SidebarMenuButton,
   SidebarMenuItem,
@@ -12,6 +12,7 @@ import { sidebarSectionIconClassName } from "./SidebarChrome";
 import { cn } from "@/lib/utils";
 
 const LINKS = [
+  { label: "Account", href: "/settings/account", Icon: UserCog },
   { label: "Data", href: "/settings/data", Icon: DataIcon },
   { label: "Appearance", href: "/settings/appearance", Icon: Palette },
   { label: "Agent settings", href: "/settings/agents", Icon: ShieldCheck },

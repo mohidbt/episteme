@@ -7,6 +7,7 @@ import { getUserIdFromRequest } from "@/lib/auth";
 import { jsonError, requireOwned } from "@/lib/crud";
 import { extractPdfPages } from "@/lib/ai/pdf-text";
 import { extractCitations } from "@/lib/citations/parser";
+import { autoLinkPaperCitations } from "@/lib/citations/auto-link";
 import { extractAnnotationMarkers } from "@/lib/citations/annotation-extractor";
 import { authorStringToJson } from "@/lib/citations/author-utils";
 import { paperSourceKey } from "@/lib/storage";
@@ -210,6 +211,14 @@ export async function POST(request: NextRequest, { params }: Ctx) {
       if (s2Enriched) {
         extractionMethodOverride = "text-regex+s2";
       }
+    }
+
+    // D2: fire-and-forget auto-link of paper_citations. Errors logged only;
+    // never block the extract response. Table-missing case handled inside.
+    if (inserted.length > 0) {
+      void autoLinkPaperCitations(paperId).catch((err) =>
+        console.warn("[citations/extract] auto-link failed", err),
+      );
     }
 
     return NextResponse.json(

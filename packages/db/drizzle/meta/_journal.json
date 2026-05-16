@@ -253,6 +253,13 @@
       "when": 1780012800000,
       "tag": "0035_unique_highlight_per_run",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1780099200000,
+      "tag": "0036_paper_citations_invites",
+      "breakpoints": true
     }
   ]
 }
