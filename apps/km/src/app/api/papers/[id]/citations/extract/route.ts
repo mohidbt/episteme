@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getDecryptedApiKey } from "@episteme/auth/byok";
+import { getOrApiKey, OpenRouterKeyMissing } from "@/lib/openrouter-key";
 import { db } from "@/lib/db";
 import { papers, documentReferences, documentReferenceMarkers } from "@episteme/db/schema";
 import { and, eq, isNull } from "drizzle-orm";
@@ -47,10 +47,15 @@ export async function POST(request: NextRequest, { params }: Ctx) {
   if (!owned.ok) return jsonError(owned.status, owned.status === 404 ? "not_found" : "forbidden");
   const paper = owned.row;
   const sourceLocator = paper.storageUrl ?? paperSourceKey(paperId);
+  // BYOK first, then server-side OPENROUTER_API_KEY fallback. Guests
+  // without BYOK still get DOI extract via the server key (~$0.001/paper).
   let llmKey = "";
   try {
-    llmKey = await getDecryptedApiKey(userId);
-  } catch {
+    llmKey = await getOrApiKey(userId);
+  } catch (err) {
+    // OpenRouterKeyMissing → no LLM available; downstream DOI extract is
+    // gated on truthy llmKey, so empty string is the safe no-op.
+    if (!(err instanceof OpenRouterKeyMissing)) throw err;
     llmKey = "";
   }
 
