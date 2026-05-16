@@ -33,7 +33,7 @@ jobs:
       - name: Refresh snapshot
         env:
           PG_DUMP_BIN: /usr/lib/postgresql/17/bin/pg_dump
-        run: pnpm --filter @episteme/db db:snapshot-update
+        run: pnpm --filter @episteme/db db:snapshot-dump
       - name: Commit + push
         run: |
           if git diff --quiet -- packages/db/schema-snapshot.sql; then
