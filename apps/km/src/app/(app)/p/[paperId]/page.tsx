@@ -14,6 +14,7 @@ import { denormaliseForList, validateCslJson } from "@/lib/csl";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { PaperMetadataPanel } from "@/components/PaperMetadataPanel";
 import { PaperHighlightsList } from "@/components/PaperHighlightsList";
+import { PaperActionsButtons } from "@/components/PaperActionsButtons";
 import { TabTitleUpdater } from "@/components/TabBar";
 
 type PaperRow = typeof papers.$inferSelect;
@@ -86,6 +87,15 @@ export default async function PaperPage({
             {displayTitle}
           </h1>
           <div className="flex shrink-0 items-center gap-2">
+            <PaperActionsButtons
+              paper={{
+                id: paper.id,
+                title: paper.title,
+                doi: paper.doi,
+                libraryId: paper.libraryId,
+                folderPath: paper.folderPath,
+              }}
+            />
             <Link
               href={`/papers/${paper.id}/read`}
               className="inline-flex h-7 items-center justify-center gap-1 rounded-md border border-border bg-background px-2.5 text-[0.8rem] font-medium text-foreground whitespace-nowrap transition-colors hover:bg-muted"
