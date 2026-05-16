@@ -1,15 +1,22 @@
 import { describe, it, expect, beforeAll } from "vitest";
-import { seedGraphFixture, SEED_USER } from "../../../../../packages/db/__tests__/fixtures/graph-seed";
+import {
+  seedGraphFixture,
+  seedPaperCitationsFixture,
+  SEED_USER,
+  SEED_IDS,
+} from "../../../../../packages/db/__tests__/fixtures/graph-seed";
 import {
   edgesPaperIsRef,
   edgesWikiLink,
   edgesSharedTag,
   edgesSemanticSim,
+  edgesPaperCitations,
   nodesForUser,
 } from "./live-edges";
 
 beforeAll(async () => {
   await seedGraphFixture();
+  await seedPaperCitationsFixture();
 });
 
 describe("live-edges", () => {
@@ -33,6 +40,19 @@ describe("live-edges", () => {
     const kinds = new Set(ns.map((n) => n.kind));
     expect(kinds.has("paper") && kinds.has("note") && kinds.has("reference")).toBe(true);
   });
+  it("paper_citations: paper↔paper same-user included; reference cited skipped; cross-user paper skipped", async () => {
+    const r = await edgesPaperCitations(SEED_USER);
+    expect(r.length).toBe(1);
+    const e = r[0];
+    expect(e.kind).toBe("paper_citation");
+    expect(e.src).toEqual({ kind: "paper", id: SEED_IDS.p1 });
+    expect(e.dst).toEqual({ kind: "paper", id: SEED_IDS.p2 });
+    // cross-user paper edge not present
+    expect(r.some((x) => x.dst.id === SEED_IDS.pOther)).toBe(false);
+    // reference-cited edge not present
+    expect(r.some((x) => x.dst.kind === "reference")).toBe(false);
+  });
+
   it("edgesSemanticSim returns empty array on empty table", async () => {
     const r = await edgesSemanticSim(SEED_USER);
     expect(Array.isArray(r)).toBe(true);

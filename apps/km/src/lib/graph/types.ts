@@ -1,5 +1,5 @@
 export type NodeKind = "paper" | "note" | "reference";
-export type EdgeKind = "paper_is_ref" | "wiki_link" | "shared_tag" | "semantic_sim";
+export type EdgeKind = "paper_is_ref" | "wiki_link" | "shared_tag" | "semantic_sim" | "paper_citation";
 export type GraphNode = { id: string; kind: NodeKind; label: string };
 export type GraphEdge = {
   src: { kind: NodeKind; id: string };
