@@ -350,6 +350,13 @@ CREATE TABLE public.folders (
     updated_at timestamp without time zone DEFAULT now() NOT NULL,
     CONSTRAINT folders_trash_at_root CHECK (((is_trash = false) OR (parent_id IS NULL)))
 );
+CREATE TABLE public.invite_codes (
+    code text NOT NULL,
+    used_by_user_id text,
+    used_at timestamp with time zone,
+    created_by_user_id text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
 CREATE TABLE public.kept_citations (
     id integer NOT NULL,
     user_id text NOT NULL,
@@ -493,6 +500,27 @@ CREATE TABLE public.paper_chunks (
     embedding public.vector(1536),
     metadata jsonb DEFAULT '{}'::jsonb NOT NULL
 );
+CREATE TABLE public.paper_citations (
+    id bigint NOT NULL,
+    citer_kind text NOT NULL,
+    citer_id text NOT NULL,
+    cited_kind text NOT NULL,
+    cited_id text NOT NULL,
+    source_marker_idx integer,
+    match_method text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT paper_citations_check CHECK ((NOT ((citer_kind = cited_kind) AND (citer_id = cited_id)))),
+    CONSTRAINT paper_citations_cited_kind_check CHECK ((cited_kind = ANY (ARRAY['paper'::text, 'reference'::text]))),
+    CONSTRAINT paper_citations_citer_kind_check CHECK ((citer_kind = ANY (ARRAY['paper'::text, 'reference'::text]))),
+    CONSTRAINT paper_citations_match_method_check CHECK ((match_method = ANY (ARRAY['doi'::text, 'title-fuzzy'::text, 'manual'::text])))
+);
+CREATE SEQUENCE public.paper_citations_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+ALTER SEQUENCE public.paper_citations_id_seq OWNED BY public.paper_citations.id;
 CREATE TABLE public.paper_highlights (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     paper_id uuid NOT NULL,
@@ -631,7 +659,13 @@ CREATE TABLE public."user" (
     created_at timestamp without time zone DEFAULT now() NOT NULL,
     updated_at timestamp without time zone DEFAULT now() NOT NULL,
     username text,
-    is_anonymous boolean DEFAULT false NOT NULL
+    is_anonymous boolean DEFAULT false NOT NULL,
+    firstname text,
+    user_type text,
+    pokemon text,
+    invite_code text,
+    CONSTRAINT user_pokemon_check CHECK (((pokemon IS NULL) OR (pokemon = ANY (ARRAY['charmander'::text, 'squirtle'::text, 'bulbasaur'::text])))),
+    CONSTRAINT user_user_type_check CHECK (((user_type IS NULL) OR (user_type = ANY (ARRAY['student'::text, 'researcher'::text, 'industry'::text, 'other'::text]))))
 );
 CREATE TABLE public.user_api_keys (
     id integer NOT NULL,
@@ -706,6 +740,7 @@ ALTER TABLE ONLY public.kept_citations ALTER COLUMN id SET DEFAULT nextval('publ
 ALTER TABLE ONLY public.libraries ALTER COLUMN id SET DEFAULT nextval('public.libraries_id_seq'::regclass);
 ALTER TABLE ONLY public.library_references ALTER COLUMN id SET DEFAULT nextval('public.library_references_id_seq'::regclass);
 ALTER TABLE ONLY public.openrouter_usage ALTER COLUMN id SET DEFAULT nextval('public.openrouter_usage_id_seq'::regclass);
+ALTER TABLE ONLY public.paper_citations ALTER COLUMN id SET DEFAULT nextval('public.paper_citations_id_seq'::regclass);
 ALTER TABLE ONLY public.processing_jobs ALTER COLUMN id SET DEFAULT nextval('public.processing_jobs_id_seq'::regclass);
 ALTER TABLE ONLY public.user_api_keys ALTER COLUMN id SET DEFAULT nextval('public.user_api_keys_id_seq'::regclass);
 ALTER TABLE ONLY public.user_highlights ALTER COLUMN id SET DEFAULT nextval('public.user_highlights_id_seq'::regclass);
@@ -751,6 +786,8 @@ ALTER TABLE ONLY public.document_segments
     ADD CONSTRAINT document_segments_pkey PRIMARY KEY (id);
 ALTER TABLE ONLY public.folders
     ADD CONSTRAINT folders_pkey PRIMARY KEY (id);
+ALTER TABLE ONLY public.invite_codes
+    ADD CONSTRAINT invite_codes_pkey PRIMARY KEY (code);
 ALTER TABLE ONLY public.kept_citations
     ADD CONSTRAINT kept_citations_pkey PRIMARY KEY (id);
 ALTER TABLE ONLY public.kept_citations
@@ -773,6 +810,10 @@ ALTER TABLE ONLY public.openrouter_catalog
     ADD CONSTRAINT openrouter_catalog_pkey PRIMARY KEY (model_id);
 ALTER TABLE ONLY public.openrouter_usage
     ADD CONSTRAINT openrouter_usage_pkey PRIMARY KEY (id);
+ALTER TABLE ONLY public.paper_citations
+    ADD CONSTRAINT paper_citations_citer_kind_citer_id_cited_kind_cited_id_key UNIQUE (citer_kind, citer_id, cited_kind, cited_id);
+ALTER TABLE ONLY public.paper_citations
+    ADD CONSTRAINT paper_citations_pkey PRIMARY KEY (id);
 ALTER TABLE ONLY public.paper_chunks
     ADD CONSTRAINT paper_embeddings_pkey PRIMARY KEY (id);
 ALTER TABLE ONLY public.paper_highlights
@@ -830,8 +871,11 @@ CREATE INDEX document_reference_markers_reference_id_idx ON public.document_refe
 CREATE INDEX document_sections_paper_idx ON public.document_sections USING btree (paper_id);
 CREATE INDEX document_segments_paper_page_idx ON public.document_segments USING btree (paper_id, page);
 CREATE UNIQUE INDEX folders_library_parent_name_unique ON public.folders USING btree (library_id, parent_id, name);
+CREATE INDEX idx_invite_used_by ON public.invite_codes USING btree (used_by_user_id) WHERE (used_by_user_id IS NOT NULL);
 CREATE INDEX idx_or_usage_guest_ts ON public.openrouter_usage USING btree (guest_session_id, created_at DESC) WHERE (guest_session_id IS NOT NULL);
 CREATE INDEX idx_or_usage_user_ts ON public.openrouter_usage USING btree (user_id, created_at DESC);
+CREATE INDEX idx_pc_cited ON public.paper_citations USING btree (cited_kind, cited_id);
+CREATE INDEX idx_pc_citer ON public.paper_citations USING btree (citer_kind, citer_id);
 CREATE INDEX idx_store_expires_at ON public.store USING btree (expires_at) WHERE (expires_at IS NOT NULL);
 CREATE INDEX kept_citations_user_id_idx ON public.kept_citations USING btree (user_id);
 CREATE UNIQUE INDEX libraries_user_id_unique ON public.libraries USING btree (user_id);
@@ -915,6 +959,8 @@ ALTER TABLE ONLY public.folders
     ADD CONSTRAINT folders_parent_fk FOREIGN KEY (parent_id) REFERENCES public.folders(id) ON DELETE CASCADE;
 ALTER TABLE ONLY public.folders
     ADD CONSTRAINT folders_user_id_user_id_fk FOREIGN KEY (user_id) REFERENCES public."user"(id) ON DELETE CASCADE;
+ALTER TABLE ONLY public.invite_codes
+    ADD CONSTRAINT invite_codes_used_by_user_id_fkey FOREIGN KEY (used_by_user_id) REFERENCES public."user"(id) ON DELETE SET NULL;
 ALTER TABLE ONLY public.kept_citations
     ADD CONSTRAINT kept_citations_document_reference_id_document_references_id_fk FOREIGN KEY (document_reference_id) REFERENCES public.document_references(id) ON DELETE CASCADE;
 ALTER TABLE ONLY public.kept_citations
@@ -991,5 +1037,7 @@ ALTER TABLE ONLY public.user_highlights
     ADD CONSTRAINT user_highlights_paper_id_papers_id_fk FOREIGN KEY (paper_id) REFERENCES public.papers(id) ON DELETE CASCADE;
 ALTER TABLE ONLY public.user_highlights
     ADD CONSTRAINT user_highlights_user_id_user_id_fk FOREIGN KEY (user_id) REFERENCES public."user"(id) ON DELETE CASCADE;
+ALTER TABLE ONLY public."user"
+    ADD CONSTRAINT user_invite_code_fkey FOREIGN KEY (invite_code) REFERENCES public.invite_codes(code) ON DELETE SET NULL;
 ALTER TABLE ONLY public.user_preferences
     ADD CONSTRAINT user_preferences_user_id_user_id_fk FOREIGN KEY (user_id) REFERENCES public."user"(id) ON DELETE CASCADE;
