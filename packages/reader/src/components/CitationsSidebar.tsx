@@ -154,15 +154,27 @@ export function CitationsSidebar({
         )}
         {!loading && citations.length > 0 && (
           <div className="flex flex-col gap-2">
-            {citations.map((c) => (
-              <CitationCard
-                key={c.id}
-                citation={c}
-                variant="compact"
-                onSaveToLibrary={onSaveToLibrary ? (folderId) => onSaveToLibrary(c.id, folderId) : undefined}
-                folders={folders}
-              />
-            ))}
+            {citations.map((c) => {
+              // D7.4 enrichment is appended by the citations API; tolerate
+              // older payloads where these fields are absent.
+              const extra = c as CitationWithStatus & {
+                matchedPaperId?: string | null;
+                citedInCount?: number;
+                citingCount?: number;
+              };
+              return (
+                <CitationCard
+                  key={c.id}
+                  citation={c}
+                  variant="compact"
+                  onSaveToLibrary={onSaveToLibrary ? (folderId) => onSaveToLibrary(c.id, folderId) : undefined}
+                  folders={folders}
+                  matchedPaperId={extra.matchedPaperId ?? null}
+                  citedInCount={extra.citedInCount ?? 0}
+                  citingCount={extra.citingCount ?? 0}
+                />
+              );
+            })}
           </div>
         )}
       </div>

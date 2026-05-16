@@ -4,6 +4,7 @@ import { papers, documentReferences, keptCitations } from "@episteme/db/schema";
 import { eq, and, asc } from "drizzle-orm";
 import { getUserIdFromRequest } from "@/lib/auth";
 import { jsonError, requireOwned } from "@/lib/crud";
+import { enrichRefsWithPaperMatchAndEdges } from "@/lib/citations/enrich-refs";
 
 export const runtime = "nodejs";
 
@@ -52,7 +53,9 @@ export async function GET(request: NextRequest, { params }: Ctx) {
       .where(eq(documentReferences.paperId, paperId))
       .orderBy(asc(documentReferences.markerIndex), asc(documentReferences.rawText));
 
-    return NextResponse.json({ citations });
+    // D7.4: per-ref enrichment — matchedPaperId + Cited-in/Citing counts.
+    const enriched = await enrichRefsWithPaperMatchAndEdges(citations, userId);
+    return NextResponse.json({ citations: enriched });
   } catch {
     return jsonError(500, "internal server error");
   }

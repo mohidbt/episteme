@@ -41,6 +41,12 @@ interface CitationCardProps {
   folders?: FolderOption[];
   variant?: CitationCardVariant;
   headerAction?: React.ReactNode;
+  /** D7.4: when the ref matches a paper the user owns, title links into the reader. */
+  matchedPaperId?: string | null;
+  /** D7.4: number of paper_citations rows with cited_kind='reference' AND cited_id=ref.id. */
+  citedInCount?: number;
+  /** D7.4: number of paper_citations rows with citer_kind='reference' AND citer_id=ref.id. */
+  citingCount?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -70,6 +76,9 @@ export function CitationCard({
   folders = [],
   variant = "popover",
   headerAction,
+  matchedPaperId = null,
+  citedInCount = 0,
+  citingCount = 0,
 }: CitationCardProps) {
   const cardRef = useRef<HTMLDivElement>(null);
   const folderMenuRef = useRef<HTMLDivElement>(null);
@@ -156,12 +165,16 @@ export function CitationCard({
 
   const title = citation.title ?? citation.rawText ?? citation.markerText;
 
-  // Title link
-  const titleHref = citation.semanticScholarId
+  // Title link. matchedPaperId (D7.4) takes precedence — opens the user's
+  // reader for that paper rather than an external lookup.
+  const titleHref = matchedPaperId
+    ? `/papers/${matchedPaperId}/read`
+    : citation.semanticScholarId
     ? `https://www.semanticscholar.org/paper/${citation.semanticScholarId}`
     : citation.doi
     ? `https://doi.org/${citation.doi}`
     : null;
+  const titleIsInternal = matchedPaperId != null;
 
   // Authors
   const authors = citation.authors ?? [];
@@ -232,8 +245,9 @@ export function CitationCard({
           {titleHref ? (
             <a
               href={titleHref}
-              target="_blank"
-              rel="noopener noreferrer"
+              {...(titleIsInternal
+                ? {}
+                : { target: "_blank", rel: "noopener noreferrer" })}
               data-testid="citation-title"
               className={`font-semibold leading-5 text-foreground hover:underline line-clamp-3 ${titleClass}`}
             >
@@ -307,8 +321,53 @@ export function CitationCard({
             {showOaBadge && (
               <Badge variant="secondary" title="Open Access PDF available">OA</Badge>
             )}
+            {citedInCount > 0 && (
+              <Badge
+                variant="outline"
+                data-testid="ref-cited-in-count"
+                title="Papers/refs that cite this reference"
+              >
+                Cited in {citedInCount}
+              </Badge>
+            )}
+            {citingCount > 0 && (
+              <Badge
+                variant="outline"
+                data-testid="ref-citing-count"
+                title="Papers/refs this reference cites"
+              >
+                Citing {citingCount}
+              </Badge>
+            )}
           </div>
         )}
+        {/* When no metrics row would render, still surface the badges. */}
+        {!citation.venue &&
+          !citation.year &&
+          citation.citationCount == null &&
+          !showOaBadge &&
+          (citedInCount > 0 || citingCount > 0) && (
+            <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-muted-foreground">
+              {citedInCount > 0 && (
+                <Badge
+                  variant="outline"
+                  data-testid="ref-cited-in-count"
+                  title="Papers/refs that cite this reference"
+                >
+                  Cited in {citedInCount}
+                </Badge>
+              )}
+              {citingCount > 0 && (
+                <Badge
+                  variant="outline"
+                  data-testid="ref-citing-count"
+                  title="Papers/refs this reference cites"
+                >
+                  Citing {citingCount}
+                </Badge>
+              )}
+            </div>
+          )}
 
         {/* TL;DR */}
         {citation.tldrText && (
