@@ -31,6 +31,8 @@ jobs:
       - name: Install deps
         run: pnpm install --frozen-lockfile
       - name: Refresh snapshot
+        env:
+          PG_DUMP_BIN: /usr/lib/postgresql/17/bin/pg_dump
         run: pnpm --filter @episteme/db db:snapshot-update
       - name: Commit + push
         run: |
