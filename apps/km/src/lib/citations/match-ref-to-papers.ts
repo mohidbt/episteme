@@ -111,7 +111,6 @@ export async function autoConnectReference(
 ): Promise<MatchResult | null> {
   try {
     const match = await matchRefToPapers(signals, userId);
-    console.log("[d7.5] autoConnect", { refId, doi: signals.doi, title: signals.title?.slice(0, 40), match });
     // Overwrite semantics (plan §3.1): drop any prior ref→paper edges for
     // this ref so an edited DOI/title doesn't leave a stale edge behind.
     await db
@@ -135,7 +134,6 @@ export async function autoConnectReference(
         matchMethod: match.matchMethod,
       })
       .onConflictDoNothing();
-    console.log("[d7.5] autoConnect inserted edge", { refId, paperId: match.paperId, matchMethod: match.matchMethod });
     return match;
   } catch (err) {
     if (isMissingRelationError(err)) {
