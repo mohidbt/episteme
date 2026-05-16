@@ -22,6 +22,16 @@ class PdfAnnotationsBody(BaseModel):
     file_path: str
 
 
+# pdfplumber's default x_tolerance is 3pt — gaps below that are treated as
+# zero-width and emit no space. Some PDFs (Family Medicine psm-paper-1.pdf,
+# arXiv 2005.11401.pdf) ship a space-glyph advance of ~2pt, so the default
+# silently glues every word on the page into one token. 1.2pt comfortably
+# separates word boundaries on those PDFs while leaving real intra-word
+# kerning untouched (verified against 5 sample PDFs incl. dense 2-col;
+# singleton-word counts unchanged vs default on PDFs that already worked).
+_EXTRACT_X_TOLERANCE = 1.2
+
+
 def _extract_page_text(page) -> str:
     """Extract text, with a column-aware path for two-column layouts.
 
@@ -34,10 +44,14 @@ def _extract_page_text(page) -> str:
     (few chars within ±15pt of x = width/2) and left/right halves are both
     populated, extract each half independently and concatenate left→right.
     Otherwise fall back to the default extractor.
+
+    All extract_text calls pass `x_tolerance=1.5` to defeat space-glyph
+    collapse on PDFs whose inter-word gap is below pdfplumber's default
+    3pt threshold (follow-up #39).
     """
     chars = page.chars
     if not chars:
-        return page.extract_text() or ""
+        return page.extract_text(x_tolerance=_EXTRACT_X_TOLERANCE) or ""
     mid = page.width / 2
     gutter_lo = mid - 15
     gutter_hi = mid + 15
@@ -52,16 +66,27 @@ def _extract_page_text(page) -> str:
         and right > total * 0.25
     )
     if not is_two_col:
-        return page.extract_text() or ""
+        return page.extract_text(x_tolerance=_EXTRACT_X_TOLERANCE) or ""
     left_text = (
-        page.crop((0, 0, mid, page.height)).extract_text() or ""
+        page.crop((0, 0, mid, page.height)).extract_text(
+            x_tolerance=_EXTRACT_X_TOLERANCE
+        )
+        or ""
     )
     right_text = (
-        page.crop((mid, 0, page.width, page.height)).extract_text() or ""
+        page.crop((mid, 0, page.width, page.height)).extract_text(
+            x_tolerance=_EXTRACT_X_TOLERANCE
+        )
+        or ""
     )
     if left_text and right_text:
         return left_text + "\n" + right_text
-    return left_text or right_text or (page.extract_text() or "")
+    return (
+        left_text
+        or right_text
+        or page.extract_text(x_tolerance=_EXTRACT_X_TOLERANCE)
+        or ""
+    )
 
 
 @router.post("/text")
