@@ -274,6 +274,13 @@
       "when": 1780272000000,
       "tag": "0038_grant_migrate_only_tables",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1780358400000,
+      "tag": "0039_papers_title_trgm",
+      "breakpoints": true
     }
   ]
 }
