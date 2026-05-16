@@ -45,7 +45,7 @@ def _extract_page_text(page) -> str:
     populated, extract each half independently and concatenate left→right.
     Otherwise fall back to the default extractor.
 
-    All extract_text calls pass `x_tolerance=1.5` to defeat space-glyph
+    All extract_text calls pass `x_tolerance=1.2` to defeat space-glyph
     collapse on PDFs whose inter-word gap is below pdfplumber's default
     3pt threshold (follow-up #39).
     """
