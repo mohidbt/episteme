@@ -140,7 +140,7 @@ const SEED_PSM_PAPERS: Array<{
       "Samira Farah",
     ],
     year: 2025,
-    doi: null,
+    doi: "10.22454/FamMed.2025.305728",
   },
   {
     filename: "psm-paper-2.pdf",
@@ -153,7 +153,7 @@ const SEED_PSM_PAPERS: Array<{
       "Nathanael Lapidus",
     ],
     year: 2025,
-    doi: null,
+    doi: "10.1101/2025.07.31.25332504",
   },
   {
     filename: "psm-paper-3.pdf",
@@ -161,7 +161,7 @@ const SEED_PSM_PAPERS: Array<{
       "Propensity score matching–difference-in-differences analysis of the casual effect of opening intermediate high-speed railway stations on employment status in surrounding municipalities",
     authors: ["Jikang Fan", "Shintaro Terabe", "Hideki Yaginuma"],
     year: 2025,
-    doi: null,
+    doi: "10.1016/j.cstp.2025.101592",
   },
 ];
 

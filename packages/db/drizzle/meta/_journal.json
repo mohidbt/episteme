@@ -288,6 +288,13 @@
       "when": 1780444800000,
       "tag": "0040_backfill_indd_sanitize",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1780531200000,
+      "tag": "0041_backfill_psm_seed_dois",
+      "breakpoints": true
     }
   ]
 }
