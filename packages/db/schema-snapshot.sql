@@ -853,6 +853,7 @@ CREATE INDEX paper_chunks_embedding_idx ON public.paper_chunks USING ivfflat (em
 CREATE INDEX paper_chunks_ivfflat_idx ON public.paper_chunks USING ivfflat (embedding public.vector_cosine_ops) WITH (lists='100');
 CREATE INDEX paper_chunks_paper_idx ON public.paper_chunks USING btree (paper_id);
 CREATE INDEX paper_highlights_paper_idx ON public.paper_highlights USING btree (paper_id);
+CREATE UNIQUE INDEX paper_highlights_run_page_bbox_uk ON public.paper_highlights USING btree (run_id, page, ((bbox)::text)) WHERE (run_id IS NOT NULL);
 CREATE INDEX papers_folder_path_idx ON public.papers USING btree (library_id, folder_path);
 CREATE INDEX papers_library_idx ON public.papers USING btree (library_id);
 CREATE INDEX papersets_row_refs_gin ON public.papersets USING gin (row_refs jsonb_path_ops);
@@ -867,6 +868,7 @@ CREATE INDEX semantic_edges_src ON public.semantic_edges USING btree (user_id, s
 CREATE INDEX "session_userId_idx" ON public.session USING btree (user_id);
 CREATE INDEX store_prefix_idx ON public.store USING btree (prefix text_pattern_ops);
 CREATE INDEX user_highlights_layer_idx ON public.user_highlights USING btree (layer_id);
+CREATE UNIQUE INDEX user_highlights_layer_page_offsets_uk ON public.user_highlights USING btree (layer_id, page_number, start_offset, end_offset) WHERE (layer_id IS NOT NULL);
 CREATE INDEX user_highlights_user_paper_idx ON public.user_highlights USING btree (user_id, paper_id);
 CREATE INDEX verification_identifier_idx ON public.verification USING btree (identifier);
 ALTER TABLE ONLY public.account
