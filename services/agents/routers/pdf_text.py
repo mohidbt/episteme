@@ -22,6 +22,48 @@ class PdfAnnotationsBody(BaseModel):
     file_path: str
 
 
+def _extract_page_text(page) -> str:
+    """Extract text, with a column-aware path for two-column layouts.
+
+    Default pdfplumber `extract_text()` is column-agnostic: on a 2-column page
+    it concatenates left-and-right column text into the same logical line,
+    which destroys bibliographies whose entries flow per-column (Family
+    Medicine journal observed in prod — see psm-paper-1.pdf seed).
+
+    Heuristic: if the page has a clear vertical gutter near its midline
+    (few chars within ±15pt of x = width/2) and left/right halves are both
+    populated, extract each half independently and concatenate left→right.
+    Otherwise fall back to the default extractor.
+    """
+    chars = page.chars
+    if not chars:
+        return page.extract_text() or ""
+    mid = page.width / 2
+    gutter_lo = mid - 15
+    gutter_hi = mid + 15
+    total = len(chars)
+    in_gutter = sum(1 for c in chars if gutter_lo < c["x0"] < gutter_hi)
+    left = sum(1 for c in chars if c["x0"] < gutter_lo)
+    right = sum(1 for c in chars if c["x0"] > gutter_hi)
+    gutter_ratio = in_gutter / total if total else 1.0
+    is_two_col = (
+        gutter_ratio < 0.05
+        and left > total * 0.25
+        and right > total * 0.25
+    )
+    if not is_two_col:
+        return page.extract_text() or ""
+    left_text = (
+        page.crop((0, 0, mid, page.height)).extract_text() or ""
+    )
+    right_text = (
+        page.crop((mid, 0, page.width, page.height)).extract_text() or ""
+    )
+    if left_text and right_text:
+        return left_text + "\n" + right_text
+    return left_text or right_text or (page.extract_text() or "")
+
+
 @router.post("/text")
 async def pdf_text(body: PdfTextBody, auth: InternalAuthDep):
     _ = auth
@@ -33,10 +75,10 @@ async def pdf_text(body: PdfTextBody, auth: InternalAuthDep):
                     if body.page < 1 or body.page > len(pdf.pages):
                         raise HTTPException(status_code=404, detail="page not found")
                     p = pdf.pages[body.page - 1]
-                    pages.append({"pageNumber": body.page, "text": p.extract_text() or ""})
+                    pages.append({"pageNumber": body.page, "text": _extract_page_text(p)})
                 else:
                     for idx, p in enumerate(pdf.pages, start=1):
-                        pages.append({"pageNumber": idx, "text": p.extract_text() or ""})
+                        pages.append({"pageNumber": idx, "text": _extract_page_text(p)})
                 return {"pages": pages}
     except HTTPException:
         raise

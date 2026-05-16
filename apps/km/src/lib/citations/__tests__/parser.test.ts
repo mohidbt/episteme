@@ -139,6 +139,54 @@ describe("extractCitations marker extraction", () => {
 // otherwise the entire line gets attached as continuation to the previous
 // entry and the filename ends up in the title field on /references.
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// Bibliography header detection — flowed two-column layouts
+//
+// Observed in prod (Family Medicine journal PDF, two-column layout):
+//   pdfplumber extracts the right-column "REFERENCES" header concatenated to
+//   the end of the last body-text line of the left column, e.g.:
+//     "...with a par- REFERENCES"
+//     "1. Petterson SM, ..."
+// `BIB_HEADER_RE` is anchored ^...$ so this never matched → references=0.
+// Fix: also accept "REFERENCES" / "BIBLIOGRAPHY" as a trailing token on a
+// line, provided the next entry-start line begins at marker 1 (the start
+// of a real bibliography).
+// ---------------------------------------------------------------------------
+describe("extractCitations — flowed bibliography header", () => {
+  it("detects REFERENCES when appended to a body-text line in a 2-col layout", () => {
+    const pages = [
+      page("This is body text. Some words and more words.", 1),
+      page(
+        [
+          "trailing body sentence wrapped into one line. REFERENCES",
+          "1. Foo A. First title here. Nature. 2020;1(1):1-2.",
+          "2. Bar B. Second title here. Science. 2021;2(2):3-4.",
+          "3. Baz C. Third title here. Cell. 2022;3(3):5-6.",
+        ].join("\n"),
+        2,
+      ),
+    ];
+    const { references } = extractCitations(pages);
+    expect(references).toHaveLength(3);
+    expect(references[0].markerIndex).toBe(1);
+    expect(references[2].markerIndex).toBe(3);
+  });
+
+  it("does NOT falsely treat 'references' in mid-sentence body text as header", () => {
+    const pages = [
+      page(
+        [
+          "The authors note many references in their analysis below.",
+          "More body text continues without a real bibliography section.",
+        ].join("\n"),
+        1,
+      ),
+    ];
+    const { references } = extractCitations(pages);
+    expect(references).toHaveLength(0);
+  });
+});
+
 describe("parseBibLines — sanitization of agents-extractor artifacts", () => {
   it("strips InDesign filename prefix like 'springernature_nature_8614.indd:'", () => {
     const refs = parseBibLines([
