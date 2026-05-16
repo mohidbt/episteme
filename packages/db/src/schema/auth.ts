@@ -9,6 +9,12 @@ export const user = pgTable("user", {
   emailVerified: boolean("email_verified").default(false).notNull(),
   image: text("image"),
   isAnonymous: boolean("is_anonymous").default(false).notNull(),
+  // Signup-extras (D4). All nullable — anonymous users + legacy rows have NULLs.
+  // CHECK constraints on user_type/pokemon are enforced in 0037 migration.
+  firstname: text("firstname"),
+  userType: text("user_type"),
+  pokemon: text("pokemon"),
+  inviteCode: text("invite_code"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at")
     .defaultNow()
