@@ -11,22 +11,24 @@ import {
   edgesWikiLink,
   edgesSharedTag,
   edgesSemanticSim,
+  edgesPaperCitations,
 } from "@/lib/graph/live-edges";
 import type { GraphPayload } from "@/lib/graph/types";
 
 type Ctx = { params: Promise<{ paperId: string }> };
 
 async function loadPayload(userId: string): Promise<GraphPayload> {
-  const [nodes, paperIsRef, wikiLink, sharedTag, semanticSim] = await Promise.all([
+  const [nodes, paperIsRef, wikiLink, sharedTag, semanticSim, paperCitations] = await Promise.all([
     nodesForUser(userId),
     edgesPaperIsRef(userId),
     edgesWikiLink(userId),
     edgesSharedTag(userId),
     edgesSemanticSim(userId),
+    edgesPaperCitations(userId),
   ]);
   return {
     nodes,
-    edges: [...paperIsRef, ...wikiLink, ...sharedTag, ...semanticSim],
+    edges: [...paperIsRef, ...wikiLink, ...sharedTag, ...semanticSim, ...paperCitations],
   };
 }
 

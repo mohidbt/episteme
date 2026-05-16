@@ -7,6 +7,7 @@ import {
   edgesWikiLink,
   edgesSharedTag,
   edgesSemanticSim,
+  edgesPaperCitations,
 } from '@/lib/graph/live-edges'
 import { db } from '@episteme/db/client'
 import { sql } from 'drizzle-orm'
@@ -27,19 +28,20 @@ function extractCount(result: unknown): number {
 }
 
 async function load(userId: string): Promise<{ payload: GraphPayload; status: { over: boolean; count: number } }> {
-  const [nodes, paperIsRef, wikiLink, sharedTag, semanticSim, countResult] = await Promise.all([
+  const [nodes, paperIsRef, wikiLink, sharedTag, semanticSim, paperCitations, countResult] = await Promise.all([
     nodesForUser(userId),
     edgesPaperIsRef(userId),
     edgesWikiLink(userId),
     edgesSharedTag(userId),
     edgesSemanticSim(userId),
+    edgesPaperCitations(userId),
     db.execute(sql`SELECT count(*)::int AS n FROM papers WHERE user_id = ${userId}`),
   ])
 
   const count = extractCount(rowsOf<{ n: number }>(countResult))
   const payload: GraphPayload = {
     nodes,
-    edges: [...paperIsRef, ...wikiLink, ...sharedTag, ...semanticSim],
+    edges: [...paperIsRef, ...wikiLink, ...sharedTag, ...semanticSim, ...paperCitations],
   }
 
   return {
@@ -84,6 +86,7 @@ export default async function GraphPage() {
             <span className="inline-flex items-center gap-1"><LineSample color="#22c55e" />{formatGraphKindLabel("wiki_link")}</span>
             <span className="inline-flex items-center gap-1"><LineSample color="#a1a1aa" dashed />{formatGraphKindLabel("shared_tag")}</span>
             <span className="inline-flex items-center gap-1"><LineSample color="#a78bfa" />{formatGraphKindLabel("semantic_sim")}</span>
+            <span className="inline-flex items-center gap-1"><LineSample color="#ec4899" />{formatGraphKindLabel("paper_citation")}</span>
           </div>
         </div>
       </div>

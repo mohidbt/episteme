@@ -67,6 +67,22 @@ export async function edgesSemanticSim(userId: string, capPerSrcDstKind = 20): P
   }));
 }
 
+export async function edgesPaperCitations(userId: string): Promise<GraphEdge[]> {
+  const r = await db.execute(sql`
+    SELECT pc.citer_id, pc.cited_id
+    FROM paper_citations pc
+    JOIN papers ps ON ps.id::text = pc.citer_id AND ps.user_id = ${userId}
+    JOIN papers pd ON pd.id::text = pc.cited_id AND pd.user_id = ${userId}
+    WHERE pc.citer_kind = 'paper' AND pc.cited_kind = 'paper'
+  `);
+  return rowsOf<{ citer_id: string; cited_id: string }>(r).map((x) => ({
+    src: { kind: "paper", id: x.citer_id },
+    dst: { kind: "paper", id: x.cited_id },
+    kind: "paper_citation",
+    weight: 1,
+  }));
+}
+
 export async function nodesForUser(userId: string): Promise<GraphNode[]> {
   const ps = await db.execute(sql`SELECT id, title FROM papers WHERE user_id = ${userId}`);
   const ns = await db.execute(sql`SELECT id, title FROM notes  WHERE user_id = ${userId}`);

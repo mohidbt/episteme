@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo, useRef, useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import ForceGraph2D from 'react-force-graph-2d'
 import { Badge } from '@/components/ui/badge'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
@@ -34,16 +35,19 @@ const STYLE: Record<EdgeKind, { dash?: number[]; opacity: number; widthMul: numb
   wiki_link: { opacity: 1.0, widthMul: 1.5, color: '#22c55e' },
   shared_tag: { dash: [2, 4], opacity: 0.45, widthMul: 1.0, color: '#a1a1aa' },
   semantic_sim: { opacity: 0.6, widthMul: 0.8, color: '#a78bfa' },
+  paper_citation: { opacity: 0.95, widthMul: 1.8, color: '#ec4899' },
 }
 
 function edgeKindBadgeClass(kind: EdgeKind): string {
   if (kind === 'paper_is_ref') return 'bg-blue-500/15 text-blue-300 border-blue-400/40'
   if (kind === 'wiki_link') return 'bg-green-500/15 text-green-300 border-green-400/40'
   if (kind === 'shared_tag') return 'bg-zinc-500/15 text-zinc-300 border-zinc-400/40'
+  if (kind === 'paper_citation') return 'bg-pink-500/15 text-pink-300 border-pink-400/40'
   return 'bg-violet-500/15 text-violet-300 border-violet-400/40'
 }
 
 export default function GraphCanvas({ payload }: { payload: GraphPayload }) {
+  const router = useRouter()
   const wrapperRef = useRef<HTMLDivElement | null>(null)
   const [size, setSize] = useState({ width: 900, height: 600 })
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null)
@@ -177,6 +181,10 @@ export default function GraphCanvas({ payload }: { payload: GraphPayload }) {
           ctx.restore()
         }}
         onNodeHover={(node: unknown) => setHoveredNodeId(node ? (node as CanvasNode).fgId : null)}
+        onNodeClick={(node: unknown) => {
+          const n = node as CanvasNode
+          if (n.kind === 'paper') router.push(`/graph/${n.id}`)
+        }}
         onLinkClick={(l: unknown) => void handleLinkClick(l as CanvasLink)}
         d3VelocityDecay={0.3}
         d3AlphaDecay={0.02}
@@ -208,6 +216,10 @@ export default function GraphCanvas({ payload }: { payload: GraphPayload }) {
 
               {selectedLink.kind === 'paper_is_ref' ? (
                 <p>{detail.srcLabel} ↔ {detail.dstLabel}</p>
+              ) : null}
+
+              {selectedLink.kind === 'paper_citation' ? (
+                <p>{detail.srcLabel} → {detail.dstLabel}</p>
               ) : null}
 
               {selectedLink.kind === 'shared_tag' ? (
