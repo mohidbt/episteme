@@ -1,5 +1,6 @@
 SELECT pg_catalog.set_config('search_path', '', false);
 CREATE SCHEMA drizzle;
+CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA public;
 CREATE EXTENSION IF NOT EXISTS vector WITH SCHEMA public;
 CREATE TYPE public.agent_thread_status AS ENUM (
     'idle',
@@ -874,6 +875,7 @@ CREATE UNIQUE INDEX folders_library_parent_name_unique ON public.folders USING b
 CREATE INDEX idx_invite_used_by ON public.invite_codes USING btree (used_by_user_id) WHERE (used_by_user_id IS NOT NULL);
 CREATE INDEX idx_or_usage_guest_ts ON public.openrouter_usage USING btree (guest_session_id, created_at DESC) WHERE (guest_session_id IS NOT NULL);
 CREATE INDEX idx_or_usage_user_ts ON public.openrouter_usage USING btree (user_id, created_at DESC);
+CREATE INDEX idx_papers_title_trgm ON public.papers USING gin (title public.gin_trgm_ops);
 CREATE INDEX idx_pc_cited ON public.paper_citations USING btree (cited_kind, cited_id);
 CREATE INDEX idx_pc_citer ON public.paper_citations USING btree (citer_kind, citer_id);
 CREATE INDEX idx_store_expires_at ON public.store USING btree (expires_at) WHERE (expires_at IS NOT NULL);
