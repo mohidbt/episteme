@@ -1,4 +1,5 @@
-import { pgTable, uuid, text, timestamp, integer, jsonb, index } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, timestamp, integer, jsonb, index, uniqueIndex } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { papers } from "./papers";
 import { user } from "./auth";
 
@@ -16,5 +17,10 @@ export const paperHighlights = pgTable(
     noteMd: text("note_md"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
-  (t) => [index("paper_highlights_paper_idx").on(t.paperId)],
+  (t) => [
+    index("paper_highlights_paper_idx").on(t.paperId),
+    uniqueIndex("paper_highlights_run_page_bbox_uk")
+      .on(t.runId, t.page, sql`(bbox::text)`)
+      .where(sql`run_id IS NOT NULL`),
+  ],
 );

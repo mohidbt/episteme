@@ -238,6 +238,26 @@ export async function runDbChecks(databaseUrl: string): Promise<DbCheckSummary> 
           'expected user+paper access index is missing'
         union all
         select
+          'paper_highlights.run_page_bbox_unique_index_exists',
+          exists (
+            select 1 from pg_indexes
+            where schemaname = 'public'
+              and tablename = 'paper_highlights'
+              and indexname = 'paper_highlights_run_page_bbox_uk'
+          ),
+          'Round G partial unique index on (run_id, page, bbox::text) is missing'
+        union all
+        select
+          'user_highlights.layer_page_offsets_unique_index_exists',
+          exists (
+            select 1 from pg_indexes
+            where schemaname = 'public'
+              and tablename = 'user_highlights'
+              and indexname = 'user_highlights_layer_page_offsets_uk'
+          ),
+          'Round G partial unique index on (layer_id, page_number, start_offset, end_offset) is missing'
+        union all
+        select
           'document_segments.paper_id_exists',
           exists (
             select 1 from information_schema.columns

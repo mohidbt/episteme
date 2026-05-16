@@ -1,4 +1,5 @@
-import { pgTable, text, timestamp, serial, integer, pgEnum, index, uuid, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, serial, integer, pgEnum, index, uniqueIndex, uuid, jsonb } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { user } from "./auth";
 import { papers } from "./papers";
 
@@ -40,4 +41,7 @@ export const userHighlights = pgTable("user_highlights", {
 (table) => [
   index("user_highlights_user_paper_idx").on(table.userId, table.paperId),
   index("user_highlights_layer_idx").on(table.layerId),
+  uniqueIndex("user_highlights_layer_page_offsets_uk")
+    .on(table.layerId, table.pageNumber, table.startOffset, table.endOffset)
+    .where(sql`layer_id IS NOT NULL`),
 ]);

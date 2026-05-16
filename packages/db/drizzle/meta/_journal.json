@@ -246,6 +246,13 @@
       "when": 1779926400000,
       "tag": "0034_openrouter_usage",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1780012800000,
+      "tag": "0035_unique_highlight_per_run",
+      "breakpoints": true
     }
   ]
 }
