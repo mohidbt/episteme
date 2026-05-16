@@ -1,8 +1,5 @@
 name: apply-migrations
 
-# Manual-only. Triggered via `gh workflow run apply-migrations.yml`.
-# Connects to prod Neon as the migrate_only role and applies any
-# pending drizzle migrations.
 on:
   workflow_dispatch:
     inputs:
@@ -42,26 +39,35 @@ jobs:
         run: |
           set +e
           echo "=== drizzle.__drizzle_migrations max id (pre) ==="
-          psql "$MIGRATE_DATABASE_URL" -c "SELECT MAX(id) FROM drizzle.__drizzle_migrations;" || \
-            psql "$MIGRATE_DATABASE_URL" -c "SELECT MAX(id) FROM __drizzle_migrations;"
+          psql "$MIGRATE_DATABASE_URL" -c "SELECT MAX(id) FROM drizzle.__drizzle_migrations;"
           echo "=== papers.size_bytes (pre) ==="
           psql "$MIGRATE_DATABASE_URL" -c "SELECT column_name FROM information_schema.columns WHERE table_name='papers' AND column_name='size_bytes';"
           echo "=== openrouter_usage (pre) ==="
           psql "$MIGRATE_DATABASE_URL" -c "SELECT to_regclass('public.openrouter_usage');"
-      - name: Predeploy check
+      - name: Apply 0033_size_bytes_papers_notes
+        run: |
+          psql -v ON_ERROR_STOP=1 "$MIGRATE_DATABASE_URL" -f packages/db/drizzle/0033_size_bytes_papers_notes.sql
+      - name: Record 0033 in drizzle.__drizzle_migrations
+        env:
+          DATABASE_URL: ${{ secrets.MIGRATE_DATABASE_URL }}
+        run: pnpm --filter @episteme/db db:record-applied 0033_size_bytes_papers_notes
+      - name: Apply 0034_openrouter_usage
+        run: |
+          psql -v ON_ERROR_STOP=1 "$MIGRATE_DATABASE_URL" -f packages/db/drizzle/0034_openrouter_usage.sql
+      - name: Record 0034 in drizzle.__drizzle_migrations
+        env:
+          DATABASE_URL: ${{ secrets.MIGRATE_DATABASE_URL }}
+        run: pnpm --filter @episteme/db db:record-applied 0034_openrouter_usage
+      - name: Predeploy check (post)
         env:
           DATABASE_URL: ${{ secrets.MIGRATE_DATABASE_URL }}
         run: pnpm --filter @episteme/db predeploy-check
-      - name: Apply migrations
-        env:
-          DATABASE_URL: ${{ secrets.MIGRATE_DATABASE_URL }}
-        run: pnpm --filter @episteme/db migrate
       - name: Post-state
         run: |
           set +e
           echo "=== drizzle.__drizzle_migrations max id (post) ==="
-          psql "$MIGRATE_DATABASE_URL" -c "SELECT MAX(id) FROM drizzle.__drizzle_migrations;" || \
-            psql "$MIGRATE_DATABASE_URL" -c "SELECT MAX(id) FROM __drizzle_migrations;"
+          psql "$MIGRATE_DATABASE_URL" -c "SELECT id, encode(hash,'hex'), created_at FROM drizzle.__drizzle_migrations ORDER BY id DESC LIMIT 5;" 2>/dev/null || \
+            psql "$MIGRATE_DATABASE_URL" -c "SELECT id, hash, created_at FROM drizzle.__drizzle_migrations ORDER BY id DESC LIMIT 5;"
           set -e
           echo "=== papers.size_bytes (post) ==="
           psql "$MIGRATE_DATABASE_URL" -c "SELECT column_name, data_type, is_nullable FROM information_schema.columns WHERE table_name='papers' AND column_name='size_bytes';"
