@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { extractCitations } from "../parser";
+import { extractCitations, parseBibLines } from "../parser";
 import type { ExtractedPage } from "@/lib/ai/pdf-text";
 
 function page(text: string, pageNumber = 1): ExtractedPage {
@@ -124,5 +124,55 @@ describe("extractCitations marker extraction", () => {
       ]);
       expect(markers.map((m) => m.markerIndex)).toContain(500);
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Bibliography line sanitization
+//
+// Observed in prod (Springer Nature PDFs run through the agents extractor):
+//   - InDesign source filename leaks as a per-line prefix:
+//       "springernature_nature_8614.indd:2. Parniske, M. ..."
+//   - Zero-width no-break spaces (U+FEFF) sprinkled inside the text:
+//       "Parniske, M.﻿ Arbuscular..."
+// Both must be scrubbed before REF_ENTRY_START_RE / title extraction runs,
+// otherwise the entire line gets attached as continuation to the previous
+// entry and the filename ends up in the title field on /references.
+// ---------------------------------------------------------------------------
+describe("parseBibLines — sanitization of agents-extractor artifacts", () => {
+  it("strips InDesign filename prefix like 'springernature_nature_8614.indd:'", () => {
+    const refs = parseBibLines([
+      "springernature_nature_8614.indd:1. Foo, A. First title here. Nat. Rev. 1, 1–2 (2007).",
+      "springernature_nature_8614.indd:2. Parniske, M. Arbuscular mycorrhiza: the mother of plant root endosymbioses. Nat. Rev. Microbiol. 6, 763–775 (2008).",
+    ]);
+    expect(refs).toHaveLength(2);
+    expect(refs[1].markerIndex).toBe(2);
+    expect(refs[1].rawText).not.toMatch(/\.indd:/);
+    expect(refs[1].rawText.startsWith("Parniske")).toBe(true);
+    expect(refs[1].title ?? "").not.toMatch(/\.indd/);
+  });
+
+  it("strips U+FEFF (zero-width no-break space) from rawText and title", () => {
+    const refs = parseBibLines([
+      "﻿1. Foo,﻿ A. First title.﻿ Nature 1, 1–2 (2007).",
+      "2.﻿ Parniske,﻿ M.﻿ Arbuscular mycorrhiza.﻿ Nat. Rev. Microbiol.﻿ 6, 763–775 (2008).",
+    ]);
+    expect(refs).toHaveLength(2);
+    for (const r of refs) {
+      expect(r.rawText).not.toMatch(/﻿/);
+      expect(r.title ?? "").not.toMatch(/﻿/);
+      expect(r.authors ?? "").not.toMatch(/﻿/);
+    }
+  });
+
+  it("combined: indd prefix + BOMs (the production corruption pattern)", () => {
+    const refs = parseBibLines([
+      "springernature_nature_8614.indd:﻿2.﻿﻿ Parniske, M. Arbuscular mycorrhiza: the mother of plant root endosymbioses. ﻿Nat. Rev. Microbiol.﻿ 6, 763–775 (2008).",
+    ]);
+    expect(refs).toHaveLength(1);
+    expect(refs[0].markerIndex).toBe(2);
+    expect(refs[0].rawText).not.toMatch(/\.indd/);
+    expect(refs[0].rawText).not.toMatch(/﻿/);
+    expect(refs[0].rawText.startsWith("Parniske")).toBe(true);
   });
 });
