@@ -1,6 +1,6 @@
 import { and, asc, eq, ilike, or, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { references_, libraries } from "@episteme/db/schema";
+import { references_, libraries, papers } from "@episteme/db/schema";
 import { getUserIdFromRequest } from "@/lib/auth";
 import { getAuthedUserId, MissingInternalSecretError } from "@/lib/internal-auth";
 import {
@@ -163,6 +163,11 @@ export async function POST(req: Request) {
 
   const lib = await requireOwned<any>(libraries, libraryId, userId);
   if (!lib.ok) return jsonError(lib.status, lib.status === 404 ? "not_found" : "forbidden");
+
+  if (paperId) {
+    const paper = await requireOwned<any>(papers, paperId, userId);
+    if (!paper.ok) return jsonError(paper.status, paper.status === 404 ? "not_found" : "forbidden");
+  }
 
   const result = await insertReference({ libraryId, folderPath, citationKey, cslJson, paperId, userId });
   if (!result.ok) return Response.json(result.conflict, { status: 409 });

@@ -40,7 +40,6 @@ export function PaperActionsButtons({ paper }: { paper: Paper }) {
       }
       const n = data.stats?.referencesInserted ?? 0;
       toast.success(n > 0 ? `Found ${n} citation${n === 1 ? "" : "s"}` : "No citations detected");
-      router.refresh();
     } catch {
       toast.error("Citation extraction failed");
     } finally {
