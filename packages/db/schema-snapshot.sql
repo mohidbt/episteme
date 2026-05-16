@@ -459,13 +459,32 @@ CREATE TABLE public.notes (
     created_at timestamp without time zone DEFAULT now() NOT NULL,
     updated_at timestamp without time zone DEFAULT now() NOT NULL,
     folder_id uuid,
-    prev_folder_id uuid
+    prev_folder_id uuid,
+    size_bytes bigint DEFAULT 0 NOT NULL
 );
 CREATE TABLE public.openrouter_catalog (
     model_id text NOT NULL,
     payload jsonb NOT NULL,
     fetched_at timestamp without time zone DEFAULT now() NOT NULL
 );
+CREATE TABLE public.openrouter_usage (
+    id bigint NOT NULL,
+    user_id text,
+    guest_session_id text,
+    model text NOT NULL,
+    prompt_tokens integer DEFAULT 0 NOT NULL,
+    completion_tokens integer DEFAULT 0 NOT NULL,
+    cost_usd numeric(10,6) DEFAULT 0 NOT NULL,
+    source text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+CREATE SEQUENCE public.openrouter_usage_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+ALTER SEQUENCE public.openrouter_usage_id_seq OWNED BY public.openrouter_usage.id;
 CREATE TABLE public.paper_chunks (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     paper_id uuid NOT NULL,
@@ -503,7 +522,8 @@ CREATE TABLE public.papers (
     folder_id uuid,
     prev_folder_id uuid,
     chandra_status text DEFAULT 'pending'::text NOT NULL,
-    chandra_completed_at timestamp with time zone
+    chandra_completed_at timestamp with time zone,
+    size_bytes bigint DEFAULT 0 NOT NULL
 );
 CREATE TABLE public.papersets (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
@@ -685,6 +705,7 @@ ALTER TABLE ONLY public.document_segments ALTER COLUMN id SET DEFAULT nextval('p
 ALTER TABLE ONLY public.kept_citations ALTER COLUMN id SET DEFAULT nextval('public.kept_citations_id_seq'::regclass);
 ALTER TABLE ONLY public.libraries ALTER COLUMN id SET DEFAULT nextval('public.libraries_id_seq'::regclass);
 ALTER TABLE ONLY public.library_references ALTER COLUMN id SET DEFAULT nextval('public.library_references_id_seq'::regclass);
+ALTER TABLE ONLY public.openrouter_usage ALTER COLUMN id SET DEFAULT nextval('public.openrouter_usage_id_seq'::regclass);
 ALTER TABLE ONLY public.processing_jobs ALTER COLUMN id SET DEFAULT nextval('public.processing_jobs_id_seq'::regclass);
 ALTER TABLE ONLY public.user_api_keys ALTER COLUMN id SET DEFAULT nextval('public.user_api_keys_id_seq'::regclass);
 ALTER TABLE ONLY public.user_highlights ALTER COLUMN id SET DEFAULT nextval('public.user_highlights_id_seq'::regclass);
@@ -750,6 +771,8 @@ ALTER TABLE ONLY public.notes
     ADD CONSTRAINT notes_pkey PRIMARY KEY (id);
 ALTER TABLE ONLY public.openrouter_catalog
     ADD CONSTRAINT openrouter_catalog_pkey PRIMARY KEY (model_id);
+ALTER TABLE ONLY public.openrouter_usage
+    ADD CONSTRAINT openrouter_usage_pkey PRIMARY KEY (id);
 ALTER TABLE ONLY public.paper_chunks
     ADD CONSTRAINT paper_embeddings_pkey PRIMARY KEY (id);
 ALTER TABLE ONLY public.paper_highlights
@@ -807,6 +830,8 @@ CREATE INDEX document_reference_markers_reference_id_idx ON public.document_refe
 CREATE INDEX document_sections_paper_idx ON public.document_sections USING btree (paper_id);
 CREATE INDEX document_segments_paper_page_idx ON public.document_segments USING btree (paper_id, page);
 CREATE UNIQUE INDEX folders_library_parent_name_unique ON public.folders USING btree (library_id, parent_id, name);
+CREATE INDEX idx_or_usage_guest_ts ON public.openrouter_usage USING btree (guest_session_id, created_at DESC) WHERE (guest_session_id IS NOT NULL);
+CREATE INDEX idx_or_usage_user_ts ON public.openrouter_usage USING btree (user_id, created_at DESC);
 CREATE INDEX idx_store_expires_at ON public.store USING btree (expires_at) WHERE (expires_at IS NOT NULL);
 CREATE INDEX kept_citations_user_id_idx ON public.kept_citations USING btree (user_id);
 CREATE UNIQUE INDEX libraries_user_id_unique ON public.libraries USING btree (user_id);
@@ -918,6 +943,8 @@ ALTER TABLE ONLY public.notes
     ADD CONSTRAINT notes_prev_folder_id_folders_id_fk FOREIGN KEY (prev_folder_id) REFERENCES public.folders(id) ON DELETE SET NULL;
 ALTER TABLE ONLY public.notes
     ADD CONSTRAINT notes_user_id_user_id_fk FOREIGN KEY (user_id) REFERENCES public."user"(id) ON DELETE CASCADE;
+ALTER TABLE ONLY public.openrouter_usage
+    ADD CONSTRAINT openrouter_usage_user_id_fkey FOREIGN KEY (user_id) REFERENCES public."user"(id) ON DELETE CASCADE;
 ALTER TABLE ONLY public.paper_chunks
     ADD CONSTRAINT paper_embeddings_paper_id_papers_id_fk FOREIGN KEY (paper_id) REFERENCES public.papers(id) ON DELETE CASCADE;
 ALTER TABLE ONLY public.paper_highlights
