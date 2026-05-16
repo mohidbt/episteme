@@ -17,6 +17,7 @@ import { resolveNoteSlug } from "@/lib/crud";
 import { deriveCitationKey, validateCslJson, type CslItem } from "@/lib/csl";
 import { extractCover } from "@/lib/pdf-extract";
 import { rebuildLinks } from "@episteme/notes-core";
+import { seedPaperCitations } from "@/lib/citations/seed-paper-citations";
 
 const SEED_DIR = "public/seed";
 const WELCOME_NOTE_FILE = "welcome-note.md";
@@ -458,6 +459,17 @@ export async function seedAnonymousUser(userId: string): Promise<void> {
       );
     }
     psmInsertedPapers.push({ id: inserted.id, title: meta.title });
+    // D7.1: pre-extract synthetic doc-refs from the PSM CSL list + auto-link
+    // inline so /references is non-empty on minute-zero guest workspaces.
+    // Failures must not break seed — auto-link is best-effort.
+    try {
+      await seedPaperCitations(inserted.id, SEED_PSM_REFERENCES);
+    } catch (err) {
+      console.warn(
+        `seed: synthetic citation seed failed for PSM paper ${inserted.id}`,
+        err,
+      );
+    }
   }
 
   // #110: Only paper-backed rows — reference-only rows that produced
