@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDecryptedApiKey } from "@episteme/auth/byok";
 import { db } from "@/lib/db";
 import { papers, documentReferences, documentReferenceMarkers } from "@episteme/db/schema";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { getUserIdFromRequest } from "@/lib/auth";
 import { jsonError, requireOwned } from "@/lib/crud";
 import { extractPdfPages } from "@/lib/ai/pdf-text";
@@ -10,6 +10,15 @@ import { extractCitations } from "@/lib/citations/parser";
 import { extractAnnotationMarkers } from "@/lib/citations/annotation-extractor";
 import { authorStringToJson } from "@/lib/citations/author-utils";
 import { paperSourceKey } from "@/lib/storage";
+import { extractDoiFromFirstPage } from "@/lib/papers/extract-doi-from-first-page";
+import { fetchPaperReferences, type S2Reference } from "@/lib/semantic-scholar";
+
+function authorsArrayToJson(
+  authors: { name: string }[] | null | undefined,
+): { name: string }[] | null {
+  if (!authors || authors.length === 0) return null;
+  return authors.map((a) => ({ name: a.name }));
+}
 
 export const runtime = "nodejs";
 
@@ -70,6 +79,7 @@ export async function POST(request: NextRequest, { params }: Ctx) {
 
     let inserted: typeof documentReferences.$inferSelect[] = [];
     let markersInserted = 0;
+    let extractionMethodOverride: string | null = null;
 
     if (usedAnnotations) {
       await db
@@ -133,6 +143,35 @@ export async function POST(request: NextRequest, { params }: Ctx) {
         markers.map((m) => [m.markerIndex, m.pageNumber]),
       );
 
+      // ── Source-DOI extract + S2 references enrichment ──────────────────
+      // If we don't yet know the source paper's DOI, try a tiny LLM extract
+      // from the first page; once known, fetch S2 references and use them
+      // as the metadata source-of-truth (positions stay from text-parse).
+      let sourceDoi = paper.doi ?? null;
+      if (!sourceDoi && pages.length > 0 && llmKey) {
+        const guess = await extractDoiFromFirstPage(pages[0]?.text ?? "", {
+          openrouterKey: llmKey,
+          userId,
+        });
+        if (guess) {
+          sourceDoi = guess;
+          try {
+            await db
+              .update(papers)
+              .set({ doi: guess })
+              .where(and(eq(papers.id, paperId), isNull(papers.doi)));
+          } catch (err) {
+            console.warn("[citations/extract] persist papers.doi failed", err);
+          }
+        }
+      }
+
+      let s2Refs: S2Reference[] | null = null;
+      if (sourceDoi) {
+        s2Refs = await fetchPaperReferences(sourceDoi);
+      }
+      const s2Enriched = s2Refs !== null;
+
       if (references.length > 0) {
         await db
           .delete(documentReferences)
@@ -141,24 +180,35 @@ export async function POST(request: NextRequest, { params }: Ctx) {
         inserted = await db
           .insert(documentReferences)
           .values(
-            references.map((ref) => ({
-              paperId,
-              markerText: `[${ref.markerIndex}]`,
-              markerIndex: ref.markerIndex,
-              rawText: ref.rawText ?? null,
-              title: ref.title ?? null,
-              authors: authorStringToJson(ref.authors),
-              year: ref.year ?? null,
-              doi: ref.doi ?? null,
-              url: ref.url ?? null,
-              semanticScholarId: null,
-              abstract: null,
-              venue: null,
-              citationCount: null,
-              pageNumber: markerPageMap.get(ref.markerIndex) ?? null,
-            })),
+            references.map((ref) => {
+              // Pair S2 ref to text-parse marker by index (1-indexed markers
+              // ↔ 0-indexed S2 array, in citation order).
+              const s2 = s2Enriched ? s2Refs![ref.markerIndex - 1] ?? null : null;
+              return {
+                paperId,
+                markerText: `[${ref.markerIndex}]`,
+                markerIndex: ref.markerIndex,
+                rawText: ref.rawText ?? null,
+                title: s2?.title ?? ref.title ?? null,
+                authors: s2
+                  ? authorsArrayToJson(s2.authors)
+                  : authorStringToJson(ref.authors),
+                year: s2?.year != null ? String(s2.year) : ref.year ?? null,
+                doi: s2?.doi ?? ref.doi ?? null,
+                url: ref.url ?? null,
+                semanticScholarId: s2?.paperId ?? null,
+                abstract: s2?.abstract ?? null,
+                venue: s2?.venue ?? null,
+                citationCount: s2?.citationCount ?? null,
+                pageNumber: markerPageMap.get(ref.markerIndex) ?? null,
+              };
+            }),
           )
           .returning();
+      }
+
+      if (s2Enriched) {
+        extractionMethodOverride = "text-regex+s2";
       }
     }
 
@@ -170,7 +220,8 @@ export async function POST(request: NextRequest, { params }: Ctx) {
           referencesExtracted: inserted.length,
           referencesInserted: inserted.length,
           markersInserted,
-          extractionMethod: usedAnnotations ? "annotations" : "text-regex",
+          extractionMethod:
+            extractionMethodOverride ?? (usedAnnotations ? "annotations" : "text-regex"),
         },
       },
       { status: 200 },
