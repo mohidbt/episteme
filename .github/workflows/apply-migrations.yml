@@ -1,0 +1,71 @@
+name: apply-migrations
+
+# Manual-only. Triggered via `gh workflow run apply-migrations.yml`.
+# Connects to prod Neon as the migrate_only role and applies any
+# pending drizzle migrations.
+#
+# Discipline (from feedback_db_migrations.md):
+#  - Migrate BEFORE code deploy. Reverse order = window of new-code-old-schema.
+#  - Predeploy-check first.
+#  - Show pre/post __drizzle_migrations state.
+#  - Required: refresh `packages/db/schema-snapshot.sql` afterwards.
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type APPLY to confirm prod migration apply'
+        required: true
+        default: 'NO'
+
+jobs:
+  apply:
+    name: drizzle migrate (prod)
+    runs-on: ubuntu-latest
+    env:
+      CONFIRM: ${{ inputs.confirm }}
+      MIGRATE_DATABASE_URL: ${{ secrets.MIGRATE_DATABASE_URL }}
+    steps:
+      - name: Guard
+        run: |
+          if [ "$CONFIRM" != "APPLY" ]; then
+            echo "::error::confirm input must be exactly 'APPLY' (got '$CONFIRM')"
+            exit 1
+          fi
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.12.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - name: Install postgres client
+        run: sudo apt-get update -qq && sudo apt-get install -y postgresql-client
+      - name: Install deps
+        run: pnpm install --frozen-lockfile
+      - name: Pre-state
+        run: |
+          echo "=== __drizzle_migrations max id (pre) ==="
+          psql "$MIGRATE_DATABASE_URL" -c "SELECT MAX(id) FROM __drizzle_migrations;"
+          echo "=== papers.size_bytes (pre) ==="
+          psql "$MIGRATE_DATABASE_URL" -c "SELECT column_name FROM information_schema.columns WHERE table_name='papers' AND column_name='size_bytes';"
+          echo "=== openrouter_usage (pre) ==="
+          psql "$MIGRATE_DATABASE_URL" -c "SELECT to_regclass('public.openrouter_usage');"
+      - name: Predeploy check
+        env:
+          DATABASE_URL: ${{ secrets.MIGRATE_DATABASE_URL }}
+        run: pnpm --filter @episteme/db predeploy-check
+      - name: Apply migrations
+        env:
+          DATABASE_URL: ${{ secrets.MIGRATE_DATABASE_URL }}
+        run: pnpm --filter @episteme/db migrate
+      - name: Post-state
+        run: |
+          echo "=== __drizzle_migrations max id (post) ==="
+          psql "$MIGRATE_DATABASE_URL" -c "SELECT MAX(id) FROM __drizzle_migrations;"
+          echo "=== papers.size_bytes (post) ==="
+          psql "$MIGRATE_DATABASE_URL" -c "SELECT column_name, data_type, is_nullable FROM information_schema.columns WHERE table_name='papers' AND column_name='size_bytes';"
+          echo "=== notes.size_bytes (post) ==="
+          psql "$MIGRATE_DATABASE_URL" -c "SELECT column_name, data_type, is_nullable FROM information_schema.columns WHERE table_name='notes' AND column_name='size_bytes';"
+          echo "=== openrouter_usage (post) ==="
+          psql "$MIGRATE_DATABASE_URL" -c "SELECT to_regclass('public.openrouter_usage');"
