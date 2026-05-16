@@ -46,6 +46,40 @@ async def pdf_text(body: PdfTextBody, auth: InternalAuthDep):
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+# Defense-in-depth sanitizer for Springer-Nature InDesign export corruption.
+# Mirrors `sanitizeRefField` in apps/km/src/lib/citations/parser.ts so callers
+# downstream see the same scrubbed strings whether the JS or Python path wins.
+# - U+FEFF zero-width no-break space (BOM)
+# - U+200B–U+200D zero-width space / joiners
+# - U+00AD soft hyphen
+# - U+0000–U+0008, U+000B, U+000C, U+000E–U+001F control chars
+#   (TAB \t U+0009, LF \n U+000A, CR \r U+000D intentionally preserved)
+_INVISIBLE_CHARS_RE = re.compile(
+    "[﻿​-‍­\x00-\x08\x0b\x0c\x0e-\x1f]"
+)
+# InDesign source filename leak: "springernature_nature_8614.indd:" at the
+# start of a field. Case-insensitive. Pattern scope: any leading token
+# ending in `.indd:` — acceptable since `.indd` is an InDesign extension and
+# not realistic content in academic citation strings.
+_INDD_FILENAME_PREFIX_RE = re.compile(r"^\S+\.indd\s*:\s*", re.IGNORECASE)
+
+
+def _sanitize_ref_field(value: str | None) -> str | None:
+    """Strip InDesign filename prefix and invisible/control chars.
+
+    Returns None for null/empty-after-cleaning so callers can flow nullable
+    reference fields through unchanged. Non-string inputs return None.
+    """
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        return None
+    cleaned = _INVISIBLE_CHARS_RE.sub("", value)
+    cleaned = _INDD_FILENAME_PREFIX_RE.sub("", cleaned)
+    cleaned = cleaned.strip()
+    return cleaned if cleaned else None
+
+
 _REF_FIELD_RE = re.compile(
     # Springer/Nature named-destinations look like:
     #   "<filename>.indd:﻿<N>.﻿\t<authors>. <title>...:<page>"
@@ -166,13 +200,22 @@ def _extract_annotations(reader: PdfReader) -> dict:
                 pass
             else:
                 raw_text = (parsed or {}).get("rawText") if parsed else None
-                authors, title, year = _extract_authors_year(raw_text or "")
+                # Sanitize the rawText BEFORE author/title/year heuristics so
+                # the InDesign filename prefix and U+FEFF noise don't pollute
+                # downstream splits. Defense-in-depth mirror of the JS
+                # `sanitizeRefField` in apps/km/src/lib/citations/parser.ts.
+                cleaned_raw_text = _sanitize_ref_field(raw_text)
+                authors, title, year = _extract_authors_year(cleaned_raw_text or "")
                 refs[marker_index] = {
                     "markerIndex": marker_index,
-                    "rawText": raw_text or raw or f"{marker_index}.",
-                    "title": title,
-                    "authors": authors,
-                    "year": year,
+                    "rawText": cleaned_raw_text
+                    or _sanitize_ref_field(raw)
+                    or f"{marker_index}.",
+                    "title": _sanitize_ref_field(title),
+                    "authors": _sanitize_ref_field(authors),
+                    "year": _sanitize_ref_field(year),
+                    # doi/url not extracted from annotations yet. If wired
+                    # later, pass through `_sanitize_ref_field` as well.
                     "doi": None,
                     "url": None,
                 }
