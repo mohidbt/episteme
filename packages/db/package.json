@@ -22,7 +22,8 @@
     "db:lint-drift": "tsx scripts/lint-schema-drift.ts",
     "db:snapshot-dump": "tsx scripts/snapshot-dump.ts",
     "db:snapshot-diff": "tsx scripts/snapshot-diff.ts",
-    "db:snapshot-update": "tsx scripts/snapshot-dump.ts packages/db/schema-snapshot.sql"
+    "db:snapshot-update": "tsx scripts/snapshot-dump.ts packages/db/schema-snapshot.sql",
+    "db:backfill-papers-size": "tsx scripts/backfill_papers_size_bytes.ts"
   },
   "dependencies": {
     "drizzle-orm": "^0.45.2",

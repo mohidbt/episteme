@@ -1,0 +1,9 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": { "noEmit": true, "types": ["node"] },
+  "include": [
+    "src/**/*.ts",
+    "scripts/backfill_papers_size_bytes.ts",
+    "scripts/__tests__/backfill_papers_size_bytes.test.ts"
+  ]
+}
