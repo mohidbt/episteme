@@ -17,6 +17,16 @@ vi.mock("@episteme/reader", () => ({
 import { PaperCitationsList, citationsRefreshEvent } from "./PaperCitationsList";
 
 const mockFetch = vi.fn();
+function citationsFetch(citations: unknown[]) {
+  // Route fetches by URL so the folders side-call doesn't burn a queued response.
+  const queue: Response[] = citations.map((c) => jsonResponse({ citations: c }));
+  mockFetch.mockImplementation(async (url: string) => {
+    if (typeof url === "string" && url.startsWith("/api/folders")) {
+      return jsonResponse({ folders: [] });
+    }
+    return queue.shift() ?? jsonResponse({ citations: [] });
+  });
+}
 beforeEach(() => {
   vi.clearAllMocks();
   vi.stubGlobal("fetch", mockFetch);
@@ -35,7 +45,7 @@ function jsonResponse(body: unknown, status = 200): Response {
 
 describe("PaperCitationsList", () => {
   it("shows empty-state message when API returns no citations", async () => {
-    mockFetch.mockResolvedValueOnce(jsonResponse({ citations: [] }));
+    citationsFetch([[]]);
     render(<PaperCitationsList paperId="paper-1" />);
     await waitFor(() =>
       expect(screen.getByText(/no citations yet/i)).toBeTruthy(),
@@ -47,15 +57,13 @@ describe("PaperCitationsList", () => {
   });
 
   it("renders one CitationCard per ref returned by /citations", async () => {
-    mockFetch.mockResolvedValueOnce(
-      jsonResponse({
-        citations: [
-          { id: 1, title: "First ref", markerIndex: 1 },
-          { id: 2, title: "Second ref", markerIndex: 2 },
-          { id: 3, title: "Third ref", markerIndex: 3 },
-        ],
-      }),
-    );
+    citationsFetch([
+      [
+        { id: 1, title: "First ref", markerIndex: 1 },
+        { id: 2, title: "Second ref", markerIndex: 2 },
+        { id: 3, title: "Third ref", markerIndex: 3 },
+      ],
+    ]);
     render(<PaperCitationsList paperId="paper-1" />);
     await waitFor(() => {
       expect(screen.getByTestId("paper-citations-list")).toBeTruthy();
@@ -67,11 +75,7 @@ describe("PaperCitationsList", () => {
   });
 
   it("reloads when the refresh event fires for the same paperId", async () => {
-    mockFetch
-      .mockResolvedValueOnce(jsonResponse({ citations: [] }))
-      .mockResolvedValueOnce(
-        jsonResponse({ citations: [{ id: 42, title: "Late ref", markerIndex: 1 }] }),
-      );
+    citationsFetch([[], [{ id: 42, title: "Late ref", markerIndex: 1 }]]);
     render(<PaperCitationsList paperId="paper-1" />);
     await waitFor(() => expect(screen.getByText(/no citations yet/i)).toBeTruthy());
 
@@ -79,6 +83,10 @@ describe("PaperCitationsList", () => {
       window.dispatchEvent(new Event(citationsRefreshEvent("paper-1")));
     });
     await waitFor(() => expect(screen.getByTestId("citation-card-42")).toBeTruthy());
-    expect(mockFetch).toHaveBeenCalledTimes(2);
+    // Two citations fetches + one folders fetch from initial mount
+    const citationsCalls = mockFetch.mock.calls.filter(
+      ([url]) => typeof url === "string" && url.startsWith("/api/papers/"),
+    );
+    expect(citationsCalls.length).toBe(2);
   });
 });

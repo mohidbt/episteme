@@ -26,7 +26,16 @@ const buildReq = () =>
   new Request(`http://x/api/papers/${PAPER_ID}/citations/extract`, { method: "POST" }) as unknown as import("next/server").NextRequest;
 const routeParams = { params: Promise.resolve({ id: PAPER_ID }) };
 
-beforeEach(() => vi.resetAllMocks());
+beforeEach(() => {
+  vi.resetAllMocks();
+  // Default mock for the idempotency-gate "existing references" select.
+  // Tests that need to drive owner lookup add their own mockReturnValueOnce
+  // FIRST; this default handles the second call (existing-refs check) and
+  // returns empty so extraction proceeds normally.
+  vi.mocked(db.select).mockReturnValue({
+    from: () => ({ where: async () => [] }),
+  } as never);
+});
 
 describe("POST /api/papers/[id]/citations/extract", () => {
   it("401 when unauthenticated", async () => {

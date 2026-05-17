@@ -5,7 +5,8 @@ import { notFound } from "next/navigation";
 import { BookMarked, BookOpen, Download } from "lucide-react";
 import { getRequiredUserId } from "@/lib/session";
 import { db } from "@/lib/db";
-import { papers } from "@episteme/db/schema";
+import { papers, documentReferences } from "@episteme/db/schema";
+import { sql } from "drizzle-orm";
 import { getDefaultLibrary } from "@/lib/default-library";
 import { getReferencesForPaper } from "@/lib/references-server";
 import { papersetCountForPaper, papersetsForPaper } from "@/lib/papersets-server";
@@ -48,12 +49,17 @@ export default async function PaperPage({
   const paper = await loadPaper(paperId, userId);
   if (!paper) notFound();
 
-  const [library, refs, papersetCount, papersetList] = await Promise.all([
+  const [library, refs, papersetCount, papersetList, citationCountRows] = await Promise.all([
     getDefaultLibrary(userId),
     getReferencesForPaper(paper.id, userId),
     papersetCountForPaper(paper.id, userId),
     papersetsForPaper(paper.id, userId),
+    db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(documentReferences)
+      .where(eq(documentReferences.paperId, paper.id)),
   ]);
+  const hasCitations = (citationCountRows[0]?.n ?? 0) > 0;
   const allFolders = library
     ? await listAllFolders(library.id, userId)
     : [];
@@ -96,6 +102,7 @@ export default async function PaperPage({
                 libraryId: paper.libraryId,
                 folderPath: paper.folderPath,
               }}
+              hasCitations={hasCitations}
             />
             <Link
               href={`/papers/${paper.id}/read`}

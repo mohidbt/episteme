@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Loader2, Sparkles, BookPlus } from "lucide-react";
+import { Loader2, Hexagon, BookPlus } from "lucide-react";
 import { citationsRefreshEvent } from "./PaperCitationsList";
 
 interface Paper {
@@ -14,13 +14,13 @@ interface Paper {
   folderPath: string;
 }
 
-export function PaperActionsButtons({ paper }: { paper: Paper }) {
+export function PaperActionsButtons({ paper, hasCitations = false }: { paper: Paper; hasCitations?: boolean }) {
   const router = useRouter();
   const [extracting, setExtracting] = useState(false);
   const [saving, setSaving] = useState(false);
 
   async function onFindCitations() {
-    if (extracting) return;
+    if (extracting || hasCitations) return;
     setExtracting(true);
     try {
       const res = await fetch(`/api/papers/${paper.id}/citations/extract`, {
@@ -96,16 +96,16 @@ export function PaperActionsButtons({ paper }: { paper: Paper }) {
       <button
         type="button"
         onClick={onFindCitations}
-        disabled={extracting}
-        aria-label="Find citations"
+        disabled={extracting || hasCitations}
+        aria-label={hasCitations ? "Citations extracted" : "Find citations"}
         className="inline-flex h-7 items-center justify-center gap-1 rounded-md border border-border bg-background px-2.5 text-[0.8rem] font-medium text-foreground whitespace-nowrap transition-colors hover:bg-muted disabled:opacity-60"
       >
         {extracting ? (
           <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
         ) : (
-          <Sparkles className="h-3 w-3" aria-hidden />
+          <Hexagon className="h-3 w-3" aria-hidden />
         )}
-        {extracting ? "Finding…" : "Find citations"}
+        {extracting ? "Finding…" : hasCitations ? "Citations extracted" : "Find citations"}
       </button>
       {showAddAsRef && (
         <button

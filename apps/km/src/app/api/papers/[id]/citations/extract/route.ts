@@ -42,10 +42,37 @@ export async function POST(request: NextRequest, { params }: Ctx) {
   if (!userId) return jsonError(401, "unauthorized");
 
   const { id: paperId } = await params;
+  const force = request.nextUrl.searchParams.get("force") === "1";
 
   const owned = await requireOwned<PaperRow>(papers, paperId, userId);
   if (!owned.ok) return jsonError(owned.status, owned.status === 404 ? "not_found" : "forbidden");
   const paper = owned.row;
+
+  // Idempotency gate: when citations already exist for this paper, return
+  // them as-is unless ?force=1 is passed. Prevents accidental re-extract
+  // (and duplicate LLM/S2 spend) from the /p/[id] Find citations button.
+  if (!force) {
+    const existing = await db
+      .select()
+      .from(documentReferences)
+      .where(eq(documentReferences.paperId, paperId));
+    if (existing.length > 0) {
+      return NextResponse.json(
+        {
+          references: existing,
+          stats: {
+            markersFound: 0,
+            referencesExtracted: existing.length,
+            referencesInserted: existing.length,
+            markersInserted: 0,
+            extractionMethod: "cached",
+          },
+          alreadyExtracted: true,
+        },
+        { status: 200 },
+      );
+    }
+  }
   const sourceLocator = paper.storageUrl ?? paperSourceKey(paperId);
   // BYOK first, then server-side OPENROUTER_API_KEY fallback. Guests
   // without BYOK still get DOI extract via the server key (~$0.001/paper).
@@ -176,45 +203,70 @@ export async function POST(request: NextRequest, { params }: Ctx) {
       if (sourceDoi) {
         s2Refs = await fetchPaperReferences(sourceDoi);
       }
-      const s2Enriched = s2Refs !== null;
+      const s2HasRefs = s2Refs !== null && s2Refs.length > 0;
 
-      if (references.length > 0) {
+      // S2-first: when Semantic Scholar returns a non-empty reference list
+      // for the source DOI, treat S2 as the canonical refs source. Text-parse
+      // still contributes marker → pageNumber positions (and rawText/url
+      // fallbacks for any index without an S2 match). The originally-designed
+      // ordering — see plan D7 "bibliography parser deprecated" — finally
+      // takes effect here. Falls back to pure text-parse when S2 is null/empty.
+      const textRefByIndex = new Map<number, typeof references[number]>(
+        references.map((r) => [r.markerIndex, r]),
+      );
+
+      const rowsToInsert = s2HasRefs
+        ? s2Refs!.map((s2, i) => {
+            const markerIndex = i + 1;
+            const text = textRefByIndex.get(markerIndex);
+            return {
+              paperId,
+              markerText: `[${markerIndex}]`,
+              markerIndex,
+              rawText: text?.rawText ?? null,
+              title: s2.title ?? text?.title ?? null,
+              authors: authorsArrayToJson(s2.authors)
+                ?? (text ? authorStringToJson(text.authors) : null),
+              year: s2.year != null ? String(s2.year) : text?.year ?? null,
+              doi: s2.doi ?? text?.doi ?? null,
+              url: text?.url ?? null,
+              semanticScholarId: s2.paperId ?? null,
+              abstract: s2.abstract ?? null,
+              venue: s2.venue ?? null,
+              citationCount: s2.citationCount ?? null,
+              pageNumber: markerPageMap.get(markerIndex) ?? null,
+            };
+          })
+        : references.map((ref) => ({
+            paperId,
+            markerText: `[${ref.markerIndex}]`,
+            markerIndex: ref.markerIndex,
+            rawText: ref.rawText ?? null,
+            title: ref.title ?? null,
+            authors: authorStringToJson(ref.authors),
+            year: ref.year ?? null,
+            doi: ref.doi ?? null,
+            url: ref.url ?? null,
+            semanticScholarId: null,
+            abstract: null,
+            venue: null,
+            citationCount: null,
+            pageNumber: markerPageMap.get(ref.markerIndex) ?? null,
+          }));
+
+      if (rowsToInsert.length > 0) {
         await db
           .delete(documentReferences)
           .where(eq(documentReferences.paperId, paperId));
 
         inserted = await db
           .insert(documentReferences)
-          .values(
-            references.map((ref) => {
-              // Pair S2 ref to text-parse marker by index (1-indexed markers
-              // ↔ 0-indexed S2 array, in citation order).
-              const s2 = s2Enriched ? s2Refs![ref.markerIndex - 1] ?? null : null;
-              return {
-                paperId,
-                markerText: `[${ref.markerIndex}]`,
-                markerIndex: ref.markerIndex,
-                rawText: ref.rawText ?? null,
-                title: s2?.title ?? ref.title ?? null,
-                authors: s2
-                  ? authorsArrayToJson(s2.authors)
-                  : authorStringToJson(ref.authors),
-                year: s2?.year != null ? String(s2.year) : ref.year ?? null,
-                doi: s2?.doi ?? ref.doi ?? null,
-                url: ref.url ?? null,
-                semanticScholarId: s2?.paperId ?? null,
-                abstract: s2?.abstract ?? null,
-                venue: s2?.venue ?? null,
-                citationCount: s2?.citationCount ?? null,
-                pageNumber: markerPageMap.get(ref.markerIndex) ?? null,
-              };
-            }),
-          )
+          .values(rowsToInsert)
           .returning();
       }
 
-      if (s2Enriched) {
-        extractionMethodOverride = "text-regex+s2";
+      if (s2HasRefs) {
+        extractionMethodOverride = "s2-first";
       }
     }
 
