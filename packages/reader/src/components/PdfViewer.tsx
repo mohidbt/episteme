@@ -120,8 +120,13 @@ export function PdfViewer({ url, containerRef: externalRef, markers = [], userHi
   }, [containerRef]);
 
   // Scroll to an explicitly requested page (Prev/Next, outline, BG2a deeplink).
-  // BG2a-followup2: retry up to ~3s while react-pdf renders the target page.
-  // Without retry, deeplinks fire before the page DOM exists and lose the jump.
+  // BG2a-followup2/3/4: react-pdf has two timing pitfalls —
+  //   1. target page DOM may not exist when state flips (retry up to 3s)
+  //   2. page images load AFTER initial scroll, shifting offsetTop down by
+  //      thousands of px (poll-correct for 6s until offset stable)
+  // The poll-correct lives in `scrollPinRef` so it survives the immediate
+  // setScrollTargetPage(null) effect-cleanup that would otherwise cancel it.
+  const scrollPinRef = useRef<{ target: number; until: number } | null>(null);
   useEffect(() => {
     if (scrollTargetPage === null) return;
     const el = containerRef.current;
@@ -131,33 +136,8 @@ export function PdfViewer({ url, containerRef: externalRef, markers = [], userHi
     }
     let cancelled = false;
     let attempts = 0;
-    // ~3s window for the target page DOM to mount.
     const MAX_ATTEMPTS = 180;
     const target = scrollTargetPage;
-
-    // After mount, page images load and shift offsets downward by hundreds
-    // of px per page. A single scrollIntoView lands short. Poll-correct for
-    // ~6s: every 400ms, if container.scrollTop is more than 30px off the
-    // current pageEl.offsetTop, scroll-correct (instant — no animation
-    // wrestling).
-    const POLL_CORRECT_MS = 6000;
-    const POLL_INTERVAL_MS = 400;
-    let correctIntervalId: ReturnType<typeof setInterval> | null = null;
-    const startPollCorrect = () => {
-      const startedAt = Date.now();
-      correctIntervalId = setInterval(() => {
-        if (cancelled || Date.now() - startedAt > POLL_CORRECT_MS) {
-          if (correctIntervalId) clearInterval(correctIntervalId);
-          return;
-        }
-        const pageEl = el.querySelector(`[data-page-number="${target}"]`) as HTMLElement | null;
-        if (!pageEl) return;
-        const diff = Math.abs(el.scrollTop - pageEl.offsetTop);
-        if (diff > 30) {
-          el.scrollTop = pageEl.offsetTop;
-        }
-      }, POLL_INTERVAL_MS);
-    };
 
     const tryScroll = () => {
       if (cancelled) return;
@@ -169,7 +149,7 @@ export function PdfViewer({ url, containerRef: externalRef, markers = [], userHi
           block: "start",
         });
         el.addEventListener("scrollend", () => { isAnimatingRef.current = false; }, { once: true });
-        startPollCorrect();
+        scrollPinRef.current = { target, until: Date.now() + 6000 };
         setScrollTargetPage(null);
         return;
       }
@@ -181,11 +161,29 @@ export function PdfViewer({ url, containerRef: externalRef, markers = [], userHi
       requestAnimationFrame(tryScroll);
     };
     tryScroll();
-    return () => {
-      cancelled = true;
-      if (correctIntervalId) clearInterval(correctIntervalId);
-    };
+    return () => { cancelled = true; };
   }, [scrollTargetPage, containerRef, setScrollTargetPage]);
+
+  // Always-on poll-correct loop, decoupled from scrollTargetPage state so it
+  // survives the in-effect setScrollTargetPage(null). Reads scrollPinRef.
+  useEffect(() => {
+    const id = setInterval(() => {
+      const pin = scrollPinRef.current;
+      if (!pin) return;
+      if (Date.now() > pin.until) {
+        scrollPinRef.current = null;
+        return;
+      }
+      const el = containerRef.current;
+      if (!el) return;
+      const pageEl = el.querySelector(`[data-page-number="${pin.target}"]`) as HTMLElement | null;
+      if (!pageEl) return;
+      if (Math.abs(el.scrollTop - pageEl.offsetTop) > 30) {
+        el.scrollTop = pageEl.offsetTop;
+      }
+    }, 300);
+    return () => clearInterval(id);
+  }, [containerRef]);
 
   // Track current page via IntersectionObserver (for toolbar display only)
   useEffect(() => {
