@@ -205,26 +205,30 @@ export function PdfViewer({ url, containerRef: externalRef, markers = [], userHi
     // Any IO callbacks still queued from the previous generation will see
     // their captured gen !== current gen and bail out (Bug 1 fix).
     let currentIo: IntersectionObserver | null = null;
+    // Persistent ratio map per observer generation — fixes page-counter
+    // ping-pong on fast scroll. Reset on each new observe() call so we don't
+    // carry stale ratios across re-mounts.
+    let ratioMap: Map<number, number> = new Map();
     const observe = () => {
       currentIo?.disconnect();
       const myGeneration = ++ioGenerationRef.current;
+      ratioMap = new Map();
       const io = new IntersectionObserver(
         (entries) => {
           // Suppress IO updates during programmatic smooth scroll
           if (isAnimatingRef.current) return;
+          const currentPage = useReaderState.getState().currentPage;
           const bestPage = pickCurrentPageFromEntries(
             entries,
             myGeneration,
-            ioGenerationRef.current
+            ioGenerationRef.current,
+            ratioMap,
+            currentPage,
           );
-          if (bestPage !== null) setCurrentPage(bestPage);
+          if (bestPage !== null && bestPage !== currentPage) {
+            setCurrentPage(bestPage);
+          }
         },
-        // Graduated threshold set: a single 0.5 threshold misses page
-        // changes on tall pages / high zoom where a page may never reach
-        // 50% visibility. Race-window control comes from the generation
-        // guard above (stale callbacks are discarded regardless of how
-        // many trip-wires fire), so threshold density no longer matters
-        // for correctness.
         { root: el, threshold: [0, 0.25, 0.5, 0.75, 1] }
       );
       currentIo = io;
