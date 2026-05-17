@@ -172,6 +172,63 @@ describe("ReferencesView", () => {
     });
   });
 
+  // BG3 — Folder pill renders with consistent <Badge> markup whether or not
+  // the row has a resolvable folderId. Same data shape -> same component.
+  it("BG3 folder pill uses identical Badge markup across all rows", () => {
+    const folders = [
+      { id: "f-bio", userId: "u1", parentId: null, name: "Bio", createdAt: NOW, updatedAt: NOW },
+    ] as unknown as Parameters<typeof ReferencesView>[0]["folders"];
+
+    const mixedRows: ReferenceRow[] = [
+      {
+        id: "r-with-id",
+        libraryId: 1,
+        userId: "u1",
+        folderPath: "Bio/",
+        folderId: "f-bio",
+        prevFolderId: null,
+        citationKey: "a2020",
+        cslJson: { id: "r-with-id", type: "article-journal", title: "A" },
+        paperId: null,
+        createdAt: NOW,
+        updatedAt: NOW,
+      },
+      {
+        id: "r-legacy",
+        libraryId: 1,
+        userId: "u1",
+        folderPath: "Bio/",
+        folderId: null,
+        prevFolderId: null,
+        citationKey: "b2020",
+        cslJson: { id: "r-legacy", type: "article-journal", title: "B" },
+        paperId: null,
+        createdAt: NOW,
+        updatedAt: NOW,
+      },
+    ] as unknown as ReferenceRow[];
+
+    render(<ReferencesView rows={mixedRows} folders={folders} />);
+
+    const row1 = screen.getByTestId("refs-row-r-with-id");
+    const row2 = screen.getByTestId("refs-row-r-legacy");
+
+    // Folder cell is the 7th column (index 6) — same as the "Folder" header.
+    const cell1 = row1.querySelectorAll("td")[6]!;
+    const cell2 = row2.querySelectorAll("td")[6]!;
+
+    // Both cells must contain a Badge (a span with the secondary badge class),
+    // not a plain text span. We assert by checking the rendered element is a
+    // SPAN carrying the `bg-secondary` class shared by both badge paths.
+    const pill1 = cell1.querySelector("span");
+    const pill2 = cell2.querySelector("span");
+    expect(pill1).toBeTruthy();
+    expect(pill2).toBeTruthy();
+    expect(pill1!.tagName).toBe(pill2!.tagName);
+    expect(pill1!.className).toContain("bg-secondary");
+    expect(pill2!.className).toContain("bg-secondary");
+  });
+
   // #101 batch fill sends cslJson in PATCH body
   it("#101 batch AI fill sends cslJson in PATCH body", async () => {
     fetchMock

@@ -19,6 +19,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { FolderBreadcrumbBadge } from "@/components/FolderBreadcrumbBadge";
+import { Badge } from "@/components/ui/badge";
 import { AiFillButton } from "@/components/AiFillButton";
 import { AiFillBatchButton } from "@/components/AiFillBatchButton";
 import { denormaliseForList, type CslItem } from "@/lib/csl";
@@ -217,13 +218,7 @@ function ReferencesListTable({
               </TableCell>
               <TableCell className={`text-muted-foreground${r.missing.includes("venue") ? " bg-red-50 dark:bg-red-950/30" : ""}`}>{r.venue}</TableCell>
               <TableCell>
-                {folders && r.folderId ? (
-                  <FolderBreadcrumbBadge folderId={r.folderId} folders={folders} />
-                ) : (
-                  <span className="font-mono text-xs text-muted-foreground">
-                    {r.folderPath || "/"}
-                  </span>
-                )}
+                <FolderPill folders={folders} folderId={r.folderId} folderPath={r.folderPath} />
               </TableCell>
               <TableCell>
                 <AiFillButton
@@ -270,11 +265,29 @@ function ReferencesGrid({
             {r.authorsText}
             {r.year != null ? ` · ${r.year}` : ""}
           </span>
-          {folders && r.folderId ? (
-            <FolderBreadcrumbBadge folderId={r.folderId} folders={folders} />
-          ) : null}
+          <FolderPill folders={folders} folderId={r.folderId} folderPath={r.folderPath} />
         </Link>
       ))}
     </div>
+  );
+}
+
+function FolderPill({
+  folders,
+  folderId,
+  folderPath,
+}: {
+  folders?: FolderRow[];
+  folderId: string | null;
+  folderPath: string;
+}) {
+  if (folders && folderId) {
+    return <FolderBreadcrumbBadge folderId={folderId} folders={folders} />;
+  }
+  const label = folderPath ? folderPath.replace(/\/$/, "") : "/";
+  return (
+    <Badge variant="secondary" data-testid="folder-pill-fallback">
+      {label}
+    </Badge>
   );
 }
