@@ -131,13 +131,37 @@ export function PdfViewer({ url, containerRef: externalRef, markers = [], userHi
     }
     let cancelled = false;
     let attempts = 0;
-    // ~3s window: PDFs with many pages can take >500ms to fully mount their
-    // page DOM. Also re-scroll once after a short delay to correct for image
-    // loads that shift page offsets between scrollIntoView and final layout.
+    // ~3s window for the target page DOM to mount.
     const MAX_ATTEMPTS = 180;
+    const target = scrollTargetPage;
+
+    // After mount, page images load and shift offsets downward by hundreds
+    // of px per page. A single scrollIntoView lands short. Poll-correct for
+    // ~6s: every 400ms, if container.scrollTop is more than 30px off the
+    // current pageEl.offsetTop, scroll-correct (instant — no animation
+    // wrestling).
+    const POLL_CORRECT_MS = 6000;
+    const POLL_INTERVAL_MS = 400;
+    let correctIntervalId: ReturnType<typeof setInterval> | null = null;
+    const startPollCorrect = () => {
+      const startedAt = Date.now();
+      correctIntervalId = setInterval(() => {
+        if (cancelled || Date.now() - startedAt > POLL_CORRECT_MS) {
+          if (correctIntervalId) clearInterval(correctIntervalId);
+          return;
+        }
+        const pageEl = el.querySelector(`[data-page-number="${target}"]`) as HTMLElement | null;
+        if (!pageEl) return;
+        const diff = Math.abs(el.scrollTop - pageEl.offsetTop);
+        if (diff > 30) {
+          el.scrollTop = pageEl.offsetTop;
+        }
+      }, POLL_INTERVAL_MS);
+    };
+
     const tryScroll = () => {
       if (cancelled) return;
-      const pageEl = el.querySelector(`[data-page-number="${scrollTargetPage}"]`);
+      const pageEl = el.querySelector(`[data-page-number="${target}"]`);
       if (pageEl) {
         isAnimatingRef.current = true;
         (pageEl as HTMLElement).scrollIntoView({
@@ -145,14 +169,7 @@ export function PdfViewer({ url, containerRef: externalRef, markers = [], userHi
           block: "start",
         });
         el.addEventListener("scrollend", () => { isAnimatingRef.current = false; }, { once: true });
-        // Re-scroll once after layout settles — page images often expand
-        // height post-mount, leaving the initial scroll short of the target.
-        const target = scrollTargetPage;
-        setTimeout(() => {
-          if (cancelled) return;
-          const settled = el.querySelector(`[data-page-number="${target}"]`);
-          if (settled) (settled as HTMLElement).scrollIntoView({ behavior: "smooth", block: "start" });
-        }, 1200);
+        startPollCorrect();
         setScrollTargetPage(null);
         return;
       }
@@ -164,7 +181,10 @@ export function PdfViewer({ url, containerRef: externalRef, markers = [], userHi
       requestAnimationFrame(tryScroll);
     };
     tryScroll();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      if (correctIntervalId) clearInterval(correctIntervalId);
+    };
   }, [scrollTargetPage, containerRef, setScrollTargetPage]);
 
   // Track current page via IntersectionObserver (for toolbar display only)
