@@ -11,12 +11,19 @@ import {
   inviteCodes,
   libraries,
   notes,
+  signupWaitlist,
   user as userTable,
+  userSignupProfiles,
 } from "@episteme/db/schema";
-import { signupRealUser } from "./signup-real";
+import {
+  saveSignupWaitlistEntry,
+  signupRealUser,
+  validateInviteCode,
+} from "./signup-real";
 
 const createdUserIds: string[] = [];
 const createdInviteCodes: string[] = [];
+const waitlistEmails: string[] = [];
 
 function uniq(): string {
   return `${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36)}`;
@@ -45,6 +52,11 @@ afterAll(async () => {
       .delete(inviteCodes)
       .where(inArray(inviteCodes.code, createdInviteCodes));
   }
+  if (waitlistEmails.length > 0) {
+    await db
+      .delete(signupWaitlist)
+      .where(inArray(signupWaitlist.email, waitlistEmails));
+  }
 });
 
 describe("signupRealUser", () => {
@@ -55,6 +67,7 @@ describe("signupRealUser", () => {
       password: "test-password-1234",
       username: `alice_${uniq()}`.slice(0, 24),
       userType: "student",
+      studentLevel: "Master",
       pokemon: "charmander",
       inviteCode: "does-not-exist-12345",
     });
@@ -85,6 +98,7 @@ describe("signupRealUser", () => {
       password: "test-password-1234",
       username: `bob_${uniq()}`.slice(0, 24),
       userType: "researcher",
+      jobRole: "Principal investigator",
       pokemon: "squirtle",
       inviteCode: code,
     });
@@ -106,7 +120,22 @@ describe("signupRealUser", () => {
     if (!result.ok) expect(result.error).toBe("validation");
   });
 
-  it("creates user, stamps invite, and persists extras on success", async () => {
+  it("rejects mismatched persona details server-side", async () => {
+    const result = await signupRealUser({
+      firstname: "Mismatch",
+      email: `m_${uniq()}@test.local`,
+      password: "test-password-1234",
+      username: `mismatch_${uniq()}`.slice(0, 24),
+      userType: "student",
+      jobRole: "Analyst",
+      pokemon: "charmander",
+      inviteCode: "not-needed-for-validation",
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toBe("validation");
+  });
+
+  it("creates user, stamps invite, and persists extras plus persona profile on success", async () => {
     const code = await seedInvite();
     const username = `carol_${uniq()}`.slice(0, 24);
     const email = `c_${uniq()}@test.local`;
@@ -117,6 +146,8 @@ describe("signupRealUser", () => {
       password: "test-password-1234",
       username,
       userType: "industry",
+      jobRole: "Product lead",
+      industry: "Biotech",
       pokemon: "bulbasaur",
       inviteCode: code,
     });
@@ -137,6 +168,16 @@ describe("signupRealUser", () => {
     expect(row.pokemon).toBe("bulbasaur");
     expect(row.inviteCode).toBe(code);
 
+    const [profile] = await db
+      .select()
+      .from(userSignupProfiles)
+      .where(eq(userSignupProfiles.userId, result.userId))
+      .limit(1);
+    expect(profile.jobRole).toBe("Product lead");
+    expect(profile.industry).toBe("Biotech");
+    expect(profile.studentLevel).toBeNull();
+    expect(profile.personaOther).toBeNull();
+
     const [invRow] = await db
       .select()
       .from(inviteCodes)
@@ -156,5 +197,52 @@ describe("signupRealUser", () => {
     await db.delete(notes).where(eq(notes.userId, result.userId));
     await db.delete(folders).where(eq(folders.userId, result.userId));
     await db.delete(libraries).where(eq(libraries.userId, result.userId));
+  });
+
+  it("validates invite codes without creating users", async () => {
+    const code = await seedInvite();
+
+    await expect(validateInviteCode(code)).resolves.toEqual({ ok: true });
+
+    const missing = await validateInviteCode("missing-code");
+    expect(missing.ok).toBe(false);
+    if (!missing.ok) expect(missing.error).toBe("invite_invalid");
+  });
+
+  it("upserts waitlist entries without requiring a password", async () => {
+    const email = `wait_${uniq()}@test.local`;
+    waitlistEmails.push(email);
+
+    const first = await saveSignupWaitlistEntry({
+      firstname: "Wendy",
+      email,
+      username: "wendy_one",
+      userType: "student",
+      studentLevel: "Bachelor",
+      pokemon: "squirtle",
+      attemptedInviteCode: "BAD-ONE",
+    });
+    expect(first.ok).toBe(true);
+
+    const second = await saveSignupWaitlistEntry({
+      firstname: "Wendy",
+      email,
+      username: "wendy_two",
+      userType: "student",
+      studentLevel: "PhD",
+      pokemon: "bulbasaur",
+      attemptedInviteCode: "BAD-TWO",
+    });
+    expect(second.ok).toBe(true);
+
+    const [row] = await db
+      .select()
+      .from(signupWaitlist)
+      .where(eq(signupWaitlist.email, email))
+      .limit(1);
+    expect(row.username).toBe("wendy_two");
+    expect(row.studentLevel).toBe("PhD");
+    expect(row.pokemon).toBe("bulbasaur");
+    expect(row.attemptedInviteCode).toBe("BAD-TWO");
   });
 });

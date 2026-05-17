@@ -324,6 +324,166 @@ export async function runDbChecks(databaseUrl: string): Promise<DbCheckSummary> 
               and p.storage_url !~ '^[0-9a-fA-F-]{36}/source\\.pdf$'
           ),
           'storage_url must match <paper_uuid>/source.pdf'
+        union all
+        select
+          'user_signup_profiles.user_id_exists',
+          exists (
+            select 1 from information_schema.columns
+            where table_schema = 'public' and table_name = 'user_signup_profiles' and column_name = 'user_id'
+          ),
+          'required for signup persona profile linkage'
+        union all
+        select
+          'user_signup_profiles.student_level_exists',
+          exists (
+            select 1 from information_schema.columns
+            where table_schema = 'public' and table_name = 'user_signup_profiles' and column_name = 'student_level'
+          ),
+          'required for student persona detail persistence'
+        union all
+        select
+          'user_signup_profiles.job_role_exists',
+          exists (
+            select 1 from information_schema.columns
+            where table_schema = 'public' and table_name = 'user_signup_profiles' and column_name = 'job_role'
+          ),
+          'required for researcher/industry persona detail persistence'
+        union all
+        select
+          'user_signup_profiles.industry_exists',
+          exists (
+            select 1 from information_schema.columns
+            where table_schema = 'public' and table_name = 'user_signup_profiles' and column_name = 'industry'
+          ),
+          'required for industry persona detail persistence'
+        union all
+        select
+          'user_signup_profiles.persona_other_exists',
+          exists (
+            select 1 from information_schema.columns
+            where table_schema = 'public' and table_name = 'user_signup_profiles' and column_name = 'persona_other'
+          ),
+          'required for other persona detail persistence'
+        union all
+        select
+          'user_signup_profiles.created_at_exists',
+          exists (
+            select 1 from information_schema.columns
+            where table_schema = 'public' and table_name = 'user_signup_profiles' and column_name = 'created_at'
+          ),
+          'required for signup persona profile audit metadata'
+        union all
+        select
+          'user_signup_profiles.updated_at_exists',
+          exists (
+            select 1 from information_schema.columns
+            where table_schema = 'public' and table_name = 'user_signup_profiles' and column_name = 'updated_at'
+          ),
+          'required for signup persona profile audit metadata'
+        union all
+        select
+          'signup_waitlist.email_single_column_pk',
+          exists (
+            select 1
+            from pg_constraint c
+            join pg_class t on t.oid = c.conrelid
+            join pg_namespace n on n.oid = t.relnamespace
+            join pg_attribute a on a.attrelid = t.oid and a.attnum = c.conkey[1]
+            where n.nspname = 'public'
+              and t.relname = 'signup_waitlist'
+              and c.contype = 'p'
+              and array_length(c.conkey, 1) = 1
+              and a.attname = 'email'
+          ),
+          'signup_waitlist email must be the single-column primary key for upsert'
+        union all
+        select
+          'signup_waitlist.firstname_exists',
+          exists (
+            select 1 from information_schema.columns
+            where table_schema = 'public' and table_name = 'signup_waitlist' and column_name = 'firstname'
+          ),
+          'required for waitlist signup payload persistence'
+        union all
+        select
+          'signup_waitlist.username_exists',
+          exists (
+            select 1 from information_schema.columns
+            where table_schema = 'public' and table_name = 'signup_waitlist' and column_name = 'username'
+          ),
+          'required for waitlist signup payload persistence'
+        union all
+        select
+          'signup_waitlist.user_type_exists',
+          exists (
+            select 1 from information_schema.columns
+            where table_schema = 'public' and table_name = 'signup_waitlist' and column_name = 'user_type'
+          ),
+          'required for waitlist persona routing'
+        union all
+        select
+          'signup_waitlist.pokemon_exists',
+          exists (
+            select 1 from information_schema.columns
+            where table_schema = 'public' and table_name = 'signup_waitlist' and column_name = 'pokemon'
+          ),
+          'required for waitlist starter persistence'
+        union all
+        select
+          'signup_waitlist.student_level_exists',
+          exists (
+            select 1 from information_schema.columns
+            where table_schema = 'public' and table_name = 'signup_waitlist' and column_name = 'student_level'
+          ),
+          'required for waitlist student persona detail persistence'
+        union all
+        select
+          'signup_waitlist.job_role_exists',
+          exists (
+            select 1 from information_schema.columns
+            where table_schema = 'public' and table_name = 'signup_waitlist' and column_name = 'job_role'
+          ),
+          'required for waitlist researcher/industry persona detail persistence'
+        union all
+        select
+          'signup_waitlist.industry_exists',
+          exists (
+            select 1 from information_schema.columns
+            where table_schema = 'public' and table_name = 'signup_waitlist' and column_name = 'industry'
+          ),
+          'required for waitlist industry persona detail persistence'
+        union all
+        select
+          'signup_waitlist.persona_other_exists',
+          exists (
+            select 1 from information_schema.columns
+            where table_schema = 'public' and table_name = 'signup_waitlist' and column_name = 'persona_other'
+          ),
+          'required for waitlist other persona detail persistence'
+        union all
+        select
+          'signup_waitlist.attempted_invite_code_exists',
+          exists (
+            select 1 from information_schema.columns
+            where table_schema = 'public' and table_name = 'signup_waitlist' and column_name = 'attempted_invite_code'
+          ),
+          'required for waitlist invite attempt tracking'
+        union all
+        select
+          'signup_waitlist.created_at_exists',
+          exists (
+            select 1 from information_schema.columns
+            where table_schema = 'public' and table_name = 'signup_waitlist' and column_name = 'created_at'
+          ),
+          'required for waitlist audit metadata'
+        union all
+        select
+          'signup_waitlist.updated_at_exists',
+          exists (
+            select 1 from information_schema.columns
+            where table_schema = 'public' and table_name = 'signup_waitlist' and column_name = 'updated_at'
+          ),
+          'required for waitlist audit metadata'
       )
       select check_name, ok, details from checks
     `;

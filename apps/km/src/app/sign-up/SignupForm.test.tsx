@@ -7,11 +7,23 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
+import { toast } from "sonner";
 import { SignupForm } from "./SignupForm";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn() }),
 }));
+
+vi.mock("sonner", () => ({
+  toast: { success: vi.fn(), error: vi.fn() },
+}));
+
+function json(data: unknown, status = 200): Response {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { "content-type": "application/json" },
+  });
+}
 
 function mockFetch(handler: (url: string, init?: RequestInit) => Response) {
   const fn = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -22,14 +34,14 @@ function mockFetch(handler: (url: string, init?: RequestInit) => Response) {
   return fn;
 }
 
+function bodyOf(call: [unknown, unknown?]) {
+  return JSON.parse((call[1] as RequestInit).body as string);
+}
+
 beforeEach(() => {
-  // Default: session probe → not a guest. Tests override as needed.
   mockFetch((url) => {
     if (url.endsWith("/api/auth/get-session")) {
-      return new Response(JSON.stringify({ user: { isAnonymous: false } }), {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      });
+      return json({ user: { isAnonymous: false } });
     }
     return new Response("nope", { status: 404 });
   });
@@ -41,167 +53,247 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-function fillRequired() {
+async function continueStep() {
+  fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+}
+
+async function reachEmailStep() {
   fireEvent.change(screen.getByLabelText(/first name/i), {
     target: { value: "Alex" },
   });
   fireEvent.change(screen.getByLabelText(/username/i), {
-    target: { value: "alex_99" },
+    target: { value: "Alex_99" },
   });
-  fireEvent.change(screen.getByLabelText(/email/i), {
+  await continueStep();
+}
+
+async function reachPersonaStep() {
+  await reachEmailStep();
+  fireEvent.change(screen.getByLabelText(/^email$/i), {
     target: { value: "alex@example.com" },
   });
-  fireEvent.change(screen.getByLabelText(/password/i), {
-    target: { value: "supersecret1" },
+  await continueStep();
+}
+
+async function reachStarterStepForIndustry() {
+  await reachPersonaStep();
+  fireEvent.click(screen.getByRole("radio", { name: /industry/i }));
+  await continueStep();
+  fireEvent.change(screen.getByLabelText(/job role/i), {
+    target: { value: "Product lead" },
   });
-  fireEvent.change(screen.getByLabelText(/invite code/i), {
-    target: { value: "INVITE-ABC" },
+  fireEvent.change(screen.getByLabelText(/^industry$/i), {
+    target: { value: "Biotech" },
   });
+  await continueStep();
+}
+
+async function reachInviteStepForIndustry() {
+  await reachStarterStepForIndustry();
+  fireEvent.click(screen.getByTestId("pokemon-bulbasaur"));
+  await continueStep();
 }
 
 describe("SignupForm", () => {
-  it("rejects submission when pokemon is not selected", async () => {
-    const onSuccess = vi.fn();
-    render(<SignupForm onSuccess={onSuccess} />);
-    fillRequired();
-    // Pick userType but skip pokemon.
-    fireEvent.click(screen.getByText("Student"));
+  it("progresses through wizard frames and keeps sign-in available", async () => {
+    render(<SignupForm />);
 
-    fireEvent.click(screen.getByRole("button", { name: /create account/i }));
+    expect(screen.getByText(/step 1 of 7/i)).toBeTruthy();
+    expect(
+      (screen.getByRole("link", { name: /sign in/i }) as HTMLAnchorElement)
+        .href,
+    ).toContain("/sign-in");
 
-    await waitFor(() => {
-      expect(screen.getByRole("alert").textContent).toMatch(/pokemon/i);
-    });
-    expect(onSuccess).not.toHaveBeenCalled();
+    await reachEmailStep();
+    expect(screen.getByText(/step 2 of 7/i)).toBeTruthy();
+    expect(screen.getByRole("link", { name: /sign in/i })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: /back/i }));
+    expect(screen.getByText(/step 1 of 7/i)).toBeTruthy();
   });
 
-  it("rejects submission when invite code is missing", async () => {
-    const onSuccess = vi.fn();
-    const { container } = render(<SignupForm onSuccess={onSuccess} />);
-    fireEvent.change(screen.getByLabelText(/first name/i), {
-      target: { value: "Alex" },
-    });
-    fireEvent.change(screen.getByLabelText(/username/i), {
-      target: { value: "alex_99" },
-    });
-    fireEvent.change(screen.getByLabelText(/email/i), {
-      target: { value: "alex@example.com" },
-    });
-    fireEvent.change(screen.getByLabelText(/password/i), {
-      target: { value: "supersecret1" },
-    });
-    fireEvent.click(screen.getByText("Student"));
-    fireEvent.click(screen.getByTestId("pokemon-squirtle"));
-
-    // Submit the <form> directly; native `required` on the invite Input
-    // would otherwise short-circuit our handleSubmit-based validation
-    // (which is the layer we want to assert).
-    const form = container.querySelector("form")!;
-    fireEvent.submit(form);
-    await waitFor(() => {
-      expect(screen.getByRole("alert").textContent).toMatch(/invite/i);
-    });
-    expect(onSuccess).not.toHaveBeenCalled();
-  });
-
-  it("rejects username with uppercase / disallowed chars", async () => {
-    const onSuccess = vi.fn();
-    render(<SignupForm onSuccess={onSuccess} />);
-    // We bypass the input's onChange lowercasing by setting value directly to
-    // simulate paste-with-invalid-chars. Use a colon (disallowed).
-    fireEvent.change(screen.getByLabelText(/first name/i), {
-      target: { value: "Alex" },
-    });
-    fireEvent.change(screen.getByLabelText(/username/i), {
-      target: { value: "bad:name" },
-    });
-    fireEvent.change(screen.getByLabelText(/email/i), {
-      target: { value: "alex@example.com" },
-    });
-    fireEvent.change(screen.getByLabelText(/password/i), {
-      target: { value: "supersecret1" },
-    });
-    fireEvent.click(screen.getByText("Student"));
-    fireEvent.click(screen.getByTestId("pokemon-charmander"));
-    fireEvent.change(screen.getByLabelText(/invite code/i), {
-      target: { value: "INVITE-ABC" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: /create account/i }));
-    await waitFor(() => {
-      expect(screen.getByRole("alert").textContent).toMatch(/username/i);
-    });
-    expect(onSuccess).not.toHaveBeenCalled();
-  });
-
-  it("submits the full payload to /api/auth/signup-real and calls onSuccess", async () => {
-    const onSuccess = vi.fn();
+  it("blocks invalid email before advancing or validating an invite", async () => {
     const fetchMock = mockFetch((url) => {
       if (url.endsWith("/api/auth/get-session")) {
-        return new Response(
-          JSON.stringify({ user: { isAnonymous: false } }),
-          { status: 200, headers: { "content-type": "application/json" } },
-        );
+        return json({ user: { isAnonymous: false } });
       }
-      if (url.endsWith("/api/auth/signup-real")) {
-        return new Response(
-          JSON.stringify({ ok: true, userId: "u_test" }),
-          { status: 200, headers: { "content-type": "application/json" } },
-        );
+      if (url.endsWith("/api/auth/invite/validate")) {
+        return json({ ok: true });
       }
       return new Response("nope", { status: 404 });
     });
 
-    render(<SignupForm onSuccess={onSuccess} />);
-    fillRequired();
-    fireEvent.click(screen.getByText("Researcher"));
-    fireEvent.click(screen.getByTestId("pokemon-bulbasaur"));
+    render(<SignupForm />);
+    await reachEmailStep();
+    fireEvent.change(screen.getByLabelText(/^email$/i), {
+      target: { value: "not-email" },
+    });
+    await continueStep();
+
+    expect(screen.getByRole("alert").textContent).toMatch(/valid email/i);
+    expect(screen.getByText(/step 2 of 7/i)).toBeTruthy();
+    expect(
+      fetchMock.mock.calls.some((c) =>
+        String(c[0]).endsWith("/api/auth/invite/validate"),
+      ),
+    ).toBe(false);
+  });
+
+  it("posts waitlist without password and shows a success toast", async () => {
+    const fetchMock = mockFetch((url) => {
+      if (url.endsWith("/api/auth/get-session")) {
+        return json({ user: { isAnonymous: false } });
+      }
+      if (url.endsWith("/api/auth/waitlist")) return json({ ok: true });
+      return new Response("nope", { status: 404 });
+    });
+
+    render(<SignupForm />);
+    await reachInviteStepForIndustry();
+    fireEvent.change(screen.getByLabelText(/invite code/i), {
+      target: { value: "BAD-CODE" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /join waitlist/i }));
+
+    await waitFor(() => {
+      expect(toast.success).toHaveBeenCalledWith(
+        "You're on the waitlist",
+        expect.any(Object),
+      );
+    });
+
+    const waitlistCall = fetchMock.mock.calls.find((c) =>
+      String(c[0]).endsWith("/api/auth/waitlist"),
+    );
+    expect(waitlistCall).toBeDefined();
+    const body = bodyOf(waitlistCall!);
+    expect(body).toMatchObject({
+      firstname: "Alex",
+      username: "alex_99",
+      email: "alex@example.com",
+      userType: "industry",
+      pokemon: "bulbasaur",
+      jobRole: "Product lead",
+      industry: "Biotech",
+      attemptedInviteCode: "BAD-CODE",
+    });
+    expect(body.password).toBeUndefined();
+  });
+
+  it("can join the waitlist without entering an invite code", async () => {
+    const fetchMock = mockFetch((url) => {
+      if (url.endsWith("/api/auth/get-session")) {
+        return json({ user: { isAnonymous: false } });
+      }
+      if (url.endsWith("/api/auth/waitlist")) return json({ ok: true });
+      return new Response("nope", { status: 404 });
+    });
+
+    render(<SignupForm />);
+    await reachInviteStepForIndustry();
+    fireEvent.click(screen.getByRole("button", { name: /join waitlist/i }));
+
+    await waitFor(() => {
+      expect(toast.success).toHaveBeenCalledWith(
+        "You're on the waitlist",
+        expect.any(Object),
+      );
+    });
+
+    const waitlistCall = fetchMock.mock.calls.find((c) =>
+      String(c[0]).endsWith("/api/auth/waitlist"),
+    );
+    expect(waitlistCall).toBeDefined();
+    const body = bodyOf(waitlistCall!);
+    expect(body.attemptedInviteCode).toBeUndefined();
+    expect(body.password).toBeUndefined();
+    expect(screen.queryByText(/enter an invite code/i)).toBeNull();
+  });
+
+  it("validates invite before showing the password step and blocks invalid codes", async () => {
+    const fetchMock = mockFetch((url) => {
+      if (url.endsWith("/api/auth/get-session")) {
+        return json({ user: { isAnonymous: false } });
+      }
+      if (url.endsWith("/api/auth/invite/validate")) {
+        return json({ error: "invite_invalid" }, 400);
+      }
+      return new Response("nope", { status: 404 });
+    });
+
+    render(<SignupForm />);
+    await reachInviteStepForIndustry();
+    fireEvent.change(screen.getByLabelText(/invite code/i), {
+      target: { value: "BAD-CODE" },
+    });
+    await continueStep();
+
+    await waitFor(() => {
+      expect(screen.getByRole("alert").textContent).toMatch(/invite/i);
+    });
+    expect(screen.queryByLabelText(/password/i)).toBeNull();
+    expect(
+      fetchMock.mock.calls.some((c) =>
+        String(c[0]).endsWith("/api/auth/invite/validate"),
+      ),
+    ).toBe(true);
+  });
+
+  it("submits final signup payload with industry details to the endpoint prop", async () => {
+    const onSuccess = vi.fn();
+    const fetchMock = mockFetch((url) => {
+      if (url.endsWith("/api/auth/get-session")) {
+        return json({ user: { isAnonymous: false } });
+      }
+      if (url.endsWith("/api/auth/invite/validate")) {
+        return json({ ok: true });
+      }
+      if (url.endsWith("/test/signup")) {
+        return json({ ok: true, userId: "u_test" });
+      }
+      return new Response("nope", { status: 404 });
+    });
+
+    render(<SignupForm endpoint="/test/signup" onSuccess={onSuccess} />);
+    await reachInviteStepForIndustry();
+    fireEvent.change(screen.getByLabelText(/invite code/i), {
+      target: { value: "INVITE-ABC" },
+    });
+    await continueStep();
+    fireEvent.change(await screen.findByLabelText(/password/i), {
+      target: { value: "supersecret1" },
+    });
     fireEvent.click(screen.getByRole("button", { name: /create account/i }));
 
     await waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(1));
 
-    const signupCall = fetchMock.mock.calls.find(
-      (c) => String(c[0]).endsWith("/api/auth/signup-real"),
+    const signupCall = fetchMock.mock.calls.find((c) =>
+      String(c[0]).endsWith("/test/signup"),
     );
     expect(signupCall).toBeDefined();
-    const body = JSON.parse((signupCall![1] as RequestInit).body as string);
-    expect(body).toEqual({
+    expect(bodyOf(signupCall!)).toEqual({
       firstname: "Alex",
       username: "alex_99",
       email: "alex@example.com",
       password: "supersecret1",
-      userType: "researcher",
+      userType: "industry",
       pokemon: "bulbasaur",
       inviteCode: "INVITE-ABC",
+      jobRole: "Product lead",
+      industry: "Biotech",
     });
   });
 
-  it("surfaces invite_invalid error from server", async () => {
-    const onSuccess = vi.fn();
+  it("shows guest data warning when session is anonymous", async () => {
     mockFetch((url) => {
       if (url.endsWith("/api/auth/get-session")) {
-        return new Response(
-          JSON.stringify({ user: { isAnonymous: false } }),
-          { status: 200, headers: { "content-type": "application/json" } },
-        );
-      }
-      if (url.endsWith("/api/auth/signup-real")) {
-        return new Response(JSON.stringify({ error: "invite_invalid" }), {
-          status: 400,
-          headers: { "content-type": "application/json" },
-        });
+        return json({ user: { isAnonymous: true } });
       }
       return new Response("nope", { status: 404 });
     });
 
-    render(<SignupForm onSuccess={onSuccess} />);
-    fillRequired();
-    fireEvent.click(screen.getByText("Student"));
-    fireEvent.click(screen.getByTestId("pokemon-charmander"));
-    fireEvent.click(screen.getByRole("button", { name: /create account/i }));
+    render(<SignupForm />);
 
-    await waitFor(() => {
-      expect(screen.getByRole("alert").textContent).toMatch(/invite/i);
-    });
-    expect(onSuccess).not.toHaveBeenCalled();
+    expect(await screen.findByTestId("guest-data-warning")).toBeTruthy();
   });
 });

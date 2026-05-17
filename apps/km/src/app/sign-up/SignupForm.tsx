@@ -1,13 +1,11 @@
 "use client";
 
-// D4 signup form — fields beyond the better-auth defaults (firstname,
-// username, user_type, pokemon, invite_code) are required and validated
-// server-side by /api/auth/signup-real. The pokemon picker uses 8-bit
-// pixel-art tiles served from /pokemon/{slug}.png as a static placeholder;
-// see task report for rationale.
-import { useEffect, useState } from "react";
+// D4 signup wizard. Required account fields stay in the main user row; persona
+// detail fields are persisted server-side in user_signup_profiles.
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -33,10 +31,31 @@ export const USER_TYPE_OPTIONS = [
   { value: "other", label: "Other" },
 ] as const;
 
+const STUDENT_LEVELS = ["Bachelor", "Master", "PhD"] as const;
+
 type Pokemon = (typeof POKEMON_OPTIONS)[number]["value"];
 type UserType = (typeof USER_TYPE_OPTIONS)[number]["value"];
+type StudentLevel = (typeof STUDENT_LEVELS)[number];
+type Step =
+  | "identity"
+  | "email"
+  | "persona"
+  | "persona-detail"
+  | "starter"
+  | "invite"
+  | "password";
 
+const STEPS: Step[] = [
+  "identity",
+  "email",
+  "persona",
+  "persona-detail",
+  "starter",
+  "invite",
+  "password",
+];
 const USERNAME_RE = /^[a-z0-9_-]+$/;
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export interface SignupFormProps {
   /** Override the fetch endpoint for tests. */
@@ -50,16 +69,27 @@ export function SignupForm({
   onSuccess,
 }: SignupFormProps) {
   const router = useRouter();
+  const [step, setStep] = useState<Step>("identity");
   const [firstname, setFirstname] = useState("");
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [userType, setUserType] = useState<UserType | "">("");
+  const [studentLevel, setStudentLevel] = useState<StudentLevel | "">("");
+  const [jobRole, setJobRole] = useState("");
+  const [industry, setIndustry] = useState("");
+  const [personaOther, setPersonaOther] = useState("");
   const [pokemon, setPokemon] = useState<Pokemon | "">("");
   const [inviteCode, setInviteCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [isGuest, setIsGuest] = useState(false);
+
+  const stepIndex = STEPS.indexOf(step);
+  const progress = useMemo(
+    () => Math.round(((stepIndex + 1) / STEPS.length) * 100),
+    [stepIndex],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -79,24 +109,143 @@ export function SignupForm({
     };
   }, []);
 
-  function validate(): string | null {
-    if (!firstname.trim()) return "First name is required";
-    if (!username.trim()) return "Username is required";
-    if (username.length < 3) return "Username must be at least 3 characters";
-    if (!USERNAME_RE.test(username))
-      return "Username must use only lowercase a-z, 0-9, _ or -";
-    if (!email.trim()) return "Email is required";
-    if (password.length < 8) return "Password must be at least 8 characters";
-    if (!userType) return "Please pick what describes you best";
-    if (!pokemon) return "Please pick a starter pokemon";
-    if (!inviteCode.trim()) return "Invite code is required";
+  function personaDetails() {
+    if (userType === "student") return { studentLevel };
+    if (userType === "researcher") return { jobRole: jobRole.trim() };
+    if (userType === "industry") {
+      return { jobRole: jobRole.trim(), industry: industry.trim() };
+    }
+    if (userType === "other") return { personaOther: personaOther.trim() };
+    return {};
+  }
+
+  function basePayload() {
+    return {
+      firstname: firstname.trim(),
+      username: username.trim(),
+      email: email.trim(),
+      userType,
+      pokemon,
+      ...personaDetails(),
+    };
+  }
+
+  function validateStep(current: Step): string | null {
+    if (current === "identity") {
+      if (!firstname.trim()) return "First name is required";
+      if (!username.trim()) return "Username is required";
+      if (username.length < 3) return "Username must be at least 3 characters";
+      if (!USERNAME_RE.test(username))
+        return "Username must use only lowercase a-z, 0-9, _ or -";
+    }
+    if (current === "email") {
+      if (!email.trim()) return "Email is required";
+      if (!EMAIL_RE.test(email.trim())) return "Please enter a valid email";
+    }
+    if (current === "persona" && !userType) {
+      return "Please pick what describes you best";
+    }
+    if (current === "persona-detail") {
+      if (userType === "student" && !studentLevel)
+        return "Please pick your student level";
+      if (userType === "researcher" && !jobRole.trim())
+        return "Job role is required";
+      if (userType === "industry" && !jobRole.trim())
+        return "Job role is required";
+      if (userType === "industry" && !industry.trim())
+        return "Industry is required";
+      if (userType === "other" && !personaOther.trim())
+        return "Please tell us what describes you";
+    }
+    if (current === "starter" && !pokemon) {
+      return "Please pick a starter pokemon";
+    }
+    if (current === "invite" && !inviteCode.trim()) {
+      return "Invite code is required";
+    }
+    if (current === "password" && password.length < 8) {
+      return "Password must be at least 8 characters";
+    }
     return null;
+  }
+
+  async function validateInvite(): Promise<boolean> {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/auth/invite/validate", {
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ inviteCode: inviteCode.trim() }),
+      });
+      if (!res.ok) {
+        setError("That invite code isn't valid or has already been used");
+        return false;
+      }
+      return true;
+    } catch {
+      setError("Invite validation failed");
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleContinue() {
+    setError(null);
+    const v = validateStep(step);
+    if (v) {
+      setError(v);
+      return;
+    }
+    if (step === "invite") {
+      const ok = await validateInvite();
+      if (!ok) return;
+    }
+    setStep(STEPS[Math.min(stepIndex + 1, STEPS.length - 1)]);
+  }
+
+  function handleBack() {
+    setError(null);
+    setStep(STEPS[Math.max(stepIndex - 1, 0)]);
+  }
+
+  async function handleWaitlist() {
+    setError(null);
+    setLoading(true);
+    const attemptedInviteCode = inviteCode.trim();
+    try {
+      const res = await fetch("/api/auth/waitlist", {
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          ...basePayload(),
+          ...(attemptedInviteCode ? { attemptedInviteCode } : {}),
+        }),
+      });
+      if (!res.ok) {
+        setError("Could not join the waitlist");
+        return;
+      }
+      toast.success("You're on the waitlist", {
+        description: "We'll email you when your invite is ready.",
+      });
+    } catch {
+      setError("Could not join the waitlist");
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (step !== "password") {
+      await handleContinue();
+      return;
+    }
     setError(null);
-    const v = validate();
+    const v = validateStep("password");
     if (v) {
       setError(v);
       return;
@@ -108,12 +257,8 @@ export function SignupForm({
         credentials: "include",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          firstname: firstname.trim(),
-          username: username.trim(),
-          email: email.trim(),
+          ...basePayload(),
           password,
-          userType,
-          pokemon,
           inviteCode: inviteCode.trim(),
         }),
       });
@@ -132,13 +277,13 @@ export function SignupForm({
                   ? "Please check the form fields"
                   : "Sign up failed";
         setError(msg);
-        setLoading(false);
         return;
       }
       if (onSuccess) onSuccess();
       else router.push("/");
     } catch {
       setError("Sign up failed");
+    } finally {
       setLoading(false);
     }
   }
@@ -146,11 +291,22 @@ export function SignupForm({
   return (
     <div className="flex min-h-screen items-center justify-center p-4">
       <Card className="w-full max-w-md">
-        <CardHeader>
-          <CardTitle className="font-display text-3xl font-normal">
-            Create account
-          </CardTitle>
-          <CardDescription>Enter your details to get started</CardDescription>
+        <CardHeader className="gap-3">
+          <div className="flex items-center justify-between gap-3">
+            <CardTitle className="font-display text-3xl font-normal">
+              Create account
+            </CardTitle>
+            <span className="text-xs text-muted-foreground">
+              Step {stepIndex + 1} of {STEPS.length}
+            </span>
+          </div>
+          <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+            <div
+              className="h-full bg-foreground transition-all"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+          <CardDescription>{descriptionForStep(step)}</CardDescription>
         </CardHeader>
         <form onSubmit={handleSubmit}>
           <CardContent className="space-y-4">
@@ -170,132 +326,269 @@ export function SignupForm({
                 {error}
               </p>
             )}
-            <div className="space-y-1.5">
-              <Label htmlFor="firstname">First name</Label>
-              <Input
-                id="firstname"
-                type="text"
-                value={firstname}
-                onChange={(e) => setFirstname(e.target.value)}
-                placeholder="Alex"
-                required
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="username">Username</Label>
-              <Input
-                id="username"
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value.toLowerCase())}
-                placeholder="lowercase, numbers, _ or -"
-                minLength={3}
-                required
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@example.com"
-                required
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Min. 8 characters"
-                required
-                minLength={8}
-              />
-            </div>
 
-            <fieldset className="space-y-2">
-              <legend className="text-sm font-medium">
-                What describes you best?
-              </legend>
-              <div
-                className="grid grid-cols-2 gap-2"
-                role="radiogroup"
-                aria-label="user type"
-              >
-                {USER_TYPE_OPTIONS.map((opt) => (
-                  <label
-                    key={opt.value}
-                    className={`flex cursor-pointer items-center justify-center rounded-md border px-3 py-2 text-sm ${
-                      userType === opt.value
-                        ? "border-foreground bg-foreground/5"
-                        : "border-border"
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="userType"
-                      value={opt.value}
-                      checked={userType === opt.value}
-                      onChange={() => setUserType(opt.value)}
-                      className="sr-only"
-                    />
-                    {opt.label}
-                  </label>
-                ))}
+            {step === "identity" && (
+              <>
+                <div className="space-y-1.5">
+                  <Label htmlFor="firstname">First name</Label>
+                  <Input
+                    id="firstname"
+                    type="text"
+                    value={firstname}
+                    onChange={(e) => setFirstname(e.target.value)}
+                    placeholder="Alex"
+                    required
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="username">Username</Label>
+                  <Input
+                    id="username"
+                    type="text"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value.toLowerCase())}
+                    placeholder="lowercase, numbers, _ or -"
+                    minLength={3}
+                    required
+                  />
+                </div>
+              </>
+            )}
+
+            {step === "email" && (
+              <div className="space-y-1.5">
+                <Label htmlFor="email">Email</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@example.com"
+                  required
+                />
               </div>
-            </fieldset>
+            )}
 
-            <fieldset className="space-y-2">
-              <legend className="text-sm font-medium">
-                Pick your starter
-              </legend>
-              <div
-                className="grid grid-cols-3 gap-2"
-                role="radiogroup"
-                aria-label="pokemon"
-              >
-                {POKEMON_OPTIONS.map((opt) => (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    role="radio"
-                    aria-checked={pokemon === opt.value}
-                    aria-label={opt.label}
-                    data-testid={`pokemon-${opt.value}`}
-                    onClick={() => setPokemon(opt.value)}
-                    className={`flex flex-col items-center gap-1 rounded-md border p-2 transition ${
-                      pokemon === opt.value
-                        ? "border-foreground ring-2 ring-foreground"
-                        : "border-border"
-                    }`}
-                  >
-                    <PokemonPixelTile slug={opt.value} accent={opt.color} />
-                    <span className="text-xs">{opt.label}</span>
-                  </button>
-                ))}
+            {step === "persona" && (
+              <fieldset className="space-y-2">
+                <legend className="text-sm font-medium">
+                  What describes you best?
+                </legend>
+                <div
+                  className="grid grid-cols-2 gap-2"
+                  role="radiogroup"
+                  aria-label="user type"
+                >
+                  {USER_TYPE_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      role="radio"
+                      aria-checked={userType === opt.value}
+                      aria-label={opt.label}
+                      onClick={() => {
+                        setUserType(opt.value);
+                        setStudentLevel("");
+                        setJobRole("");
+                        setIndustry("");
+                        setPersonaOther("");
+                      }}
+                      className={`flex items-center justify-center rounded-md border px-3 py-2 text-sm ${
+                        userType === opt.value
+                          ? "border-foreground bg-foreground/5"
+                          : "border-border"
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </fieldset>
+            )}
+
+            {step === "persona-detail" && userType === "student" && (
+              <fieldset className="space-y-2">
+                <legend className="text-sm font-medium">Student level</legend>
+                <div
+                  className="grid grid-cols-3 gap-2"
+                  role="radiogroup"
+                  aria-label="student level"
+                >
+                  {STUDENT_LEVELS.map((level) => (
+                    <button
+                      key={level}
+                      type="button"
+                      role="radio"
+                      aria-checked={studentLevel === level}
+                      aria-label={level}
+                      onClick={() => setStudentLevel(level)}
+                      className={`rounded-md border px-3 py-2 text-sm ${
+                        studentLevel === level
+                          ? "border-foreground bg-foreground/5"
+                          : "border-border"
+                      }`}
+                    >
+                      {level}
+                    </button>
+                  ))}
+                </div>
+              </fieldset>
+            )}
+
+            {step === "persona-detail" && userType === "researcher" && (
+              <div className="space-y-1.5">
+                <Label htmlFor="jobRole">Job role</Label>
+                <Input
+                  id="jobRole"
+                  type="text"
+                  value={jobRole}
+                  onChange={(e) => setJobRole(e.target.value)}
+                  placeholder="Principal investigator"
+                  required
+                />
               </div>
-            </fieldset>
+            )}
 
-            <div className="space-y-1.5">
-              <Label htmlFor="inviteCode">Invite code</Label>
-              <Input
-                id="inviteCode"
-                type="text"
-                value={inviteCode}
-                onChange={(e) => setInviteCode(e.target.value)}
-                placeholder="EPISTEME-XXXX"
-                required
-              />
-            </div>
+            {step === "persona-detail" && userType === "industry" && (
+              <>
+                <div className="space-y-1.5">
+                  <Label htmlFor="jobRole">Job role</Label>
+                  <Input
+                    id="jobRole"
+                    type="text"
+                    value={jobRole}
+                    onChange={(e) => setJobRole(e.target.value)}
+                    placeholder="Product lead"
+                    required
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="industry">Industry</Label>
+                  <Input
+                    id="industry"
+                    type="text"
+                    value={industry}
+                    onChange={(e) => setIndustry(e.target.value)}
+                    placeholder="Biotech"
+                    required
+                  />
+                </div>
+              </>
+            )}
+
+            {step === "persona-detail" && userType === "other" && (
+              <div className="space-y-1.5">
+                <Label htmlFor="personaOther">What describes you?</Label>
+                <Input
+                  id="personaOther"
+                  type="text"
+                  value={personaOther}
+                  onChange={(e) => setPersonaOther(e.target.value)}
+                  placeholder="Independent scholar"
+                  required
+                />
+              </div>
+            )}
+
+            {step === "starter" && (
+              <fieldset className="space-y-2">
+                <legend className="text-sm font-medium">
+                  Pick your starter
+                </legend>
+                <div
+                  className="grid grid-cols-3 gap-2"
+                  role="radiogroup"
+                  aria-label="pokemon"
+                >
+                  {POKEMON_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      role="radio"
+                      aria-checked={pokemon === opt.value}
+                      aria-label={opt.label}
+                      data-testid={`pokemon-${opt.value}`}
+                      onClick={() => setPokemon(opt.value)}
+                      className={`flex flex-col items-center gap-1 rounded-md border p-2 transition ${
+                        pokemon === opt.value
+                          ? "border-foreground ring-2 ring-foreground"
+                          : "border-border"
+                      }`}
+                    >
+                      <PokemonPixelTile slug={opt.value} accent={opt.color} />
+                      <span className="text-xs">{opt.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </fieldset>
+            )}
+
+            {step === "invite" && (
+              <div className="space-y-1.5">
+                <Label htmlFor="inviteCode">Invite code</Label>
+                <Input
+                  id="inviteCode"
+                  type="text"
+                  value={inviteCode}
+                  onChange={(e) => setInviteCode(e.target.value)}
+                  placeholder="EPISTEME-XXXX"
+                  required
+                />
+              </div>
+            )}
+
+            {step === "password" && (
+              <div className="space-y-1.5">
+                <Label htmlFor="password">Password</Label>
+                <Input
+                  id="password"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Min. 8 characters"
+                  required
+                  minLength={8}
+                />
+              </div>
+            )}
           </CardContent>
           <CardFooter className="flex flex-col gap-3 pt-6">
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? "Creating account…" : "Create account"}
-            </Button>
+            <div className="flex w-full gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="flex-1"
+                disabled={loading || stepIndex === 0}
+                onClick={handleBack}
+              >
+                Back
+              </Button>
+              {step === "password" ? (
+                <Button type="submit" className="flex-1" disabled={loading}>
+                  {loading ? "Creating account..." : "Create account"}
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  className="flex-1"
+                  disabled={loading}
+                  onClick={handleContinue}
+                >
+                  Continue
+                </Button>
+              )}
+            </div>
+            {step === "invite" && (
+              <Button
+                type="button"
+                variant="ghost"
+                className="w-full"
+                disabled={loading}
+                onClick={handleWaitlist}
+              >
+                Join waitlist
+              </Button>
+            )}
             <p className="text-sm text-muted-foreground">
               Already have an account?{" "}
               <Link
@@ -312,9 +605,27 @@ export function SignupForm({
   );
 }
 
+function descriptionForStep(step: Step): string {
+  switch (step) {
+    case "identity":
+      return "Choose how your account appears in Episteme";
+    case "email":
+      return "Use the email you want attached to your account";
+    case "persona":
+      return "Tell us which setup should fit you best";
+    case "persona-detail":
+      return "Add a little context for your workspace";
+    case "starter":
+      return "Pick an 8-bit starter for your empty library";
+    case "invite":
+      return "Validate your invite before setting a password";
+    case "password":
+      return "Finish your account credentials";
+  }
+}
+
 // Tiny 8x8 pixel-art tile. Uses a per-pokemon two-tone palette
-// (transparent + accent) so we don't ship binary assets. The pattern is a
-// stylized creature silhouette; intentionally chunky to read as "8-bit".
+// (transparent + accent) so we don't ship binary assets.
 function PokemonPixelTile({
   slug,
   accent,
@@ -344,11 +655,8 @@ function PokemonPixelTile({
   );
 }
 
-// 8x8 hand-painted pixel patterns. Row-major, 64 chars each.
-// '1' = filled with accent color, '0' = transparent.
 const PIXEL_PATTERNS: Record<"charmander" | "squirtle" | "bulbasaur", string> =
   {
-    // Flame tail silhouette
     charmander:
       "00011000" +
       "00111100" +
@@ -358,7 +666,6 @@ const PIXEL_PATTERNS: Record<"charmander" | "squirtle" | "bulbasaur", string> =
       "11111111" +
       "01111110" +
       "00100100",
-    // Shell + head
     squirtle:
       "00111100" +
       "01111110" +
@@ -368,7 +675,6 @@ const PIXEL_PATTERNS: Record<"charmander" | "squirtle" | "bulbasaur", string> =
       "11000011" +
       "01111110" +
       "00100100",
-    // Bulb leaf on top
     bulbasaur:
       "00100100" +
       "01111110" +

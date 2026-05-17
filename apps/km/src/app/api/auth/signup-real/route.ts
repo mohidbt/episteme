@@ -1,6 +1,7 @@
 // Real-user signup endpoint — wraps better-auth signUpEmail with invite-gate
 // + signup-extras persistence. Anonymous signup still goes through
 // /api/auth/[...all] (better-auth's native handler).
+import { isAllowedOrigin } from "@/lib/origin-protection";
 import { signupRealUser } from "@/lib/signup-real";
 
 const ERROR_STATUS: Record<string, number> = {
@@ -10,30 +11,6 @@ const ERROR_STATUS: Record<string, number> = {
   username_taken: 409,
   internal: 500,
 };
-
-// Allowlist origins — production + previews + local dev. Cross-origin
-// POSTs without a matching Origin header are rejected to prevent CSRF
-// (this route runs before better-auth would, so its built-in CSRF guard
-// does not cover us).
-function isAllowedOrigin(origin: string | null, host: string | null): boolean {
-  if (!origin) return false;
-  let url: URL;
-  try {
-    url = new URL(origin);
-  } catch {
-    return false;
-  }
-  if (host && url.host === host) return true;
-  const allowed = [
-    "tryepisteme.com",
-    "www.tryepisteme.com",
-    "localhost:3000",
-    "127.0.0.1:3000",
-  ];
-  if (allowed.includes(url.host)) return true;
-  if (url.host.endsWith(".vercel.app")) return true;
-  return false;
-}
 
 export async function POST(req: Request) {
   const origin = req.headers.get("origin");
