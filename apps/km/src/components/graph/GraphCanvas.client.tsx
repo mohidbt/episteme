@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import type { GraphPayload, EdgeKind, NodeKind } from '@/lib/graph/types'
 import { formatGraphKindLabel } from '@/lib/graph/labels'
+import { paperCitationHoverLabel } from '@/lib/graph/edge-labels'
 
 type CanvasNode = {
   id: string
@@ -138,6 +139,21 @@ export default function GraphCanvas({ payload }: { payload: GraphPayload }) {
         nodeVal={(n: unknown) => 1 + (degreeMap.get((n as CanvasNode).fgId) ?? 0) * 0.5}
         nodeLabel={(n: unknown) => (n as CanvasNode).label}
         linkColor={(l: unknown) => STYLE[(l as CanvasLink).kind].color}
+        linkDirectionalArrowLength={(l: unknown) => ((l as CanvasLink).kind === 'paper_citation' ? 4 : 0)}
+        linkDirectionalArrowRelPos={(l: unknown) => ((l as CanvasLink).kind === 'paper_citation' ? 1 : 0)}
+        linkDirectionalArrowColor={(l: unknown) => STYLE[(l as CanvasLink).kind].color}
+        linkLabel={(l: unknown) => {
+          const link = l as CanvasLink
+          const directional = paperCitationHoverLabel(link, hoveredNodeId)
+          if (directional) {
+            const srcLabel = nodeByKey.get(`${link.src.kind}:${link.src.id}`)?.label ?? link.src.id
+            const dstLabel = nodeByKey.get(`${link.dst.kind}:${link.dst.id}`)?.label ?? link.dst.id
+            return directional === 'citing'
+              ? `citing: ${dstLabel}`
+              : `cited in: ${srcLabel}`
+          }
+          return formatGraphKindLabel(link.kind)
+        }}
         linkWidth={(l: unknown) => {
           const link = l as CanvasLink
           const weightFactor = link.kind === 'semantic_sim' ? Math.max(0.4, link.weight ?? 1) : 1
