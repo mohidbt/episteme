@@ -1,4 +1,5 @@
 import { signRequest } from "@/lib/agents/sign-request";
+import type { Citation } from "@/lib/agent-events";
 
 export type PersistedMessagePart =
   | { type: "text"; text: string }
@@ -26,6 +27,13 @@ export interface PersistedMessage {
    * (which previously rendered the literal "thought" model leakage).
    */
   parts?: PersistedMessagePart[];
+  /**
+   * BG1 — inline citations stamped onto the AIMessage in the checkpoint at
+   * stream-finalize time. Present on assistant messages whose live SSE turn
+   * emitted a `sources` event; absent otherwise. Seeded into
+   * `sourcesByMessage` on hydration so reload restores citation pills.
+   */
+  citations?: Citation[];
 }
 
 /**

@@ -128,6 +128,35 @@ describe("AgentTranscript", () => {
     expect(screen.queryByText(/tool-call/)).toBeNull();
   });
 
+  it("BG1: hydration restores citation pills from persisted citations field (no live SSE)", () => {
+    render(
+      <AgentTranscript
+        threadId="t-bg1"
+        initialMessages={[
+          { id: "u-1", role: "user", text: "tell me about transformers" },
+          {
+            id: "a-cite",
+            role: "assistant",
+            text: "Per the paper [c1].",
+            citations: [
+              {
+                chunk_id: "c1",
+                paper_id: "paper-1",
+                page: 4,
+                bbox: { x0: 12, y0: 20, x1: 44, y1: 66 },
+                snippet: "First snippet",
+              },
+            ],
+          },
+        ]}
+      />,
+    );
+    // Pill rendered without any live SSE event being dispatched.
+    expect(screen.getByTestId("inline-citation-pill-c1")).toBeTruthy();
+    // Sidebar "Sources" list also seeded.
+    expect(screen.getByTestId("all-citations")).toBeTruthy();
+  });
+
   it("G-R3-07 #78: hydration strips leading 'thought' prefix from assistant text", () => {
     render(
       <AgentTranscript

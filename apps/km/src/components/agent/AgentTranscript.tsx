@@ -128,6 +128,10 @@ export interface AgentTranscriptProps {
           errorText?: string;
         }
     >;
+    /** BG1 — citations persisted onto the AIMessage's additional_kwargs.
+     *  When present, seeded into `sourcesByMessage` so reload restores pills.
+     */
+    citations?: Citation[];
   }>;
   onPdfExtractProgress?: (progress: { paperId: string; stage: string } | null) => void;
 }
@@ -234,16 +238,29 @@ export function AgentTranscript({
       // mirror the live SSE rendering. Otherwise fall back to a single
       // text card. Either way, strip the model "thought" prefix once.
       const cards: TranscriptCard[] = [];
+      // BG1: seed `sourcesByMessage` from `m.citations` so citation pills
+      // and the sidebar re-render on thread reload without needing the live
+      // SSE `sources` event.
+      const sourcesByMessage: Record<string, Citation[]> = {};
       for (const m of initialMessages) {
+        if (m.citations && m.citations.length > 0) {
+          sourcesByMessage[m.id] = m.citations;
+        }
         if (m.parts && m.parts.length > 0) {
           let textIdx = 0;
           for (const part of m.parts) {
             if (part.type === "text") {
               const t = stripLeadingThought(part.text);
               if (!t.trim()) continue;
+              const cardId = `${m.id}:t${textIdx++}`;
+              // Mirror citations onto the first synthetic text card so the
+              // CardView pill renderer (keyed by card id) finds them.
+              if (textIdx === 1 && m.citations && m.citations.length > 0) {
+                sourcesByMessage[cardId] = m.citations;
+              }
               cards.push({
                 kind: "text",
-                id: `${m.id}:t${textIdx++}`,
+                id: cardId,
                 role: m.role,
                 text: t,
               });
@@ -283,7 +300,7 @@ export function AgentTranscript({
           text,
         });
       }
-      return { ...base, cards };
+      return { ...base, cards, sourcesByMessage };
     },
   );
   const [input, setInput] = useState("");
