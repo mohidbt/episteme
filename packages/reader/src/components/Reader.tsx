@@ -51,6 +51,14 @@ export type ReaderProps = {
   agentSlot?: ReactNode;
   agentOpen?: boolean;
   onAgentOpenChange?: (open: boolean) => void;
+  /**
+   * BG2a follow-up — initial 1-indexed page to scroll to on mount (e.g. from
+   * `?p=<n>` deeplinks). Consumed once; clamped to `[1, totalPages]` when
+   * totalPages is known. Out-of-range values are ignored (stay on page 1).
+   * Prop-based to avoid the dispatch/listen race between consumer effect and
+   * Reader's `episteme:reader-jump` mount listener.
+   */
+  initialPage?: number;
 };
 
 interface MarkerRect {
@@ -144,6 +152,7 @@ export function Reader({
   agentSlot,
   agentOpen: agentOpenProp,
   onAgentOpenChange,
+  initialPage,
 }: ReaderProps) {
   // Paper meta (title, processingStatus)
   const [meta, setMeta] = useState<PaperMeta | null>(null);
@@ -556,22 +565,18 @@ export function Reader({
     return () => window.removeEventListener("keydown", onKey);
   }, [clearSelection]);
 
-  useEffect(() => {
-    const onJump = (ev: Event) => {
-      const detail = (ev as CustomEvent<{
-        page?: number;
-        bboxRect?: SegmentBbox | null;
-        chunkId?: string | null;
-        orderIndex?: string | null;
-      }>).detail;
+  // Shared scroll-jump handler used by both the `episteme:reader-jump`
+  // listener (in-app citation pills) and the `initialPage` prop effect
+  // (BG2a deeplinks). Out-of-range pages are ignored when totalPages > 0.
+  const performReaderJump = useCallback(
+    (detail: {
+      page?: number;
+      bboxRect?: SegmentBbox | null;
+      chunkId?: string | null;
+    }) => {
       if (!detail?.page) return;
-      // R6 B4 — when the citation carries a structured bbox, try to
-      // scroll-to-segment so the OCR rect lands centered. The page may not be
-      // mounted yet (virtualized PdfViewer renders a placeholder), so we
-      // first set scrollTargetPage to trigger the page switch + scroll-into-
-      // view, then retry the segment-level scroll on subsequent animation
-      // frames once the real page DOM (with natural dims) lands. After
-      // success we briefly pulse the bbox highlight by toggling a data-attr.
+      const total = useReaderState.getState().totalPages;
+      if (total > 0 && detail.page > total) return;
       useReaderState.getState().setScrollTargetPage(detail.page);
       const bbox = detail.bboxRect ?? null;
       if (!bbox) return;
@@ -582,8 +587,6 @@ export function Reader({
         { page: detail.page!, bbox },
         {
           onSuccess: () => {
-            // Pulse highlight: tag the container with a data-attr keyed on the
-            // chunk id so CSS / overlay can flash. Cleared after 1.2s.
             if (detail.chunkId) {
               container.setAttribute("data-segment-flash", detail.chunkId);
               setTimeout(() => {
@@ -595,10 +598,63 @@ export function Reader({
           },
         },
       );
+    },
+    [],
+  );
+
+  useEffect(() => {
+    const onJump = (ev: Event) => {
+      const detail = (ev as CustomEvent<{
+        page?: number;
+        bboxRect?: SegmentBbox | null;
+        chunkId?: string | null;
+        orderIndex?: string | null;
+      }>).detail;
+      performReaderJump(detail);
     };
     window.addEventListener("episteme:reader-jump", onJump as EventListener);
     return () => window.removeEventListener("episteme:reader-jump", onJump as EventListener);
-  }, []);
+  }, [performReaderJump]);
+
+  // BG2a follow-up — prop-based deeplink: dispatch the page jump once on
+  // mount when `initialPage` is provided. Listener registration is guaranteed
+  // because this effect lives inside Reader itself (no cross-component race).
+  // Waits until totalPages is known so the upper-bound clamp can ignore
+  // out-of-range deeplinks rather than landing on the last page.
+  const initialPageConsumedRef = useRef(false);
+  useEffect(() => {
+    if (initialPageConsumedRef.current) return;
+    if (initialPage === undefined) return;
+    if (!Number.isFinite(initialPage) || initialPage < 1) return;
+    const total = useReaderState.getState().totalPages;
+    if (total === 0) return;
+    initialPageConsumedRef.current = true;
+    performReaderJump({ page: initialPage, bboxRect: null });
+  }, [initialPage, performReaderJump]);
+
+  // Subscribe to totalPages so the initialPage effect fires once PdfViewer
+  // loads the document. The effect above is gated by getState() and only
+  // consumes once — a subscription is needed because totalPages changes
+  // outside React render flow.
+  useEffect(() => {
+    if (initialPage === undefined) return;
+    if (initialPageConsumedRef.current) return;
+    const unsub = useReaderState.subscribe((s) => {
+      if (initialPageConsumedRef.current) return;
+      if (s.totalPages <= 0) return;
+      if (!Number.isFinite(initialPage) || initialPage < 1) {
+        initialPageConsumedRef.current = true;
+        return;
+      }
+      if (initialPage > s.totalPages) {
+        initialPageConsumedRef.current = true;
+        return;
+      }
+      initialPageConsumedRef.current = true;
+      performReaderJump({ page: initialPage, bboxRect: null });
+    });
+    return unsub;
+  }, [initialPage, performReaderJump]);
 
   useEffect(() => {
     if (!pendingScrollHighlightId) return;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef } from "react";
 import dynamic from "next/dynamic";
 import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
@@ -29,9 +29,8 @@ async function createThread(signal: AbortSignal): Promise<string | null> {
   }
 }
 
-export function ReaderShell({ paperId }: { paperId: string }) {
+function ReaderShellInner({ paperId }: { paperId: string }) {
   const searchParams = useSearchParams();
-  const initialPageJumpedRef = useRef(false);
   const panelOpen = useAgentBallStore((s) => s.panelOpen);
   const mountPoint = useAgentBallStore((s) => s.mountPoint);
   const activeThreadId = useAgentBallStore((s) => s.activeThreadId);
@@ -72,24 +71,16 @@ export function ReaderShell({ paperId }: { paperId: string }) {
     };
   }, []);
 
-  // BG2a — citation pills navigate with `?p=<n>`. Fire `episteme:reader-jump`
-  // once after mount so Reader's window listener scrolls to that page top.
-  // Guard with a ref so re-renders / searchParams identity churn don't refire.
-  useEffect(() => {
-    if (initialPageJumpedRef.current) return;
+  // BG2a — citation pills navigate with `?p=<n>`. Parse once and pass as
+  // `initialPage` to Reader; Reader owns the scroll-jump inside its own
+  // mount lifecycle so listener registration is guaranteed before consumption
+  // (replaces previous `queueMicrotask` + window-dispatch race).
+  const initialPage = useMemo(() => {
     const raw = searchParams?.get("p");
-    if (!raw) return;
+    if (!raw) return undefined;
     const page = Number(raw);
-    if (!Number.isFinite(page) || page < 1) return;
-    initialPageJumpedRef.current = true;
-    // Defer to a microtask so Reader's mount-time listener is registered.
-    queueMicrotask(() => {
-      window.dispatchEvent(
-        new CustomEvent("episteme:reader-jump", {
-          detail: { page, bboxRect: null },
-        }),
-      );
-    });
+    if (!Number.isFinite(page) || page < 1) return undefined;
+    return page;
   }, [searchParams]);
 
   // A4 — Reader dispatches `episteme:reader-toast` when scroll-to-segment
@@ -152,7 +143,18 @@ export function ReaderShell({ paperId }: { paperId: string }) {
         agentSlot={agentSlot}
         agentOpen={agentOpen}
         onAgentOpenChange={handleAgentOpenChange}
+        initialPage={initialPage}
       />
     </div>
+  );
+}
+
+// `useSearchParams` requires a Suspense boundary in the App Router; the
+// parent page.tsx is a Server Component with no boundary, so wrap here.
+export function ReaderShell({ paperId }: { paperId: string }) {
+  return (
+    <Suspense fallback={null}>
+      <ReaderShellInner paperId={paperId} />
+    </Suspense>
   );
 }
