@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { validateCslJson, type CslItem } from "@/lib/csl";
+import { sanitizeAbstract } from "@/lib/strip-jats";
 import type { ReferenceRow } from "@/lib/references-server";
 import { cn } from "@/lib/utils";
 
@@ -71,7 +72,7 @@ function toForm(ref: ReferenceRow): FormState {
     containerTitle: (csl["container-title"] as string | undefined) ?? "",
     doi: csl.DOI ?? "",
     url: csl.URL ?? "",
-    abstract: csl.abstract ?? "",
+    abstract: sanitizeAbstract(csl.abstract),
     extraCsl: extra,
   };
 }
@@ -167,7 +168,7 @@ export function ReferenceForm({ reference }: ReferenceFormProps) {
         containerTitle: (csl["container-title"] as string | undefined) ?? "",
         doi: csl.DOI ?? "",
         url: csl.URL ?? "",
-        abstract: csl.abstract ?? "",
+        abstract: sanitizeAbstract(csl.abstract),
         extraCsl: extra,
       }));
       setJsonError(null);

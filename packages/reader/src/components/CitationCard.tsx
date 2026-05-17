@@ -9,6 +9,7 @@ import type { documentReferences } from "@episteme/db/schema";
 import type { InferSelectModel } from "drizzle-orm";
 import { toast } from "sonner";
 import { formatBibtex } from "../lib/citations/bibtex";
+import { sanitizeAbstract } from "../lib/strip-jats";
 
 export type DocumentReference = InferSelectModel<typeof documentReferences>;
 
@@ -178,6 +179,11 @@ export function CitationCard({
 
   // Authors
   const authors = citation.authors ?? [];
+
+  // Abstract — render-side fallback strip for legacy rows still carrying JATS
+  // XML or HTML entities (defense-in-depth alongside the ingest-time strip in
+  // apps/km/src/lib/crossref.ts).
+  const cleanAbstract = sanitizeAbstract(citation.abstract);
 
   // Metrics
   const showOaBadge = !!(citation.openAccessPdfUrl || citation.isOpenAccess);
@@ -380,12 +386,12 @@ export function CitationCard({
         )}
 
         {/* Abstract (collapsible) */}
-        {citation.abstract && (
+        {cleanAbstract && (
           <div className="pt-0.5">
             <p
               className={`text-xs text-foreground/80 leading-relaxed ${abstractExpanded ? "" : abstractClamp}`}
             >
-              {citation.abstract}
+              {cleanAbstract}
             </p>
             <button
               type="button"

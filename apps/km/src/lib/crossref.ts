@@ -1,4 +1,5 @@
 import type { CslItem } from "./csl";
+import { stripJats as stripJatsUtil } from "./strip-jats";
 
 const TYPE_MAP: Record<string, string> = {
   "journal-article": "article-journal",
@@ -33,16 +34,11 @@ type CrossRefMessage = {
 };
 
 /**
- * Crossref ships abstracts as JATS-flavoured XML (e.g. `<jats:p>`, `<jats:title>`,
- * `<jats:italic>`). Strip all `<jats:*>` open/close tags and collapse any
- * resulting whitespace runs so the plain prose is suitable for CSL JSON.
+ * Re-export from the shared strip-jats util so callers that previously imported
+ * `stripJats` from this module keep working. New code should import from
+ * `./strip-jats` directly.
  */
-export function stripJats(input: string): string {
-  return input
-    .replace(/<\/?jats:[^>]*>/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
+export const stripJats = stripJatsUtil;
 
 export function crossRefToCsl(message: unknown): CslItem {
   const msg = message as Record<string, unknown>;
