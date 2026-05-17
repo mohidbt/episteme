@@ -32,6 +32,18 @@ type CrossRefMessage = {
   publisher?: string;
 };
 
+/**
+ * Crossref ships abstracts as JATS-flavoured XML (e.g. `<jats:p>`, `<jats:title>`,
+ * `<jats:italic>`). Strip all `<jats:*>` open/close tags and collapse any
+ * resulting whitespace runs so the plain prose is suitable for CSL JSON.
+ */
+export function stripJats(input: string): string {
+  return input
+    .replace(/<\/?jats:[^>]*>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export function crossRefToCsl(message: unknown): CslItem {
   const msg = message as Record<string, unknown>;
   if (typeof msg?.DOI !== "string") {
@@ -49,7 +61,7 @@ export function crossRefToCsl(message: unknown): CslItem {
 
   if (m.URL) csl.URL = m.URL;
   if (m["container-title"]?.[0]) csl["container-title"] = m["container-title"][0];
-  if (m.abstract) csl.abstract = m.abstract;
+  if (m.abstract) csl.abstract = stripJats(m.abstract);
   if (m.publisher) csl.publisher = m.publisher;
 
   if (m.author) {
