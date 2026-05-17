@@ -51,15 +51,19 @@ export function PaperActionsButtons({ paper }: { paper: Paper }) {
     if (saving || !paper.doi || paper.libraryId == null) return;
     setSaving(true);
     try {
+      // BG7: omit folderPath so the server derives folder location from the
+      // source paper (paperId). Sending an empty string here would otherwise
+      // race-with / override the server-side derivation in some flows.
+      const refBody: Record<string, unknown> = {
+        doi: paper.doi,
+        libraryId: paper.libraryId,
+        paperId: paper.id,
+      };
+      if (paper.folderPath) refBody.folderPath = paper.folderPath;
       const res = await fetch(`/api/references`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          doi: paper.doi,
-          libraryId: paper.libraryId,
-          folderPath: paper.folderPath,
-          paperId: paper.id,
-        }),
+        body: JSON.stringify(refBody),
       });
       if (res.status === 409) {
         toast.info("Already in your library");

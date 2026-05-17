@@ -281,6 +281,59 @@ describe("references POST { doi }", () => {
     const body = await r.json();
     expect(body.error).toBe("doi_not_found");
   });
+
+  it("BG7: derives folderId/folderPath from source paper when paperId is provided", async () => {
+    // Seed: a paper sitting inside folder "/Bio".
+    const [bio] = await db
+      .insert(folders)
+      .values({ libraryId, userId: u.id, parentId: null, name: `Bio-${Date.now()}` })
+      .returning({ id: folders.id, name: folders.name });
+    const bioPath = `/${bio.name}`;
+    const [paper] = await db
+      .insert(papers)
+      .values({
+        libraryId,
+        userId: u.id,
+        filename: `bg7-${Date.now()}.pdf`,
+        title: "BG7 Paper",
+        doi: "10.42/bg7-folder",
+        folderId: bio.id,
+        folderPath: bioPath,
+      })
+      .returning({ id: papers.id });
+
+    const cslMsg = {
+      DOI: "10.42/bg7-folder",
+      type: "article-journal",
+      title: ["BG7 Reference"],
+      author: [{ family: "Bee", given: "Gee" }],
+      issued: { "date-parts": [[2025]] },
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        status: 200,
+        json: async () => ({ status: "ok", message: cslMsg }),
+      }),
+    );
+
+    // Client omits folderPath (or sends ""); paperId should drive folder.
+    const r = await POST(
+      req("/api/references", {
+        method: "POST",
+        cookie: u.cookie,
+        body: JSON.stringify({
+          libraryId,
+          doi: "10.42/bg7-folder",
+          paperId: paper.id,
+        }),
+      }),
+    );
+    expect(r.status).toBe(201);
+    const row = await r.json();
+    expect(row.folderId).toBe(bio.id);
+    expect(row.folderPath).toBe(bioPath);
+  });
 });
 
 // ── GET ?q= search ──────────────────────────────────────────────────────────

@@ -88,6 +88,7 @@ export async function GET(req: Request) {
 type InsertValues = {
   libraryId: number;
   folderPath: string;
+  folderId?: string | null;
   citationKey: string;
   cslJson: unknown;
   paperId?: string | null;
@@ -165,12 +166,19 @@ export async function POST(req: Request) {
   const lib = await requireOwned<any>(libraries, libraryId, userId);
   if (!lib.ok) return jsonError(lib.status, lib.status === 404 ? "not_found" : "forbidden");
 
+  // BG7: when a source paper is provided, the reference inherits its folder
+  // location. The client previously sent paper.folderPath but never
+  // paper.folderId — and the drive UI filters by folderId — so refs created
+  // via "Add as reference" always landed at the root.
+  let folderId: string | null | undefined;
   if (paperId) {
     const paper = await requireOwned<any>(papers, paperId, userId);
     if (!paper.ok) return jsonError(paper.status, paper.status === 404 ? "not_found" : "forbidden");
+    folderId = paper.row.folderId ?? null;
+    folderPath = paper.row.folderPath ?? folderPath;
   }
 
-  const result = await insertReference({ libraryId, folderPath, citationKey, cslJson, paperId, userId });
+  const result = await insertReference({ libraryId, folderPath, folderId, citationKey, cslJson, paperId, userId });
   if (!result.ok) return Response.json(result.conflict, { status: 409 });
   await autoConnectReference(result.row.id, userId, extractRefSignals(cslJson));
   return Response.json(result.row, { status: 201 });

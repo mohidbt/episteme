@@ -83,11 +83,33 @@ describe("PaperActionsButtons", () => {
     expect(url).toBe("/api/references");
     expect(init.method).toBe("POST");
     const body = JSON.parse(init.body as string);
+    // BG7: client omits folderPath when paper sits at root ("") so the
+    // server derives folder location from paperId. Includes it when truthy.
     expect(body).toEqual({
       doi: "10.1/abc",
       libraryId: 7,
-      folderPath: "",
       paperId: "paper-1",
+    });
+  });
+
+  it("BG7: includes folderPath when paper has a non-root folderPath", async () => {
+    mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({ id: "ref-2" }), { status: 201 }),
+    );
+    render(
+      <PaperActionsButtons
+        paper={{ ...paperBase, doi: "10.1/abc", folderPath: "/Bio" }}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /add as reference/i }));
+    await waitFor(() => expect(mockFetch).toHaveBeenCalled());
+    const [, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(init.body as string);
+    expect(body).toEqual({
+      doi: "10.1/abc",
+      libraryId: 7,
+      paperId: "paper-1",
+      folderPath: "/Bio",
     });
   });
 });
