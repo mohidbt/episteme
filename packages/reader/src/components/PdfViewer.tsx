@@ -166,7 +166,15 @@ export function PdfViewer({ url, containerRef: externalRef, markers = [], userHi
 
   // Always-on poll-correct loop, decoupled from scrollTargetPage state so it
   // survives the in-effect setScrollTargetPage(null). Reads scrollPinRef.
+  // User input (wheel/touch/key) cancels the pin so the viewer doesn't fight
+  // the user when they try to scroll away during the 6s settle window.
   useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const cancelPin = () => { scrollPinRef.current = null; };
+    el.addEventListener("wheel", cancelPin, { passive: true });
+    el.addEventListener("touchstart", cancelPin, { passive: true });
+    el.addEventListener("keydown", cancelPin);
     const id = setInterval(() => {
       const pin = scrollPinRef.current;
       if (!pin) return;
@@ -174,15 +182,18 @@ export function PdfViewer({ url, containerRef: externalRef, markers = [], userHi
         scrollPinRef.current = null;
         return;
       }
-      const el = containerRef.current;
-      if (!el) return;
       const pageEl = el.querySelector(`[data-page-number="${pin.target}"]`) as HTMLElement | null;
       if (!pageEl) return;
       if (Math.abs(el.scrollTop - pageEl.offsetTop) > 30) {
         el.scrollTop = pageEl.offsetTop;
       }
     }, 300);
-    return () => clearInterval(id);
+    return () => {
+      clearInterval(id);
+      el.removeEventListener("wheel", cancelPin);
+      el.removeEventListener("touchstart", cancelPin);
+      el.removeEventListener("keydown", cancelPin);
+    };
   }, [containerRef]);
 
   // Track current page via IntersectionObserver (for toolbar display only)
