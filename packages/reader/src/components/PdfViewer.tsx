@@ -131,6 +131,10 @@ export function PdfViewer({ url, containerRef: externalRef, markers = [], userHi
     }
     let cancelled = false;
     let attempts = 0;
+    // ~3s window: PDFs with many pages can take >500ms to fully mount their
+    // page DOM. Also re-scroll once after a short delay to correct for image
+    // loads that shift page offsets between scrollIntoView and final layout.
+    const MAX_ATTEMPTS = 180;
     const tryScroll = () => {
       if (cancelled) return;
       const pageEl = el.querySelector(`[data-page-number="${scrollTargetPage}"]`);
@@ -141,11 +145,19 @@ export function PdfViewer({ url, containerRef: externalRef, markers = [], userHi
           block: "start",
         });
         el.addEventListener("scrollend", () => { isAnimatingRef.current = false; }, { once: true });
+        // Re-scroll once after layout settles — page images often expand
+        // height post-mount, leaving the initial scroll short of the target.
+        const target = scrollTargetPage;
+        setTimeout(() => {
+          if (cancelled) return;
+          const settled = el.querySelector(`[data-page-number="${target}"]`);
+          if (settled) (settled as HTMLElement).scrollIntoView({ behavior: "smooth", block: "start" });
+        }, 1200);
         setScrollTargetPage(null);
         return;
       }
       attempts += 1;
-      if (attempts >= 30) {
+      if (attempts >= MAX_ATTEMPTS) {
         setScrollTargetPage(null);
         return;
       }
