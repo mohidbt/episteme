@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Loader2, Sparkles, BookPlus } from "lucide-react";
+import { citationsRefreshEvent } from "./PaperCitationsList";
 
 interface Paper {
   id: string;
@@ -40,6 +41,9 @@ export function PaperActionsButtons({ paper }: { paper: Paper }) {
       }
       const n = data.stats?.referencesInserted ?? 0;
       toast.success(n > 0 ? `Found ${n} citation${n === 1 ? "" : "s"}` : "No citations detected");
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event(citationsRefreshEvent(paper.id)));
+      }
     } catch {
       toast.error("Citation extraction failed");
     } finally {

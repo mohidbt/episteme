@@ -12,6 +12,7 @@ export { CommentsSidebar } from "./components/CommentsSidebar";
 export { FindBar } from "./components/FindBar";
 export { SelectionToolbar } from "./components/SelectionToolbar";
 export { CitationCard } from "./components/CitationCard";
+export type { CitationWithStatus, FolderOption } from "./components/CitationCard";
 export { ZoomControls } from "./components/ZoomControls";
 export { ReaderSidePanel } from "./components/ReaderSidePanel";
 export type { ReaderSidePanelProps } from "./components/ReaderSidePanel";

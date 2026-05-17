@@ -14,6 +14,7 @@ import { denormaliseForList, validateCslJson } from "@/lib/csl";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { PaperMetadataPanel } from "@/components/PaperMetadataPanel";
 import { PaperHighlightsList } from "@/components/PaperHighlightsList";
+import { PaperCitationsList } from "@/components/PaperCitationsList";
 import { PaperActionsButtons } from "@/components/PaperActionsButtons";
 import { TabTitleUpdater } from "@/components/TabBar";
 
@@ -127,6 +128,7 @@ export default async function PaperPage({
         <aside className="flex flex-col gap-8 overflow-y-auto border-t border-border/60 p-6 lg:border-t-0 lg:border-l">
           <PaperMetadataPanel paper={paper} papersetCount={papersetCount} papersets={papersetList} />
           <PaperHighlightsList paperId={paper.id} />
+          <PaperCitationsList paperId={paper.id} />
         </aside>
       </div>
     </div>
