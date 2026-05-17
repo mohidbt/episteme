@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef } from "react";
 import dynamic from "next/dynamic";
+import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { AgentTranscript } from "@/components/agent/AgentTranscript";
 import { useAgentBallStore } from "@/state/agent-ball";
@@ -29,6 +30,8 @@ async function createThread(signal: AbortSignal): Promise<string | null> {
 }
 
 export function ReaderShell({ paperId }: { paperId: string }) {
+  const searchParams = useSearchParams();
+  const initialPageJumpedRef = useRef(false);
   const panelOpen = useAgentBallStore((s) => s.panelOpen);
   const mountPoint = useAgentBallStore((s) => s.mountPoint);
   const activeThreadId = useAgentBallStore((s) => s.activeThreadId);
@@ -68,6 +71,26 @@ export function ReaderShell({ paperId }: { paperId: string }) {
       useAgentBallStore.getState().close();
     };
   }, []);
+
+  // BG2a — citation pills navigate with `?p=<n>`. Fire `episteme:reader-jump`
+  // once after mount so Reader's window listener scrolls to that page top.
+  // Guard with a ref so re-renders / searchParams identity churn don't refire.
+  useEffect(() => {
+    if (initialPageJumpedRef.current) return;
+    const raw = searchParams?.get("p");
+    if (!raw) return;
+    const page = Number(raw);
+    if (!Number.isFinite(page) || page < 1) return;
+    initialPageJumpedRef.current = true;
+    // Defer to a microtask so Reader's mount-time listener is registered.
+    queueMicrotask(() => {
+      window.dispatchEvent(
+        new CustomEvent("episteme:reader-jump", {
+          detail: { page, bboxRect: null },
+        }),
+      );
+    });
+  }, [searchParams]);
 
   // A4 — Reader dispatches `episteme:reader-toast` when scroll-to-segment
   // exhausts its rAF retry budget. Surface it via Sonner so the user sees
