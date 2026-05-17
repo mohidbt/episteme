@@ -55,7 +55,14 @@ async def _fetch_personal_skills(user_id: str) -> list[dict]:
 # Without this, "Remember: my X is Y" prompts produce a friendly text reply
 # but no `write_file` call, so nothing persists across threads. The wording
 # is deliberately concrete: name the tool, name the path, give one example.
-_MEMORY_SYSTEM_PROMPT = """## Memory
+_MEMORY_SYSTEM_PROMPT = """## IMPORTANT TOOL CHOICE RULE
+
+When the user asks vaguely about their library ("show me my papers", "what do
+I have", "list my docs", "browse"), ALWAYS call `list_pdfs` first. Use
+`search_pdfs` ONLY when the user mentions a specific paper title, author, or
+topic keyword. Never default to `search_pdfs`.
+
+## Memory
 
 You have a persistent memory under `/.episteme/agents/memories/`. Anything you
 write there survives across threads — use it to remember facts the user tells
