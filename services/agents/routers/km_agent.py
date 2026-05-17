@@ -704,8 +704,11 @@ async def invoke(req: Request, auth: InternalAuthDep):
                             yield format_typed(extra[0], extra[1])
                 for ev_type, payload in await _flush_pending_interrupts(agent, thread_id):
                     yield format_typed(ev_type, payload)
-                # BG1: persist citations into the checkpoint so a later
-                # /state/{thread_id} reload restores citation pills.
+                # BG1#3: persist citations BEFORE the terminal `done` yield so
+                # a client that immediately calls /state/{thread_id} after the
+                # SSE stream closes sees the persisted citations. The finally
+                # block below re-runs this as an idempotent safety net for
+                # error/cancel paths (aupdate_state by-id replace is no-op).
                 await _persist_citations_into_checkpoint(
                     agent, thread_id, citations_by_msg_id,
                 )
@@ -748,6 +751,15 @@ async def invoke(req: Request, auth: InternalAuthDep):
                     "state": "output-error",
                     "errorText": "stream ended",
                 })
+            # BG1#3 safety net: error/cancel paths skip the in-try persist.
+            # Re-run here so /state is consistent even when the stream aborts.
+            # Idempotent: aupdate_state replaces AIMessages by id.
+            try:
+                await _persist_citations_into_checkpoint(
+                    agent, thread_id, citations_by_msg_id,
+                )
+            except Exception:  # noqa: BLE001
+                logger.exception("citations persist (finally) failed thread_id=%s", thread_id)
             # yield-in-finally trade-off: Python async-gen spec says that
             # yielding inside finally is undefined behaviour when the generator
             # is closed via aclose() / GeneratorExit — the frame may or may not
@@ -900,7 +912,8 @@ async def resume(req: Request, auth: InternalAuthDep):
                         yield format_typed(extra[0], extra[1])
             for ev_type, payload in await _flush_pending_interrupts(agent, thread_id):
                 yield format_typed(ev_type, payload)
-            # BG1: persist citations into the checkpoint after resume run.
+            # BG1#3: persist citations BEFORE the terminal `done` yield so a
+            # reload immediately after the stream closes sees them.
             await _persist_citations_into_checkpoint(
                 agent, thread_id, citations_by_msg_id,
             )
@@ -927,6 +940,14 @@ async def resume(req: Request, auth: InternalAuthDep):
                 "message": str(e),
                 "retriable": False,
             })
+        finally:
+            # BG1#3 safety net for error paths: idempotent re-persist.
+            try:
+                await _persist_citations_into_checkpoint(
+                    agent, thread_id, citations_by_msg_id,
+                )
+            except Exception:  # noqa: BLE001
+                logger.exception("citations persist (finally) failed thread_id=%s", thread_id)
         yield format_sse("done", {"thread_id": body["thread_id"]})
 
     return StreamingResponse(
@@ -1051,11 +1072,30 @@ def _serialize_messages_with_tools(raw_messages: list) -> list[dict]:
 @router.get("/state/{thread_id}")
 async def state(thread_id: str, auth: InternalAuthDep):
     _reject_guest(auth["user_id"])
+    caller_user_id = auth["user_id"]
     saver = get_saver()
     config = {"configurable": {"thread_id": thread_id}}
     tuple_ = await saver.aget_tuple(config)
     if tuple_ is None:
         return {"todos": [], "pending_interrupts": [], "messages": []}
+    # BG1#7 owner-check (best-effort). LangGraph threads have no first-class
+    # owner table; we propagate `user_id` into `RunnableConfig.configurable`
+    # at /invoke and /resume (see `_build_configurable`), and the checkpointer
+    # persists it on the saved config. If a mismatch is detectable we 403;
+    # if no user_id is present (older threads, or a checkpointer that didn't
+    # round-trip configurable), we fall through and serve. ACCEPTED RISK:
+    # threads written before this stamping land in the no-owner bucket and
+    # remain readable cross-user. Proper fix requires a thread->user table.
+    tuple_cfg = getattr(tuple_, "config", None) or {}
+    tuple_configurable = tuple_cfg.get("configurable") if isinstance(tuple_cfg, dict) else None
+    owner_user_id = (
+        tuple_configurable.get("user_id")
+        if isinstance(tuple_configurable, dict)
+        else None
+    )
+    if isinstance(owner_user_id, str) and owner_user_id and owner_user_id != caller_user_id:
+        from fastapi import HTTPException  # noqa: PLC0415
+        raise HTTPException(status_code=403, detail="thread not owned by caller")
     channel_values = tuple_.checkpoint.get("channel_values", {})
     todos = channel_values.get("todos", [])
     raw_messages = channel_values.get("messages", []) or []

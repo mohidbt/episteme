@@ -154,6 +154,88 @@ def test_state_surfaces_persisted_citations_from_additional_kwargs() -> None:
     )
 
 
+def test_state_rejects_caller_when_thread_owner_mismatches() -> None:
+    """BG1#7: /state/{thread_id} 403s when the checkpoint's saved
+    ``configurable.user_id`` does not match the signed caller id.
+    """
+    from langchain_core.messages import AIMessage  # noqa: PLC0415
+
+    path = "/agents/km/state/thread-owner-mismatch"
+    mock_tuple = MagicMock()
+    mock_tuple.checkpoint = {"channel_values": {"todos": [], "messages": [AIMessage(content="x", id="a-1")]}}
+    mock_tuple.config = {"configurable": {"thread_id": "thread-owner-mismatch", "user_id": "user_999"}}
+    mock_saver = MagicMock()
+    mock_saver.aget_tuple = AsyncMock(return_value=mock_tuple)
+
+    with patch("routers.km_agent.get_saver", return_value=mock_saver):
+        r = client.get(path, headers=_signed_headers("GET", path, b""))
+
+    assert r.status_code == 403, r.text
+
+
+def test_state_allows_caller_when_thread_owner_matches() -> None:
+    """BG1#7: caller_id == thread.configurable.user_id returns 200."""
+    from langchain_core.messages import AIMessage  # noqa: PLC0415
+
+    path = "/agents/km/state/thread-owner-match"
+    mock_tuple = MagicMock()
+    mock_tuple.checkpoint = {"channel_values": {"todos": [], "messages": [AIMessage(content="x", id="a-1")]}}
+    mock_tuple.config = {"configurable": {"thread_id": "thread-owner-match", "user_id": "user_1"}}
+    mock_saver = MagicMock()
+    mock_saver.aget_tuple = AsyncMock(return_value=mock_tuple)
+
+    with patch("routers.km_agent.get_saver", return_value=mock_saver):
+        r = client.get(path, headers=_signed_headers("GET", path, b""))
+
+    assert r.status_code == 200, r.text
+
+
+def test_state_allows_caller_when_thread_has_no_owner_stamp() -> None:
+    """BG1#7 ACCEPTED RISK: older threads w/o user_id stamping remain readable."""
+    from langchain_core.messages import AIMessage  # noqa: PLC0415
+
+    path = "/agents/km/state/thread-no-owner"
+    mock_tuple = MagicMock()
+    mock_tuple.checkpoint = {"channel_values": {"todos": [], "messages": [AIMessage(content="x", id="a-1")]}}
+    mock_tuple.config = {"configurable": {"thread_id": "thread-no-owner"}}  # no user_id
+    mock_saver = MagicMock()
+    mock_saver.aget_tuple = AsyncMock(return_value=mock_tuple)
+
+    with patch("routers.km_agent.get_saver", return_value=mock_saver):
+        r = client.get(path, headers=_signed_headers("GET", path, b""))
+
+    assert r.status_code == 200, r.text
+
+
+def test_persist_runs_before_done_in_invoke_source() -> None:
+    """BG1#3 regression lock: in `routers.km_agent.invoke`'s `gen()`, the
+    `_persist_citations_into_checkpoint` call must appear textually BEFORE
+    the terminal `yield format_sse("done", ...)`. Source-level ordering
+    proxy: an async-generator integration test would need a live agent.
+    """
+    import inspect  # noqa: PLC0415
+    import routers.km_agent as mod  # noqa: PLC0415
+
+    src = inspect.getsource(mod.invoke)
+    persist_idx = src.find("_persist_citations_into_checkpoint(")
+    done_idx = src.find('format_sse("done"')
+    assert persist_idx != -1, "persist call missing in /invoke gen()"
+    assert done_idx != -1, "done yield missing in /invoke gen()"
+    assert persist_idx < done_idx, (
+        f"persist call must precede done yield in /invoke; "
+        f"persist_idx={persist_idx} done_idx={done_idx}"
+    )
+
+    src_resume = inspect.getsource(mod.resume)
+    persist_idx_r = src_resume.find("_persist_citations_into_checkpoint(")
+    done_idx_r = src_resume.find('format_sse("done"')
+    assert persist_idx_r != -1 and done_idx_r != -1
+    assert persist_idx_r < done_idx_r, (
+        f"persist call must precede done yield in /resume; "
+        f"persist_idx={persist_idx_r} done_idx={done_idx_r}"
+    )
+
+
 def test_state_omits_citations_when_additional_kwargs_empty() -> None:
     """Sanity: AI messages without citations do not gain an empty array."""
     from langchain_core.messages import AIMessage  # noqa: PLC0415
