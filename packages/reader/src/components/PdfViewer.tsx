@@ -119,7 +119,9 @@ export function PdfViewer({ url, containerRef: externalRef, markers = [], userHi
     };
   }, [containerRef]);
 
-  // Scroll to an explicitly requested page (Prev/Next buttons, outline clicks, etc.)
+  // Scroll to an explicitly requested page (Prev/Next, outline, BG2a deeplink).
+  // BG2a-followup2: retry up to ~3s while react-pdf renders the target page.
+  // Without retry, deeplinks fire before the page DOM exists and lose the jump.
   useEffect(() => {
     if (scrollTargetPage === null) return;
     const el = containerRef.current;
@@ -127,16 +129,30 @@ export function PdfViewer({ url, containerRef: externalRef, markers = [], userHi
       setScrollTargetPage(null);
       return;
     }
-    const pageEl = el.querySelector(`[data-page-number="${scrollTargetPage}"]`);
-    if (pageEl) {
-      isAnimatingRef.current = true;
-      (pageEl as HTMLElement).scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
-      el.addEventListener("scrollend", () => { isAnimatingRef.current = false; }, { once: true });
-    }
-    setScrollTargetPage(null);
+    let cancelled = false;
+    let attempts = 0;
+    const tryScroll = () => {
+      if (cancelled) return;
+      const pageEl = el.querySelector(`[data-page-number="${scrollTargetPage}"]`);
+      if (pageEl) {
+        isAnimatingRef.current = true;
+        (pageEl as HTMLElement).scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+        el.addEventListener("scrollend", () => { isAnimatingRef.current = false; }, { once: true });
+        setScrollTargetPage(null);
+        return;
+      }
+      attempts += 1;
+      if (attempts >= 30) {
+        setScrollTargetPage(null);
+        return;
+      }
+      requestAnimationFrame(tryScroll);
+    };
+    tryScroll();
+    return () => { cancelled = true; };
   }, [scrollTargetPage, containerRef, setScrollTargetPage]);
 
   // Track current page via IntersectionObserver (for toolbar display only)
