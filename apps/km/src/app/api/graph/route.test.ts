@@ -11,6 +11,7 @@ vi.mock("@/lib/graph/live-edges", () => ({
   edgesWikiLink: vi.fn(),
   edgesSharedTag: vi.fn(),
   edgesSemanticSim: vi.fn(),
+  edgesPaperCitations: vi.fn(),
 }));
 
 import { getUserIdFromRequest } from "@/lib/auth";
@@ -20,6 +21,7 @@ import {
   edgesWikiLink,
   edgesSharedTag,
   edgesSemanticSim,
+  edgesPaperCitations,
 } from "@/lib/graph/live-edges";
 import { GET } from "./route";
 
@@ -72,6 +74,7 @@ describe("GET /api/graph", () => {
     vi.mocked(edgesWikiLink).mockResolvedValue(wikiEdges as never);
     vi.mocked(edgesSharedTag).mockResolvedValue(tagEdges as never);
     vi.mocked(edgesSemanticSim).mockResolvedValue(semEdges as never);
+    vi.mocked(edgesPaperCitations).mockResolvedValue([] as never);
 
     const res = await GET(makeReq());
     expect(res.status).toBe(200);
@@ -86,6 +89,7 @@ describe("GET /api/graph", () => {
     expect(body.nodes).toEqual([{ id: "n1" }, { id: "n2" }]);
     expect(body.capped).toEqual({
       paper_is_ref: { kept: 5000, total: 5002 },
+      paper_citation: { kept: 0, total: 0 },
       wiki_link: { kept: 5000, total: 5001 },
       shared_tag: { kept: 3, total: 3 },
       semantic_sim: { kept: 3, total: 3 },
@@ -100,5 +104,78 @@ describe("GET /api/graph", () => {
     const tail = body.edges.slice(-6);
     expect(tail.slice(0, 3).map((e: { weight: number }) => e.weight)).toEqual([9, 5, 1]);
     expect(tail.slice(3).map((e: { weight: number }) => e.weight)).toEqual([0.9, 0.5, 0.2]);
+  });
+
+  it("returns paper_citation edges and prefers them over paper_is_ref on duplicate pairs", async () => {
+    vi.mocked(getUserIdFromRequest).mockResolvedValue("u1");
+    vi.mocked(nodesForUser).mockResolvedValue([] as never);
+
+    // Duplicate pair (paper pA -> paper pB) appears as both paper_is_ref and paper_citation.
+    const refEdges = [
+      {
+        src: { kind: "paper", id: "pA" },
+        dst: { kind: "paper", id: "pB" },
+        kind: "paper_is_ref",
+        weight: 1,
+      },
+      {
+        src: { kind: "paper", id: "pX" },
+        dst: { kind: "reference", id: "rY" },
+        kind: "paper_is_ref",
+        weight: 1,
+      },
+    ];
+    const citeEdges = [
+      {
+        src: { kind: "paper", id: "pA" },
+        dst: { kind: "paper", id: "pB" },
+        kind: "paper_citation",
+        weight: 1,
+      },
+      {
+        src: { kind: "paper", id: "pC" },
+        dst: { kind: "paper", id: "pD" },
+        kind: "paper_citation",
+        weight: 1,
+      },
+    ];
+
+    vi.mocked(edgesPaperIsRef).mockResolvedValue(refEdges as never);
+    vi.mocked(edgesWikiLink).mockResolvedValue([] as never);
+    vi.mocked(edgesSharedTag).mockResolvedValue([] as never);
+    vi.mocked(edgesSemanticSim).mockResolvedValue([] as never);
+    vi.mocked(edgesPaperCitations).mockResolvedValue(citeEdges as never);
+
+    const res = await GET(makeReq());
+    expect(res.status).toBe(200);
+    const body = await res.json();
+
+    expect(edgesPaperCitations).toHaveBeenCalledWith("u1");
+
+    const kinds = body.edges.map((e: { kind: string }) => e.kind);
+    // paper_citation present
+    expect(kinds).toContain("paper_citation");
+    // dedup: paper_is_ref for (pA,pB) removed in favour of paper_citation
+    const dupPair = body.edges.filter(
+      (e: { src: { id: string }; dst: { id: string } }) => e.src.id === "pA" && e.dst.id === "pB"
+    );
+    expect(dupPair).toHaveLength(1);
+    expect(dupPair[0].kind).toBe("paper_citation");
+    // non-duplicated paper_is_ref still present
+    expect(
+      body.edges.find(
+        (e: { src: { id: string }; dst: { id: string } }) => e.src.id === "pX" && e.dst.id === "rY"
+      )?.kind
+    ).toBe("paper_is_ref");
+    // non-duplicated paper_citation still present
+    expect(
+      body.edges.find(
+        (e: { src: { id: string }; dst: { id: string } }) => e.src.id === "pC" && e.dst.id === "pD"
+      )?.kind
+    ).toBe("paper_citation");
+
+    expect(body.capped).toMatchObject({
+      paper_citation: { kept: 2, total: 2 },
+    });
   });
 });
