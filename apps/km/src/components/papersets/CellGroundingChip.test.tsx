@@ -75,22 +75,22 @@ describe("CellGroundingChip", () => {
       />,
     );
     const chip = screen.getByTestId("cell-grounding-chip");
-    expect(chip.getAttribute("aria-label")).toContain("block_abc_p7_0");
+    expect(chip.getAttribute("aria-label")).toContain("page 7");
     expect(chip.textContent).toBe("p.7");
   });
 
-  it("clicking chip pushes /p/<paperId>?block=<first_block_id>", () => {
+  it("renders a Link to /papers/<paperId>/read?p=<page> for BG2a deeplink (BG2b)", () => {
     render(
       <CellGroundingChip
         paperId="p-abc"
-        blockIds={["block_abc_p42_0"]}
+        blockIds={["block_abc_p4_0"]}
       />,
     );
-    fireEvent.click(screen.getByTestId("cell-grounding-chip"));
-    expect(routerMock.push).toHaveBeenCalledTimes(1);
-    expect(routerMock.push).toHaveBeenCalledWith(
-      "/p/p-abc?block=block_abc_p42_0",
-    );
+    const chip = screen.getByTestId("cell-grounding-chip");
+    // The chip should be (or be wrapped in) an anchor with the BG2a href.
+    const anchor = chip.tagName === "A" ? chip : chip.closest("a");
+    expect(anchor).not.toBeNull();
+    expect(anchor!.getAttribute("href")).toBe("/papers/p-abc/read?p=4");
   });
 
   it("does not render when blockIds is empty (n/a or empty cell)", () => {
@@ -188,6 +188,5 @@ describe("CellGroundingChip", () => {
     );
     fireEvent.click(screen.getByTestId("cell-grounding-chip"));
     expect(onParentClick).not.toHaveBeenCalled();
-    expect(routerMock.push).toHaveBeenCalledTimes(1);
   });
 });

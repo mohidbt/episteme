@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
@@ -32,9 +32,11 @@ export function CellGroundingChip({
   maxPage,
   className,
 }: CellGroundingChipProps) {
-  const router = useRouter();
   if (blockIds.length === 0) return null;
   const firstBlockId = blockIds[0];
+
+  const pageNum = blockRefPageNumber(firstBlockId);
+  const pageValid = pageNum !== null && (maxPage == null || pageNum <= maxPage);
 
   // Derive label. Explicit null hides the chip; explicit string overrides;
   // undefined → auto-derive from block ID (page first, segment fallback).
@@ -44,33 +46,31 @@ export function CellGroundingChip({
   } else if (label !== undefined) {
     displayText = label;
   } else {
-    const pageNum = blockRefPageNumber(firstBlockId);
-    displayText =
-      pageNum !== null && (maxPage == null || pageNum <= maxPage)
-        ? `p.${pageNum}`
-        : null;
+    displayText = pageValid ? `p.${pageNum}` : null;
   }
 
   if (displayText === null) return null;
+  // BG2b — chip is a page deeplink; no page number = nowhere to go.
+  if (!pageValid) return null;
 
-  const ariaLabel = `Open paper at cited block ${firstBlockId}`;
+  const href = `/papers/${paperId}/read?p=${pageNum}`;
+  const ariaLabel = `Open paper at page ${pageNum}`;
 
   return (
     <Badge
       variant="outline"
       className={cn("cursor-pointer hover:bg-muted", className)}
       render={
-        <button
-          type="button"
+        <Link
+          href={href}
           aria-label={ariaLabel}
           data-testid="cell-grounding-chip"
           data-paper-id={paperId}
           data-block-id={firstBlockId}
+          data-page={pageNum}
           onClick={(e) => {
+            // Prevent parent cell click handlers from firing alongside nav.
             e.stopPropagation();
-            router.push(
-              `/p/${paperId}?block=${encodeURIComponent(firstBlockId)}`,
-            );
           }}
         />
       }
