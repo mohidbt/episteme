@@ -105,12 +105,29 @@ export async function resolvePaperId(
   const { apiKey } = opts;
 
   if (ref.doi?.trim()) {
-    const encoded = encodeURIComponent(`DOI:${ref.doi.trim()}`);
+    const doi = ref.doi.trim();
+    // Try DOI: scheme first.
+    const encoded = encodeURIComponent(`DOI:${doi}`);
     const url = `${BASE_URL}/${encoded}?fields=paperId`;
     const response = await fetchGet(url, apiKey);
     if (response) {
       const data = (await response.json()) as { paperId?: string };
       if (data.paperId) return data.paperId;
+    }
+    // ARXIV: fallback. S2 returns 404 on `DOI:10.48550/arXiv.X` — re-try
+    // via the canonical `ARXIV:X` scheme. Matches both `10.48550/arXiv.X`
+    // (canonical) and bare `arXiv:X` forms.
+    const arxivMatch =
+      doi.match(/^10\.48550\/arXiv\.(.+)$/i) ?? doi.match(/^arXiv:(.+)$/i);
+    if (arxivMatch) {
+      const arxivId = arxivMatch[1];
+      const arxivEncoded = encodeURIComponent(`ARXIV:${arxivId}`);
+      const arxivUrl = `${BASE_URL}/${arxivEncoded}?fields=paperId`;
+      const arxivResp = await fetchGet(arxivUrl, apiKey);
+      if (arxivResp) {
+        const data = (await arxivResp.json()) as { paperId?: string };
+        if (data.paperId) return data.paperId;
+      }
     }
   }
 
