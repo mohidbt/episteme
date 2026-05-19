@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { getOrApiKey, OpenRouterKeyMissing } from "@/lib/openrouter-key";
 import { db } from "@/lib/db";
 import { papers, documentReferences, documentReferenceMarkers } from "@episteme/db/schema";
@@ -221,20 +221,28 @@ export async function POST(request: NextRequest, { params }: Ctx) {
       }
     }
 
-    // D2: fire-and-forget auto-link of paper_citations. Errors logged only;
-    // never block the extract response. Table-missing case handled inside.
+    // Post-response background work via Next 16 `after()` — survives the
+    // response on Vercel (plain `void promise` gets killed at handler exit
+    // on serverless). Both jobs are best-effort; errors logged only.
     //
-    // Per-row S2 enrichment also fires here: fills title/authors/year/doi/
-    // abstract/venue/citationCount on every ref via DOI-then-title lookup.
-    // Pure per-row resolution, no ordinal assumption — see plan pivot
-    // 2026-05-18 (Codex task-mpbm0thh-3f0tz8 risk #1).
+    // - auto-link paper_citations edges (D2).
+    // - per-row S2 enrichment: fills title/authors/year/doi/abstract/venue/
+    //   citationCount on every ref via DOI-then-title lookup. Pure per-row
+    //   resolution, no ordinal assumption — see plan pivot 2026-05-18
+    //   (Codex task-mpbm0thh-3f0tz8 risk #1).
     if (inserted.length > 0) {
-      void autoLinkPaperCitations(paperId).catch((err) =>
-        console.warn("[citations/extract] auto-link failed", err),
-      );
-      void enrichPaperReferencesInDb(paperId, userId).catch((err) =>
-        console.warn("[citations/extract] enrich failed", err),
-      );
+      after(async () => {
+        try {
+          await autoLinkPaperCitations(paperId);
+        } catch (err) {
+          console.warn("[citations/extract] auto-link failed", err);
+        }
+        try {
+          await enrichPaperReferencesInDb(paperId, userId);
+        } catch (err) {
+          console.warn("[citations/extract] enrich failed", err);
+        }
+      });
     }
 
     return NextResponse.json(
