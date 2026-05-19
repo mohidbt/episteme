@@ -86,6 +86,19 @@ describe("audit_papers_size_bytes", () => {
     expect(result.examples).toHaveLength(20);
   });
 
+  it("strict comparison expects pre-coerced numbers, not bigint strings", async () => {
+    // Guards the SELECT-side Number() coercion in main(): if the test deps
+    // pass a string size_bytes through, runAudit treats it as mismatch — a
+    // signal that callers MUST cast `postgres` int8 strings to Number first.
+    const deps = singleBatchDeps(
+      [{ id: "s", size_bytes: "12345" as unknown as number, storage_url: "x.pdf" }],
+      async () => ({ contentLength: 12345 }),
+    );
+    const result = await runAudit(deps);
+    expect(result.mismatch).toBe(1);
+    expect(result.match).toBe(0);
+  });
+
   it("legacy size_bytes=0 rows show as mismatch (not silently skipped)", async () => {
     const deps = singleBatchDeps(
       [{ id: "legacy", size_bytes: 0, storage_url: "old.pdf" }],

@@ -173,7 +173,11 @@ async function main() {
   async function* selectRows(): AsyncIterable<AuditRow[]> {
     let lastId: string | null = null;
     while (true) {
-      const rows: AuditRow[] = lastId
+      // `postgres` returns int8/bigint columns as strings by default. Coerce
+      // to Number after SELECT so strict comparison in runAudit measures
+      // real byte counts (S3 ContentLength is a number). Object sizes are
+      // capped at 100MB so Number's 2^53 ceiling is comfortable.
+      const raw: Array<{ id: string; size_bytes: string | number; storage_url: string }> = lastId
         ? await sql`
             SELECT id, size_bytes, storage_url FROM papers
             WHERE storage_url IS NOT NULL
@@ -187,8 +191,13 @@ async function main() {
             ORDER BY id ASC
             LIMIT ${BATCH}
           `;
-      if (rows.length === 0) break;
-      lastId = rows[rows.length - 1].id;
+      if (raw.length === 0) break;
+      lastId = raw[raw.length - 1].id;
+      const rows: AuditRow[] = raw.map((r) => ({
+        id: r.id,
+        size_bytes: Number(r.size_bytes),
+        storage_url: r.storage_url,
+      }));
       yield rows;
     }
   }
