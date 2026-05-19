@@ -44,7 +44,9 @@ const PROBES: ProbeSpec[] = [
   {
     path: "/sign-up",
     expectStatus: 200,
-    expectBodyContains: ["<form", 'type="email"'],
+    // /sign-up is a multi-step wizard since e106761 — first step doesn't
+    // render the email input. Anchor on the persistent "Sign in" link.
+    expectBodyContains: ["<form", 'href="/sign-in"'],
   },
   { path: "/robots.txt", expectStatus: 200, expectBodyContains: "sitemap" },
   { path: "/sitemap.xml", expectStatus: 200, expectBodyContains: "<urlset" },

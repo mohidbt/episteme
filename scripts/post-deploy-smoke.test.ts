@@ -153,7 +153,7 @@ test("PROBES: configured assertions are structural, not copy-based", () => {
   assert.ok(Array.isArray(signIn) && signIn.includes('type="email"'));
   const signUp = byPath["/sign-up"]!.expectBodyContains;
   assert.ok(Array.isArray(signUp) && signUp.includes("<form"));
-  assert.ok(Array.isArray(signUp) && signUp.includes('type="email"'));
+  assert.ok(Array.isArray(signUp) && signUp.includes('href="/sign-in"'));
   assert.equal(byPath["/sitemap.xml"]!.expectBodyContains, "<urlset");
 });
 
