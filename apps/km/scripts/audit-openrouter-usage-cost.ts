@@ -18,7 +18,7 @@
  *     on openrouter_usage + openrouter_catalog.
  */
 
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { openrouterCatalog, openrouterUsage } from "@episteme/db/schema";
 
@@ -130,10 +130,16 @@ async function main() {
   const catalogCache = new Map<string, CatalogEntry | null>();
   async function getCatalog(model: string): Promise<CatalogEntry | null> {
     if (catalogCache.has(model)) return catalogCache.get(model) ?? null;
+    // `openrouter_catalog.fetched_at` is `timestamp` (no TZ) — postgres-js
+    // parses it in the connection's local TZ, which would skew the drift
+    // classification on a non-UTC server. Re-interpret as UTC via SQL so
+    // the JS Date always reflects the wall-clock moment that was stored.
     const r = await db
       .select({
         payload: openrouterCatalog.payload,
-        fetchedAt: openrouterCatalog.fetchedAt,
+        fetchedAtUtc: sql<
+          Date | null
+        >`(${openrouterCatalog.fetchedAt} AT TIME ZONE 'UTC')`,
       })
       .from(openrouterCatalog)
       .where(eq(openrouterCatalog.modelId, model))
@@ -141,7 +147,7 @@ async function main() {
     const entry: CatalogEntry | null = r[0]
       ? {
           payload: (r[0].payload ?? {}) as CatalogPayload,
-          fetchedAt: r[0].fetchedAt,
+          fetchedAt: r[0].fetchedAtUtc,
         }
       : null;
     catalogCache.set(model, entry);
