@@ -222,6 +222,40 @@ describe("rebuildLinks — resolution", () => {
     }
   });
 
+  it("filename match wins over title match on collision", async () => {
+    // Codex regression guard: paper A's title equals paper B's filename.
+    // A `[[pdf:<that-string>]]` link must resolve to paper B (exact
+    // filename), not paper A (case-insensitive title).
+    const collision = "collide.pdf";
+    const [paperA] = await db
+      .insert(papers)
+      .values({
+        userId: u.id,
+        libraryId,
+        filename: "actual-a.pdf",
+        title: collision, // paper A's title is the literal "collide.pdf"
+      })
+      .returning({ id: papers.id });
+    const [paperB] = await db
+      .insert(papers)
+      .values({
+        userId: u.id,
+        libraryId,
+        filename: collision, // paper B's filename matches
+        title: "Some Other Paper",
+      })
+      .returning({ id: papers.id });
+    try {
+      await rebuildLinks(sourceNoteId, `[[pdf:${collision}]]`, u.id);
+      const rows = await linksOf(sourceNoteId);
+      const paper = rows.find((r) => r.targetKind === "paper");
+      expect(paper?.targetId).toBe(paperB.id); // filename match wins
+    } finally {
+      await db.delete(papers).where(eq(papers.id, paperA.id));
+      await db.delete(papers).where(eq(papers.id, paperB.id));
+    }
+  });
+
   it("still resolves [[pdf:filename.pdf]] when title is null", async () => {
     // Legacy / fallback: paper without a title must still resolve when the
     // note links by its filename.

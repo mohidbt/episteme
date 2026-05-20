@@ -100,20 +100,19 @@ export async function rebuildLinks(
   const refByKey = new Map<string, string>();
   for (const r of refRows) refByKey.set(r.citationKey, r.id);
 
-  // Resolve papers by title OR filename (case-insensitive). The WikiLink
-  // typeahead inserts `[[pdf:<paper.title>]]` while older content + the
-  // search route's fallback can produce `[[pdf:<paper.filename>]]`. Both
-  // forms must resolve so pills don't go red on refresh. desc(addedAt)
-  // order from SQL already wins ties to the most recent paper.
-  const paperByKey = new Map<string, string>();
+  // Resolve papers by filename (exact) first, then by title (case-insensitive)
+  // as a fallback. Separate namespaces so a legacy `[[pdf:<filename>]]` link
+  // never collides with a paper whose TITLE happens to equal that filename
+  // — exact filename match wins. desc(addedAt) from SQL still ties-breaks.
+  const paperByFilename = new Map<string, string>();
+  const paperByTitleLower = new Map<string, string>();
   for (const r of paperRows) {
+    if (r.filename && !paperByFilename.has(r.filename)) {
+      paperByFilename.set(r.filename, r.id);
+    }
     if (r.title) {
       const k = r.title.toLowerCase();
-      if (!paperByKey.has(k)) paperByKey.set(k, r.id);
-    }
-    if (r.filename) {
-      const k = r.filename.toLowerCase();
-      if (!paperByKey.has(k)) paperByKey.set(k, r.id);
+      if (!paperByTitleLower.has(k)) paperByTitleLower.set(k, r.id);
     }
   }
 
@@ -121,7 +120,12 @@ export async function rebuildLinks(
     let targetId: string | null = null;
     if (l.kind === "note") targetId = noteByTitle.get(l.raw.toLowerCase()) ?? null;
     else if (l.kind === "reference") targetId = refByKey.get(l.raw) ?? null;
-    else if (l.kind === "paper") targetId = paperByKey.get(l.raw.toLowerCase()) ?? null;
+    else if (l.kind === "paper") {
+      targetId =
+        paperByFilename.get(l.raw) ??
+        paperByTitleLower.get(l.raw.toLowerCase()) ??
+        null;
+    }
     return { kind: l.kind, raw: l.raw, targetId };
   });
 

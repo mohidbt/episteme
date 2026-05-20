@@ -179,26 +179,54 @@ const SEED_PSM_PAPERSET_COLUMNS = [
   },
   {
     name: "Variables matched on",
+    description: "Which covariates the matching is performed over.",
+  },
+  {
+    name: "Sample size",
     description:
-      "Which covariates the matching is performed over.",
+      "Approximate number of subjects, observations, or matched pairs analyzed.",
   },
 ] as const;
 const SEED_PSM_PAPERSET_ROWS = [
   {
     "Uses PSM": "Yes, primary analysis",
-    "Variables matched on": "demographics, prior training experience, financial-aid status",
+    "Variables matched on":
+      "demographics, prior training experience, financial-aid status",
+    "Sample size": "~1,200 family-medicine graduates",
   },
   {
     "Uses PSM": "Yes, with GAN-augmented controls",
     "Variables matched on": "baseline EHR vitals and comorbidities",
+    "Sample size": "4,313 ventilated COVID-19 patients",
   },
   // Last row left empty so the user can fill cells themselves and try the
   // AI-fill workflow on a real paperset row.
   {
     "Uses PSM": "",
     "Variables matched on": "",
+    "Sample size": "",
   },
 ] as const;
+
+// Page anchors for prepopulated cells — drives the cell-grounding chip on
+// /d/[id]. Format is `<paperId>:p<page>:<orderIndex>`; ordering doesn't
+// matter for the demo (any non-empty index renders the chip + deep-links to
+// /papers/<id>/read?p=<page>).
+//
+// Row indices align with `psmInsertedPapers` (paper-backed rows only). Row 2
+// is intentionally absent — that row is the empty AI-fill demo target.
+const SEED_PSM_PAPERSET_CELL_PAGES: Record<number, Record<string, number>> = {
+  0: {
+    "Uses PSM": 3,
+    "Variables matched on": 4,
+    "Sample size": 2,
+  },
+  1: {
+    "Uses PSM": 5,
+    "Variables matched on": 6,
+    "Sample size": 8,
+  },
+};
 
 function dummyPapersetCsv(
   rowRefs: Array<{ citationKey: string; title: string }>,
@@ -213,12 +241,41 @@ function dummyPapersetCsv(
         `${ref.citationKey} — ${ref.title}`,
         row["Uses PSM"],
         row["Variables matched on"],
+        row["Sample size"],
       ]
         .map(csvEscape)
         .join(","),
     );
   }
   return lines.join("\n");
+}
+
+/**
+ * Build a `cellGrounding` map for the prepopulated paperset cells. Surfaces
+ * the page-deeplink chip feature (BG2b) on the guest demo — clicking the
+ * chip opens the paper at the chosen page via `/papers/<id>/read?p=N`.
+ */
+function buildSeedCellGrounding(
+  papers: Array<{ id: string }>,
+): Record<string, Record<string, { paper_id: string; block_ids: string[] }>> {
+  const out: Record<
+    string,
+    Record<string, { paper_id: string; block_ids: string[] }>
+  > = {};
+  for (const [rowIdxStr, perCol] of Object.entries(SEED_PSM_PAPERSET_CELL_PAGES)) {
+    const rowIdx = Number(rowIdxStr);
+    const paper = papers[rowIdx];
+    if (!paper) continue;
+    const row: Record<string, { paper_id: string; block_ids: string[] }> = {};
+    for (const [col, page] of Object.entries(perCol)) {
+      row[col] = {
+        paper_id: paper.id,
+        block_ids: [`${paper.id}:p${page}:0`],
+      };
+    }
+    out[String(rowIdx)] = row;
+  }
+  return out;
 }
 
 function csvEscape(field: string): string {
@@ -489,7 +546,7 @@ export async function seedAnonymousUser(userId: string): Promise<void> {
       description: c.description,
     })),
     rowRefs,
-    cellGrounding: {},
+    cellGrounding: buildSeedCellGrounding(psmInsertedPapers),
     runningCells: [],
     content: dummyPapersetCsv(rowLabels),
   });
