@@ -165,8 +165,10 @@ describe("seedAnonymousUser", () => {
     expect(nestedRef!.folderPath).toBe("Reading List/Foundations");
     expect(nestedRef!.folderId).toBe(foundations!.id);
 
-    // PSM paperset CSV is seeded inside the PSM folder, with two columns
-    // ("Uses PSM" + "Variables matched on") and one row per PSM paper.
+    // PSM paperset CSV is seeded inside the PSM folder, with three columns
+    // ("Uses PSM", "Variables matched on", "Sample size") and one row per
+    // PSM paper. cellGrounding is populated for the first two rows so the
+    // page-deeplink chip renders out-of-the-box.
     const psRows = await db
       .select()
       .from(papersets)
@@ -174,10 +176,19 @@ describe("seedAnonymousUser", () => {
     expect(psRows).toHaveLength(1);
     expect(psRows[0].filename).toMatch(/\.csv$/);
     expect(psRows[0].folderId).toBe(psmFolder!.id);
-    expect(psRows[0].columns).toHaveLength(2);
+    expect(psRows[0].columns).toHaveLength(3);
     const colNames = psRows[0].columns.map((c) => c.name);
     expect(colNames).toContain("Uses PSM");
     expect(colNames).toContain("Variables matched on");
+    expect(colNames).toContain("Sample size");
+    const grounding = psRows[0].cellGrounding as Record<
+      string,
+      Record<string, { paper_id: string; block_ids: string[] }>
+    >;
+    expect(Object.keys(grounding)).toEqual(expect.arrayContaining(["0", "1"]));
+    expect(grounding["0"]?.["Uses PSM"]?.block_ids?.[0]).toMatch(
+      /^[0-9a-f-]+:p\d+:\d+$/,
+    );
     expect(psRows[0].rowRefs).toHaveLength(3);
     for (const row of psRows[0].rowRefs) {
       expect(typeof row.paper_id).toBe("string");
