@@ -195,6 +195,50 @@ describe("rebuildLinks — resolution", () => {
     }
   });
 
+  it("resolves [[pdf:Title]] against papers.title (case-insensitive)", async () => {
+    // The WikiLink typeahead inserts `pdf:<paper.title>` — not the filename.
+    // Verify rebuildLinks resolves the title form so pills don't go red on
+    // refresh.
+    const [titled] = await db
+      .insert(papers)
+      .values({
+        userId: u.id,
+        libraryId,
+        filename: "attn.pdf",
+        title: "Attention Is All You Need",
+      })
+      .returning({ id: papers.id });
+    try {
+      await rebuildLinks(
+        sourceNoteId,
+        "[[pdf:attention is all you need]]",
+        u.id,
+      );
+      const rows = await linksOf(sourceNoteId);
+      const paper = rows.find((r) => r.targetKind === "paper");
+      expect(paper?.targetId).toBe(titled.id);
+    } finally {
+      await db.delete(papers).where(eq(papers.id, titled.id));
+    }
+  });
+
+  it("still resolves [[pdf:filename.pdf]] when title is null", async () => {
+    // Legacy / fallback: paper without a title must still resolve when the
+    // note links by its filename.
+    const [untitled] = await db
+      .insert(papers)
+      .values({ userId: u.id, libraryId, filename: "legacy-only.pdf" })
+      .returning({ id: papers.id });
+    try {
+      await rebuildLinks(sourceNoteId, "[[pdf:legacy-only.pdf]]", u.id);
+      const rows = await linksOf(sourceNoteId);
+      const paper = rows.find((r) => r.targetKind === "paper");
+      expect(paper?.targetId).toBe(untitled.id);
+    } finally {
+      await db.delete(papers).where(eq(papers.id, untitled.id));
+    }
+  });
+
   it("picks the most recently added paper on filename collision", async () => {
     // Insert an older and newer paper sharing a filename; newer wins.
     const olderAddedAt = new Date(Date.now() - 60_000);

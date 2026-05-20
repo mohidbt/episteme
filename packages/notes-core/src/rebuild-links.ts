@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import { db } from "@episteme/db";
 import {
   noteLinks,
@@ -67,12 +67,31 @@ export async function rebuildLinks(
           .select({
             id: papers.id,
             filename: papers.filename,
+            title: papers.title,
             addedAt: papers.addedAt,
           })
           .from(papers)
-          .where(and(eq(papers.userId, userId), inArray(papers.filename, paperRaws)))
+          .where(
+            and(
+              eq(papers.userId, userId),
+              or(
+                inArray(
+                  sql`lower(${papers.title})`,
+                  paperRaws.map((r) => r.toLowerCase()),
+                ),
+                inArray(papers.filename, paperRaws),
+              ),
+            ),
+          )
           .orderBy(desc(papers.addedAt))
-      : Promise.resolve([] as { id: string; filename: string; addedAt: Date }[]),
+      : Promise.resolve(
+          [] as {
+            id: string;
+            filename: string;
+            title: string | null;
+            addedAt: Date;
+          }[],
+        ),
   ]);
 
   const noteByTitle = new Map<string, string>();
@@ -81,17 +100,28 @@ export async function rebuildLinks(
   const refByKey = new Map<string, string>();
   for (const r of refRows) refByKey.set(r.citationKey, r.id);
 
-  // Multiple papers may share a filename — keep only the most recent (desc order already).
-  const paperByFilename = new Map<string, string>();
+  // Resolve papers by title OR filename (case-insensitive). The WikiLink
+  // typeahead inserts `[[pdf:<paper.title>]]` while older content + the
+  // search route's fallback can produce `[[pdf:<paper.filename>]]`. Both
+  // forms must resolve so pills don't go red on refresh. desc(addedAt)
+  // order from SQL already wins ties to the most recent paper.
+  const paperByKey = new Map<string, string>();
   for (const r of paperRows) {
-    if (!paperByFilename.has(r.filename)) paperByFilename.set(r.filename, r.id);
+    if (r.title) {
+      const k = r.title.toLowerCase();
+      if (!paperByKey.has(k)) paperByKey.set(k, r.id);
+    }
+    if (r.filename) {
+      const k = r.filename.toLowerCase();
+      if (!paperByKey.has(k)) paperByKey.set(k, r.id);
+    }
   }
 
   const resolved: ResolvedLink[] = links.map((l) => {
     let targetId: string | null = null;
     if (l.kind === "note") targetId = noteByTitle.get(l.raw.toLowerCase()) ?? null;
     else if (l.kind === "reference") targetId = refByKey.get(l.raw) ?? null;
-    else if (l.kind === "paper") targetId = paperByFilename.get(l.raw) ?? null;
+    else if (l.kind === "paper") targetId = paperByKey.get(l.raw.toLowerCase()) ?? null;
     return { kind: l.kind, raw: l.raw, targetId };
   });
 
