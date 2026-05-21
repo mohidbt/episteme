@@ -639,6 +639,23 @@ CREATE TABLE public.session (
     user_agent text,
     user_id text NOT NULL
 );
+CREATE TABLE public.signup_waitlist (
+    email text NOT NULL,
+    firstname text NOT NULL,
+    username text NOT NULL,
+    user_type text NOT NULL,
+    pokemon text NOT NULL,
+    student_level text,
+    job_role text,
+    industry text,
+    persona_other text,
+    attempted_invite_code text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT signup_waitlist_pokemon_check CHECK ((pokemon = ANY (ARRAY['charmander'::text, 'squirtle'::text, 'bulbasaur'::text]))),
+    CONSTRAINT signup_waitlist_student_level_check CHECK (((student_level IS NULL) OR (student_level = ANY (ARRAY['Bachelor'::text, 'Master'::text, 'PhD'::text])))),
+    CONSTRAINT signup_waitlist_user_type_check CHECK ((user_type = ANY (ARRAY['student'::text, 'researcher'::text, 'industry'::text, 'other'::text])))
+);
 CREATE TABLE public.store (
     prefix text NOT NULL,
     key text NOT NULL,
@@ -719,6 +736,16 @@ CREATE TABLE public.user_preferences (
     font public.font_pref DEFAULT 'sans'::public.font_pref NOT NULL,
     ruled_lines boolean DEFAULT false NOT NULL,
     updated_at timestamp without time zone DEFAULT now() NOT NULL
+);
+CREATE TABLE public.user_signup_profiles (
+    user_id text NOT NULL,
+    student_level text,
+    job_role text,
+    industry text,
+    persona_other text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT user_signup_profiles_student_level_check CHECK (((student_level IS NULL) OR (student_level = ANY (ARRAY['Bachelor'::text, 'Master'::text, 'PhD'::text]))))
 );
 CREATE TABLE public.verification (
     id text NOT NULL,
@@ -839,6 +866,8 @@ ALTER TABLE ONLY public.session
     ADD CONSTRAINT session_pkey PRIMARY KEY (id);
 ALTER TABLE ONLY public.session
     ADD CONSTRAINT session_token_unique UNIQUE (token);
+ALTER TABLE ONLY public.signup_waitlist
+    ADD CONSTRAINT signup_waitlist_pkey PRIMARY KEY (email);
 ALTER TABLE ONLY public.store_migrations
     ADD CONSTRAINT store_migrations_pkey PRIMARY KEY (v);
 ALTER TABLE ONLY public.store
@@ -853,6 +882,8 @@ ALTER TABLE ONLY public."user"
     ADD CONSTRAINT user_pkey PRIMARY KEY (id);
 ALTER TABLE ONLY public.user_preferences
     ADD CONSTRAINT user_preferences_pkey PRIMARY KEY (user_id);
+ALTER TABLE ONLY public.user_signup_profiles
+    ADD CONSTRAINT user_signup_profiles_pkey PRIMARY KEY (user_id);
 ALTER TABLE ONLY public."user"
     ADD CONSTRAINT user_username_unique UNIQUE (username);
 ALTER TABLE ONLY public.verification
@@ -1043,3 +1074,5 @@ ALTER TABLE ONLY public."user"
     ADD CONSTRAINT user_invite_code_fkey FOREIGN KEY (invite_code) REFERENCES public.invite_codes(code) ON DELETE SET NULL;
 ALTER TABLE ONLY public.user_preferences
     ADD CONSTRAINT user_preferences_user_id_user_id_fk FOREIGN KEY (user_id) REFERENCES public."user"(id) ON DELETE CASCADE;
+ALTER TABLE ONLY public.user_signup_profiles
+    ADD CONSTRAINT user_signup_profiles_user_id_fkey FOREIGN KEY (user_id) REFERENCES public."user"(id) ON DELETE CASCADE;
