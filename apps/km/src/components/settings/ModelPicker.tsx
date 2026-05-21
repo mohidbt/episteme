@@ -87,10 +87,16 @@ export function ModelPicker({
   }, []);
 
   const sorted = React.useMemo(() => sortByReleaseDate(models), [models]);
+  // Anonymous guests are gated behind the signup CTA — hide the catalog so
+  // the CommandEmpty branch renders the upgrade prompt instead of a list of
+  // selectable models.
+  const displayed = isAnonymous ? [] : sorted;
   const selected = sorted.find((m) => m.id === value);
   const triggerLabel = loading
     ? "Loading models..."
-    : (selected?.name ?? value ?? "Select a model");
+    : isAnonymous
+      ? "Sign up to select a model"
+      : (selected?.name ?? value ?? "Select a model");
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -146,7 +152,7 @@ export function ModelPicker({
               )}
             </CommandEmpty>
             <CommandGroup>
-              {sorted.map((m) => {
+              {displayed.map((m) => {
                 const label = m.name ?? m.id;
                 return (
                   <CommandItem
