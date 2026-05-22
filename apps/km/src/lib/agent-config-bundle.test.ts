@@ -7,11 +7,15 @@
 
 import { describe, expect, it } from "vitest";
 import JSZip from "jszip";
+import fs from "node:fs";
+import path from "node:path";
 import {
   buildBundleFromSnapshot,
   diffSnapshots,
+  filterExportableSkills,
   parseBundle,
   serializeAgentConfig,
+  SYSTEM_SKILL_SLUGS,
   type AgentConfigSnapshot,
   type PersonalSkillEntry,
 } from "./agent-config-bundle";
@@ -154,6 +158,42 @@ describe("buildBundleFromSnapshot + parseBundle — round trip", () => {
     );
     const parsed = await parseBundle(zip);
     expect(parsed.skills).toEqual([]);
+  });
+});
+
+describe("SYSTEM_SKILL_SLUGS — derived from services/agents/skills/ on disk (G3)", () => {
+  // Resolve the canonical disk source of truth: services/agents/skills/<slug>/.
+  // Filter: skip dirs starting with `_` or `.` (e.g. `_deep-read`, `__pycache__`).
+  const skillsDir = path.resolve(
+    __dirname,
+    "../../../../services/agents/skills",
+  );
+  const diskSlugs = fs
+    .readdirSync(skillsDir, { withFileTypes: true })
+    .filter((d) => d.isDirectory())
+    .map((d) => d.name)
+    .filter((n) => !n.startsWith("_") && !n.startsWith("."));
+
+  it("includes every non-underscored disk skill directory", () => {
+    for (const slug of diskSlugs) {
+      expect(SYSTEM_SKILL_SLUGS.has(slug)).toBe(true);
+    }
+  });
+
+  it("filters out a disk-only skill that is not in any prior hardcoded list", () => {
+    // Pick a real disk slug; the dynamic allowlist must filter it out on export
+    // even if it had never been added to a hand-maintained Set.
+    expect(diskSlugs.length).toBeGreaterThan(0);
+    const slug = diskSlugs[diskSlugs.length - 1];
+    const filtered = filterExportableSkills([
+      { path: `.episteme/agents/skills/${slug}/SKILL.md`, body: "x" },
+    ]);
+    expect(filtered).toEqual([]);
+  });
+
+  it("excludes directories starting with `_` or `.`", () => {
+    expect(SYSTEM_SKILL_SLUGS.has("_deep-read")).toBe(false);
+    expect(SYSTEM_SKILL_SLUGS.has("__pycache__")).toBe(false);
   });
 });
 

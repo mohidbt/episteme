@@ -3,6 +3,9 @@
   "version": "0.0.0",
   "private": true,
   "scripts": {
+    "gen:system-skills": "tsx scripts/gen-system-skills.ts",
+    "predev": "pnpm gen:system-skills",
+    "prebuild": "pnpm gen:system-skills",
     "dev": "next dev --port 3001",
     "dev:warm": "next dev --port 3001 & sleep 15 && curl -sf http://localhost:3001/ > /dev/null && curl -sf http://localhost:3001/drive > /dev/null && curl -sf http://localhost:3001/agents > /dev/null && curl -sf http://localhost:3001/settings/agents > /dev/null && echo 'routes warmed'",
     "build": "next build",

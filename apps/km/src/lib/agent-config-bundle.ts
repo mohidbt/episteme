@@ -21,6 +21,9 @@ import { and, eq, like, or } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { agentConfigs, notes, libraries } from "@episteme/db/schema";
 import { getSkillStore } from "@/lib/skills-store";
+import { SYSTEM_SKILL_SLUGS } from "./system-skills.generated";
+
+export { SYSTEM_SKILL_SLUGS };
 
 // ---------- Types ----------------------------------------------------------
 
@@ -64,15 +67,11 @@ const SKILLS_PREFIX = ".episteme/agents/skills/";
 const PERSONAL_SKILLS_PREFIX = ".episteme/agents/skills-personal/";
 const MEMORIES_PREFIX = ".episteme/agents/memories/";
 
-// A5: source of truth is `services/agents/skills/*` on disk (seeded by DriveSkillsLoader). Add a new system skill there AND here.
-const SYSTEM_SKILL_SLUGS: ReadonlySet<string> = new Set([
-  "claim-verify",
-  "data-extract",
-  "deep-read",
-  "lit-triage",
-  "paper-search",
-  "synthesis",
-]);
+// G3: SYSTEM_SKILL_SLUGS is now generated from `services/agents/skills/*` at
+// build time by `scripts/gen-system-skills.ts` (wired via `predev`/`prebuild`).
+// This eliminates drift between the hand-maintained allowlist and the disk
+// source of truth seeded by DriveSkillsLoader. To add a system skill: drop
+// the directory under `services/agents/skills/<slug>/`, re-run codegen.
 
 function extractSkillSlug(path: string): string | null {
   if (!path.startsWith(SKILLS_PREFIX)) return null;
