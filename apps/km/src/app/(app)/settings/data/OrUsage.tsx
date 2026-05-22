@@ -9,9 +9,11 @@ export interface OrUsageData {
 }
 
 function fmtUsd(n: number): string {
-  // Always two decimals — "$1.23", "$0.50", "$5.00". Keeps the bar legend
-  // a stable width across renders.
-  return `$${n.toFixed(2)}`;
+  // Sub-cent spend would round to $0.00 with 2 decimals, which reads as
+  // "nothing happened" even though a few cheap turns have landed. Switch to
+  // 4 decimals below $0.01 so a single nano-model turn ($0.002) is visible.
+  const decimals = n > 0 && n < 0.01 ? 4 : 2;
+  return `$${n.toFixed(decimals)}`;
 }
 
 export function OrUsage({ usage }: { usage: OrUsageData }) {
