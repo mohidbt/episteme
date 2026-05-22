@@ -233,6 +233,11 @@ def _map_event(ev: dict) -> tuple[str, dict] | None:
         # Round-C gap closure: emit a `usage` SSE event so the Next.js side
         # writes a row into `openrouter_usage`. LangChain attaches
         # `usage_metadata` to the AIMessage returned in `data.output`.
+        #
+        # `model` is intentionally left blank here — the streaming loops
+        # overwrite it with their local `model_pref` before yield, because
+        # LangChain's `response_metadata.model_name` accumulates across
+        # streamed chunks and ends up duplicated by the time we see it.
         output = ev.get("data", {}).get("output")
         usage = getattr(output, "usage_metadata", None)
         if not isinstance(usage, dict):
@@ -241,18 +246,8 @@ def _map_event(ev: dict) -> tuple[str, dict] | None:
         completion_tokens = int(usage.get("output_tokens") or 0)
         if prompt_tokens == 0 and completion_tokens == 0:
             return None
-        # Prefer the model that was actually invoked (`response_metadata.model_name`)
-        # over the configured model — provider routing may have swapped it.
-        resp_meta = getattr(output, "response_metadata", None) or {}
-        model_name = ""
-        if isinstance(resp_meta, dict):
-            model_name = str(resp_meta.get("model_name") or resp_meta.get("model") or "")
-        # Last-resort fallback: pull from the chunk's `metadata` field if present.
-        if not model_name:
-            meta = ev.get("metadata") or {}
-            model_name = str(meta.get("ls_model_name") or "") if isinstance(meta, dict) else ""
         return ("usage", {
-            "model": model_name,
+            "model": "",
             "prompt_tokens": prompt_tokens,
             "completion_tokens": completion_tokens,
         })
@@ -708,6 +703,11 @@ async def invoke(req: Request, auth: InternalAuthDep):
                         active_tool_run_ids.discard(ev_run_id)
                     mapped = _map_event(ev)
                     if mapped:
+                        # Fill in the model id on usage events from the
+                        # streaming loop's local var — see _map_event for why
+                        # response_metadata.model_name is unreliable.
+                        if mapped[0] == "usage" and isinstance(model_pref, str):
+                            mapped[1]["model"] = model_pref
                         extracted = _extract_rag_citations_from_tool_result(ev, mapped)
                         if extracted:
                             pending_citations = extracted
@@ -919,6 +919,8 @@ async def resume(req: Request, auth: InternalAuthDep):
                         )
                 mapped = _map_event(ev)
                 if mapped:
+                    if mapped[0] == "usage" and isinstance(model_pref, str):
+                        mapped[1]["model"] = model_pref
                     extracted = _extract_rag_citations_from_tool_result(ev, mapped)
                     if extracted:
                         pending_citations = extracted
