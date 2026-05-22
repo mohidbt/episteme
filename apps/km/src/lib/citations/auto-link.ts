@@ -1,4 +1,4 @@
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
   documentReferences,
@@ -55,12 +55,13 @@ function isPgTrgmMissingError(err: unknown): boolean {
 
 async function findFuzzyTitleHit(
   rawTitle: string,
+  userId: string,
 ): Promise<{ id: string; sim: number } | undefined> {
   try {
     const result = await db.execute(sql`
       SELECT id, similarity(title, ${rawTitle}) AS sim
       FROM papers
-      WHERE title % ${rawTitle}
+      WHERE user_id = ${userId} AND title % ${rawTitle}
       ORDER BY sim DESC
       LIMIT 5
     `);
@@ -88,6 +89,17 @@ async function findFuzzyTitleHit(
 export async function autoLinkPaperCitations(
   paperId: string,
 ): Promise<AutoLinkResult> {
+  // Scope all DOI/title lookups to the owning user — auto-link must never
+  // cross tenants. Originally unscoped; tenanted hosts were OK in prod but
+  // shared dev DBs leaked edges across users.
+  const ownerRows = (await db
+    .select({ userId: papers.userId })
+    .from(papers)
+    .where(eq(papers.id, paperId))
+    .limit(1)) as Array<{ userId: string }>;
+  const userId = ownerRows[0]?.userId;
+  if (!userId) return { linked: 0, matched: 0 };
+
   const refs = await db
     .select({
       id: documentReferences.id,
@@ -110,7 +122,7 @@ export async function autoLinkPaperCitations(
       const hits = (await db
         .select({ id: papers.id })
         .from(papers)
-        .where(eq(papers.doi, ref.doi))
+        .where(and(eq(papers.doi, ref.doi), eq(papers.userId, userId)))
         .limit(1)) as Array<{ id: string }>;
       if (hits.length > 0) {
         citedKind = "paper";
@@ -122,7 +134,7 @@ export async function autoLinkPaperCitations(
         matchMethod = "manual";
       }
     } else if (ref.title) {
-      const hit = await findFuzzyTitleHit(ref.title);
+      const hit = await findFuzzyTitleHit(ref.title, userId);
       if (hit) {
         citedKind = "paper";
         citedId = hit.id;

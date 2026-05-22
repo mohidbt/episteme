@@ -90,6 +90,7 @@ describe("autoLinkPaperCitations", () => {
     // execute (pg_trgm fuzzy lookup, called once for the title-only ref):
     //   1) [] → no fuzzy hit, fallback to "reference"
     stubSelectChain([
+      [{ userId: "user-1" }],
       [
         {
           id: 101,
@@ -121,6 +122,7 @@ describe("autoLinkPaperCitations", () => {
 
   it("uses pg_trgm similarity for title fuzzy match above threshold", async () => {
     stubSelectChain([
+      [{ userId: "user-1" }],
       [
         {
           id: 201,
@@ -148,6 +150,7 @@ describe("autoLinkPaperCitations", () => {
 
   it("falls back to reference when pg_trgm extension missing", async () => {
     stubSelectChain([
+      [{ userId: "user-1" }],
       [
         {
           id: 301,
@@ -172,6 +175,7 @@ describe("autoLinkPaperCitations", () => {
 
   it("returns {linked:0} with warning when paper_citations relation does not exist", async () => {
     stubSelectChain([
+      [{ userId: "user-1" }],
       [
         {
           id: 101,
@@ -195,6 +199,7 @@ describe("autoLinkPaperCitations", () => {
 
   it("idempotent: second run inserts 0 thanks to ON CONFLICT", async () => {
     stubSelectChain([
+      [{ userId: "user-1" }],
       [
         {
           id: 101,
