@@ -141,7 +141,7 @@ export function ModelPicker({
                   className="text-foreground underline-offset-2 hover:underline"
                   onClick={() => {
                     if (typeof window !== "undefined") {
-                      window.location.href = "/sign-in";
+                      window.location.href = "/sign-up";
                     }
                   }}
                 >

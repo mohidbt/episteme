@@ -5,6 +5,12 @@ import { papers } from "@episteme/db/schema";
 import { storage, paperSourceKey } from "@/lib/storage";
 
 export const runtime = "nodejs";
+// Self-maintenance route; capped at the per-call BATCH below so a large
+// library can be processed across multiple invocations rather than timing
+// out mid-loop.
+export const maxDuration = 60;
+
+const BATCH = 200;
 
 // One-shot, idempotent, self-scoped backfill for the current user's
 // `papers.size_bytes`. Selects rows where `size_bytes = 0`, HEADs the R2
@@ -24,7 +30,8 @@ export async function POST(req: Request) {
   const rows = await db
     .select({ id: papers.id })
     .from(papers)
-    .where(and(eq(papers.userId, userId), eq(papers.sizeBytes, 0)));
+    .where(and(eq(papers.userId, userId), eq(papers.sizeBytes, 0)))
+    .limit(BATCH);
 
   let scanned = 0;
   let updated = 0;

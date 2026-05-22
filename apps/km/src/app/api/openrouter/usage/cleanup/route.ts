@@ -30,10 +30,14 @@ export async function POST(req: Request) {
     .from(openrouterUsage)
     .where(eq(openrouterUsage.userId, userId));
 
+  // Narrow predicate: require provider/slug shape and that the FIRST half
+  // already contains a '/'. Stops a legitimate even-length palindrome-like
+  // model id (e.g. "abab") from being deleted.
   const doubled = rows.filter((r) => {
     const m = r.model;
-    if (!m || m.length < 4 || m.length % 2 !== 0) return false;
+    if (!m || m.length < 6 || m.length % 2 !== 0) return false;
     const half = m.length / 2;
+    if (!m.slice(0, half).includes("/")) return false;
     return m.slice(0, half) === m.slice(half);
   });
 

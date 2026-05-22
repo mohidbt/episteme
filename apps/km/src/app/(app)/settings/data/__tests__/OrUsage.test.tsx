@@ -24,6 +24,13 @@ describe("OrUsage", () => {
     expect(screen.getByText(/\$0\.50 \/ \$1\.00/)).toBeTruthy();
   });
 
+  it("shows 4 decimals for sub-cent spend so nano-model turns are visible", () => {
+    render(
+      <OrUsage usage={{ totalUsd: 0.002075, byModel: [], isGuest: false, limitUsd: 5 }} />,
+    );
+    expect(screen.getByText(/\$0\.0021 \/ \$5\.00/)).toBeTruthy();
+  });
+
   it("shows an Over budget badge and clamps the bar at 100% when over", () => {
     render(
       <OrUsage usage={{ totalUsd: 6, byModel: [], isGuest: false, limitUsd: 5 }} />,
