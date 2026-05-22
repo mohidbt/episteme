@@ -22,10 +22,12 @@ import {
 } from "@/lib/citations/semantic-scholar";
 
 const CHUNK_SIZE = 20;
-// Lowered 500→100ms: S2 batch endpoint absorbs burstiness, and per-ref
-// pacing at 500ms meant a 20-ref chunk spent ~10s sleeping before the batch
-// fetch — frequently breaching the serverless execution deadline mid-loop.
-const RESOLVE_DELAY_MS = 100;
+// S2 free tier rate-limits at ~1 req/sec across all endpoints. resolvePaperId
+// fires individual GETs per ref (DOI/arXiv/title-match), so per-ref pacing
+// must stay ≥1000ms. The chunked-write design (CHUNK_SIZE=20) is what keeps
+// partial progress durable when the serverless deadline hits mid-loop, not
+// aggressive pacing.
+const RESOLVE_DELAY_MS = 1100;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -55,7 +57,12 @@ async function persistEnrichment(
       externalIds: metadata.externalIds,
       bibtex: metadata.bibtex,
     })
-    .where(eq(documentReferences.id, refId));
+    .where(
+      and(
+        eq(documentReferences.id, refId),
+        isNull(documentReferences.semanticScholarId),
+      ),
+    );
 }
 
 async function enrichChunk(
