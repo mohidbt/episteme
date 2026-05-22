@@ -5,7 +5,9 @@ import { db } from "@/lib/db";
 import { agentConfigs } from "@episteme/db/schema";
 import { signRequest } from "@/lib/agents/sign-request";
 import { streamPassthrough } from "@/lib/agents/stream-passthrough";
+import { tapAgentEvents } from "@/lib/agents/thread-lifecycle";
 import { OPENROUTER_KEY_MISSING } from "@/lib/openrouter-errors";
+import { recordUsage } from "@/lib/openrouter-usage";
 
 export async function POST(req: Request) {
   const session = await getSessionInfo(req);
@@ -66,5 +68,30 @@ export async function POST(req: Request) {
     body: upstreamBody,
   });
 
-  return streamPassthrough(upstream);
+  if (!upstream.ok || !upstream.body) {
+    return streamPassthrough(upstream);
+  }
+  // Resume turns still drive LLM calls (post-HITL approvals continue the
+  // graph), so they must record usage. No status callback — /invoke already
+  // initialised the thread row; the tap only siphons usage frames.
+  const tapped = tapAgentEvents(upstream.body, () => {}, (u) => {
+    void recordUsage({
+      userId: session.userId,
+      guestSessionId: null,
+      model: u.model,
+      promptTokens: u.promptTokens,
+      completionTokens: u.completionTokens,
+      source: "km-agent",
+    }).catch((err) => {
+      console.warn("[resume] recordUsage failed", err);
+    });
+  });
+  return new Response(tapped, {
+    status: upstream.status,
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+    },
+  });
 }
