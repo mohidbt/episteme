@@ -153,8 +153,6 @@ describe("AgentTranscript", () => {
     );
     // Pill rendered without any live SSE event being dispatched.
     expect(screen.getByTestId("inline-citation-pill-c1")).toBeTruthy();
-    // Sidebar "Sources" list also seeded.
-    expect(screen.getByTestId("all-citations")).toBeTruthy();
   });
 
   it("G-R3-07 #78: hydration strips leading 'thought' prefix from assistant text", () => {
@@ -482,7 +480,6 @@ describe("AgentTranscript", () => {
     expect(screen.getByTestId("card-file_diff")).toBeTruthy();
     expect(screen.getByTestId("card-suggestion")).toBeTruthy();
     expect(screen.getByTestId("todo-count").textContent).toContain("2 todos");
-    expect(screen.getByTestId("all-citations")).toBeTruthy();
   });
 
   it("Approve on interrupt POSTs /api/agents/km/resume with correct body", async () => {

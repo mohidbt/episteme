@@ -439,10 +439,19 @@ async def _persist_citations_into_checkpoint(
         if getattr(m, "type", None) != "ai":
             continue
         mid = getattr(m, "id", None)
-        if not mid or mid not in citations_by_msg_id:
+        if not isinstance(mid, str) or not mid:
+            continue
+        # G6.1: LangChain stamps checkpoint AIMessage.id as ``run--<run_id>``
+        # while the streaming loop buffers under the raw run_id. Try both.
+        mid_stripped = mid.removeprefix("run--") if mid.startswith("run--") else mid
+        if mid in citations_by_msg_id:
+            cits = citations_by_msg_id[mid]
+        elif mid_stripped in citations_by_msg_id:
+            cits = citations_by_msg_id[mid_stripped]
+        else:
             continue
         kwargs = dict(getattr(m, "additional_kwargs", None) or {})
-        kwargs["citations"] = citations_by_msg_id[mid]
+        kwargs["citations"] = cits
         # Rebuild the message preserving content/tool_calls so add_messages'
         # by-id replacement does not drop them.
         try:
@@ -459,7 +468,15 @@ async def _persist_citations_into_checkpoint(
         except Exception:  # noqa: BLE001
             logger.exception("citations persist: rebuild failed msg_id=%s", mid)
     if not updates:
+        logger.debug(
+            "citations persist: no matching AI messages thread_id=%s buffer_keys=%d",
+            thread_id, len(citations_by_msg_id),
+        )
         return
+    logger.debug(
+        "citations persist: writing %d update(s) thread_id=%s",
+        len(updates), thread_id,
+    )
     try:
         await agent.aupdate_state(
             {"configurable": {"thread_id": thread_id}},
@@ -724,7 +741,12 @@ async def invoke(req: Request, auth: InternalAuthDep):
                             # the stream completes.
                             msg_id = payload.get("id")
                             if isinstance(msg_id, str) and msg_id:
+                                # G6.1: store under both raw id and the
+                                # ``run--<id>`` form so the persist loop matches
+                                # whichever the checkpointer stamps onto the
+                                # AIMessage.
                                 citations_by_msg_id[msg_id] = pending_citations
+                                citations_by_msg_id[f"run--{msg_id}"] = pending_citations
                             pending_citations = []
                         else:
                             yield format_typed(mapped[0], mapped[1])

@@ -13,10 +13,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 
-import {
-  AllSourcesList,
-  InlineCitationPills,
-} from "../CitationsBlock";
+import { InlineCitationPills } from "../CitationsBlock";
 import type { Citation } from "@/lib/agent-events";
 
 afterEach(() => {
@@ -74,17 +71,3 @@ describe("InlineCitationPills", () => {
   });
 });
 
-describe("AllSourcesList", () => {
-  it("renders header `Sources (N)` (replacing 'Used N sources')", () => {
-    render(<AllSourcesList citations={CITATIONS} />);
-    expect(screen.getByText("Sources (3)")).toBeTruthy();
-    expect(screen.queryByText(/Used \d+ sources/)).toBeNull();
-  });
-
-  it("renders each row using the citation title for paper-kind citations", () => {
-    render(<AllSourcesList citations={CITATIONS} defaultOpen />);
-    expect(screen.getByText("Attention Is All You Need - Page 1")).toBeTruthy();
-    expect(screen.getByText("Attention Is All You Need - Page 3")).toBeTruthy();
-    expect(screen.getByText("Attention Is All You Need - Page 5")).toBeTruthy();
-  });
-});

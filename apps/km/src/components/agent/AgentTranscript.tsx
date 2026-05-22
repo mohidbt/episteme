@@ -3,7 +3,6 @@
 import {
   useCallback,
   useEffect,
-  useMemo,
   useReducer,
   useRef,
   useState,
@@ -39,10 +38,7 @@ import {
   MessageContent,
   MessageResponse,
 } from "@/components/ai-elements/message";
-import {
-  AllSourcesList,
-  InlineCitationPills,
-} from "./CitationsBlock";
+import { InlineCitationPills } from "./CitationsBlock";
 import {
   Reasoning,
   ReasoningTrigger,
@@ -578,14 +574,6 @@ export function AgentTranscript({
     [handleSend],
   );
 
-  const allCitations = useMemo<Citation[]>(() => {
-    const out: Citation[] = [];
-    for (const list of Object.values(state.sourcesByMessage)) {
-      out.push(...list);
-    }
-    return out;
-  }, [state.sourcesByMessage]);
-
   const handleCitationClick = useCallback(
     (citation: Citation) => {
       const paperId = citation.paperId ?? citation.paper_id;
@@ -695,9 +683,6 @@ export function AgentTranscript({
                 </TaskContent>
               </Task>
             </div>
-          ) : null}
-          {allCitations.length > 0 ? (
-            <AllSourcesList citations={allCitations} />
           ) : null}
           {streaming ? (
             <div
