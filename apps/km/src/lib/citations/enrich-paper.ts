@@ -22,7 +22,10 @@ import {
 } from "@/lib/citations/semantic-scholar";
 
 const CHUNK_SIZE = 20;
-const RESOLVE_DELAY_MS = 500;
+// Lowered 500→100ms: S2 batch endpoint absorbs burstiness, and per-ref
+// pacing at 500ms meant a 20-ref chunk spent ~10s sleeping before the batch
+// fetch — frequently breaching the serverless execution deadline mid-loop.
+const RESOLVE_DELAY_MS = 100;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));

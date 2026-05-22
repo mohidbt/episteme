@@ -51,6 +51,20 @@ export async function POST(request: NextRequest, { params }: Ctx) {
       .from(documentReferences)
       .where(eq(documentReferences.paperId, paperId));
     if (existing.length > 0) {
+      // Cached-extract re-enrichment: when any cached row is missing S2
+      // metadata (semanticScholarId IS NULL), re-fire enrichment in the
+      // background. Without this, papers extracted before the enrichment
+      // pipeline existed — or whose first enrichment run was killed by the
+      // serverless deadline — keep returning blank citation cards forever.
+      if (existing.some((r) => r.semanticScholarId == null)) {
+        after(async () => {
+          try {
+            await enrichPaperReferencesInDb(paperId, userId);
+          } catch (err) {
+            console.warn("[citations/extract] cached re-enrich failed", err);
+          }
+        });
+      }
       return NextResponse.json(
         {
           references: existing,
