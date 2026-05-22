@@ -11,7 +11,7 @@ const COLORS = [
   { name: "blue", class: "bg-blue-300" },
   { name: "pink", class: "bg-pink-300" },
   { name: "orange", class: "bg-orange-300" },
-  { name: "purple", class: "bg-purple-300" },
+  { name: "amber", class: "bg-amber-300" },
 ] as const;
 
 export type HighlightColor = (typeof COLORS)[number]["name"];
