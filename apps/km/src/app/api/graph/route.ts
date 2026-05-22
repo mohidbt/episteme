@@ -42,7 +42,17 @@ export async function GET(req: Request) {
   const keptWiki = eWiki.slice(0, QUOTA_WIKI_LINK);
   const keptTag = [...eTag].sort(byWeightDesc).slice(0, QUOTA_SHARED_TAG);
   const keptSem = [...eSem].sort(byWeightDesc).slice(0, QUOTA_SEMANTIC);
-  const keptCite = eCite.slice(0, QUOTA_PAPER_CITATION);
+  // Cap citation ROWS (not edges). edgesPaperCitations emits 2 reciprocal
+  // edges per row (citing + cited_in); slicing the flat array would halve
+  // the visible-row capacity. Cap citing first, then pair-match cited_in.
+  const eCiting = eCite.filter((e) => e.kind === "citing");
+  const eCitedIn = eCite.filter((e) => e.kind === "cited_in");
+  const keptCiting = eCiting.slice(0, QUOTA_PAPER_CITATION);
+  const keptCitingDirPairs = new Set(keptCiting.map(pairKey));
+  const keptCitedIn = eCitedIn.filter((e) =>
+    keptCitingDirPairs.has(`${e.dst.kind}:${e.dst.id}>${e.src.kind}:${e.src.id}`),
+  );
+  const keptCite = [...keptCiting, ...keptCitedIn];
 
   // Dedup: prefer citation edges over paper_is_ref on duplicate
   // (srcKind,srcId,dstKind,dstId). 'citing' aligns direction with paper_is_ref

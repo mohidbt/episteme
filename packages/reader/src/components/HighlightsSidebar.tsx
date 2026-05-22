@@ -339,6 +339,7 @@ function RunRow({
         type="button"
         className="w-full text-left"
         aria-label={label}
+        title={label}
         onClick={onNavigateFirst}
       >
         <p className="line-clamp-2 text-sm font-medium leading-snug">{label}</p>
