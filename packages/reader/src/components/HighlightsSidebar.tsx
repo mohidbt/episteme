@@ -320,7 +320,6 @@ function RunRow({
   onPrev: () => void;
   onNext: () => void;
 }) {
-  const truncated = label.length > 60 ? `${label.slice(0, 60)}…` : label;
   // Total rects across all highlights in the group, and the cursor's flat
   // position. Highlights without rect data count as 1 navigable target each.
   // Normalize the cursor — if the group shrank since the cursor was set,
@@ -335,45 +334,40 @@ function RunRow({
   for (let i = 0; i < safeHIdx; i++) flatPos += rectCount(group[i]);
   const isMulti = totalRects > 1;
   return (
-    <div className="rounded border p-2">
+    <div className="space-y-2 rounded-lg border bg-card p-3">
       <button
         type="button"
         className="w-full text-left"
         aria-label={label}
         onClick={onNavigateFirst}
       >
-        <p className="text-xs font-medium">{truncated}</p>
-        {isMulti && (
-          <>
-            <p className="mt-0.5 text-[10px] text-muted-foreground">
-              {group.length} {group.length === 1 ? "highlight" : "highlights"}
-            </p>
-            <p className="mt-0.5 text-[10px] text-muted-foreground">
-              {flatPos + 1} of {totalRects}
-            </p>
-          </>
-        )}
+        <p className="line-clamp-2 text-sm font-medium leading-snug">{label}</p>
       </button>
       {isMulti && (
-        <div className="mt-1 flex items-center gap-1">
-          <Button
-            size="sm"
-            variant="ghost"
-            className="h-6 px-1"
-            onClick={onPrev}
-            aria-label="Previous highlight"
-          >
-            <ChevronLeft className="size-3" />
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            className="h-6 px-1"
-            onClick={onNext}
-            aria-label="Next highlight"
-          >
-            <ChevronRight className="size-3" />
-          </Button>
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-[10px] text-muted-foreground">
+            {flatPos + 1} of {totalRects}
+          </p>
+          <div className="flex gap-1">
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-7 w-7"
+              onClick={onPrev}
+              aria-label="Previous highlight"
+            >
+              <ChevronLeft className="size-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-7 w-7"
+              onClick={onNext}
+              aria-label="Next highlight"
+            >
+              <ChevronRight className="size-4" />
+            </Button>
+          </div>
         </div>
       )}
     </div>

@@ -86,11 +86,13 @@ describe("Bug 3a: single highlight with multi-rects shows '1 highlight' (singula
       />,
     );
 
-    const chipBtn = screen.getByRole("button", { name: /Cross-page claim/i });
-    expect(chipBtn.textContent).toMatch(/1\s+highlight(?!s)/);
-    expect(chipBtn.textContent).not.toMatch(/1\s+highlights/);
-    // Counter should still appear because totalRects > 1
-    expect(chipBtn.textContent).toMatch(/1\s+of\s+2/);
+    // After G5: the redundant "N highlight(s)" label is removed entirely; only
+    // the rect counter remains. Title button no longer carries the count text.
+    screen.getByRole("button", { name: /Cross-page claim/i });
+    // Counter still appears because totalRects > 1, now as a sibling node.
+    expect(screen.getByText(/1\s+of\s+2/)).toBeDefined();
+    // The misleading "N highlight(s)" label must NOT be in the DOM.
+    expect(screen.queryByText(/\d+\s+highlights?\b/i)).toBeNull();
   });
 });
 
@@ -113,10 +115,12 @@ describe("Bug 3a: multi-highlight run shows secondary line + counter", () => {
     const chipBtn = screen.getByRole("button", { name: /Key findings/i });
     // No "(3)" inline suffix
     expect(chipBtn.textContent).not.toMatch(/\(3\)/);
-    // Secondary line: "3 highlights"
-    expect(chipBtn.textContent).toMatch(/3\s+highlights/);
-    // Counter format: "1 of 3"
-    expect(chipBtn.textContent).toMatch(/1\s+of\s+3/);
+    // G5: the "N highlights" label was dropped (redundant + misleading). Only
+    // the rect counter remains.
+    expect(screen.queryByText(/\d+\s+highlights?\b/i)).toBeNull();
+    // Counter format: "1 of 3" — now lives in a sibling node, not inside the
+    // title button.
+    expect(screen.getByText(/1\s+of\s+3/)).toBeDefined();
 
     // Both nav buttons rendered with aria-labels
     expect(screen.getByRole("button", { name: "Next highlight" })).toBeDefined();
