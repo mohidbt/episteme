@@ -52,7 +52,8 @@ export async function enrichRefsWithPaperMatchAndEdges<T extends RefInput>(
       WHERE user_id = ${userId}
         AND doi IN (${sql.join(dois.map((doi) => sql`${doi}`), sql`, `)})
     `);
-    const doiRows = (doiMapRes as { rows?: unknown[] }).rows ?? [];
+    const doiRowsRaw = (doiMapRes as { rows?: unknown[] }).rows ?? (doiMapRes as unknown as unknown[]);
+    const doiRows = Array.isArray(doiRowsRaw) ? doiRowsRaw : [];
     for (const row of doiRows as Array<{ doi: string; paper_id: string }>) {
       if (row?.doi && row?.paper_id) doiToPaper.set(row.doi, row.paper_id);
     }
@@ -66,7 +67,8 @@ export async function enrichRefsWithPaperMatchAndEdges<T extends RefInput>(
       AND cited_id IN (${sql.join(refIdStrings.map((id) => sql`${id}`), sql`, `)})
     GROUP BY cited_id
   `);
-  const citedInRows = (citedInRes as { rows?: unknown[] }).rows ?? [];
+  const citedInRowsRaw = (citedInRes as { rows?: unknown[] }).rows ?? (citedInRes as unknown as unknown[]);
+  const citedInRows = Array.isArray(citedInRowsRaw) ? citedInRowsRaw : [];
   const citedInMap = new Map<string, number>();
   for (const row of citedInRows as Array<{ cited_id: string; n: number | string }>) {
     citedInMap.set(String(row.cited_id), toNumber(row.n));
@@ -80,7 +82,8 @@ export async function enrichRefsWithPaperMatchAndEdges<T extends RefInput>(
       AND citer_id IN (${sql.join(refIdStrings.map((id) => sql`${id}`), sql`, `)})
     GROUP BY citer_id
   `);
-  const citingRows = (citingRes as { rows?: unknown[] }).rows ?? [];
+  const citingRowsRaw = (citingRes as { rows?: unknown[] }).rows ?? (citingRes as unknown as unknown[]);
+  const citingRows = Array.isArray(citingRowsRaw) ? citingRowsRaw : [];
   const citingMap = new Map<string, number>();
   for (const row of citingRows as Array<{ citer_id: string; n: number | string }>) {
     citingMap.set(String(row.citer_id), toNumber(row.n));

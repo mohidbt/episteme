@@ -1,6 +1,6 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { papers, paperCitations } from "@episteme/db/schema";
+import { documentReferences, papers, paperCitations } from "@episteme/db/schema";
 
 // D7.5: one-shot matcher invoked from POST/PATCH references. User-scoped:
 // only ever matches against the caller's own papers. Idempotent via the
@@ -101,38 +101,122 @@ export function extractRefSignals(cslJson: unknown): RefSignals {
   return { doi, title };
 }
 
-// Try to auto-connect a reference row to one of the user's papers. Writes a
-// paper_citations edge on hit. Best-effort: any failure is logged and
-// swallowed so the ref write path never fails because of matching.
+// Locate document_references rows in the user's papers that "incarnate" this
+// library reference — same DOI (case-insensitive, whitespace-tolerant) or, if
+// no DOI, the same fuzzy title via pg_trgm above FUZZY_SIM_THRESHOLD. Used by
+// autoConnectReference to pick the int citer_id under the Symmetry contract
+// (Task #57): paper_citations.citer_id for citer_kind='reference' MUST be
+// String(document_references.id), matching the cited-side convention in
+// auto-link.ts. pg_trgm missing → fuzzy path degrades to no hit.
+async function findUserDocRefsForSignals(
+  userId: string,
+  signals: RefSignals,
+): Promise<number[]> {
+  const { doi, title } = signals;
+  if (doi) {
+    const rows = await db
+      .select({ id: documentReferences.id })
+      .from(documentReferences)
+      .innerJoin(papers, eq(papers.id, documentReferences.paperId))
+      .where(
+        and(
+          eq(papers.userId, userId),
+          eq(sql`lower(trim(${documentReferences.doi}))`, doi.toLowerCase().trim()),
+        ),
+      );
+    return rows.map((r) => r.id);
+  }
+  if (title) {
+    try {
+      const result = await db.execute(sql`
+        SELECT dr.id
+        FROM document_references dr
+        INNER JOIN papers p ON p.id = dr.paper_id
+        WHERE p.user_id = ${userId}
+          AND dr.title IS NOT NULL
+          AND dr.title % ${title}
+          AND similarity(dr.title, ${title}) >= ${FUZZY_SIM_THRESHOLD}
+      `);
+      const rows = (result as { rows?: unknown[] }).rows ?? (result as unknown as unknown[]);
+      const list = Array.isArray(rows) ? rows : [];
+      return list
+        .map((r) => (r as { id?: number | string }).id)
+        .filter((v): v is number | string => v != null)
+        .map((v) => (typeof v === "string" ? parseInt(v, 10) : v))
+        .filter((n) => Number.isFinite(n));
+    } catch (err) {
+      if (isPgTrgmMissingError(err)) {
+        console.warn(
+          "[match-ref-to-papers] pg_trgm missing; skipping fuzzy docRef lookup",
+          err instanceof Error ? err.message : err,
+        );
+        return [];
+      }
+      throw err;
+    }
+  }
+  return [];
+}
+
+// Try to auto-connect a library reference (references_.id, UUID) to one of
+// the user's papers. Best-effort: any failure is logged and swallowed so the
+// ref write path never fails because of matching.
+//
+// Task #57 — Symmetry contract: under citer_kind='reference', citer_id must
+// be String(document_references.id) — same convention as cited_kind='reference'
+// edges from auto-link.ts. Therefore autoConnectReference resolves the library
+// reference to its document_references incarnations (DOI/title) in the user's
+// papers and emits one edge per incarnation. If no incarnation exists yet
+// (e.g. no extracted bib has the matching DOI), no edge is written — the
+// edge will materialise once a paper extract produces the docRef.
+//
+// Overwrite semantics: prior edges for any matching docRef (citer_id in the
+// resolved int set) AND the legacy UUID-keyed citer_id are dropped first so
+// an edited DOI/title doesn't leave a stale edge, and pre-Symmetry UUID rows
+// get cleaned up on the next edit.
 export async function autoConnectReference(
   refId: string,
   userId: string,
   signals: RefSignals,
 ): Promise<MatchResult | null> {
   try {
-    const match = await matchRefToPapers(signals, userId);
-    // Overwrite semantics (plan §3.1): drop any prior ref→paper edges for
-    // this ref so an edited DOI/title doesn't leave a stale edge behind.
-    await db
-      .delete(paperCitations)
-      .where(
-        and(
-          eq(paperCitations.citerKind, "reference"),
-          eq(paperCitations.citerId, refId),
-          eq(paperCitations.citedKind, "paper"),
-        ),
-      );
+    const [match, docRefIds] = await Promise.all([
+      matchRefToPapers(signals, userId),
+      findUserDocRefsForSignals(userId, signals),
+    ]);
+    const docRefIdStrings = docRefIds.map((n) => String(n));
+    // Overwrite: clear prior edges for these docRef ids AND the legacy
+    // UUID-keyed row (pre-#57 writes; cleaned up on next edit).
+    const staleCiterIds = [refId, ...docRefIdStrings];
+    if (staleCiterIds.length > 0) {
+      await db
+        .delete(paperCitations)
+        .where(
+          and(
+            eq(paperCitations.citerKind, "reference"),
+            inArray(paperCitations.citerId, staleCiterIds),
+            eq(paperCitations.citedKind, "paper"),
+          ),
+        );
+    }
     if (!match) return null;
+    if (docRefIdStrings.length === 0) {
+      // No docRef incarnation yet — defer. Edge will be written once a paper
+      // extract produces a document_references row with the matching DOI/title.
+      return match;
+    }
     await db
       .insert(paperCitations)
-      .values({
-        citerKind: "reference",
-        citerId: refId,
-        citedKind: "paper",
-        citedId: match.paperId,
-        sourceMarkerIdx: null,
-        matchMethod: match.matchMethod,
-      })
+      .values(
+        docRefIdStrings.map((citerId) => ({
+          citerKind: "reference" as const,
+          citerId,
+          citedKind: "paper" as const,
+          citedId: match.paperId,
+          sourceMarkerIdx: null,
+          matchMethod: match.matchMethod,
+        })),
+      )
       .onConflictDoNothing();
     return match;
   } catch (err) {
