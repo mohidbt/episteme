@@ -44,18 +44,18 @@ export async function enrichRefsWithPaperMatchAndEdges<T extends RefInput>(
     .map((r) => r.doi)
     .filter((d): d is string => typeof d === "string" && d.length > 0);
 
-  // 1) doi → paper_id map, user-scoped. Run unconditionally so callers/tests
-  //    see a stable 3-query shape; ANY(empty array) is a no-op.
-  const doiMapRes = await db.execute(sql`
-    SELECT doi, id AS paper_id
-    FROM papers
-    WHERE user_id = ${userId}
-      AND doi = ANY(${dois})
-  `);
-  const doiRows = (doiMapRes as { rows?: unknown[] }).rows ?? [];
   const doiToPaper = new Map<string, string>();
-  for (const row of doiRows as Array<{ doi: string; paper_id: string }>) {
-    if (row?.doi && row?.paper_id) doiToPaper.set(row.doi, row.paper_id);
+  if (dois.length > 0) {
+    const doiMapRes = await db.execute(sql`
+      SELECT doi, id AS paper_id
+      FROM papers
+      WHERE user_id = ${userId}
+        AND doi IN (${sql.join(dois.map((doi) => sql`${doi}`), sql`, `)})
+    `);
+    const doiRows = (doiMapRes as { rows?: unknown[] }).rows ?? [];
+    for (const row of doiRows as Array<{ doi: string; paper_id: string }>) {
+      if (row?.doi && row?.paper_id) doiToPaper.set(row.doi, row.paper_id);
+    }
   }
 
   // 2) citedIn counts: rows where cited_kind='reference' AND cited_id ∈ refIds
@@ -63,7 +63,7 @@ export async function enrichRefsWithPaperMatchAndEdges<T extends RefInput>(
     SELECT cited_id, COUNT(*)::int AS n
     FROM paper_citations
     WHERE cited_kind = 'reference'
-      AND cited_id = ANY(${refIdStrings})
+      AND cited_id IN (${sql.join(refIdStrings.map((id) => sql`${id}`), sql`, `)})
     GROUP BY cited_id
   `);
   const citedInRows = (citedInRes as { rows?: unknown[] }).rows ?? [];
@@ -77,7 +77,7 @@ export async function enrichRefsWithPaperMatchAndEdges<T extends RefInput>(
     SELECT citer_id, COUNT(*)::int AS n
     FROM paper_citations
     WHERE citer_kind = 'reference'
-      AND citer_id = ANY(${refIdStrings})
+      AND citer_id IN (${sql.join(refIdStrings.map((id) => sql`${id}`), sql`, `)})
     GROUP BY citer_id
   `);
   const citingRows = (citingRes as { rows?: unknown[] }).rows ?? [];

@@ -4,6 +4,16 @@
   "private": true,
   "main": "./src/index.ts",
   "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./citation-card": {
+      "types": "./src/components/CitationCard.tsx",
+      "default": "./src/components/CitationCard.tsx"
+    }
+  },
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",

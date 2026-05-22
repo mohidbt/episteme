@@ -2,7 +2,11 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { CitationCard, type CitationWithStatus, type FolderOption } from "@episteme/reader";
+import {
+  CitationCard,
+  type CitationWithStatus,
+  type FolderOption,
+} from "@episteme/reader/citation-card";
 
 interface PaperCitationsListProps {
   paperId: string;

@@ -8,7 +8,7 @@ vi.mock("sonner", () => ({
 
 // CitationCard pulls in heavy reader internals; stub to a simple node so we
 // can assert on list rendering without exercising the full card.
-vi.mock("@episteme/reader", () => ({
+vi.mock("@episteme/reader/citation-card", () => ({
   CitationCard: ({ citation }: { citation: { id: number; title?: string | null } }) => (
     <div data-testid={`citation-card-${citation.id}`}>{citation.title ?? "untitled"}</div>
   ),
