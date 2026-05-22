@@ -76,7 +76,13 @@ export type AgentEvent =
   | { type: "suggestion"; items: string[] }
   | { type: "done"; thread_id: string }
   | { type: "error"; code: string; message: string; retriable: boolean }
-  | { type: "recursion_step"; step: number; limit?: number };
+  | { type: "recursion_step"; step: number; limit?: number }
+  | {
+      type: "usage";
+      model: string;
+      prompt_tokens: number;
+      completion_tokens: number;
+    };
 
 export const AGENT_EVENT_TYPES = [
   "text",
@@ -93,6 +99,7 @@ export const AGENT_EVENT_TYPES = [
   "done",
   "error",
   "recursion_step",
+  "usage",
 ] as const;
 
 export type AgentEventType = (typeof AGENT_EVENT_TYPES)[number];

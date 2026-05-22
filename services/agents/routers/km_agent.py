@@ -229,6 +229,34 @@ def _map_event(ev: dict) -> tuple[str, dict] | None:
             payload["errorText"] = str(raw_output)
         return ("tool_result", payload)
 
+    if event_name == "on_chat_model_end":
+        # Round-C gap closure: emit a `usage` SSE event so the Next.js side
+        # writes a row into `openrouter_usage`. LangChain attaches
+        # `usage_metadata` to the AIMessage returned in `data.output`.
+        output = ev.get("data", {}).get("output")
+        usage = getattr(output, "usage_metadata", None)
+        if not isinstance(usage, dict):
+            return None
+        prompt_tokens = int(usage.get("input_tokens") or 0)
+        completion_tokens = int(usage.get("output_tokens") or 0)
+        if prompt_tokens == 0 and completion_tokens == 0:
+            return None
+        # Prefer the model that was actually invoked (`response_metadata.model_name`)
+        # over the configured model — provider routing may have swapped it.
+        resp_meta = getattr(output, "response_metadata", None) or {}
+        model_name = ""
+        if isinstance(resp_meta, dict):
+            model_name = str(resp_meta.get("model_name") or resp_meta.get("model") or "")
+        # Last-resort fallback: pull from the chunk's `metadata` field if present.
+        if not model_name:
+            meta = ev.get("metadata") or {}
+            model_name = str(meta.get("ls_model_name") or "") if isinstance(meta, dict) else ""
+        return ("usage", {
+            "model": model_name,
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": completion_tokens,
+        })
+
     if event_name == "on_chain_end":
         output = ev.get("data", {}).get("output") or {}
         interrupts = output.get("__interrupt__") if isinstance(output, dict) else None

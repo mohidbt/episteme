@@ -7,6 +7,7 @@ import { agentConfigs } from "@episteme/db/schema";
 import { signRequest } from "@/lib/agents/sign-request";
 import { tapAgentEvents } from "@/lib/agents/thread-lifecycle";
 import { OPENROUTER_KEY_MISSING } from "@/lib/openrouter-errors";
+import { recordUsage } from "@/lib/openrouter-usage";
 import {
   updateThread,
   upsertThreadOnInvoke,
@@ -26,10 +27,6 @@ export async function POST(req: Request) {
   if (!session) return Response.json({ error: "unauthorized" }, { status: 401 });
 
   // Round C: BYOK first, then server env fallback (also covers anonymous).
-  // Usage instrumentation is deferred for this streaming path until the
-  // agents service forwards OR's final usage chunk (it currently drops it
-  // — see services/agents/lib/sse_events.py). Tracking the gap in the
-  // round-C report.
   let llmKey: string;
   try {
     llmKey = await getOrApiKey(session.userId);
@@ -144,7 +141,19 @@ export async function POST(req: Request) {
     return new Response(upstream.body, { status: upstream.status });
   }
 
-  const tapped = tapAgentEvents(upstream.body, setStatus);
+  const tapped = tapAgentEvents(upstream.body, setStatus, (u) => {
+    // Fire-and-forget — recordUsage swallows DB errors via console.warn.
+    void recordUsage({
+      userId,
+      guestSessionId: null,
+      model: u.model,
+      promptTokens: u.promptTokens,
+      completionTokens: u.completionTokens,
+      source: "km-agent",
+    }).catch((err) => {
+      console.warn("[invoke] recordUsage failed", err);
+    });
+  });
   return new Response(tapped, {
     status: upstream.status,
     headers: {

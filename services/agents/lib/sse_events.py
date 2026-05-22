@@ -115,6 +115,16 @@ class PdfExtractProgressEvent(TypedDict):
     stage: str
 
 
+class UsageEvent(TypedDict):
+    # Emitted on `on_chat_model_end` so the Next.js side can write a row to
+    # `openrouter_usage`. Cost is computed downstream from `model` ×
+    # `prompt_tokens` / `completion_tokens` via the catalog (no need to ship
+    # cents over the wire).
+    model: str
+    prompt_tokens: int
+    completion_tokens: int
+
+
 # ---------------------------------------------------------------------------
 # EventType literal + required-key map (drives format_typed validation)
 # ---------------------------------------------------------------------------
@@ -122,7 +132,7 @@ class PdfExtractProgressEvent(TypedDict):
 EventType = Literal[
     "text", "thinking", "tool_call", "tool_result", "interrupt",
     "todos", "sources", "skill_load", "file_diff", "suggestion", "done",
-    "error", "recursion_step", "pdf_extract_progress",
+    "error", "recursion_step", "pdf_extract_progress", "usage",
 ]
 
 _REQUIRED_KEYS: dict[str, frozenset[str]] = {
@@ -140,6 +150,7 @@ _REQUIRED_KEYS: dict[str, frozenset[str]] = {
     "error":      frozenset({"code", "message", "retriable"}),
     "recursion_step": frozenset({"step"}),
     "pdf_extract_progress": frozenset({"paper_id", "stage"}),
+    "usage": frozenset({"model", "prompt_tokens", "completion_tokens"}),
 }
 
 
