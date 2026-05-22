@@ -113,8 +113,9 @@ export async function getReferenceCitedIn(
       .where(
         and(
           eq(papers.userId, userId),
-          // Case-insensitive DOI match
-          eq(sql`lower(${documentReferences.doi})`, doi.toLowerCase()),
+          // Case-insensitive, whitespace-tolerant DOI match.
+          // Some imports leave trailing whitespace in documentReferences.doi.
+          eq(sql`lower(trim(${documentReferences.doi}))`, doi.toLowerCase()),
         ),
       );
     for (const h of hits) docRefIds.add(h.id);
