@@ -519,8 +519,17 @@ export async function seedAnonymousUser(userId: string): Promise<void> {
     // D7.1: pre-extract synthetic doc-refs from the PSM CSL list + auto-link
     // inline so /references is non-empty on minute-zero guest workspaces.
     // Failures must not break seed — auto-link is best-effort.
+    //
+    // #56 follow-up: papers 2 & 3 also "cite" paper 1 via psm-paper-1.csl.json
+    // so auto-link's DOI path produces at least one paper↔paper edge — needed
+    // for the graph's `citing`/`cited_in` kinds to render in the demo. Paper 1
+    // does NOT include its own CSL to avoid a self-citation.
+    const cslList =
+      meta.filename === "psm-paper-1.pdf"
+        ? SEED_PSM_REFERENCES
+        : [...SEED_PSM_REFERENCES, "psm-paper-1.csl.json"];
     try {
-      await seedPaperCitations(inserted.id, SEED_PSM_REFERENCES);
+      await seedPaperCitations(inserted.id, cslList);
     } catch (err) {
       console.warn(
         `seed: synthetic citation seed failed for PSM paper ${inserted.id}`,

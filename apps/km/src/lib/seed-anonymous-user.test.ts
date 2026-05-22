@@ -5,6 +5,7 @@ import {
   folders,
   libraries,
   notes,
+  paperCitations,
   papers,
   papersets,
   references_,
@@ -199,6 +200,33 @@ describe("seedAnonymousUser", () => {
     const rowRefIds = psRows[0].rowRefs.map((r) => r.paper_id);
     const matchedPaperIds = rowRefIds.filter((id) => paperIds.has(id));
     expect(matchedPaperIds).toHaveLength(3);
+
+    // Graph demo requires ≥1 paper↔paper citation so the `citing`/`cited_in`
+    // edge kinds render in the anonymous demo (#56 follow-up).
+    const psmPaperIds = psmPapers.map((p) => p.id);
+    const paperCitationRows = await db
+      .select({
+        citerId: paperCitations.citerId,
+        citedId: paperCitations.citedId,
+        citedKind: paperCitations.citedKind,
+        matchMethod: paperCitations.matchMethod,
+      })
+      .from(paperCitations)
+      .where(
+        and(
+          eq(paperCitations.citerKind, "paper"),
+          inArray(paperCitations.citerId, psmPaperIds),
+        ),
+      );
+    // auto-link's DOI match is global (no user-scope filter), so citedId may
+    // resolve to another user's paper with the same DOI in shared-DB test
+    // runs. The graph-edges layer (edgesPaperCitations) re-scopes to the
+    // current user via the papers JOIN, so what matters here is just that
+    // cited_kind='paper' rows exist for this user's papers.
+    const paperToPaper = paperCitationRows.filter(
+      (r) => r.citedKind === "paper",
+    );
+    expect(paperToPaper.length).toBeGreaterThanOrEqual(1);
   });
 
   it("is idempotent on a second call for the same user", { timeout: 60_000 }, async () => {
