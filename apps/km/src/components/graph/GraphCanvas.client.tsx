@@ -7,7 +7,6 @@ import { Badge } from '@/components/ui/badge'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import type { GraphPayload, EdgeKind, NodeKind } from '@/lib/graph/types'
 import { formatGraphKindLabel } from '@/lib/graph/labels'
-import { paperCitationHoverLabel } from '@/lib/graph/edge-labels'
 
 type CanvasNode = {
   id: string
@@ -36,14 +35,16 @@ const STYLE: Record<EdgeKind, { dash?: number[]; opacity: number; widthMul: numb
   wiki_link: { opacity: 1.0, widthMul: 1.5, color: '#22c55e' },
   shared_tag: { dash: [2, 4], opacity: 0.45, widthMul: 1.0, color: '#a1a1aa' },
   semantic_sim: { opacity: 0.6, widthMul: 0.8, color: '#a78bfa' },
-  paper_citation: { opacity: 0.95, widthMul: 1.8, color: '#ec4899' },
+  citing: { opacity: 0.95, widthMul: 1.8, color: '#ec4899' },
+  cited_in: { dash: [4, 3], opacity: 0.8, widthMul: 1.4, color: '#d946ef' },
 }
 
 function edgeKindBadgeClass(kind: EdgeKind): string {
   if (kind === 'paper_is_ref') return 'bg-blue-500/15 text-blue-300 border-blue-400/40'
   if (kind === 'wiki_link') return 'bg-green-500/15 text-green-300 border-green-400/40'
   if (kind === 'shared_tag') return 'bg-zinc-500/15 text-zinc-300 border-zinc-400/40'
-  if (kind === 'paper_citation') return 'bg-pink-500/15 text-pink-300 border-pink-400/40'
+  if (kind === 'citing') return 'bg-pink-500/15 text-pink-300 border-pink-400/40'
+  if (kind === 'cited_in') return 'bg-fuchsia-500/15 text-fuchsia-300 border-fuchsia-400/40'
   return 'bg-violet-500/15 text-violet-300 border-violet-400/40'
 }
 
@@ -139,21 +140,16 @@ export default function GraphCanvas({ payload }: { payload: GraphPayload }) {
         nodeVal={(n: unknown) => 1 + (degreeMap.get((n as CanvasNode).fgId) ?? 0) * 0.5}
         nodeLabel={(n: unknown) => (n as CanvasNode).label}
         linkColor={(l: unknown) => STYLE[(l as CanvasLink).kind].color}
-        linkDirectionalArrowLength={(l: unknown) => ((l as CanvasLink).kind === 'paper_citation' ? 4 : 0)}
-        linkDirectionalArrowRelPos={(l: unknown) => ((l as CanvasLink).kind === 'paper_citation' ? 1 : 0)}
-        linkDirectionalArrowColor={(l: unknown) => STYLE[(l as CanvasLink).kind].color}
-        linkLabel={(l: unknown) => {
-          const link = l as CanvasLink
-          const directional = paperCitationHoverLabel(link, hoveredNodeId)
-          if (directional) {
-            const srcLabel = nodeByKey.get(`${link.src.kind}:${link.src.id}`)?.label ?? link.src.id
-            const dstLabel = nodeByKey.get(`${link.dst.kind}:${link.dst.id}`)?.label ?? link.dst.id
-            return directional === 'citing'
-              ? `citing: ${dstLabel}`
-              : `cited in: ${srcLabel}`
-          }
-          return formatGraphKindLabel(link.kind)
+        linkDirectionalArrowLength={(l: unknown) => {
+          const k = (l as CanvasLink).kind
+          return k === 'citing' || k === 'cited_in' ? 4 : 0
         }}
+        linkDirectionalArrowRelPos={(l: unknown) => {
+          const k = (l as CanvasLink).kind
+          return k === 'citing' || k === 'cited_in' ? 1 : 0
+        }}
+        linkDirectionalArrowColor={(l: unknown) => STYLE[(l as CanvasLink).kind].color}
+        linkLabel={(l: unknown) => formatGraphKindLabel((l as CanvasLink).kind)}
         linkWidth={(l: unknown) => {
           const link = l as CanvasLink
           const weightFactor = link.kind === 'semantic_sim' ? Math.max(0.4, link.weight ?? 1) : 1
@@ -234,8 +230,12 @@ export default function GraphCanvas({ payload }: { payload: GraphPayload }) {
                 <p>{detail.srcLabel} ↔ {detail.dstLabel}</p>
               ) : null}
 
-              {selectedLink.kind === 'paper_citation' ? (
-                <p>{detail.srcLabel} → {detail.dstLabel}</p>
+              {selectedLink.kind === 'citing' ? (
+                <p>{detail.srcLabel} cites {detail.dstLabel}</p>
+              ) : null}
+
+              {selectedLink.kind === 'cited_in' ? (
+                <p>{detail.srcLabel} cited in {detail.dstLabel}</p>
               ) : null}
 
               {selectedLink.kind === 'shared_tag' ? (

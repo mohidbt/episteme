@@ -44,19 +44,29 @@ export async function GET(req: Request) {
   const keptSem = [...eSem].sort(byWeightDesc).slice(0, QUOTA_SEMANTIC);
   const keptCite = eCite.slice(0, QUOTA_PAPER_CITATION);
 
-  // Dedup: prefer paper_citation over paper_is_ref on duplicate (srcKind,srcId,dstKind,dstId).
-  const citePairs = new Set(keptCite.map(pairKey));
-  const keptRef = keptRefRaw.filter((e) => !citePairs.has(pairKey(e)));
+  // Dedup: prefer citation edges over paper_is_ref on duplicate
+  // (srcKind,srcId,dstKind,dstId). 'citing' aligns direction with paper_is_ref
+  // (citer → cited); 'cited_in' is the reciprocal kind.
+  const citingPairs = new Set(
+    keptCite.filter((e) => e.kind === "citing").map(pairKey),
+  );
+  const keptRef = keptRefRaw.filter((e) => !citingPairs.has(pairKey(e)));
 
   const det = [...keptRef, ...keptCite, ...keptWiki, ...keptTag];
   const sem = keptSem;
+
+  const citingCount = keptCite.filter((e) => e.kind === "citing").length;
+  const citedInCount = keptCite.filter((e) => e.kind === "cited_in").length;
+  const citingTotal = eCite.filter((e) => e.kind === "citing").length;
+  const citedInTotal = eCite.filter((e) => e.kind === "cited_in").length;
 
   return NextResponse.json({
     nodes,
     edges: [...det, ...sem],
     capped: {
       paper_is_ref: { kept: keptRef.length, total: eRef.length },
-      paper_citation: { kept: keptCite.length, total: eCite.length },
+      citing: { kept: citingCount, total: citingTotal },
+      cited_in: { kept: citedInCount, total: citedInTotal },
       wiki_link: { kept: keptWiki.length, total: eWiki.length },
       shared_tag: { kept: keptTag.length, total: eTag.length },
       semantic_sim: { kept: keptSem.length, total: eSem.length },

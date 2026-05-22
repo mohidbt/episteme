@@ -86,7 +86,8 @@ export default async function GraphPage() {
             <span className="inline-flex items-center gap-1"><LineSample color="#22c55e" />{formatGraphKindLabel("wiki_link")}</span>
             <span className="inline-flex items-center gap-1"><LineSample color="#a1a1aa" dashed />{formatGraphKindLabel("shared_tag")}</span>
             <span className="inline-flex items-center gap-1"><LineSample color="#a78bfa" />{formatGraphKindLabel("semantic_sim")}</span>
-            <span className="inline-flex items-center gap-1"><LineSample color="#ec4899" />{formatGraphKindLabel("paper_citation")}</span>
+            <span className="inline-flex items-center gap-1"><LineSample color="#ec4899" />{formatGraphKindLabel("citing")}</span>
+            <span className="inline-flex items-center gap-1"><LineSample color="#d946ef" dashed />{formatGraphKindLabel("cited_in")}</span>
           </div>
         </div>
       </div>

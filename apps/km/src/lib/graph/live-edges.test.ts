@@ -40,17 +40,27 @@ describe("live-edges", () => {
     const kinds = new Set(ns.map((n) => n.kind));
     expect(kinds.has("paper") && kinds.has("note") && kinds.has("reference")).toBe(true);
   });
-  it("paper_citations: paper↔paper same-user included; reference cited skipped; cross-user paper skipped", async () => {
+  it("paper_citations: emits reciprocal citing + cited_in edges for each paper↔paper row", async () => {
     const r = await edgesPaperCitations(SEED_USER);
-    expect(r.length).toBe(1);
-    const e = r[0];
-    expect(e.kind).toBe("paper_citation");
-    expect(e.src).toEqual({ kind: "paper", id: SEED_IDS.p1 });
-    expect(e.dst).toEqual({ kind: "paper", id: SEED_IDS.p2 });
+    // One same-user paper↔paper row → 2 edges (citing + cited_in)
+    expect(r.length).toBe(2);
+
+    const citing = r.find((e) => e.kind === "citing");
+    const citedIn = r.find((e) => e.kind === "cited_in");
+    expect(citing).toBeDefined();
+    expect(citedIn).toBeDefined();
+
+    // citing: src=p1 (citer) → dst=p2 (cited)
+    expect(citing!.src).toEqual({ kind: "paper", id: SEED_IDS.p1 });
+    expect(citing!.dst).toEqual({ kind: "paper", id: SEED_IDS.p2 });
+    // cited_in: src=p2 (cited) → dst=p1 (citer)
+    expect(citedIn!.src).toEqual({ kind: "paper", id: SEED_IDS.p2 });
+    expect(citedIn!.dst).toEqual({ kind: "paper", id: SEED_IDS.p1 });
+
     // cross-user paper edge not present
-    expect(r.some((x) => x.dst.id === SEED_IDS.pOther)).toBe(false);
+    expect(r.some((x) => x.dst.id === SEED_IDS.pOther || x.src.id === SEED_IDS.pOther)).toBe(false);
     // reference-cited edge not present
-    expect(r.some((x) => x.dst.kind === "reference")).toBe(false);
+    expect(r.some((x) => x.dst.kind === "reference" || x.src.kind === "reference")).toBe(false);
   });
 
   it("edgesSemanticSim returns empty array on empty table", async () => {

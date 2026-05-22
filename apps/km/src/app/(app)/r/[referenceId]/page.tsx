@@ -10,6 +10,7 @@ import { ReferenceAttachToPaperButton } from "@/components/ReferenceAttachToPape
 import { ReferenceAgenticSearchButton } from "@/components/ReferenceAgenticSearchButton";
 import { TabTitleUpdater } from "@/components/TabBar";
 import { denormaliseForList, validateCslJson } from "@/lib/csl";
+import { getReferenceCitedIn } from "@/lib/citations/reference-cited-in";
 
 export default async function ReferencePage({
   params,
@@ -18,9 +19,10 @@ export default async function ReferencePage({
 }) {
   const userId = await getRequiredUserId();
   const { referenceId } = await params;
-  const [ref, library] = await Promise.all([
+  const [ref, library, citedIn] = await Promise.all([
     getReference(referenceId, userId),
     getDefaultLibrary(userId),
+    getReferenceCitedIn(referenceId, userId),
   ]);
   if (!ref) notFound();
 
@@ -70,6 +72,37 @@ export default async function ReferencePage({
         )}
       </div>
       <ReferenceForm reference={ref} />
+
+      <section className="mt-8 border-t border-border/60 pt-6">
+        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+          Cited in
+        </h2>
+        {citedIn.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            No papers in your library cite this reference yet.
+          </p>
+        ) : (
+          <ul className="flex flex-col gap-1">
+            {citedIn.map((row) => (
+              <li key={row.edgeId}>
+                <Link
+                  href={`/p/${row.paperId}`}
+                  className="flex items-baseline gap-2 rounded px-2 py-1.5 text-sm hover:bg-muted"
+                >
+                  <span className="line-clamp-1 flex-1">
+                    {row.title?.trim() || "(untitled paper)"}
+                  </span>
+                  {row.markerIdx != null && (
+                    <span className="font-mono text-xs text-muted-foreground">
+                      [{row.markerIdx}]
+                    </span>
+                  )}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
     </div>
   );
 }

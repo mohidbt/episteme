@@ -89,7 +89,8 @@ describe("GET /api/graph", () => {
     expect(body.nodes).toEqual([{ id: "n1" }, { id: "n2" }]);
     expect(body.capped).toEqual({
       paper_is_ref: { kept: 5000, total: 5002 },
-      paper_citation: { kept: 0, total: 0 },
+      citing: { kept: 0, total: 0 },
+      cited_in: { kept: 0, total: 0 },
       wiki_link: { kept: 5000, total: 5001 },
       shared_tag: { kept: 3, total: 3 },
       semantic_sim: { kept: 3, total: 3 },
@@ -106,7 +107,7 @@ describe("GET /api/graph", () => {
     expect(tail.slice(3).map((e: { weight: number }) => e.weight)).toEqual([0.9, 0.5, 0.2]);
   });
 
-  it("returns paper_citation edges and prefers them over paper_is_ref on duplicate pairs", async () => {
+  it("returns citing + cited_in edges and prefers citing over paper_is_ref on duplicate pairs", async () => {
     vi.mocked(getUserIdFromRequest).mockResolvedValue("u1");
     vi.mocked(nodesForUser).mockResolvedValue([] as never);
 
@@ -129,13 +130,25 @@ describe("GET /api/graph", () => {
       {
         src: { kind: "paper", id: "pA" },
         dst: { kind: "paper", id: "pB" },
-        kind: "paper_citation",
+        kind: "citing",
+        weight: 1,
+      },
+      {
+        src: { kind: "paper", id: "pB" },
+        dst: { kind: "paper", id: "pA" },
+        kind: "cited_in",
         weight: 1,
       },
       {
         src: { kind: "paper", id: "pC" },
         dst: { kind: "paper", id: "pD" },
-        kind: "paper_citation",
+        kind: "citing",
+        weight: 1,
+      },
+      {
+        src: { kind: "paper", id: "pD" },
+        dst: { kind: "paper", id: "pC" },
+        kind: "cited_in",
         weight: 1,
       },
     ];
@@ -153,29 +166,31 @@ describe("GET /api/graph", () => {
     expect(edgesPaperCitations).toHaveBeenCalledWith("u1");
 
     const kinds = body.edges.map((e: { kind: string }) => e.kind);
-    // paper_citation present
-    expect(kinds).toContain("paper_citation");
-    // dedup: paper_is_ref for (pA,pB) removed in favour of paper_citation
+    // citing + cited_in present
+    expect(kinds).toContain("citing");
+    expect(kinds).toContain("cited_in");
+    // dedup: paper_is_ref for (pA,pB) removed in favour of citing (same direction)
     const dupPair = body.edges.filter(
       (e: { src: { id: string }; dst: { id: string } }) => e.src.id === "pA" && e.dst.id === "pB"
     );
     expect(dupPair).toHaveLength(1);
-    expect(dupPair[0].kind).toBe("paper_citation");
+    expect(dupPair[0].kind).toBe("citing");
     // non-duplicated paper_is_ref still present
     expect(
       body.edges.find(
         (e: { src: { id: string }; dst: { id: string } }) => e.src.id === "pX" && e.dst.id === "rY"
       )?.kind
     ).toBe("paper_is_ref");
-    // non-duplicated paper_citation still present
+    // non-duplicated citing still present
     expect(
       body.edges.find(
         (e: { src: { id: string }; dst: { id: string } }) => e.src.id === "pC" && e.dst.id === "pD"
       )?.kind
-    ).toBe("paper_citation");
+    ).toBe("citing");
 
     expect(body.capped).toMatchObject({
-      paper_citation: { kept: 2, total: 2 },
+      citing: { kept: 2, total: 2 },
+      cited_in: { kept: 2, total: 2 },
     });
   });
 });

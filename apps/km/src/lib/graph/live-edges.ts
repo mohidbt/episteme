@@ -75,12 +75,23 @@ export async function edgesPaperCitations(userId: string): Promise<GraphEdge[]> 
     JOIN papers pd ON pd.id::text = pc.cited_id AND pd.user_id = ${userId}
     WHERE pc.citer_kind = 'paper' AND pc.cited_kind = 'paper'
   `);
-  return rowsOf<{ citer_id: string; cited_id: string }>(r).map((x) => ({
-    src: { kind: "paper", id: x.citer_id },
-    dst: { kind: "paper", id: x.cited_id },
-    kind: "paper_citation",
-    weight: 1,
-  }));
+  const rows = rowsOf<{ citer_id: string; cited_id: string }>(r);
+  const edges: GraphEdge[] = [];
+  for (const x of rows) {
+    edges.push({
+      src: { kind: "paper", id: x.citer_id },
+      dst: { kind: "paper", id: x.cited_id },
+      kind: "citing",
+      weight: 1,
+    });
+    edges.push({
+      src: { kind: "paper", id: x.cited_id },
+      dst: { kind: "paper", id: x.citer_id },
+      kind: "cited_in",
+      weight: 1,
+    });
+  }
+  return edges;
 }
 
 export async function nodesForUser(userId: string): Promise<GraphNode[]> {
