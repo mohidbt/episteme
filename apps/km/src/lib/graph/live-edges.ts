@@ -3,13 +3,73 @@ import { sql } from "drizzle-orm";
 import { rowsOf } from "@/lib/db/rows";
 import type { GraphEdge, GraphNode } from "./types";
 
+// Identity threshold for fuzzy title match (mirror of auto-link's
+// FUZZY_SIM_THRESHOLD). Empirically tuned so paraphrased / punctuation-
+// varied titles still pass while short shared prefixes don't.
+const PAPER_IS_REF_FUZZY_SIM_THRESHOLD = 0.6;
+
+function isPgTrgmMissingError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  const msg = err.message.toLowerCase();
+  return (
+    msg.includes("does not exist") &&
+    (msg.includes("operator") || msg.includes("similarity") || msg.includes("pg_trgm"))
+  );
+}
+
+// paper_is_ref now means IDENTITY (paper IS the same entity as a reference),
+// not "paper has reference in bibliography". Source: DOI exact match between
+// papers.doi and references.csl_json->>'DOI', OR pg_trgm fuzzy title match
+// between papers.title and references.csl_json->>'title' ≥ 0.6.
+//
+// Note: the legacy references.paper_id column is intentionally ignored —
+// it is reserved for the future "PDF attached to reference" workflow and no
+// longer drives graph edges. See plan H-batch.
+//
+// pg_trgm-missing errors degrade silently to "no fuzzy hits" so the DOI path
+// still emits edges (matches auto-link.ts behaviour).
 export async function edgesPaperIsRef(userId: string): Promise<GraphEdge[]> {
-  const r = await db.execute(sql`
-    SELECT p.id AS paper_id, r.id AS ref_id
-    FROM "references" r JOIN papers p ON p.id = r.paper_id
-    WHERE r.user_id = ${userId} AND r.paper_id IS NOT NULL
-  `);
-  return rowsOf<{ paper_id: string; ref_id: string }>(r).map((x) => ({
+  const query = sql`
+    SELECT DISTINCT ON (r.id)
+           p.id AS paper_id, r.id AS ref_id
+    FROM papers p, "references" r
+    WHERE p.user_id = ${userId} AND r.user_id = ${userId}
+      AND (
+        (p.doi IS NOT NULL AND r.csl_json->>'DOI' IS NOT NULL
+         AND lower(trim(p.doi)) = lower(trim(r.csl_json->>'DOI')))
+        OR
+        (p.title IS NOT NULL AND r.csl_json->>'title' IS NOT NULL
+         AND p.title % (r.csl_json->>'title')
+         AND similarity(p.title, r.csl_json->>'title') >= ${PAPER_IS_REF_FUZZY_SIM_THRESHOLD})
+      )
+    ORDER BY r.id, similarity(COALESCE(p.title, ''), COALESCE(r.csl_json->>'title', '')) DESC NULLS LAST
+    LIMIT 5000
+  `;
+  let result;
+  try {
+    result = await db.execute(query);
+  } catch (err) {
+    if (isPgTrgmMissingError(err)) {
+      // pg_trgm absent: fall back to DOI-only identity join.
+      console.warn(
+        "[live-edges] pg_trgm not available; paper_is_ref using DOI-only path",
+        err instanceof Error ? err.message : err,
+      );
+      result = await db.execute(sql`
+        SELECT DISTINCT ON (r.id)
+               p.id AS paper_id, r.id AS ref_id
+        FROM papers p, "references" r
+        WHERE p.user_id = ${userId} AND r.user_id = ${userId}
+          AND p.doi IS NOT NULL AND r.csl_json->>'DOI' IS NOT NULL
+          AND lower(trim(p.doi)) = lower(trim(r.csl_json->>'DOI'))
+        ORDER BY r.id
+        LIMIT 5000
+      `);
+    } else {
+      throw err;
+    }
+  }
+  return rowsOf<{ paper_id: string; ref_id: string }>(result).map((x) => ({
     src: { kind: "paper", id: x.paper_id },
     dst: { kind: "reference", id: x.ref_id },
     kind: "paper_is_ref",
@@ -67,6 +127,22 @@ export async function edgesSemanticSim(userId: string, capPerSrcDstKind = 20): P
   }));
 }
 
+// Citation edges between papers, plus the widened path that resolves
+// paper_citations rows of cited_kind='reference' (pointing at document_references
+// rows) onto library references when their DOI / fuzzy title matches a
+// references row in the user's library.
+//
+// Single function emits two unions:
+//   1. paper → paper (existing): unchanged.
+//   2. paper → reference (new): paper_citations.cited_id is a document_references
+//      bigint; we join document_references → references via DOI exact OR
+//      pg_trgm title fuzzy ≥ 0.6, both scoped to userId. Truly orphan refs
+//      (no library match) are skipped per plan.
+//
+// Each row produces 2 reciprocal edges (citing + cited_in) mirroring the
+// paper↔paper convention.
+const PAPER_CITATIONS_FUZZY_SIM_THRESHOLD = 0.6;
+
 export async function edgesPaperCitations(userId: string): Promise<GraphEdge[]> {
   const r = await db.execute(sql`
     SELECT pc.citer_id, pc.cited_id
@@ -87,6 +163,71 @@ export async function edgesPaperCitations(userId: string): Promise<GraphEdge[]> 
     edges.push({
       src: { kind: "paper", id: x.cited_id },
       dst: { kind: "paper", id: x.citer_id },
+      kind: "cited_in",
+      weight: 1,
+    });
+  }
+
+  // Widened path: paper_citations rows where cited_kind='reference' point at
+  // a document_references id. Resolve to a library references row by DOI /
+  // fuzzy title match in the same user's library.
+  let widenedRows: Array<{ paper_id: string; ref_id: string }> = [];
+  try {
+    const w = await db.execute(sql`
+      WITH dr_match AS (
+        SELECT dr.id::text AS dr_id, r.id AS ref_uuid
+        FROM document_references dr
+        JOIN papers p ON p.id = dr.paper_id AND p.user_id = ${userId}
+        JOIN "references" r ON r.user_id = ${userId} AND (
+          (dr.doi IS NOT NULL AND r.csl_json->>'DOI' IS NOT NULL
+           AND lower(trim(dr.doi)) = lower(trim(r.csl_json->>'DOI')))
+          OR
+          (dr.title IS NOT NULL AND r.csl_json->>'title' IS NOT NULL
+           AND dr.title % (r.csl_json->>'title')
+           AND similarity(dr.title, r.csl_json->>'title') >= ${PAPER_CITATIONS_FUZZY_SIM_THRESHOLD})
+        )
+      )
+      SELECT pc.citer_id AS paper_id, dm.ref_uuid::text AS ref_id
+      FROM paper_citations pc
+      JOIN dr_match dm ON dm.dr_id = pc.cited_id
+      WHERE pc.citer_kind = 'paper' AND pc.cited_kind = 'reference'
+    `);
+    widenedRows = rowsOf<{ paper_id: string; ref_id: string }>(w);
+  } catch (err) {
+    if (isPgTrgmMissingError(err)) {
+      console.warn(
+        "[live-edges] pg_trgm not available; edgesPaperCitations using DOI-only widened path",
+        err instanceof Error ? err.message : err,
+      );
+      const w = await db.execute(sql`
+        WITH dr_match AS (
+          SELECT dr.id::text AS dr_id, r.id AS ref_uuid
+          FROM document_references dr
+          JOIN papers p ON p.id = dr.paper_id AND p.user_id = ${userId}
+          JOIN "references" r ON r.user_id = ${userId}
+            AND dr.doi IS NOT NULL AND r.csl_json->>'DOI' IS NOT NULL
+            AND lower(trim(dr.doi)) = lower(trim(r.csl_json->>'DOI'))
+        )
+        SELECT pc.citer_id AS paper_id, dm.ref_uuid::text AS ref_id
+        FROM paper_citations pc
+        JOIN dr_match dm ON dm.dr_id = pc.cited_id
+        WHERE pc.citer_kind = 'paper' AND pc.cited_kind = 'reference'
+      `);
+      widenedRows = rowsOf<{ paper_id: string; ref_id: string }>(w);
+    } else {
+      throw err;
+    }
+  }
+  for (const x of widenedRows) {
+    edges.push({
+      src: { kind: "paper", id: x.paper_id },
+      dst: { kind: "reference", id: x.ref_id },
+      kind: "citing",
+      weight: 1,
+    });
+    edges.push({
+      src: { kind: "reference", id: x.ref_id },
+      dst: { kind: "paper", id: x.paper_id },
       kind: "cited_in",
       weight: 1,
     });

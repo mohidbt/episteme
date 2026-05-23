@@ -107,7 +107,7 @@ describe("GET /api/graph", () => {
     expect(tail.slice(3).map((e: { weight: number }) => e.weight)).toEqual([0.9, 0.5, 0.2]);
   });
 
-  it("returns citing + cited_in edges and prefers citing over paper_is_ref on duplicate pairs", async () => {
+  it("returns citing + cited_in edges and KEEPS paper_is_ref on duplicate pairs (identity ≠ citation)", async () => {
     vi.mocked(getUserIdFromRequest).mockResolvedValue("u1");
     vi.mocked(nodesForUser).mockResolvedValue([] as never);
 
@@ -169,12 +169,15 @@ describe("GET /api/graph", () => {
     // citing + cited_in present
     expect(kinds).toContain("citing");
     expect(kinds).toContain("cited_in");
-    // dedup: paper_is_ref for (pA,pB) removed in favour of citing (same direction)
+    // Post-H-batch: both identity (paper_is_ref) and citation (citing) for
+    // the same (pA, pB) pair surface. They mean different things.
     const dupPair = body.edges.filter(
       (e: { src: { id: string }; dst: { id: string } }) => e.src.id === "pA" && e.dst.id === "pB"
     );
-    expect(dupPair).toHaveLength(1);
-    expect(dupPair[0].kind).toBe("citing");
+    expect(dupPair).toHaveLength(2);
+    const dupKinds = new Set(dupPair.map((e: { kind: string }) => e.kind));
+    expect(dupKinds.has("paper_is_ref")).toBe(true);
+    expect(dupKinds.has("citing")).toBe(true);
     // non-duplicated paper_is_ref still present
     expect(
       body.edges.find(

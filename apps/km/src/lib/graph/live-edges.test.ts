@@ -1,8 +1,11 @@
 import { describe, it, expect, beforeAll } from "vitest";
+import { db } from "@episteme/db/client";
+import { sql } from "drizzle-orm";
 import {
   seedGraphFixture,
   seedPaperCitationsFixture,
   SEED_USER,
+  SEED_OTHER_USER,
   SEED_IDS,
 } from "../../../../../packages/db/__tests__/fixtures/graph-seed";
 import {
@@ -14,16 +17,205 @@ import {
   nodesForUser,
 } from "./live-edges";
 
+// Extra identity-edge fixture nodes for H-batch tests. Distinct UUIDs from
+// SEED_IDS so the existing seedGraphFixture remains untouched.
+const ID = {
+  // paper + reference paired by DOI
+  pDoi: "aaaaaaa1-0000-0000-0000-000000000001",
+  rDoi: "aaaaaaa1-0000-0000-0000-000000000002",
+  // paper + reference paired by fuzzy title only (no DOI on either)
+  pFuzzy: "aaaaaaa2-0000-0000-0000-000000000001",
+  rFuzzy: "aaaaaaa2-0000-0000-0000-000000000002",
+  // reference with stale paper_id pointing at a paper that does NOT match
+  // by DOI or title — must NOT emit an identity edge.
+  pStale: "aaaaaaa3-0000-0000-0000-000000000001",
+  rStaleRef: "aaaaaaa3-0000-0000-0000-000000000002",
+  // cross-user pair (must not leak)
+  pOtherLeak: "aaaaaaa4-0000-0000-0000-000000000001",
+  rOtherLeak: "aaaaaaa4-0000-0000-0000-000000000002",
+  // widened citation fixture: paper_citations row pointing at a document
+  // reference whose DOI matches a library reference.
+  pCiter: "aaaaaaa5-0000-0000-0000-000000000001",
+  rLibCited: "aaaaaaa5-0000-0000-0000-000000000003",
+  // orphan: paper_citations row pointing at a document reference with no
+  // matching library reference — must NOT emit a citation edge.
+  pOrphanCiter: "aaaaaaa6-0000-0000-0000-000000000001",
+};
+
+function firstId(res: unknown): number | undefined {
+  const a = res as { rows?: Array<{ id: number }> };
+  if (a.rows && a.rows[0]) return a.rows[0].id;
+  if (Array.isArray(res) && (res as Array<{ id: number }>)[0]) return (res as Array<{ id: number }>)[0].id;
+  return undefined;
+}
+
+async function seedIdentityFixture(): Promise<void> {
+  const libRes = await db.execute(sql`SELECT id FROM libraries WHERE user_id = ${SEED_USER} LIMIT 1`);
+  const libId = firstId(libRes);
+  const otherLibRes = await db.execute(sql`SELECT id FROM libraries WHERE user_id = ${SEED_OTHER_USER} LIMIT 1`);
+  const otherLibId = firstId(otherLibRes);
+
+  // DOI-match pair.
+  await db.execute(sql`
+    INSERT INTO papers (id, user_id, library_id, filename, title, doi)
+    VALUES (${ID.pDoi}, ${SEED_USER}, ${libId}, 'pdoi.pdf', 'DOI Paper', '10.1000/identity.doi')
+    ON CONFLICT (id) DO NOTHING
+  `);
+  await db.execute(sql`
+    INSERT INTO "references" (id, library_id, user_id, citation_key, csl_json)
+    VALUES (${ID.rDoi}, ${libId}, ${SEED_USER}, 'kdoi',
+            '{"DOI":"  10.1000/IDENTITY.DOI ","title":"Something Else"}'::jsonb)
+    ON CONFLICT (id) DO NOTHING
+  `);
+
+  // Fuzzy-title-only pair (no DOIs).
+  await db.execute(sql`
+    INSERT INTO papers (id, user_id, library_id, filename, title)
+    VALUES (${ID.pFuzzy}, ${SEED_USER}, ${libId}, 'pfuzzy.pdf',
+            'Propensity Score Matching for Causal Inference in Practice')
+    ON CONFLICT (id) DO NOTHING
+  `);
+  await db.execute(sql`
+    INSERT INTO "references" (id, library_id, user_id, citation_key, csl_json)
+    VALUES (${ID.rFuzzy}, ${libId}, ${SEED_USER}, 'kfuzzy',
+            '{"title":"Propensity Score Matching for Causal Inference in Practice."}'::jsonb)
+    ON CONFLICT (id) DO NOTHING
+  `);
+
+  // Stale paper_id: refStaleRef.paper_id → pStale but neither DOI nor title
+  // align (no DOIs anywhere; titles totally distinct).
+  await db.execute(sql`
+    INSERT INTO papers (id, user_id, library_id, filename, title)
+    VALUES (${ID.pStale}, ${SEED_USER}, ${libId}, 'pstale.pdf', 'AAAAAA — totally distinct paper title for stale check')
+    ON CONFLICT (id) DO NOTHING
+  `);
+  await db.execute(sql`
+    INSERT INTO "references" (id, library_id, user_id, citation_key, csl_json, paper_id)
+    VALUES (${ID.rStaleRef}, ${libId}, ${SEED_USER}, 'kstale',
+            '{"title":"ZZZZZZ — quite unrelated stale reference title"}'::jsonb,
+            ${ID.pStale})
+    ON CONFLICT (id) DO NOTHING
+  `);
+
+  // Cross-user leak: paper in user A, reference in user OTHER with same DOI.
+  if (otherLibId) {
+    await db.execute(sql`
+      INSERT INTO papers (id, user_id, library_id, filename, title, doi)
+      VALUES (${ID.pOtherLeak}, ${SEED_USER}, ${libId}, 'pleak.pdf', 'Leak Paper', '10.1000/leak.doi')
+      ON CONFLICT (id) DO NOTHING
+    `);
+    await db.execute(sql`
+      INSERT INTO "references" (id, library_id, user_id, citation_key, csl_json)
+      VALUES (${ID.rOtherLeak}, ${otherLibId}, ${SEED_OTHER_USER}, 'kleak',
+              '{"DOI":"10.1000/leak.doi","title":"Leak Ref"}'::jsonb)
+      ON CONFLICT (id) DO NOTHING
+    `);
+  }
+
+  // Widened citation fixture: pCiter has a document_references row tagged
+  // with the DOI of an existing library reference (rLibCited). A
+  // paper_citations row points paper → that document_references id.
+  await db.execute(sql`
+    INSERT INTO papers (id, user_id, library_id, filename, title)
+    VALUES (${ID.pCiter}, ${SEED_USER}, ${libId}, 'pciter.pdf', 'Citer Paper')
+    ON CONFLICT (id) DO NOTHING
+  `);
+  await db.execute(sql`
+    INSERT INTO "references" (id, library_id, user_id, citation_key, csl_json)
+    VALUES (${ID.rLibCited}, ${libId}, ${SEED_USER}, 'klibcited',
+            '{"DOI":"10.1000/widened.cite","title":"Widened Library Ref"}'::jsonb)
+    ON CONFLICT (id) DO NOTHING
+  `);
+  // Clear any prior dr/pc rows for this fixture so re-runs stay clean.
+  await db.execute(sql`
+    DELETE FROM paper_citations
+    WHERE citer_id IN (${ID.pCiter}, ${ID.pOrphanCiter})
+  `);
+  await db.execute(sql`
+    DELETE FROM document_references
+    WHERE paper_id IN (${ID.pCiter}, ${ID.pOrphanCiter})
+  `);
+  const drIns = await db.execute(sql`
+    INSERT INTO document_references (paper_id, marker_text, marker_index, doi, title)
+    VALUES (${ID.pCiter}, '[1]', 1, '10.1000/widened.cite', 'Widened Library Ref')
+    RETURNING id
+  `);
+  const drId = firstId(drIns);
+  await db.execute(sql`
+    INSERT INTO paper_citations (citer_kind, citer_id, cited_kind, cited_id, match_method)
+    VALUES ('paper', ${ID.pCiter}, 'reference', ${String(drId)}, 'doi')
+    ON CONFLICT DO NOTHING
+  `);
+
+  // Orphan: docRef with DOI that does NOT match any library reference.
+  await db.execute(sql`
+    INSERT INTO papers (id, user_id, library_id, filename, title)
+    VALUES (${ID.pOrphanCiter}, ${SEED_USER}, ${libId}, 'porphan.pdf', 'Orphan Citer')
+    ON CONFLICT (id) DO NOTHING
+  `);
+  const drOrphan = await db.execute(sql`
+    INSERT INTO document_references (paper_id, marker_text, marker_index, doi, title)
+    VALUES (${ID.pOrphanCiter}, '[1]', 1, '10.9999/no.such.library.ref', 'Truly Orphan Reference')
+    RETURNING id
+  `);
+  const drOrphanId = firstId(drOrphan);
+  await db.execute(sql`
+    INSERT INTO paper_citations (citer_kind, citer_id, cited_kind, cited_id, match_method)
+    VALUES ('paper', ${ID.pOrphanCiter}, 'reference', ${String(drOrphanId)}, 'manual')
+    ON CONFLICT DO NOTHING
+  `);
+}
+
 beforeAll(async () => {
   await seedGraphFixture();
   await seedPaperCitationsFixture();
+  await seedIdentityFixture();
 });
 
 describe("live-edges", () => {
-  it("paper_is_ref returns p2 -> r1", async () => {
+  it("paper_is_ref: emits identity edge by DOI match (case + whitespace insensitive)", async () => {
     const r = await edgesPaperIsRef(SEED_USER);
-    expect(r.length).toBeGreaterThanOrEqual(1);
-    expect(r[0].kind).toBe("paper_is_ref");
+    const doiEdge = r.find(
+      (e) => e.src.id === ID.pDoi && e.dst.id === ID.rDoi,
+    );
+    expect(doiEdge).toBeDefined();
+    expect(doiEdge!.kind).toBe("paper_is_ref");
+    expect(doiEdge!.src.kind).toBe("paper");
+    expect(doiEdge!.dst.kind).toBe("reference");
+  });
+
+  it("paper_is_ref: emits identity edge by pg_trgm fuzzy title match", async () => {
+    const r = await edgesPaperIsRef(SEED_USER);
+    const fuzzy = r.find(
+      (e) => e.src.id === ID.pFuzzy && e.dst.id === ID.rFuzzy,
+    );
+    expect(fuzzy).toBeDefined();
+    expect(fuzzy!.kind).toBe("paper_is_ref");
+  });
+
+  it("paper_is_ref: IGNORES references.paper_id (legacy field is no longer load-bearing)", async () => {
+    const r = await edgesPaperIsRef(SEED_USER);
+    // rStaleRef.paper_id = pStale but no DOI/title overlap → must NOT emit.
+    const stale = r.find(
+      (e) => e.src.id === ID.pStale && e.dst.id === ID.rStaleRef,
+    );
+    expect(stale).toBeUndefined();
+    // Also: legacy r1 (seedGraphFixture) had paper_id=p2 and no DOI/title
+    // match. The old impl emitted it; the new impl must not.
+    const legacy = r.find(
+      (e) => e.src.id === SEED_IDS.p2 && e.dst.id === SEED_IDS.r1,
+    );
+    expect(legacy).toBeUndefined();
+  });
+
+  it("paper_is_ref: userId-scoped (no cross-user leak via DOI match)", async () => {
+    const r = await edgesPaperIsRef(SEED_USER);
+    // pOtherLeak (user=SEED_USER) and rOtherLeak (user=SEED_OTHER_USER) share
+    // the same DOI; cross-user join must not emit.
+    const leak = r.find(
+      (e) => e.dst.id === ID.rOtherLeak || e.src.id === ID.pOtherLeak,
+    );
+    expect(leak).toBeUndefined();
   });
   it("wiki_link returns n1->p1 and n1->r1", async () => {
     const r = await edgesWikiLink(SEED_USER);
@@ -40,27 +232,60 @@ describe("live-edges", () => {
     const kinds = new Set(ns.map((n) => n.kind));
     expect(kinds.has("paper") && kinds.has("note") && kinds.has("reference")).toBe(true);
   });
-  it("paper_citations: emits reciprocal citing + cited_in edges for each paper↔paper row", async () => {
+  it("paper_citations: emits reciprocal citing + cited_in edges for each paper↔paper row (unchanged)", async () => {
     const r = await edgesPaperCitations(SEED_USER);
-    // One same-user paper↔paper row → 2 edges (citing + cited_in)
-    expect(r.length).toBe(2);
-
-    const citing = r.find((e) => e.kind === "citing");
-    const citedIn = r.find((e) => e.kind === "cited_in");
-    expect(citing).toBeDefined();
-    expect(citedIn).toBeDefined();
-
-    // citing: src=p1 (citer) → dst=p2 (cited)
-    expect(citing!.src).toEqual({ kind: "paper", id: SEED_IDS.p1 });
-    expect(citing!.dst).toEqual({ kind: "paper", id: SEED_IDS.p2 });
-    // cited_in: src=p2 (cited) → dst=p1 (citer)
-    expect(citedIn!.src).toEqual({ kind: "paper", id: SEED_IDS.p2 });
-    expect(citedIn!.dst).toEqual({ kind: "paper", id: SEED_IDS.p1 });
+    // paper↔paper edges between p1 and p2: exactly one row in the seed.
+    const ppCiting = r.find(
+      (e) =>
+        e.kind === "citing" &&
+        e.src.kind === "paper" &&
+        e.src.id === SEED_IDS.p1 &&
+        e.dst.kind === "paper" &&
+        e.dst.id === SEED_IDS.p2,
+    );
+    const ppCitedIn = r.find(
+      (e) =>
+        e.kind === "cited_in" &&
+        e.src.kind === "paper" &&
+        e.src.id === SEED_IDS.p2 &&
+        e.dst.kind === "paper" &&
+        e.dst.id === SEED_IDS.p1,
+    );
+    expect(ppCiting).toBeDefined();
+    expect(ppCitedIn).toBeDefined();
 
     // cross-user paper edge not present
     expect(r.some((x) => x.dst.id === SEED_IDS.pOther || x.src.id === SEED_IDS.pOther)).toBe(false);
-    // reference-cited edge not present
-    expect(r.some((x) => x.dst.kind === "reference" || x.src.kind === "reference")).toBe(false);
+  });
+
+  it("paper_citations: widened path emits citing + cited_in for paper→docRef→libraryRef match", async () => {
+    const r = await edgesPaperCitations(SEED_USER);
+    const citing = r.find(
+      (e) =>
+        e.kind === "citing" &&
+        e.src.kind === "paper" &&
+        e.src.id === ID.pCiter &&
+        e.dst.kind === "reference" &&
+        e.dst.id === ID.rLibCited,
+    );
+    const citedIn = r.find(
+      (e) =>
+        e.kind === "cited_in" &&
+        e.src.kind === "reference" &&
+        e.src.id === ID.rLibCited &&
+        e.dst.kind === "paper" &&
+        e.dst.id === ID.pCiter,
+    );
+    expect(citing).toBeDefined();
+    expect(citedIn).toBeDefined();
+  });
+
+  it("paper_citations: skips widened path when docRef has no matching library reference (orphan)", async () => {
+    const r = await edgesPaperCitations(SEED_USER);
+    // pOrphanCiter has a paper_citations row pointing at a docRef with a
+    // DOI/title that does NOT match any library reference — must NOT emit.
+    const orphan = r.find((e) => e.src.id === ID.pOrphanCiter || e.dst.id === ID.pOrphanCiter);
+    expect(orphan).toBeUndefined();
   });
 
   it("edgesSemanticSim returns empty array on empty table", async () => {

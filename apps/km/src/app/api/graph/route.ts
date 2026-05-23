@@ -38,7 +38,7 @@ export async function GET(req: Request) {
     edgesPaperCitations(userId),
   ]);
 
-  const keptRefRaw = eRef.slice(0, QUOTA_PAPER_IS_REF);
+  const keptRef = eRef.slice(0, QUOTA_PAPER_IS_REF);
   const keptWiki = eWiki.slice(0, QUOTA_WIKI_LINK);
   const keptTag = [...eTag].sort(byWeightDesc).slice(0, QUOTA_SHARED_TAG);
   const keptSem = [...eSem].sort(byWeightDesc).slice(0, QUOTA_SEMANTIC);
@@ -54,13 +54,11 @@ export async function GET(req: Request) {
   );
   const keptCite = [...keptCiting, ...keptCitedIn];
 
-  // Dedup: prefer citation edges over paper_is_ref on duplicate
-  // (srcKind,srcId,dstKind,dstId). 'citing' aligns direction with paper_is_ref
-  // (citer → cited); 'cited_in' is the reciprocal kind.
-  const citingPairs = new Set(
-    keptCite.filter((e) => e.kind === "citing").map(pairKey),
-  );
-  const keptRef = keptRefRaw.filter((e) => !citingPairs.has(pairKey(e)));
+  // No paper_is_ref ↔ citation dedup: post-H-batch the two edges represent
+  // distinct facts (identity vs bibliography citation). A paper that IS the
+  // same entity as a library reference AND is cited by another paper which
+  // bibliographically references it should surface both edges. See plan
+  // H-batch.
 
   const det = [...keptRef, ...keptCite, ...keptWiki, ...keptTag];
   const sem = keptSem;
