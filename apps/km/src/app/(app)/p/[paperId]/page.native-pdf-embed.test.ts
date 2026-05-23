@@ -15,11 +15,13 @@ describe("/p/[paperId] PDF preview", () => {
     expect(source).toContain("<PaperPdfPreview");
   });
 
-  it("loads the PDF.js preview behind a client boundary", async () => {
+  it("does not auto-load the PDF.js reader preview", async () => {
     const source = await readFile(path.join(__dirname, "PaperPdfPreview.tsx"), "utf8");
 
-    expect(source).toContain('"use client"');
-    expect(source).toContain("ssr: false");
-    expect(source).toContain('import("@episteme/reader")');
+    expect(source).not.toContain('"use client"');
+    expect(source).not.toContain("dynamic(");
+    expect(source).not.toContain("@episteme/reader");
+    expect(source).toContain('href={`/papers/${paperId}/read`}');
+    expect(source).toContain('href={`/api/papers/${paperId}/file`}');
   });
 });
