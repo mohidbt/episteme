@@ -137,6 +137,14 @@ CREATE TABLE public.agent_memories (
     value jsonb NOT NULL,
     updated_at timestamp without time zone DEFAULT now() NOT NULL
 );
+CREATE TABLE public.agent_message_metadata (
+    thread_id text NOT NULL,
+    user_id text NOT NULL,
+    message_id text NOT NULL,
+    kind text NOT NULL,
+    payload jsonb NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
 CREATE TABLE public.agent_messages (
     id integer NOT NULL,
     conversation_id integer NOT NULL,
@@ -782,6 +790,8 @@ ALTER TABLE ONLY public.agent_conversations
     ADD CONSTRAINT agent_conversations_pkey PRIMARY KEY (id);
 ALTER TABLE ONLY public.agent_memories
     ADD CONSTRAINT agent_memories_pkey PRIMARY KEY (id);
+ALTER TABLE ONLY public.agent_message_metadata
+    ADD CONSTRAINT agent_message_metadata_pkey PRIMARY KEY (thread_id, message_id, kind);
 ALTER TABLE ONLY public.agent_messages
     ADD CONSTRAINT agent_messages_pkey PRIMARY KEY (id);
 ALTER TABLE ONLY public.agent_threads
@@ -891,6 +901,8 @@ ALTER TABLE ONLY public.verification
 CREATE INDEX "account_userId_idx" ON public.account USING btree (user_id);
 CREATE INDEX agent_conversations_kind_idx ON public.agent_conversations USING btree (paper_id, kind);
 CREATE INDEX agent_memories_user_ns_idx ON public.agent_memories USING btree (user_id, namespace);
+CREATE INDEX agent_message_metadata_thread_id_idx ON public.agent_message_metadata USING btree (thread_id);
+CREATE INDEX agent_message_metadata_user_id_idx ON public.agent_message_metadata USING btree (user_id);
 CREATE INDEX ai_highlight_runs_paper_idx ON public.ai_highlight_runs USING btree (paper_id, created_at DESC);
 CREATE INDEX assets_library_folder_idx ON public.assets USING btree (library_id, folder_id);
 CREATE INDEX assets_library_idx ON public.assets USING btree (library_id);
@@ -963,6 +975,8 @@ ALTER TABLE ONLY public.agent_conversations
     ADD CONSTRAINT agent_conversations_user_id_user_id_fk FOREIGN KEY (user_id) REFERENCES public."user"(id) ON DELETE CASCADE;
 ALTER TABLE ONLY public.agent_memories
     ADD CONSTRAINT agent_memories_user_id_user_id_fk FOREIGN KEY (user_id) REFERENCES public."user"(id) ON DELETE CASCADE;
+ALTER TABLE ONLY public.agent_message_metadata
+    ADD CONSTRAINT agent_message_metadata_user_id_user_id_fk FOREIGN KEY (user_id) REFERENCES public."user"(id) ON DELETE CASCADE;
 ALTER TABLE ONLY public.agent_messages
     ADD CONSTRAINT agent_messages_conversation_id_agent_conversations_id_fk FOREIGN KEY (conversation_id) REFERENCES public.agent_conversations(id) ON DELETE CASCADE;
 ALTER TABLE ONLY public.agent_threads
