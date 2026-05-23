@@ -903,12 +903,17 @@ CREATE INDEX document_reference_markers_reference_id_idx ON public.document_refe
 CREATE INDEX document_sections_paper_idx ON public.document_sections USING btree (paper_id);
 CREATE INDEX document_segments_paper_page_idx ON public.document_segments USING btree (paper_id, page);
 CREATE UNIQUE INDEX folders_library_parent_name_unique ON public.folders USING btree (library_id, parent_id, name);
+CREATE INDEX idx_document_references_doi_lower ON public.document_references USING btree (lower(TRIM(BOTH FROM doi))) WHERE (doi IS NOT NULL);
+CREATE INDEX idx_document_references_title_trgm ON public.document_references USING gin (title public.gin_trgm_ops) WHERE (title IS NOT NULL);
 CREATE INDEX idx_invite_used_by ON public.invite_codes USING btree (used_by_user_id) WHERE (used_by_user_id IS NOT NULL);
 CREATE INDEX idx_or_usage_guest_ts ON public.openrouter_usage USING btree (guest_session_id, created_at DESC) WHERE (guest_session_id IS NOT NULL);
 CREATE INDEX idx_or_usage_user_ts ON public.openrouter_usage USING btree (user_id, created_at DESC);
+CREATE INDEX idx_papers_doi_lower ON public.papers USING btree (lower(TRIM(BOTH FROM doi))) WHERE (doi IS NOT NULL);
 CREATE INDEX idx_papers_title_trgm ON public.papers USING gin (title public.gin_trgm_ops);
 CREATE INDEX idx_pc_cited ON public.paper_citations USING btree (cited_kind, cited_id);
 CREATE INDEX idx_pc_citer ON public.paper_citations USING btree (citer_kind, citer_id);
+CREATE INDEX idx_references_doi_lower ON public."references" USING btree (lower(TRIM(BOTH FROM (csl_json ->> 'DOI'::text)))) WHERE ((csl_json ->> 'DOI'::text) IS NOT NULL);
+CREATE INDEX idx_references_title_trgm ON public."references" USING gin (((csl_json ->> 'title'::text)) public.gin_trgm_ops) WHERE ((csl_json ->> 'title'::text) IS NOT NULL);
 CREATE INDEX idx_store_expires_at ON public.store USING btree (expires_at) WHERE (expires_at IS NOT NULL);
 CREATE INDEX kept_citations_user_id_idx ON public.kept_citations USING btree (user_id);
 CREATE UNIQUE INDEX libraries_user_id_unique ON public.libraries USING btree (user_id);
