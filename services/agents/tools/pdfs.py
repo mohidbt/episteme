@@ -25,6 +25,70 @@ _UNAVAILABLE = {
 
 
 @tool
+async def find_papers(
+    query: str | None = None,
+    libraryId: int | None = None,
+    *,
+    config: RunnableConfig,
+) -> object:
+    """Find papers / PDFs in the user's library — single entry point.
+
+    Default behavior (no ``query``): returns every paper across every
+    library the user owns. Use this for browse / list / "what do I have"
+    intents AND for topic questions like "do I have anything on X?" —
+    inspecting the full list is how you discover topical matches.
+
+    With ``query``: filters by title/filename substring. If the filtered
+    result is non-empty, the response is ``{"results": [...], "matched":
+    true, "query": "..."}``. If filtered to zero matches, falls back
+    automatically to the full library list and returns ``{"results":
+    [...], "matched": false, "fallback_used": true, "query": "..."}`` —
+    so you never reach a dead-end and can still recommend related work.
+
+    Never invent a libraryId. They are opaque integers; omit to span all
+    the user's libraries.
+
+    Args:
+        query: Optional title/filename substring. Leave None for a full
+            list (the right default for vague intents).
+        libraryId: Optional numeric library id from ``list_libraries`` to
+            scope the search. Omit to span every library the user owns.
+    """
+    user_id = user_id_from_config(config)
+
+    async def _full_list() -> list:
+        if libraryId is not None:
+            data = await km_get(f"/api/papers?libraryId={libraryId}", user_id=user_id)
+            return filter_hidden(data) if isinstance(data, list) else []
+        libs = await km_get("/api/libraries", user_id=user_id)
+        if not isinstance(libs, list) or not libs:
+            return []
+        out: list = []
+        for lib in libs:
+            rows = await km_get(f"/api/papers?libraryId={lib['id']}", user_id=user_id)
+            if isinstance(rows, list):
+                out.extend(rows)
+        return filter_hidden(out)
+
+    if query is None or not query.strip():
+        return {"results": await _full_list(), "matched": False, "query": None}
+
+    raw = await km_get(f"/api/pdfs/search?q={quote_plus(query)}", user_id=user_id)
+    hits = filter_hidden(raw) if isinstance(raw, list) else []
+    if hits:
+        return {"results": hits, "matched": True, "query": query}
+
+    # Zero-hit fallback: return the full library so the model can scan
+    # titles for a topical match instead of dead-ending.
+    return {
+        "results": await _full_list(),
+        "matched": False,
+        "fallback_used": True,
+        "query": query,
+    }
+
+
+@tool
 async def list_pdfs(libraryId: int | None = None, *, config: RunnableConfig) -> object:
     """List individual PDF files / papers in the user's library.
 
@@ -303,11 +367,12 @@ async def get_page_text(pdf_id: str, page: int, *, config: RunnableConfig) -> ob
     return _UNAVAILABLE
 
 
-# Tools advertised to the LLM. Stubbed tools (pdf_read_tables, pdf_extract_data,
-# extract_passages, get_page_text) are deliberately excluded.
+# Tools advertised to the LLM. `find_papers` replaces the old list_pdfs +
+# search_pdfs pair — single entry-point semantics so the system prompt no
+# longer needs a tool-choice rule. The legacy functions remain importable
+# for any non-LLM caller but are not exposed to the model.
 TOOLS = [
-    list_pdfs,
-    search_pdfs,
+    find_papers,
     pdf_read_text,
     highlight,
     pdf_explain_passage,

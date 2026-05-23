@@ -113,14 +113,14 @@ def test_dedup_floor_cap_and_titles() -> None:
         assert c["title"] == f"{PAPER_TITLE} - Page {page}", c["title"]
 
 
-def test_state_surfaces_persisted_citations_from_additional_kwargs() -> None:
-    """BG1: when an AIMessage in the checkpoint carries citations in
-    ``additional_kwargs``, ``/state/{thread_id}`` must include them on the
-    serialized message payload so reload rehydrates the citation pills.
+def test_state_surfaces_citations_from_metadata_table() -> None:
+    """Citation pills on thread reload come from agent_message_metadata,
+    not from AIMessage.additional_kwargs. `/state/{thread_id}` must merge
+    rows where (thread_id, user_id, kind='citations') match the caller.
     """
     from langchain_core.messages import AIMessage, HumanMessage  # noqa: PLC0415
 
-    path = "/agents/km/state/thread-bg1"
+    path = "/agents/km/state/thread-meta-1"
     citations = [
         {
             "chunk_id": "paper-1:p4:7",
@@ -132,25 +132,29 @@ def test_state_surfaces_persisted_citations_from_additional_kwargs() -> None:
             "bbox": {"x0": 0.0, "y0": 0.0, "x1": 1.0, "y1": 1.0},
         }
     ]
-    ai = AIMessage(
-        content="Per the paper [1].",
-        id="a-cite",
-        additional_kwargs={"citations": citations},
-    )
+    ai = AIMessage(content="Per the paper [1].", id="a-cite")
     msgs = [HumanMessage(content="why?", id="u-1"), ai]
     mock_tuple = MagicMock()
     mock_tuple.checkpoint = {"channel_values": {"todos": [], "messages": msgs}}
     mock_saver = MagicMock()
     mock_saver.aget_tuple = AsyncMock(return_value=mock_tuple)
 
-    with patch("routers.km_agent.get_saver", return_value=mock_saver):
+    async def fake_fetch(*, thread_id: str, user_id: str):
+        assert thread_id == "thread-meta-1"
+        assert user_id == "user_1"
+        return {("a-cite", "citations"): citations}
+
+    with (
+        patch("routers.km_agent.get_saver", return_value=mock_saver),
+        patch("routers.km_agent.fetch_thread_metadata", side_effect=fake_fetch),
+    ):
         r = client.get(path, headers=_signed_headers("GET", path, b""))
 
     assert r.status_code == 200
     data = r.json()
     ai_payload = next(m for m in data["messages"] if m["id"] == "a-cite")
     assert ai_payload.get("citations") == citations, (
-        f"expected citations array on persisted AI message, got: {ai_payload}"
+        f"expected metadata-merged citations on AI message, got: {ai_payload}"
     )
 
 
@@ -207,37 +211,26 @@ def test_state_allows_caller_when_thread_has_no_owner_stamp() -> None:
     assert r.status_code == 200, r.text
 
 
-def test_persist_runs_before_done_in_invoke_source() -> None:
-    """BG1#3 regression lock: in `routers.km_agent.invoke`'s `gen()`, the
-    `_persist_citations_into_checkpoint` call must appear textually BEFORE
-    the terminal `yield format_sse("done", ...)`. Source-level ordering
-    proxy: an async-generator integration test would need a live agent.
+def test_persist_metadata_called_during_invoke_source() -> None:
+    """Citations persist inline during the SSE stream — both /invoke and
+    /resume must call ``persist_message_metadata`` when emitting sources.
+    Source-level guard so an integration test isn't required.
     """
     import inspect  # noqa: PLC0415
     import routers.km_agent as mod  # noqa: PLC0415
 
-    src = inspect.getsource(mod.invoke)
-    persist_idx = src.find("_persist_citations_into_checkpoint(")
-    done_idx = src.find('format_sse("done"')
-    assert persist_idx != -1, "persist call missing in /invoke gen()"
-    assert done_idx != -1, "done yield missing in /invoke gen()"
-    assert persist_idx < done_idx, (
-        f"persist call must precede done yield in /invoke; "
-        f"persist_idx={persist_idx} done_idx={done_idx}"
-    )
-
-    src_resume = inspect.getsource(mod.resume)
-    persist_idx_r = src_resume.find("_persist_citations_into_checkpoint(")
-    done_idx_r = src_resume.find('format_sse("done"')
-    assert persist_idx_r != -1 and done_idx_r != -1
-    assert persist_idx_r < done_idx_r, (
-        f"persist call must precede done yield in /resume; "
-        f"persist_idx={persist_idx_r} done_idx={done_idx_r}"
-    )
+    for fn_name in ("invoke", "resume"):
+        src = inspect.getsource(getattr(mod, fn_name))
+        assert "persist_message_metadata" in src, (
+            f"{fn_name} gen() must call persist_message_metadata"
+        )
+        assert "CITATIONS_KIND" in src, (
+            f"{fn_name} gen() must pass kind=CITATIONS_KIND"
+        )
 
 
-def test_state_omits_citations_when_additional_kwargs_empty() -> None:
-    """Sanity: AI messages without citations do not gain an empty array."""
+def test_state_omits_citations_when_metadata_empty() -> None:
+    """Sanity: AI messages without metadata rows do not gain a citations key."""
     from langchain_core.messages import AIMessage  # noqa: PLC0415
 
     path = "/agents/km/state/thread-bg1b"
@@ -247,7 +240,13 @@ def test_state_omits_citations_when_additional_kwargs_empty() -> None:
     mock_saver = MagicMock()
     mock_saver.aget_tuple = AsyncMock(return_value=mock_tuple)
 
-    with patch("routers.km_agent.get_saver", return_value=mock_saver):
+    async def empty_fetch(*, thread_id: str, user_id: str):
+        return {}
+
+    with (
+        patch("routers.km_agent.get_saver", return_value=mock_saver),
+        patch("routers.km_agent.fetch_thread_metadata", side_effect=empty_fetch),
+    ):
         r = client.get(path, headers=_signed_headers("GET", path, b""))
 
     assert r.status_code == 200

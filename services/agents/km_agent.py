@@ -55,26 +55,7 @@ async def _fetch_personal_skills(user_id: str) -> list[dict]:
 # Without this, "Remember: my X is Y" prompts produce a friendly text reply
 # but no `write_file` call, so nothing persists across threads. The wording
 # is deliberately concrete: name the tool, name the path, give one example.
-_MEMORY_SYSTEM_PROMPT = """## IMPORTANT TOOL CHOICE RULE
-
-When the user asks vaguely about their library ("show me my papers", "what do
-I have", "list my docs", "browse"), ALWAYS call `list_pdfs` first. Use
-`search_pdfs` ONLY when the user names a specific paper title or author.
-Never default to `search_pdfs`.
-
-Topic / "do I have a paper on X" questions ("do I have a paper on
-spontaneous switching?", "any paper about diffusion?", "anything on RAG?")
-are NOT specific-title queries. Call `list_pdfs` first and inspect the
-returned titles — that is how you discover whether the library contains
-something on the topic.
-
-Mandatory fallback: if you do call `search_pdfs` and it returns an empty
-list (or `{"results": []}`), IMMEDIATELY call `list_pdfs` next. Do NOT tell
-the user "no paper found" until you have seen the full library list. The
-user's exact keyword often won't appear in a title, but a related paper
-will — `list_pdfs` lets you (and the user) see it.
-
-## Memory
+_MEMORY_SYSTEM_PROMPT = """## Memory
 
 You have a persistent memory under `/.episteme/agents/memories/`. Anything you
 write there survives across threads — use it to remember facts the user tells
@@ -113,7 +94,7 @@ references, and library files are NOT on this filesystem. Calling
 return an empty list (or only your memories/skills) and waste a turn.
 
 To work with drive content, use the dedicated tools (list_notes, search_notes,
-read_note, create_note, update_note, list_folders, list_pdfs, search_pdfs,
+read_note, create_note, update_note, list_folders, find_papers,
 list_references, get_reference, list_libraries, highlight, make_public,
 agentic_search_papers, agentic_fetch_papers, browse_papersets, csv_read,
 csv_write_cell). Each tool's description explains
@@ -233,7 +214,7 @@ _CORE_TOOL_NAMES: frozenset[str] = frozenset({
     # _build_reader_context_prefix); without them in core, enabling any skill
     # whose tools list omits them (e.g. lit-triage) silently pruned them and
     # the LLM hallucinated calls to a name it could not actually invoke.
-    "list_pdfs", "search_pdfs", "read_paper", "pdf_read_text", "pdf_explain_passage",
+    "find_papers", "read_paper", "pdf_read_text", "pdf_explain_passage",
     # reader annotation action — kept core so highlighting remains available
     # regardless of the currently enabled skill set.
     "highlight",

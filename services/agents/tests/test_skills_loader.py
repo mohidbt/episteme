@@ -187,7 +187,7 @@ def test_deep_read_skill_tools_list():
         "read_paper",
         "pdf_read_text",
         "pdf_explain_passage",
-        "search_pdfs",
+        "find_papers",
         "search_library",
         "highlight",
         "create_note",

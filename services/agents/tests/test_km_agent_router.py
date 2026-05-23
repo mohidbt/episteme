@@ -28,8 +28,7 @@ def test_reader_context_prefix_names_core_tools():
         "read_paper",
         "pdf_read_text",
         "pdf_explain_passage",
-        "search_pdfs",
-        "list_pdfs",
+        "find_papers",
     ):
         assert tool in prefix, f"prefix missing core tool {tool!r}: {prefix}"
 

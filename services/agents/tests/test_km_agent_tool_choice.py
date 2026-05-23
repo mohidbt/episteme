@@ -1,8 +1,10 @@
-"""BG0: System prompt must explicitly steer list_pdfs vs search_pdfs choice.
+"""System prompt must stay lean — no per-tool choice rules.
 
-Tool docstrings alone don't reliably steer the model — the system prompt
-weighs more. Assert the explicit rule string is present in the model-facing
-system prompt.
+Routing logic now lives in tool docstrings (find_papers consolidates the
+old list_pdfs+search_pdfs pair). The system prompt must NOT contain the
+old `IMPORTANT TOOL CHOICE RULE` block; future tools self-describe in
+their own docstrings so the prompt stays scalable as the tool surface
+grows.
 """
 from __future__ import annotations
 
@@ -76,14 +78,12 @@ async def test_system_prompt_contains_list_vs_search_pdfs_rule():
     assert model.captured_inputs, "fake model never called"
     system_text = _extract_system_text(model.captured_inputs[0])
 
-    # Marker phrase the prod prompt must contain.
-    assert "IMPORTANT TOOL CHOICE RULE" in system_text, (
-        "System prompt missing 'IMPORTANT TOOL CHOICE RULE' marker"
+    # Routing logic lives in tool docstrings now — system prompt must NOT
+    # carry per-tool choice rules. Keeps the prompt scalable as the tool
+    # surface grows.
+    assert "IMPORTANT TOOL CHOICE RULE" not in system_text, (
+        "System prompt must not contain the deprecated tool-choice rule"
     )
-    assert "list_pdfs" in system_text and "search_pdfs" in system_text, (
-        "Rule must reference both list_pdfs and search_pdfs by name"
-    )
-    # Must steer toward list_pdfs as the default for vague library queries.
-    assert "Never default to `search_pdfs`" in system_text, (
-        "Rule must explicitly forbid defaulting to search_pdfs"
+    assert "Never default to `search_pdfs`" not in system_text, (
+        "Old search_pdfs steering must be removed from system prompt"
     )

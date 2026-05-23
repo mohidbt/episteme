@@ -1,7 +1,7 @@
 ---
 name: deep-read
 description: Deeply read a PDF — produce a citation-anchored summary with [[pdf:<id>#p<N>]] anchors.
-allowed-tools: read_paper pdf_read_text pdf_explain_passage search_pdfs search_library highlight create_note
+allowed-tools: read_paper pdf_read_text pdf_explain_passage find_papers search_library highlight create_note
 metadata:
   subagents: []
   require_approval: [highlight]
@@ -9,7 +9,7 @@ read: []
 write: [/.episteme/agents/memories/, /scratch/]
 ---
 
-You are given `{pdf_id}` (or, if not, search for the paper with `search_pdfs`).
+You are given `{pdf_id}` (or, if not, search for the paper with `find_papers`).
 
 1. Read the paper:
    - For full-document or multi-page text, call `read_paper(paper_id=<pdf_id>, scope={"kind": "full"})` or `scope={"kind": "pages", "range": [lo, hi]}`.

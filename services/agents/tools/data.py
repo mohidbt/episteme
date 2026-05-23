@@ -46,7 +46,7 @@ async def browse_papersets(*, config: RunnableConfig) -> object:
     structured table where each ROW is a paper and each COLUMN is a piece of
     information to extract from that paper.
 
-    USE THIS — not list_pdfs — whenever the user asks about:
+    USE THIS — not find_papers — whenever the user asks about:
       - "papersets", "paper sets"
       - "spreadsheets", "csvs", "tables", "extraction tables"
       - "show me my data", "what tables do I have", "list my sheets"

@@ -34,6 +34,11 @@ from lib.config_cache import GUEST_USER_ID, load_user_config, save_user_config
 from lib.km_http import km_get
 from lib.openrouter_model import model_for
 from lib.sse_events import _jsonable, format_sse, format_typed
+from lib.message_metadata import (
+    CITATIONS_KIND,
+    fetch_thread_metadata,
+    persist_message_metadata,
+)
 
 # Per langgraph, ``recursion_limit`` bounds the number of super-steps a
 # graph executes before raising ``GraphRecursionError``. Deep Agents with
@@ -409,119 +414,6 @@ def _extract_rag_citations_from_tool_result(ev: dict, mapped: tuple[str, dict]) 
     return citations
 
 
-async def _persist_citations_into_checkpoint(
-    agent, thread_id: str, citations_by_msg_id: dict[str, list[dict]],
-) -> None:
-    """BG1: stamp accumulated citations onto AIMessages in the checkpoint.
-
-    Inline citations are extracted during streaming for the live SSE
-    ``sources`` event but were never written to checkpoint state. On thread
-    reload via ``/state/{thread_id}`` the citations disappeared. This helper
-    fetches the current checkpoint, finds each target AIMessage by id, and
-    re-emits it via ``aupdate_state`` with ``additional_kwargs["citations"]``
-    populated. ``add_messages`` merges by id, replacing the existing entry.
-
-    Errors are swallowed so checkpoint persistence never breaks the stream.
-    """
-    if not citations_by_msg_id:
-        return
-    try:
-        snap = await agent.aget_state({"configurable": {"thread_id": thread_id}})
-    except Exception:  # noqa: BLE001
-        logger.exception("citations persist: aget_state failed thread_id=%s", thread_id)
-        return
-    values = getattr(snap, "values", None) or {}
-    messages = values.get("messages") if isinstance(values, dict) else None
-    if not isinstance(messages, list):
-        return
-    # Collect AI messages in order so we can do a heuristic last-message
-    # fallback if the buffer key doesn't match any checkpoint id exactly.
-    ai_messages: list = [m for m in messages if getattr(m, "type", None) == "ai"]
-    updates: list = []
-    matched_any = False
-    for m in ai_messages:
-        mid = getattr(m, "id", None)
-        if not isinstance(mid, str) or not mid:
-            continue
-        # G6.1: LangChain stamps checkpoint AIMessage.id as ``run--<run_id>``
-        # while the streaming loop buffers under the raw run_id. Try both.
-        mid_stripped = mid.removeprefix("run--") if mid.startswith("run--") else mid
-        if mid in citations_by_msg_id:
-            cits = citations_by_msg_id[mid]
-        elif mid_stripped in citations_by_msg_id:
-            cits = citations_by_msg_id[mid_stripped]
-        else:
-            continue
-        matched_any = True
-        kwargs = dict(getattr(m, "additional_kwargs", None) or {})
-        kwargs["citations"] = cits
-        # Rebuild the message preserving content/tool_calls so add_messages'
-        # by-id replacement does not drop them.
-        try:
-            from langchain_core.messages import AIMessage  # noqa: PLC0415
-            updates.append(
-                AIMessage(
-                    id=mid,
-                    content=getattr(m, "content", "") or "",
-                    additional_kwargs=kwargs,
-                    tool_calls=list(getattr(m, "tool_calls", []) or []),
-                    response_metadata=dict(getattr(m, "response_metadata", None) or {}),
-                )
-            )
-        except Exception:  # noqa: BLE001
-            logger.exception("citations persist: rebuild failed msg_id=%s", mid)
-    # Heuristic fallback: if no checkpoint AIMessage id matched any buffer
-    # key, stamp the most recent AIMessage with the *latest* buffered
-    # citation list. astream_events run_ids do not always equal the id
-    # LangGraph eventually persists (per-LLM-call run_ids vs. checkpoint
-    # message ids), so an exact-match-only loop sometimes drops everything.
-    if not matched_any and citations_by_msg_id and ai_messages:
-        last = ai_messages[-1]
-        mid = getattr(last, "id", None)
-        if isinstance(mid, str) and mid:
-            # Pick the most recently buffered citation set — keys are inserted
-            # in stream order, so the last value is the freshest.
-            cits = next(reversed(list(citations_by_msg_id.values())))
-            kwargs = dict(getattr(last, "additional_kwargs", None) or {})
-            kwargs["citations"] = cits
-            try:
-                from langchain_core.messages import AIMessage  # noqa: PLC0415
-                updates.append(
-                    AIMessage(
-                        id=mid,
-                        content=getattr(last, "content", "") or "",
-                        additional_kwargs=kwargs,
-                        tool_calls=list(getattr(last, "tool_calls", []) or []),
-                        response_metadata=dict(getattr(last, "response_metadata", None) or {}),
-                    )
-                )
-                logger.info(
-                    "citations persist: id-miss fallback stamped last AI msg "
-                    "thread_id=%s mid=%s buffer_keys=%d",
-                    thread_id, mid, len(citations_by_msg_id),
-                )
-            except Exception:  # noqa: BLE001
-                logger.exception("citations persist: fallback rebuild failed")
-
-    if not updates:
-        logger.debug(
-            "citations persist: no matching AI messages thread_id=%s buffer_keys=%d",
-            thread_id, len(citations_by_msg_id),
-        )
-        return
-    logger.debug(
-        "citations persist: writing %d update(s) thread_id=%s",
-        len(updates), thread_id,
-    )
-    try:
-        await agent.aupdate_state(
-            {"configurable": {"thread_id": thread_id}},
-            {"messages": updates},
-        )
-    except Exception:  # noqa: BLE001
-        logger.exception("citations persist: aupdate_state failed thread_id=%s", thread_id)
-
-
 def _extra_events(ev: dict, mapped: tuple[str, dict]) -> list[tuple[str, dict]]:
     """Derive piggyback SSE events from a primary mapped event.
 
@@ -599,7 +491,8 @@ def _build_reader_context_prefix(active_paper_id: str) -> str:
         f"(page is required);\n"
         f"- pdf_explain_passage(paper_id=\"{active_paper_id}\", page=N, "
         f"text=\"...\") to explain a selected passage;\n"
-        f"- search_pdfs(query=\"...\") / list_pdfs() to find or list papers.\n"
+        f"- find_papers(query=\"...\") to find or list papers (omit query "
+        f"to list all).\n"
         f"If read_paper(scope.kind=\"rag\") returns zero blocks, do not stop: "
         f"immediately retry with a simpler query, then fall back to "
         f"read_paper(scope.kind=\"full\") and continue.\n"
@@ -708,9 +601,6 @@ async def invoke(req: Request, auth: InternalAuthDep):
         step = 0
         thread_id = body["thread_id"]
         pending_citations: list[dict] = []
-        # BG1: per-message citation buffer; flushed into the checkpoint after
-        # the stream completes so reload via /state/{thread_id} sees them.
-        citations_by_msg_id: dict[str, list[dict]] = {}
         # G1: track run_ids from on_tool_start so we can emit synthetic
         # output-error frames for any tool that never received on_tool_end.
         active_tool_run_ids: set[str] = set()
@@ -772,17 +662,19 @@ async def invoke(req: Request, auth: InternalAuthDep):
                                 "message_id": payload["id"],
                                 "citations": pending_citations,
                             })
-                            # BG1: remember which AIMessage these citations
-                            # belong to so we can stamp the checkpoint after
-                            # the stream completes.
+                            # Persist into agent_message_metadata directly off
+                            # the SSE message_id — no checkpoint id matching.
+                            # Fire-and-forget so DB latency never blocks the
+                            # stream; persistence is best-effort.
                             msg_id = payload.get("id")
                             if isinstance(msg_id, str) and msg_id:
-                                # G6.1: store under both raw id and the
-                                # ``run--<id>`` form so the persist loop matches
-                                # whichever the checkpointer stamps onto the
-                                # AIMessage.
-                                citations_by_msg_id[msg_id] = pending_citations
-                                citations_by_msg_id[f"run--{msg_id}"] = pending_citations
+                                asyncio.create_task(persist_message_metadata(
+                                    thread_id=thread_id,
+                                    user_id=user_id,
+                                    message_id=msg_id,
+                                    kind=CITATIONS_KIND,
+                                    payload=pending_citations,
+                                ))
                             pending_citations = []
                         else:
                             yield format_typed(mapped[0], mapped[1])
@@ -790,14 +682,6 @@ async def invoke(req: Request, auth: InternalAuthDep):
                             yield format_typed(extra[0], extra[1])
                 for ev_type, payload in await _flush_pending_interrupts(agent, thread_id):
                     yield format_typed(ev_type, payload)
-                # BG1#3: persist citations BEFORE the terminal `done` yield so
-                # a client that immediately calls /state/{thread_id} after the
-                # SSE stream closes sees the persisted citations. The finally
-                # block below re-runs this as an idempotent safety net for
-                # error/cancel paths (aupdate_state by-id replace is no-op).
-                await _persist_citations_into_checkpoint(
-                    agent, thread_id, citations_by_msg_id,
-                )
             except asyncio.CancelledError:
                 logger.info("agent stream cancelled thread_id=%s", thread_id)
                 raise
@@ -837,15 +721,10 @@ async def invoke(req: Request, auth: InternalAuthDep):
                     "state": "output-error",
                     "errorText": "stream ended",
                 })
-            # BG1#3 safety net: error/cancel paths skip the in-try persist.
-            # Re-run here so /state is consistent even when the stream aborts.
-            # Idempotent: aupdate_state replaces AIMessages by id.
-            try:
-                await _persist_citations_into_checkpoint(
-                    agent, thread_id, citations_by_msg_id,
-                )
-            except Exception:  # noqa: BLE001
-                logger.exception("citations persist (finally) failed thread_id=%s", thread_id)
+            # Citation persistence happens inline during the stream (see
+            # `persist_message_metadata` fire-and-forget above). No
+            # post-stream stamp needed — failure modes degrade to "citations
+            # missing on reload" rather than corrupted checkpoint state.
             # yield-in-finally trade-off: Python async-gen spec says that
             # yielding inside finally is undefined behaviour when the generator
             # is closed via aclose() / GeneratorExit — the frame may or may not
@@ -952,8 +831,6 @@ async def resume(req: Request, auth: InternalAuthDep):
         # Match /invoke citation handling so a resumed RAG tool call still
         # emits the `sources` event consumed by the UI. (Codex senior review.)
         pending_citations: list[dict] = []
-        # BG1: same per-message accumulation as /invoke.
-        citations_by_msg_id: dict[str, list[dict]] = {}
         try:
             async for ev in agent.astream_events(
                 Command(resume=resume_payload),
@@ -992,7 +869,13 @@ async def resume(req: Request, auth: InternalAuthDep):
                         })
                         msg_id = payload.get("id")
                         if isinstance(msg_id, str) and msg_id:
-                            citations_by_msg_id[msg_id] = pending_citations
+                            asyncio.create_task(persist_message_metadata(
+                                thread_id=thread_id,
+                                user_id=user_id,
+                                message_id=msg_id,
+                                kind=CITATIONS_KIND,
+                                payload=pending_citations,
+                            ))
                         pending_citations = []
                     else:
                         yield format_typed(mapped[0], mapped[1])
@@ -1000,11 +883,6 @@ async def resume(req: Request, auth: InternalAuthDep):
                         yield format_typed(extra[0], extra[1])
             for ev_type, payload in await _flush_pending_interrupts(agent, thread_id):
                 yield format_typed(ev_type, payload)
-            # BG1#3: persist citations BEFORE the terminal `done` yield so a
-            # reload immediately after the stream closes sees them.
-            await _persist_citations_into_checkpoint(
-                agent, thread_id, citations_by_msg_id,
-            )
         except openai.RateLimitError as e:
             logger.warning("agent stream rate-limited: %s", e)
             is_free = isinstance(model_pref, str) and model_pref.endswith(":free")
@@ -1028,14 +906,6 @@ async def resume(req: Request, auth: InternalAuthDep):
                 "message": str(e),
                 "retriable": False,
             })
-        finally:
-            # BG1#3 safety net for error paths: idempotent re-persist.
-            try:
-                await _persist_citations_into_checkpoint(
-                    agent, thread_id, citations_by_msg_id,
-                )
-            except Exception:  # noqa: BLE001
-                logger.exception("citations persist (finally) failed thread_id=%s", thread_id)
         yield format_sse("done", {"thread_id": body["thread_id"]})
 
     return StreamingResponse(
@@ -1083,15 +953,8 @@ def _serialize_message(msg) -> dict | None:
     msg_id = getattr(msg, "id", None) or f"{role}-{id(msg)}"
     out: dict = {"id": str(msg_id), "role": role, "text": text}
 
-    # BG1: surface persisted citations from AIMessage.additional_kwargs so
-    # `/state/{thread_id}` returns the inline-citation payload after thread
-    # reload. Citations are stamped onto the assistant message at stream-
-    # finalize time (see `_persist_citations_into_checkpoint` below).
-    if role == "assistant":
-        kwargs = getattr(msg, "additional_kwargs", None) or {}
-        persisted = kwargs.get("citations")
-        if isinstance(persisted, list) and persisted:
-            out["citations"] = persisted
+    # Citations + future per-message extras are merged in /state from the
+    # agent_message_metadata side table — not from AIMessage.additional_kwargs.
 
     if role == "assistant" and tool_calls:
         parts: list[dict] = []
@@ -1188,6 +1051,23 @@ async def state(thread_id: str, auth: InternalAuthDep):
     todos = channel_values.get("todos", [])
     raw_messages = channel_values.get("messages", []) or []
     messages = _serialize_messages_with_tools(raw_messages)
+
+    # Merge per-message extras (citations + future kinds) from the side
+    # table. Keyed off the SSE-emitted message_id which is what the writer
+    # stamped. Filtered by (thread_id, user_id) so route-level auth has
+    # defense-in-depth at the data layer.
+    metadata = await fetch_thread_metadata(
+        thread_id=thread_id, user_id=caller_user_id,
+    )
+    if metadata:
+        for msg in messages:
+            mid = msg.get("id")
+            if not isinstance(mid, str):
+                continue
+            cits = metadata.get((mid, CITATIONS_KIND))
+            if cits is not None:
+                msg["citations"] = cits
+
     # pending_interrupts detail deferred to 1.3b
     return {
         "todos": todos,

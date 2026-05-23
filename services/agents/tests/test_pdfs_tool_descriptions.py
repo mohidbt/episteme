@@ -1,29 +1,33 @@
-"""B9 — tool descriptions for list_pdfs / search_pdfs must bias the model
-toward the correct default.
+"""Tool surface for finding papers — single ``find_papers`` entry point.
 
-Empirically the model was calling ``search_pdfs("")`` for plain "show me my
-papers" requests because both docstrings led with similar verbs. The fix is
-to make the descriptions explicit about WHEN each one applies.
+Replaces the prior list_pdfs / search_pdfs pair so the system prompt
+doesn't need a tool-choice rule. Tests pin the consolidated docstring
+contract: optional query, empty-result fallback to full list.
 """
-from tools.pdfs import list_pdfs, search_pdfs
+from tools.pdfs import TOOLS, find_papers
 
 
-def test_list_pdfs_description_marks_it_the_default_for_browse():
-    desc = (list_pdfs.description or "").lower()
-    assert "default" in desc, f"list_pdfs description must call itself the default: {desc!r}"
-    assert "browse" in desc or "library" in desc, (
-        f"list_pdfs description must mention browse/library: {desc!r}"
+def test_find_papers_is_exposed_to_llm():
+    names = {t.name for t in TOOLS}
+    assert "find_papers" in names, f"find_papers must be in TOOLS, got {names}"
+    assert "list_pdfs" not in names, (
+        "list_pdfs must be removed from LLM-facing TOOLS (use find_papers)"
+    )
+    assert "search_pdfs" not in names, (
+        "search_pdfs must be removed from LLM-facing TOOLS (use find_papers)"
     )
 
 
-def test_search_pdfs_description_restricts_to_specific_queries():
-    desc = (search_pdfs.description or "").lower()
-    # The phrase signals to the LLM that this is NOT a default fallback.
-    assert "only when" in desc, (
-        f"search_pdfs description must contain 'ONLY when' guidance: {desc!r}"
+def test_find_papers_description_documents_optional_query():
+    desc = (find_papers.description or "").lower()
+    assert "query" in desc
+    assert "no query" in desc or "leave none" in desc or "default behavior" in desc, (
+        f"find_papers must teach the model that omitting query lists all: {desc!r}"
     )
-    # Must refuse the fallback role explicitly so the model does not pick it
-    # when the user only asked to list everything.
-    assert "fallback" in desc or "do not use" in desc, (
-        f"search_pdfs description must forbid fallback use: {desc!r}"
+
+
+def test_find_papers_description_documents_zero_hit_fallback():
+    desc = (find_papers.description or "").lower()
+    assert "fallback" in desc or "dead-end" in desc, (
+        f"find_papers must promise a zero-hit fallback in its docstring: {desc!r}"
     )

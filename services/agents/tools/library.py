@@ -23,8 +23,8 @@ from tools._drive_filter import filter_hidden
 async def list_libraries(*, config: RunnableConfig) -> object:
     """List the calling user's libraries (id, name).
 
-    Use this FIRST before list_references / list_pdfs — those endpoints
-    require a libraryId.
+    Use this FIRST before list_references / find_papers when a libraryId
+    is needed.
     """
     user_id = user_id_from_config(config)
     return await km_get("/api/libraries", user_id=user_id)
@@ -42,8 +42,8 @@ async def list_references(
     """List BIBLIOGRAPHIC references (Zotero-style citations from `.bib` import
     or manual entry) in a given library — NOT the user's stored PDF files.
 
-    If the user asks to find a paper they have, use `search_pdfs` (search by
-    title substring) or `list_pdfs` (enumerate all PDFs in a library).
+    If the user asks to find a paper they have, use `find_papers` (omit
+    query to list all, pass query string to filter).
     References are a separate table (`library_references`) used for citation
     management; PDFs live in `papers`. The two are linked via
     `library_references.paperId` once a matching PDF has been located.
