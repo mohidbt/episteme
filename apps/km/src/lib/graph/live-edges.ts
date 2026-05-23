@@ -170,8 +170,15 @@ export async function edgesPaperCitations(userId: string): Promise<GraphEdge[]> 
 
   // Widened path: paper_citations rows where cited_kind='reference' point at
   // a document_references id. Resolve to a library references row by DOI /
-  // fuzzy title match in the same user's library.
-  let widenedRows: Array<{ paper_id: string; ref_id: string }> = [];
+  // fuzzy title match in the same user's library — AND/OR to a different
+  // user paper (Step 9 gap fix): when user uploads paper Y that matches an
+  // old docRef X (via DOI/title) in another paper A's bibliography, we must
+  // emit citing edge A→Y for the existing paper_citations row of
+  // cited_kind='reference', cited_id=docRef.id. We emit BOTH paper-node and
+  // ref-node edges when a docRef matches both; the graph view shows both
+  // relationships.
+  let widenedRefRows: Array<{ paper_id: string; ref_id: string }> = [];
+  let widenedPaperRows: Array<{ citer_id: string; cited_paper_id: string }> = [];
   try {
     const w = await db.execute(sql`
       WITH dr_match AS (
@@ -192,7 +199,30 @@ export async function edgesPaperCitations(userId: string): Promise<GraphEdge[]> 
       JOIN dr_match dm ON dm.dr_id = pc.cited_id
       WHERE pc.citer_kind = 'paper' AND pc.cited_kind = 'reference'
     `);
-    widenedRows = rowsOf<{ paper_id: string; ref_id: string }>(w);
+    widenedRefRows = rowsOf<{ paper_id: string; ref_id: string }>(w);
+
+    // docRef → paper (different user paper than the citer) via DOI/title.
+    const wp = await db.execute(sql`
+      WITH dr_paper_match AS (
+        SELECT DISTINCT dr.id::text AS dr_id, pcand.id::text AS cited_paper_id
+        FROM document_references dr
+        JOIN papers pciter ON pciter.id = dr.paper_id AND pciter.user_id = ${userId}
+        JOIN papers pcand ON pcand.user_id = ${userId} AND pcand.id <> pciter.id AND (
+          (dr.doi IS NOT NULL AND pcand.doi IS NOT NULL
+           AND lower(trim(dr.doi)) = lower(trim(pcand.doi)))
+          OR
+          (dr.title IS NOT NULL AND pcand.title IS NOT NULL
+           AND dr.title % pcand.title
+           AND similarity(dr.title, pcand.title) >= ${PAPER_CITATIONS_FUZZY_SIM_THRESHOLD})
+        )
+      )
+      SELECT pc.citer_id, dpm.cited_paper_id
+      FROM paper_citations pc
+      JOIN dr_paper_match dpm ON dpm.dr_id = pc.cited_id
+      WHERE pc.citer_kind = 'paper' AND pc.cited_kind = 'reference'
+        AND pc.citer_id <> dpm.cited_paper_id
+    `);
+    widenedPaperRows = rowsOf<{ citer_id: string; cited_paper_id: string }>(wp);
   } catch (err) {
     if (isPgTrgmMissingError(err)) {
       console.warn(
@@ -213,12 +243,29 @@ export async function edgesPaperCitations(userId: string): Promise<GraphEdge[]> 
         JOIN dr_match dm ON dm.dr_id = pc.cited_id
         WHERE pc.citer_kind = 'paper' AND pc.cited_kind = 'reference'
       `);
-      widenedRows = rowsOf<{ paper_id: string; ref_id: string }>(w);
+      widenedRefRows = rowsOf<{ paper_id: string; ref_id: string }>(w);
+
+      const wp = await db.execute(sql`
+        WITH dr_paper_match AS (
+          SELECT DISTINCT dr.id::text AS dr_id, pcand.id::text AS cited_paper_id
+          FROM document_references dr
+          JOIN papers pciter ON pciter.id = dr.paper_id AND pciter.user_id = ${userId}
+          JOIN papers pcand ON pcand.user_id = ${userId} AND pcand.id <> pciter.id
+            AND dr.doi IS NOT NULL AND pcand.doi IS NOT NULL
+            AND lower(trim(dr.doi)) = lower(trim(pcand.doi))
+        )
+        SELECT pc.citer_id, dpm.cited_paper_id
+        FROM paper_citations pc
+        JOIN dr_paper_match dpm ON dpm.dr_id = pc.cited_id
+        WHERE pc.citer_kind = 'paper' AND pc.cited_kind = 'reference'
+          AND pc.citer_id <> dpm.cited_paper_id
+      `);
+      widenedPaperRows = rowsOf<{ citer_id: string; cited_paper_id: string }>(wp);
     } else {
       throw err;
     }
   }
-  for (const x of widenedRows) {
+  for (const x of widenedRefRows) {
     edges.push({
       src: { kind: "paper", id: x.paper_id },
       dst: { kind: "reference", id: x.ref_id },
@@ -228,6 +275,20 @@ export async function edgesPaperCitations(userId: string): Promise<GraphEdge[]> 
     edges.push({
       src: { kind: "reference", id: x.ref_id },
       dst: { kind: "paper", id: x.paper_id },
+      kind: "cited_in",
+      weight: 1,
+    });
+  }
+  for (const x of widenedPaperRows) {
+    edges.push({
+      src: { kind: "paper", id: x.citer_id },
+      dst: { kind: "paper", id: x.cited_paper_id },
+      kind: "citing",
+      weight: 1,
+    });
+    edges.push({
+      src: { kind: "paper", id: x.cited_paper_id },
+      dst: { kind: "paper", id: x.citer_id },
       kind: "cited_in",
       weight: 1,
     });

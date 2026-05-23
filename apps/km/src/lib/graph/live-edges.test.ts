@@ -40,6 +40,16 @@ const ID = {
   // orphan: paper_citations row pointing at a document reference with no
   // matching library reference — must NOT emit a citation edge.
   pOrphanCiter: "aaaaaaa6-0000-0000-0000-000000000001",
+  // docRef→paper widened path (Step 9 gap fix): paper A cites docRef X via
+  // DOI; paper B exists in user's library with matching DOI; expect citing
+  // edge A→B (paper-node) + cited_in B→A.
+  pCiterPaperOnly: "aaaaaaa7-0000-0000-0000-000000000001",
+  pCitedPaperOnly: "aaaaaaa7-0000-0000-0000-000000000002",
+  // docRef matches BOTH a library ref AND a different paper by DOI; expect
+  // TWO citing edges from the citer (one to ref, one to paper).
+  pCiterBoth: "aaaaaaa8-0000-0000-0000-000000000001",
+  pCitedBoth: "aaaaaaa8-0000-0000-0000-000000000002",
+  rCitedBoth: "aaaaaaa8-0000-0000-0000-000000000003",
 };
 
 function firstId(res: unknown): number | undefined {
@@ -129,11 +139,11 @@ async function seedIdentityFixture(): Promise<void> {
   // Clear any prior dr/pc rows for this fixture so re-runs stay clean.
   await db.execute(sql`
     DELETE FROM paper_citations
-    WHERE citer_id IN (${ID.pCiter}, ${ID.pOrphanCiter})
+    WHERE citer_id IN (${ID.pCiter}, ${ID.pOrphanCiter}, ${ID.pCiterPaperOnly}, ${ID.pCiterBoth})
   `);
   await db.execute(sql`
     DELETE FROM document_references
-    WHERE paper_id IN (${ID.pCiter}, ${ID.pOrphanCiter})
+    WHERE paper_id IN (${ID.pCiter}, ${ID.pOrphanCiter}, ${ID.pCiterPaperOnly}, ${ID.pCiterBoth})
   `);
   const drIns = await db.execute(sql`
     INSERT INTO document_references (paper_id, marker_text, marker_index, doi, title)
@@ -162,6 +172,54 @@ async function seedIdentityFixture(): Promise<void> {
   await db.execute(sql`
     INSERT INTO paper_citations (citer_kind, citer_id, cited_kind, cited_id, match_method)
     VALUES ('paper', ${ID.pOrphanCiter}, 'reference', ${String(drOrphanId)}, 'manual')
+    ON CONFLICT DO NOTHING
+  `);
+
+  // docRef→paper-only widened path: pCiterPaperOnly cites a docRef whose
+  // DOI matches pCitedPaperOnly. No library reference exists for that DOI.
+  await db.execute(sql`
+    INSERT INTO papers (id, user_id, library_id, filename, title, doi)
+    VALUES
+      (${ID.pCiterPaperOnly}, ${SEED_USER}, ${libId}, 'pcite-po.pdf', 'Citer Paper Only', NULL),
+      (${ID.pCitedPaperOnly}, ${SEED_USER}, ${libId}, 'pcited-po.pdf', 'Cited Paper Only', '10.1000/paper-only.cite')
+    ON CONFLICT (id) DO NOTHING
+  `);
+  const drPaperOnly = await db.execute(sql`
+    INSERT INTO document_references (paper_id, marker_text, marker_index, doi, title)
+    VALUES (${ID.pCiterPaperOnly}, '[1]', 1, '10.1000/paper-only.cite', 'Paper Only Cite')
+    RETURNING id
+  `);
+  const drPaperOnlyId = firstId(drPaperOnly);
+  await db.execute(sql`
+    INSERT INTO paper_citations (citer_kind, citer_id, cited_kind, cited_id, match_method)
+    VALUES ('paper', ${ID.pCiterPaperOnly}, 'reference', ${String(drPaperOnlyId)}, 'doi')
+    ON CONFLICT DO NOTHING
+  `);
+
+  // docRef matches BOTH a library reference AND a different paper by DOI.
+  // Expect both ref-node citing edge AND paper-node citing edge from pCiterBoth.
+  await db.execute(sql`
+    INSERT INTO papers (id, user_id, library_id, filename, title, doi)
+    VALUES
+      (${ID.pCiterBoth}, ${SEED_USER}, ${libId}, 'pciter-both.pdf', 'Citer Both', NULL),
+      (${ID.pCitedBoth}, ${SEED_USER}, ${libId}, 'pcited-both.pdf', 'Cited Both', '10.1000/both.cite')
+    ON CONFLICT (id) DO NOTHING
+  `);
+  await db.execute(sql`
+    INSERT INTO "references" (id, library_id, user_id, citation_key, csl_json)
+    VALUES (${ID.rCitedBoth}, ${libId}, ${SEED_USER}, 'kboth',
+            '{"DOI":"10.1000/both.cite","title":"Both Library Ref"}'::jsonb)
+    ON CONFLICT (id) DO NOTHING
+  `);
+  const drBoth = await db.execute(sql`
+    INSERT INTO document_references (paper_id, marker_text, marker_index, doi, title)
+    VALUES (${ID.pCiterBoth}, '[1]', 1, '10.1000/both.cite', 'Both Cite')
+    RETURNING id
+  `);
+  const drBothId = firstId(drBoth);
+  await db.execute(sql`
+    INSERT INTO paper_citations (citer_kind, citer_id, cited_kind, cited_id, match_method)
+    VALUES ('paper', ${ID.pCiterBoth}, 'reference', ${String(drBothId)}, 'doi')
     ON CONFLICT DO NOTHING
   `);
 }
@@ -278,6 +336,48 @@ describe("live-edges", () => {
     );
     expect(citing).toBeDefined();
     expect(citedIn).toBeDefined();
+  });
+
+  it("paper_citations: widened path emits paper-node citing edge when docRef→paper matches (no library ref needed)", async () => {
+    const r = await edgesPaperCitations(SEED_USER);
+    const citing = r.find(
+      (e) =>
+        e.kind === "citing" &&
+        e.src.kind === "paper" &&
+        e.src.id === ID.pCiterPaperOnly &&
+        e.dst.kind === "paper" &&
+        e.dst.id === ID.pCitedPaperOnly,
+    );
+    const citedIn = r.find(
+      (e) =>
+        e.kind === "cited_in" &&
+        e.src.kind === "paper" &&
+        e.src.id === ID.pCitedPaperOnly &&
+        e.dst.kind === "paper" &&
+        e.dst.id === ID.pCiterPaperOnly,
+    );
+    expect(citing).toBeDefined();
+    expect(citedIn).toBeDefined();
+  });
+
+  it("paper_citations: widened path emits BOTH ref-node and paper-node citing edges when docRef matches both", async () => {
+    const r = await edgesPaperCitations(SEED_USER);
+    const citingRef = r.find(
+      (e) =>
+        e.kind === "citing" &&
+        e.src.id === ID.pCiterBoth &&
+        e.dst.kind === "reference" &&
+        e.dst.id === ID.rCitedBoth,
+    );
+    const citingPaper = r.find(
+      (e) =>
+        e.kind === "citing" &&
+        e.src.id === ID.pCiterBoth &&
+        e.dst.kind === "paper" &&
+        e.dst.id === ID.pCitedBoth,
+    );
+    expect(citingRef).toBeDefined();
+    expect(citingPaper).toBeDefined();
   });
 
   it("paper_citations: skips widened path when docRef has no matching library reference (orphan)", async () => {
