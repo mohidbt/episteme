@@ -158,6 +158,53 @@ def test_state_surfaces_citations_from_metadata_table() -> None:
     )
 
 
+def test_state_strips_lc_run_prefix_when_merging_metadata() -> None:
+    """LangChain prefixes checkpoint AIMessage.id with ``lc_run--`` while the
+    SSE event ``run_id`` (which we persist off) is the raw UUID. /state must
+    try both the literal id and the prefix-stripped variant so persisted
+    citations rehydrate.
+    """
+    from langchain_core.messages import AIMessage, HumanMessage  # noqa: PLC0415
+
+    path = "/agents/km/state/thread-prefix-1"
+    citations = [
+        {
+            "chunk_id": "paper-1:p4:7",
+            "paper_id": "paper-1",
+            "title": "X - Page 4",
+            "score": 0.9,
+            "snippet": "s",
+            "page": 4,
+            "bbox": {"x0": 0.0, "y0": 0.0, "x1": 1.0, "y1": 1.0},
+        }
+    ]
+    raw_uuid = "019e557a-afa8-7aa1-88b5-1adcf4ae573d"
+    ai = AIMessage(content="x [1].", id=f"lc_run--{raw_uuid}")
+    msgs = [HumanMessage(content="q", id="u-1"), ai]
+    mock_tuple = MagicMock()
+    mock_tuple.checkpoint = {"channel_values": {"todos": [], "messages": msgs}}
+    mock_saver = MagicMock()
+    mock_saver.aget_tuple = AsyncMock(return_value=mock_tuple)
+
+    async def fake_fetch(*, thread_id: str, user_id: str):
+        # Persisted under the raw SSE run_id, not the lc_run-- prefixed
+        # checkpoint id.
+        return {(raw_uuid, "citations"): citations}
+
+    with (
+        patch("routers.km_agent.get_saver", return_value=mock_saver),
+        patch("routers.km_agent.fetch_thread_metadata", side_effect=fake_fetch),
+    ):
+        r = client.get(path, headers=_signed_headers("GET", path, b""))
+
+    assert r.status_code == 200
+    data = r.json()
+    ai_payload = next(m for m in data["messages"] if m["id"] == f"lc_run--{raw_uuid}")
+    assert ai_payload.get("citations") == citations, (
+        f"expected citations after lc_run-- prefix strip, got: {ai_payload}"
+    )
+
+
 def test_state_rejects_caller_when_thread_owner_mismatches() -> None:
     """BG1#7: /state/{thread_id} 403s when the checkpoint's saved
     ``configurable.user_id`` does not match the signed caller id.

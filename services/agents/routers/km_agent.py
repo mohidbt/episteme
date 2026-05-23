@@ -1069,11 +1069,24 @@ async def state(thread_id: str, auth: InternalAuthDep):
         thread_id=thread_id, user_id=caller_user_id,
     )
     if metadata:
+        # LangChain prefixes checkpoint AIMessage.id with ``lc_run--`` (and
+        # sometimes ``run--``) while the SSE event ``run_id`` we persist off
+        # is the raw UUID. Try both the literal id and the prefix-stripped
+        # variant so persisted citations rehydrate regardless of which form
+        # the checkpoint stored.
         for msg in messages:
             mid = msg.get("id")
             if not isinstance(mid, str):
                 continue
-            cits = metadata.get((mid, CITATIONS_KIND))
+            candidates = [mid]
+            for prefix in ("lc_run--", "run--"):
+                if mid.startswith(prefix):
+                    candidates.append(mid[len(prefix):])
+            cits = None
+            for key in candidates:
+                cits = metadata.get((key, CITATIONS_KIND))
+                if cits is not None:
+                    break
             if cits is not None:
                 msg["citations"] = cits
 
