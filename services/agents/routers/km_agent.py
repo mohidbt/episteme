@@ -38,6 +38,7 @@ from lib.message_metadata import (
     CITATIONS_KIND,
     fetch_thread_metadata,
     persist_message_metadata,
+    schedule_persist,
 )
 
 # Per langgraph, ``recursion_limit`` bounds the number of super-steps a
@@ -668,7 +669,7 @@ async def invoke(req: Request, auth: InternalAuthDep):
                             # stream; persistence is best-effort.
                             msg_id = payload.get("id")
                             if isinstance(msg_id, str) and msg_id:
-                                asyncio.create_task(persist_message_metadata(
+                                schedule_persist(persist_message_metadata(
                                     thread_id=thread_id,
                                     user_id=user_id,
                                     message_id=msg_id,
@@ -869,7 +870,7 @@ async def resume(req: Request, auth: InternalAuthDep):
                         })
                         msg_id = payload.get("id")
                         if isinstance(msg_id, str) and msg_id:
-                            asyncio.create_task(persist_message_metadata(
+                            schedule_persist(persist_message_metadata(
                                 thread_id=thread_id,
                                 user_id=user_id,
                                 message_id=msg_id,
@@ -953,8 +954,16 @@ def _serialize_message(msg) -> dict | None:
     msg_id = getattr(msg, "id", None) or f"{role}-{id(msg)}"
     out: dict = {"id": str(msg_id), "role": role, "text": text}
 
-    # Citations + future per-message extras are merged in /state from the
-    # agent_message_metadata side table — not from AIMessage.additional_kwargs.
+    # Citations going forward live in `agent_message_metadata` (merged into
+    # /state below). Read-only legacy compat: pre-migration threads still
+    # carry citations stamped into AIMessage.additional_kwargs; surface
+    # them so those threads don't visibly lose their pills on reload.
+    # /state metadata merge overwrites this when a fresh row exists.
+    if role == "assistant":
+        kwargs = getattr(msg, "additional_kwargs", None) or {}
+        legacy = kwargs.get("citations")
+        if isinstance(legacy, list) and legacy:
+            out["citations"] = legacy
 
     if role == "assistant" and tool_calls:
         parts: list[dict] = []

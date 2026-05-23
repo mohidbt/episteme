@@ -17,6 +17,12 @@ from tools._auth import user_id_from_config
 from tools._drive_filter import filter_hidden
 
 
+# Cap on the zero-hit fallback list. Protects token budget when the user
+# has hundreds of papers — model retries on a bad query won't repeatedly
+# pump full libraries through context.
+_FIND_PAPERS_FALLBACK_CAP = 50
+
+
 _UNAVAILABLE = {
     "error": True,
     "status": None,
@@ -78,12 +84,18 @@ async def find_papers(
     if hits:
         return {"results": hits, "matched": True, "query": query}
 
-    # Zero-hit fallback: return the full library so the model can scan
-    # titles for a topical match instead of dead-ending.
+    # Zero-hit fallback: return up to `_FIND_PAPERS_FALLBACK_CAP` papers
+    # so the model can scan titles for a topical match instead of
+    # dead-ending. Cap protects context budget on repeated retries with
+    # bad queries when the library has 200+ papers.
+    full = await _full_list()
+    truncated = len(full) > _FIND_PAPERS_FALLBACK_CAP
     return {
-        "results": await _full_list(),
+        "results": full[:_FIND_PAPERS_FALLBACK_CAP],
         "matched": False,
         "fallback_used": True,
+        "truncated": truncated,
+        "total_available": len(full),
         "query": query,
     }
 
