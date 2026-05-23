@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import {
   CitationCard,
@@ -221,8 +222,12 @@ export function PaperCitationsList({ paperId }: PaperCitationsListProps) {
         {refreshing ? (
           <span className="text-[11px] text-muted-foreground">Extracting…</span>
         ) : enriching ? (
-          <span className="text-[11px] text-muted-foreground" data-testid="citations-enriching">
-            Enriching…
+          <span
+            className="inline-flex items-center gap-1 text-[11px] text-muted-foreground"
+            data-testid="citations-enriching"
+          >
+            <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
+            Enriching
           </span>
         ) : null}
       </div>

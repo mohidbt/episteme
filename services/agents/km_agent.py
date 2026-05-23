@@ -59,8 +59,20 @@ _MEMORY_SYSTEM_PROMPT = """## IMPORTANT TOOL CHOICE RULE
 
 When the user asks vaguely about their library ("show me my papers", "what do
 I have", "list my docs", "browse"), ALWAYS call `list_pdfs` first. Use
-`search_pdfs` ONLY when the user mentions a specific paper title, author, or
-topic keyword. Never default to `search_pdfs`.
+`search_pdfs` ONLY when the user names a specific paper title or author.
+Never default to `search_pdfs`.
+
+Topic / "do I have a paper on X" questions ("do I have a paper on
+spontaneous switching?", "any paper about diffusion?", "anything on RAG?")
+are NOT specific-title queries. Call `list_pdfs` first and inspect the
+returned titles — that is how you discover whether the library contains
+something on the topic.
+
+Mandatory fallback: if you do call `search_pdfs` and it returns an empty
+list (or `{"results": []}`), IMMEDIATELY call `list_pdfs` next. Do NOT tell
+the user "no paper found" until you have seen the full library list. The
+user's exact keyword often won't appear in a title, but a related paper
+will — `list_pdfs` lets you (and the user) see it.
 
 ## Memory
 

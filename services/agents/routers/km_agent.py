@@ -434,10 +434,12 @@ async def _persist_citations_into_checkpoint(
     messages = values.get("messages") if isinstance(values, dict) else None
     if not isinstance(messages, list):
         return
+    # Collect AI messages in order so we can do a heuristic last-message
+    # fallback if the buffer key doesn't match any checkpoint id exactly.
+    ai_messages: list = [m for m in messages if getattr(m, "type", None) == "ai"]
     updates: list = []
-    for m in messages:
-        if getattr(m, "type", None) != "ai":
-            continue
+    matched_any = False
+    for m in ai_messages:
         mid = getattr(m, "id", None)
         if not isinstance(mid, str) or not mid:
             continue
@@ -450,6 +452,7 @@ async def _persist_citations_into_checkpoint(
             cits = citations_by_msg_id[mid_stripped]
         else:
             continue
+        matched_any = True
         kwargs = dict(getattr(m, "additional_kwargs", None) or {})
         kwargs["citations"] = cits
         # Rebuild the message preserving content/tool_calls so add_messages'
@@ -467,6 +470,39 @@ async def _persist_citations_into_checkpoint(
             )
         except Exception:  # noqa: BLE001
             logger.exception("citations persist: rebuild failed msg_id=%s", mid)
+    # Heuristic fallback: if no checkpoint AIMessage id matched any buffer
+    # key, stamp the most recent AIMessage with the *latest* buffered
+    # citation list. astream_events run_ids do not always equal the id
+    # LangGraph eventually persists (per-LLM-call run_ids vs. checkpoint
+    # message ids), so an exact-match-only loop sometimes drops everything.
+    if not matched_any and citations_by_msg_id and ai_messages:
+        last = ai_messages[-1]
+        mid = getattr(last, "id", None)
+        if isinstance(mid, str) and mid:
+            # Pick the most recently buffered citation set — keys are inserted
+            # in stream order, so the last value is the freshest.
+            cits = next(reversed(list(citations_by_msg_id.values())))
+            kwargs = dict(getattr(last, "additional_kwargs", None) or {})
+            kwargs["citations"] = cits
+            try:
+                from langchain_core.messages import AIMessage  # noqa: PLC0415
+                updates.append(
+                    AIMessage(
+                        id=mid,
+                        content=getattr(last, "content", "") or "",
+                        additional_kwargs=kwargs,
+                        tool_calls=list(getattr(last, "tool_calls", []) or []),
+                        response_metadata=dict(getattr(last, "response_metadata", None) or {}),
+                    )
+                )
+                logger.info(
+                    "citations persist: id-miss fallback stamped last AI msg "
+                    "thread_id=%s mid=%s buffer_keys=%d",
+                    thread_id, mid, len(citations_by_msg_id),
+                )
+            except Exception:  # noqa: BLE001
+                logger.exception("citations persist: fallback rebuild failed")
+
     if not updates:
         logger.debug(
             "citations persist: no matching AI messages thread_id=%s buffer_keys=%d",

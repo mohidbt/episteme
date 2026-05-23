@@ -3,19 +3,11 @@ import { db } from "@/lib/db";
 
 // H-batch Step 7-8: cross-library cite count.
 //
-// For each input docRefId, count distinct user-library papers that cite the
-// *same underlying work* (DOI exact / pg_trgm title fuzzy ≥ 0.6) — not just
-// that specific docRef. This widens the citedInCount shown on paper cite
-// cards: if both paper A and paper B in the user's library cite DOI X, the
-// docRef on each card shows count = 2 (the cluster of citers in the user's
-// library).
-//
-// The query joins document_references to itself (a, b) by:
-//   - both belong to papers owned by userId
-//   - a.id ∈ input
-//   - identity match between a and b on DOI (case/whitespace tolerant) OR
-//     pg_trgm title fuzzy ≥ FUZZY_SIM_THRESHOLD
-// Then groups by a.id, counting DISTINCT b.paper_id.
+// For each input docRefId, count distinct OTHER user-library papers that
+// cite the same underlying work (DOI / pg_trgm title fuzzy ≥ 0.6). Excludes
+// the source paper itself — "Cited in 1" on every card is trivial noise.
+// The renderer hides the badge when count is 0; only shows when ≥1 OTHER
+// library paper also bibliographically cites this identity.
 //
 // pg_trgm-missing degrades to DOI-only path (matches auto-link.ts).
 
@@ -56,11 +48,14 @@ export async function getCrossLibraryCiteCounts(
   // user's library, possibly a itself). Count distinct b.paper_id per a.id.
   // a.id is the *input* docRefId; we report counts back keyed on a.id even
   // though b.paper_id is what gets counted.
+  // Count DISTINCT b.paper_id where b.paper_id != a.paper_id — i.e. OTHER
+  // library papers that cite the same identity. Self-paper exclusion makes
+  // the count meaningful: 0 = unique to this paper, ≥1 = shared with N others.
   const fuzzyQuery = sql`
     SELECT a.id AS input_id, COUNT(DISTINCT b.paper_id)::int AS n
     FROM document_references a
     JOIN papers pa ON pa.id = a.paper_id AND pa.user_id = ${userId}
-    JOIN document_references b ON b.id != a.id OR b.id = a.id
+    JOIN document_references b ON b.paper_id != a.paper_id
     JOIN papers pb ON pb.id = b.paper_id AND pb.user_id = ${userId}
     WHERE a.id IN (${idList})
       AND (
@@ -78,7 +73,7 @@ export async function getCrossLibraryCiteCounts(
     SELECT a.id AS input_id, COUNT(DISTINCT b.paper_id)::int AS n
     FROM document_references a
     JOIN papers pa ON pa.id = a.paper_id AND pa.user_id = ${userId}
-    JOIN document_references b ON TRUE
+    JOIN document_references b ON b.paper_id != a.paper_id
     JOIN papers pb ON pb.id = b.paper_id AND pb.user_id = ${userId}
     WHERE a.id IN (${idList})
       AND a.doi IS NOT NULL AND b.doi IS NOT NULL

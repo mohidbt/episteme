@@ -157,18 +157,17 @@ function decodeNotes(blob: string): Array<{ path: string; body: string }> {
 }
 
 /**
- * B13/A5: skill export filter — system skills (those whose slug appears in
- * `SYSTEM_SKILL_SLUGS`, seeded from `services/agents/skills/*` on disk)
- * are stripped from the exported bundle. Personal skills survive via
- * `personalSkills`. The previous implementation used a brittle path-prefix
- * check that also dropped personal skills sharing the `.episteme/agents/skills/`
- * prefix; the allowlist is the explicit fix.
+ * Strip every `.episteme/agents/skills/` note from exports. Personal skills
+ * live under `.episteme/agents/skills-personal/` and ship via the separate
+ * `personalSkills` array; anything under `SKILLS_PREFIX` is by definition a
+ * system skill (or stale seed) and never belongs in a user-bundle export.
+ *
+ * Allowlist-by-slug from `system-skills.generated.ts` is unreliable on prod
+ * — old user drives still hold seeded notes for slugs that no longer exist
+ * in `services/agents/skills/` (or that got renamed). Path-prefix is exact.
  */
 export function filterExportableSkills(skills: SkillNote[]): SkillNote[] {
-  return skills.filter((s) => {
-    const slug = extractSkillSlug(s.path);
-    return slug === null || !SYSTEM_SKILL_SLUGS.has(slug);
-  });
+  return skills.filter((s) => !s.path.startsWith(SKILLS_PREFIX));
 }
 
 export async function buildBundleFromSnapshot(

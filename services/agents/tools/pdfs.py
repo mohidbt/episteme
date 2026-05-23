@@ -71,11 +71,15 @@ async def list_pdfs(libraryId: int | None = None, *, config: RunnableConfig) -> 
 async def search_pdfs(query: str, *, config: RunnableConfig) -> object:
     """Search across the user's PDFs/papers by title or filename.
 
-    Use ONLY when the user mentions a specific paper title or keyword
-    (e.g. "open the BERT paper", "find papers about diffusion",
-    "find the attention paper"). Do NOT use as a fallback or default when
-    the user just wants to browse / list / see their library — call
-    `list_pdfs` for that instead.
+    Use ONLY when the user names a specific paper title or author (e.g.
+    "open the BERT paper", "find the attention paper"). Topic questions
+    like "do I have a paper on X?" should call `list_pdfs` first — the
+    keyword rarely appears verbatim in titles.
+
+    MANDATORY FALLBACK: if this returns an empty list, you MUST call
+    `list_pdfs` next before answering. The user's keyword may not match a
+    title literally; only the full library list confirms presence/absence.
+    Never tell the user "no paper found" based on `search_pdfs` alone.
 
     Returns up to 20 matches (id, title, filename, year, doi).
 
