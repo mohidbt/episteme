@@ -26,15 +26,38 @@ export function citationsRefreshEvent(paperId: string): string {
   return `paper-citations-refresh:${paperId}`;
 }
 
+// A ref is "unenriched" when Semantic Scholar enrichment hasn't landed yet —
+// no S2 id, no abstract, no venue. Enrichment runs in an after() hook on the
+// /citations/extract route and lands ~30-150s later, so we poll until the
+// fields show up (or we hit the max-attempts ceiling).
+function isUnenriched(row: CitationRow): boolean {
+  return row.semanticScholarId == null && row.abstract == null && row.venue == null;
+}
+
+// Polling cadence: 8s wait, then 6s × 5, then 12s × 6 → ~90s ceiling.
+// Index 0 is the initial delay after the refresh event fires.
+const POLL_DELAYS_MS = [8000, 6000, 6000, 6000, 6000, 6000, 12000, 12000, 12000, 12000, 12000, 12000];
+
 export function PaperCitationsList({ paperId }: PaperCitationsListProps) {
   const [rows, setRows] = useState<CitationRow[] | null>(null);
   const [folders, setFolders] = useState<FolderOption[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [enriching, setEnriching] = useState(false);
   const pendingIds = useRef<Set<number>>(new Set());
+  const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pollAttempt = useRef(0);
+  const mounted = useRef(true);
+
+  const clearPoll = useCallback(() => {
+    if (pollTimer.current != null) {
+      clearTimeout(pollTimer.current);
+      pollTimer.current = null;
+    }
+  }, []);
 
   const load = useCallback(
-    async (signal?: AbortSignal) => {
+    async (signal?: AbortSignal): Promise<CitationRow[] | null> => {
       try {
         const res = await fetch(`/api/papers/${paperId}/citations`, {
           credentials: "include",
@@ -42,18 +65,53 @@ export function PaperCitationsList({ paperId }: PaperCitationsListProps) {
         });
         if (!res.ok) {
           setError(`HTTP ${res.status}`);
-          return;
+          return null;
         }
         const data = (await res.json()) as CitationsResponse;
+        const next = data.citations ?? [];
         setError(null);
-        setRows(data.citations ?? []);
+        setRows(next);
+        return next;
       } catch (e) {
-        if ((e as Error).name === "AbortError") return;
+        if ((e as Error).name === "AbortError") return null;
         setError((e as Error).message);
+        return null;
       }
     },
     [paperId],
   );
+
+  // Poll loop: re-fetch citations after a backoff delay until every ref is
+  // enriched or we hit the max-attempts ceiling.
+  const scheduleNextPoll = useCallback(() => {
+    if (!mounted.current) return;
+    const attempt = pollAttempt.current;
+    if (attempt >= POLL_DELAYS_MS.length) {
+      setEnriching(false);
+      return;
+    }
+    const delay = POLL_DELAYS_MS[attempt];
+    pollAttempt.current = attempt + 1;
+    pollTimer.current = setTimeout(async () => {
+      pollTimer.current = null;
+      if (!mounted.current) return;
+      const next = await load();
+      if (!mounted.current) return;
+      if (next && next.some(isUnenriched)) {
+        scheduleNextPoll();
+      } else {
+        setEnriching(false);
+      }
+    }, delay);
+  }, [load]);
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      clearPoll();
+    };
+  }, [clearPoll]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -62,14 +120,22 @@ export function PaperCitationsList({ paperId }: PaperCitationsListProps) {
   }, [load]);
 
   useEffect(() => {
-    function onRefresh() {
+    async function onRefresh() {
       setRefreshing(true);
-      load().finally(() => setRefreshing(false));
+      const next = await load();
+      setRefreshing(false);
+      if (next && next.some(isUnenriched)) {
+        // Restart polling for the fresh extract.
+        clearPoll();
+        pollAttempt.current = 0;
+        setEnriching(true);
+        scheduleNextPoll();
+      }
     }
     const evt = citationsRefreshEvent(paperId);
     window.addEventListener(evt, onRefresh);
     return () => window.removeEventListener(evt, onRefresh);
-  }, [paperId, load]);
+  }, [paperId, load, scheduleNextPoll, clearPoll]);
 
   // Folder picker source — mirrors Reader.tsx filter rules (hide Trash,
   // `.episteme/*`, and any `.`-prefixed system folder).
@@ -152,9 +218,13 @@ export function PaperCitationsList({ paperId }: PaperCitationsListProps) {
         <p className="text-[11px] text-muted-foreground">
           Citations{rows ? ` · ${rows.length}` : ""}
         </p>
-        {refreshing && (
+        {refreshing ? (
           <span className="text-[11px] text-muted-foreground">Extracting…</span>
-        )}
+        ) : enriching ? (
+          <span className="text-[11px] text-muted-foreground" data-testid="citations-enriching">
+            Enriching…
+          </span>
+        ) : null}
       </div>
       {error ? (
         <p className="text-sm text-muted-foreground">Couldn&rsquo;t load citations.</p>
