@@ -197,6 +197,7 @@ export async function edgesPaperCitations(userId: string): Promise<GraphEdge[]> 
       SELECT pc.citer_id AS paper_id, dm.ref_uuid::text AS ref_id
       FROM paper_citations pc
       JOIN dr_match dm ON dm.dr_id = pc.cited_id
+      JOIN papers pcheck ON pcheck.id::text = pc.citer_id AND pcheck.user_id = ${userId}
       WHERE pc.citer_kind = 'paper' AND pc.cited_kind = 'reference'
     `);
     widenedRefRows = rowsOf<{ paper_id: string; ref_id: string }>(w);
@@ -219,6 +220,7 @@ export async function edgesPaperCitations(userId: string): Promise<GraphEdge[]> 
       SELECT pc.citer_id, dpm.cited_paper_id
       FROM paper_citations pc
       JOIN dr_paper_match dpm ON dpm.dr_id = pc.cited_id
+      JOIN papers pcheck ON pcheck.id::text = pc.citer_id AND pcheck.user_id = ${userId}
       WHERE pc.citer_kind = 'paper' AND pc.cited_kind = 'reference'
         AND pc.citer_id <> dpm.cited_paper_id
     `);
@@ -241,6 +243,7 @@ export async function edgesPaperCitations(userId: string): Promise<GraphEdge[]> 
         SELECT pc.citer_id AS paper_id, dm.ref_uuid::text AS ref_id
         FROM paper_citations pc
         JOIN dr_match dm ON dm.dr_id = pc.cited_id
+        JOIN papers pcheck ON pcheck.id::text = pc.citer_id AND pcheck.user_id = ${userId}
         WHERE pc.citer_kind = 'paper' AND pc.cited_kind = 'reference'
       `);
       widenedRefRows = rowsOf<{ paper_id: string; ref_id: string }>(w);
@@ -257,6 +260,7 @@ export async function edgesPaperCitations(userId: string): Promise<GraphEdge[]> 
         SELECT pc.citer_id, dpm.cited_paper_id
         FROM paper_citations pc
         JOIN dr_paper_match dpm ON dpm.dr_id = pc.cited_id
+        JOIN papers pcheck ON pcheck.id::text = pc.citer_id AND pcheck.user_id = ${userId}
         WHERE pc.citer_kind = 'paper' AND pc.cited_kind = 'reference'
           AND pc.citer_id <> dpm.cited_paper_id
       `);
