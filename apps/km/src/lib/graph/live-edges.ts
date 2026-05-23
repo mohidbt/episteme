@@ -139,8 +139,10 @@ export async function edgesSemanticSim(userId: string, capPerSrcDstKind = 20): P
 //      pg_trgm title fuzzy ≥ 0.6, both scoped to userId. Truly orphan refs
 //      (no library match) are skipped per plan.
 //
-// Each row produces 2 reciprocal edges (citing + cited_in) mirroring the
-// paper↔paper convention.
+// Each row produces ONE citing edge (src=citer, dst=cited). Perspective-
+// dependent labels ("citing" / "cited in") are computed at render time
+// from the focused node — emitting reciprocal edges duplicates the same
+// fact and visually overlaps in the graph canvas.
 const PAPER_CITATIONS_FUZZY_SIM_THRESHOLD = 0.6;
 
 export async function edgesPaperCitations(userId: string): Promise<GraphEdge[]> {
@@ -158,12 +160,6 @@ export async function edgesPaperCitations(userId: string): Promise<GraphEdge[]> 
       src: { kind: "paper", id: x.citer_id },
       dst: { kind: "paper", id: x.cited_id },
       kind: "citing",
-      weight: 1,
-    });
-    edges.push({
-      src: { kind: "paper", id: x.cited_id },
-      dst: { kind: "paper", id: x.citer_id },
-      kind: "cited_in",
       weight: 1,
     });
   }
@@ -276,24 +272,12 @@ export async function edgesPaperCitations(userId: string): Promise<GraphEdge[]> 
       kind: "citing",
       weight: 1,
     });
-    edges.push({
-      src: { kind: "reference", id: x.ref_id },
-      dst: { kind: "paper", id: x.paper_id },
-      kind: "cited_in",
-      weight: 1,
-    });
   }
   for (const x of widenedPaperRows) {
     edges.push({
       src: { kind: "paper", id: x.citer_id },
       dst: { kind: "paper", id: x.cited_paper_id },
       kind: "citing",
-      weight: 1,
-    });
-    edges.push({
-      src: { kind: "paper", id: x.cited_paper_id },
-      dst: { kind: "paper", id: x.citer_id },
-      kind: "cited_in",
       weight: 1,
     });
   }

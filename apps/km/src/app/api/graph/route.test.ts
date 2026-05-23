@@ -89,8 +89,7 @@ describe("GET /api/graph", () => {
     expect(body.nodes).toEqual([{ id: "n1" }, { id: "n2" }]);
     expect(body.capped).toEqual({
       paper_is_ref: { kept: 5000, total: 5002 },
-      citing: { kept: 0, total: 0 },
-      cited_in: { kept: 0, total: 0 },
+      paper_citation: { kept: 0, total: 0 },
       wiki_link: { kept: 5000, total: 5001 },
       shared_tag: { kept: 3, total: 3 },
       semantic_sim: { kept: 3, total: 3 },
@@ -107,7 +106,7 @@ describe("GET /api/graph", () => {
     expect(tail.slice(3).map((e: { weight: number }) => e.weight)).toEqual([0.9, 0.5, 0.2]);
   });
 
-  it("returns citing + cited_in edges and KEEPS paper_is_ref on duplicate pairs (identity ≠ citation)", async () => {
+  it("returns citing edges and KEEPS paper_is_ref on duplicate pairs (identity ≠ citation)", async () => {
     vi.mocked(getUserIdFromRequest).mockResolvedValue("u1");
     vi.mocked(nodesForUser).mockResolvedValue([] as never);
 
@@ -126,6 +125,7 @@ describe("GET /api/graph", () => {
         weight: 1,
       },
     ];
+    // Post-overlap-fix: ONE edge per citation row (no reciprocal cited_in).
     const citeEdges = [
       {
         src: { kind: "paper", id: "pA" },
@@ -134,21 +134,9 @@ describe("GET /api/graph", () => {
         weight: 1,
       },
       {
-        src: { kind: "paper", id: "pB" },
-        dst: { kind: "paper", id: "pA" },
-        kind: "cited_in",
-        weight: 1,
-      },
-      {
         src: { kind: "paper", id: "pC" },
         dst: { kind: "paper", id: "pD" },
         kind: "citing",
-        weight: 1,
-      },
-      {
-        src: { kind: "paper", id: "pD" },
-        dst: { kind: "paper", id: "pC" },
-        kind: "cited_in",
         weight: 1,
       },
     ];
@@ -166,11 +154,11 @@ describe("GET /api/graph", () => {
     expect(edgesPaperCitations).toHaveBeenCalledWith("u1");
 
     const kinds = body.edges.map((e: { kind: string }) => e.kind);
-    // citing + cited_in present
+    // citing present, no more cited_in
     expect(kinds).toContain("citing");
-    expect(kinds).toContain("cited_in");
-    // Post-H-batch: both identity (paper_is_ref) and citation (citing) for
-    // the same (pA, pB) pair surface. They mean different things.
+    expect(kinds).not.toContain("cited_in");
+    // Both identity (paper_is_ref) and citation (citing) for the same
+    // (pA, pB) pair surface. They mean different things.
     const dupPair = body.edges.filter(
       (e: { src: { id: string }; dst: { id: string } }) => e.src.id === "pA" && e.dst.id === "pB"
     );
@@ -192,8 +180,7 @@ describe("GET /api/graph", () => {
     ).toBe("citing");
 
     expect(body.capped).toMatchObject({
-      citing: { kept: 2, total: 2 },
-      cited_in: { kept: 2, total: 2 },
+      paper_citation: { kept: 2, total: 2 },
     });
   });
 });

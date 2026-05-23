@@ -78,16 +78,18 @@ export default async function GraphPage() {
               {payload.nodes.length} nodes · {payload.edges.length} edges
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-mono text-muted-foreground">
-            <span className="inline-flex items-center gap-1"><Dot color="#3b82f6" />{formatGraphKindLabel("paper")}</span>
-            <span className="inline-flex items-center gap-1"><Dot color="#22c55e" />{formatGraphKindLabel("note")}</span>
-            <span className="inline-flex items-center gap-1"><Dot color="#f59e0b" />{formatGraphKindLabel("reference")}</span>
-            <span className="inline-flex items-center gap-1"><LineSample color="#3b82f6" />{formatGraphKindLabel("paper_is_ref")}</span>
-            <span className="inline-flex items-center gap-1"><LineSample color="#22c55e" />{formatGraphKindLabel("wiki_link")}</span>
-            <span className="inline-flex items-center gap-1"><LineSample color="#a1a1aa" dashed />{formatGraphKindLabel("shared_tag")}</span>
-            <span className="inline-flex items-center gap-1"><LineSample color="#a78bfa" />{formatGraphKindLabel("semantic_sim")}</span>
-            <span className="inline-flex items-center gap-1"><LineSample color="#ec4899" />{formatGraphKindLabel("citing")}</span>
-            <span className="inline-flex items-center gap-1"><LineSample color="#d946ef" dashed />{formatGraphKindLabel("cited_in")}</span>
+          <div className="flex flex-col items-end gap-1">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-mono text-muted-foreground">
+              <span className="inline-flex items-center gap-1"><Dot color="#3b82f6" />{formatGraphKindLabel("paper")}</span>
+              <span className="inline-flex items-center gap-1"><Dot color="#22c55e" />{formatGraphKindLabel("note")}</span>
+              <span className="inline-flex items-center gap-1"><Dot color="#f59e0b" />{formatGraphKindLabel("reference")}</span>
+              <span className="inline-flex items-center gap-1"><LineSample color="#3b82f6" />{formatGraphKindLabel("paper_is_ref")}</span>
+              <span className="inline-flex items-center gap-1"><LineSample color="#22c55e" />{formatGraphKindLabel("wiki_link")}</span>
+              <span className="inline-flex items-center gap-1"><LineSample color="#a1a1aa" dashed />{formatGraphKindLabel("shared_tag")}</span>
+              <span className="inline-flex items-center gap-1"><LineSample color="#a78bfa" />{formatGraphKindLabel("semantic_sim")}</span>
+              <span className="inline-flex items-center gap-1"><LineSample color="#ec4899" />Citation</span>
+            </div>
+            <p className="text-[10px] text-muted-foreground/70">arrow direction = who cites whom</p>
           </div>
         </div>
       </div>

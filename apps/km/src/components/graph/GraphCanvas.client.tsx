@@ -36,7 +36,6 @@ const STYLE: Record<EdgeKind, { dash?: number[]; opacity: number; widthMul: numb
   shared_tag: { dash: [2, 4], opacity: 0.45, widthMul: 1.0, color: '#a1a1aa' },
   semantic_sim: { opacity: 0.6, widthMul: 0.8, color: '#a78bfa' },
   citing: { opacity: 0.95, widthMul: 1.8, color: '#ec4899' },
-  cited_in: { dash: [4, 3], opacity: 0.8, widthMul: 1.4, color: '#d946ef' },
 }
 
 function edgeKindBadgeClass(kind: EdgeKind): string {
@@ -44,8 +43,22 @@ function edgeKindBadgeClass(kind: EdgeKind): string {
   if (kind === 'wiki_link') return 'bg-green-500/15 text-green-300 border-green-400/40'
   if (kind === 'shared_tag') return 'bg-zinc-500/15 text-zinc-300 border-zinc-400/40'
   if (kind === 'citing') return 'bg-pink-500/15 text-pink-300 border-pink-400/40'
-  if (kind === 'cited_in') return 'bg-fuchsia-500/15 text-fuchsia-300 border-fuchsia-400/40'
   return 'bg-violet-500/15 text-violet-300 border-violet-400/40'
+}
+
+// Perspective-aware label for a citing edge, computed relative to the
+// currently focused/hovered node. With ONE edge per citation row the
+// label flips depending on which endpoint the user is looking from.
+function citingLabel(
+  link: { src: { kind: NodeKind; id: string }; dst: { kind: NodeKind; id: string } },
+  focusedKey: string | null,
+): 'Citing' | 'Cited in' | 'Citation' {
+  if (!focusedKey) return 'Citation'
+  const srcKey = `${link.src.kind}:${link.src.id}`
+  const dstKey = `${link.dst.kind}:${link.dst.id}`
+  if (focusedKey === srcKey) return 'Citing'
+  if (focusedKey === dstKey) return 'Cited in'
+  return 'Citation'
 }
 
 export default function GraphCanvas({ payload }: { payload: GraphPayload }) {
@@ -142,14 +155,18 @@ export default function GraphCanvas({ payload }: { payload: GraphPayload }) {
         linkColor={(l: unknown) => STYLE[(l as CanvasLink).kind].color}
         linkDirectionalArrowLength={(l: unknown) => {
           const k = (l as CanvasLink).kind
-          return k === 'citing' || k === 'cited_in' ? 4 : 0
+          return k === 'citing' ? 4 : 0
         }}
         linkDirectionalArrowRelPos={(l: unknown) => {
           const k = (l as CanvasLink).kind
-          return k === 'citing' || k === 'cited_in' ? 1 : 0
+          return k === 'citing' ? 1 : 0
         }}
         linkDirectionalArrowColor={(l: unknown) => STYLE[(l as CanvasLink).kind].color}
-        linkLabel={(l: unknown) => formatGraphKindLabel((l as CanvasLink).kind)}
+        linkLabel={(l: unknown) => {
+          const link = l as CanvasLink
+          if (link.kind === 'citing') return citingLabel(link, hoveredNodeId)
+          return formatGraphKindLabel(link.kind)
+        }}
         linkWidth={(l: unknown) => {
           const link = l as CanvasLink
           const weightFactor = link.kind === 'semantic_sim' ? Math.max(0.4, link.weight ?? 1) : 1
@@ -211,7 +228,9 @@ export default function GraphCanvas({ payload }: { payload: GraphPayload }) {
           {selectedLink && detail ? (
             <div className="space-y-4 p-4 pt-0 text-sm">
               <Badge variant="outline" className={edgeKindBadgeClass(selectedLink.kind)}>
-                {formatGraphKindLabel(selectedLink.kind)}
+                {selectedLink.kind === 'citing'
+                  ? citingLabel(selectedLink, hoveredNodeId)
+                  : formatGraphKindLabel(selectedLink.kind)}
               </Badge>
               {selectedLink.weight != null ? <p className="text-muted-foreground">Weight: {selectedLink.weight}</p> : null}
 
@@ -232,10 +251,6 @@ export default function GraphCanvas({ payload }: { payload: GraphPayload }) {
 
               {selectedLink.kind === 'citing' ? (
                 <p>{detail.srcLabel} cites {detail.dstLabel}</p>
-              ) : null}
-
-              {selectedLink.kind === 'cited_in' ? (
-                <p>{detail.srcLabel} cited in {detail.dstLabel}</p>
               ) : null}
 
               {selectedLink.kind === 'shared_tag' ? (

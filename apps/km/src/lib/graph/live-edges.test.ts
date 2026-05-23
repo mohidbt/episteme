@@ -290,10 +290,10 @@ describe("live-edges", () => {
     const kinds = new Set(ns.map((n) => n.kind));
     expect(kinds.has("paper") && kinds.has("note") && kinds.has("reference")).toBe(true);
   });
-  it("paper_citations: emits reciprocal citing + cited_in edges for each paper↔paper row (unchanged)", async () => {
+  it("paper_citations: emits ONE citing edge per paper↔paper row (no reciprocal)", async () => {
     const r = await edgesPaperCitations(SEED_USER);
     // paper↔paper edges between p1 and p2: exactly one row in the seed.
-    const ppCiting = r.find(
+    const ppCiting = r.filter(
       (e) =>
         e.kind === "citing" &&
         e.src.kind === "paper" &&
@@ -301,24 +301,25 @@ describe("live-edges", () => {
         e.dst.kind === "paper" &&
         e.dst.id === SEED_IDS.p2,
     );
-    const ppCitedIn = r.find(
+    expect(ppCiting).toHaveLength(1);
+
+    // No reciprocal edge from p2→p1 for the same row.
+    const reciprocal = r.find(
       (e) =>
-        e.kind === "cited_in" &&
         e.src.kind === "paper" &&
         e.src.id === SEED_IDS.p2 &&
         e.dst.kind === "paper" &&
         e.dst.id === SEED_IDS.p1,
     );
-    expect(ppCiting).toBeDefined();
-    expect(ppCitedIn).toBeDefined();
+    expect(reciprocal).toBeUndefined();
 
     // cross-user paper edge not present
     expect(r.some((x) => x.dst.id === SEED_IDS.pOther || x.src.id === SEED_IDS.pOther)).toBe(false);
   });
 
-  it("paper_citations: widened path emits citing + cited_in for paper→docRef→libraryRef match", async () => {
+  it("paper_citations: widened path emits ONE citing edge for paper→docRef→libraryRef match", async () => {
     const r = await edgesPaperCitations(SEED_USER);
-    const citing = r.find(
+    const citing = r.filter(
       (e) =>
         e.kind === "citing" &&
         e.src.kind === "paper" &&
@@ -326,21 +327,17 @@ describe("live-edges", () => {
         e.dst.kind === "reference" &&
         e.dst.id === ID.rLibCited,
     );
-    const citedIn = r.find(
-      (e) =>
-        e.kind === "cited_in" &&
-        e.src.kind === "reference" &&
-        e.src.id === ID.rLibCited &&
-        e.dst.kind === "paper" &&
-        e.dst.id === ID.pCiter,
+    expect(citing).toHaveLength(1);
+    // no reciprocal
+    const reciprocal = r.find(
+      (e) => e.src.id === ID.rLibCited && e.dst.id === ID.pCiter,
     );
-    expect(citing).toBeDefined();
-    expect(citedIn).toBeDefined();
+    expect(reciprocal).toBeUndefined();
   });
 
-  it("paper_citations: widened path emits paper-node citing edge when docRef→paper matches (no library ref needed)", async () => {
+  it("paper_citations: widened path emits ONE paper-node citing edge when docRef→paper matches (no library ref needed)", async () => {
     const r = await edgesPaperCitations(SEED_USER);
-    const citing = r.find(
+    const citing = r.filter(
       (e) =>
         e.kind === "citing" &&
         e.src.kind === "paper" &&
@@ -348,16 +345,12 @@ describe("live-edges", () => {
         e.dst.kind === "paper" &&
         e.dst.id === ID.pCitedPaperOnly,
     );
-    const citedIn = r.find(
+    expect(citing).toHaveLength(1);
+    const reciprocal = r.find(
       (e) =>
-        e.kind === "cited_in" &&
-        e.src.kind === "paper" &&
-        e.src.id === ID.pCitedPaperOnly &&
-        e.dst.kind === "paper" &&
-        e.dst.id === ID.pCiterPaperOnly,
+        e.src.id === ID.pCitedPaperOnly && e.dst.id === ID.pCiterPaperOnly,
     );
-    expect(citing).toBeDefined();
-    expect(citedIn).toBeDefined();
+    expect(reciprocal).toBeUndefined();
   });
 
   it("paper_citations: widened path emits BOTH ref-node and paper-node citing edges when docRef matches both", async () => {
