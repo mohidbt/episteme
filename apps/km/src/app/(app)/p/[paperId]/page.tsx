@@ -18,6 +18,7 @@ import { PaperHighlightsList } from "@/components/PaperHighlightsList";
 import { PaperCitationsList } from "@/components/PaperCitationsList";
 import { PaperActionsButtons } from "@/components/PaperActionsButtons";
 import { TabTitleUpdater } from "@/components/TabBar";
+import { PaperPdfPreview } from "./PaperPdfPreview";
 
 type PaperRow = typeof papers.$inferSelect;
 
@@ -125,12 +126,8 @@ export default async function PaperPage({
         </div>
       </div>
       <div className="mt-4 grid min-h-0 flex-1 grid-cols-1 border-t border-border/60 lg:grid-cols-[minmax(0,1fr)_420px]">
-        <div className="relative h-full min-h-[60vh] lg:min-h-0">
-          <iframe
-            src={`/api/papers/${paper.id}/file`}
-            title={displayTitle}
-            className="h-full w-full border-0"
-          />
+        <div className="relative h-full min-h-[60vh] overflow-hidden lg:min-h-0">
+          <PaperPdfPreview paperId={paper.id} />
         </div>
         <aside className="flex flex-col gap-8 overflow-y-auto border-t border-border/60 p-6 lg:border-t-0 lg:border-l">
           <PaperMetadataPanel paper={paper} papersetCount={papersetCount} papersets={papersetList} />
