@@ -1,16 +1,16 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { BookMarked } from "lucide-react";
 import { getRequiredUserId } from "@/lib/session";
 import { getDefaultLibrary } from "@/lib/default-library";
-import { getReference, listPapersInLibrary } from "@/lib/references-server";
+import { getReference } from "@/lib/references-server";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { ReferenceForm } from "@/components/ReferenceForm";
-import { ReferenceAttachToPaperButton } from "@/components/ReferenceAttachToPaperButton";
 import { ReferenceAgenticSearchButton } from "@/components/ReferenceAgenticSearchButton";
 import { TabTitleUpdater } from "@/components/TabBar";
+import { Badge } from "@/components/ui/badge";
 import { denormaliseForList, validateCslJson } from "@/lib/csl";
 import { getReferenceCitedIn } from "@/lib/citations/reference-cited-in";
+import { findIdentityPaperForReference } from "@/lib/citations/identity-match";
 
 export default async function ReferencePage({
   params,
@@ -19,20 +19,14 @@ export default async function ReferencePage({
 }) {
   const userId = await getRequiredUserId();
   const { referenceId } = await params;
-  const [ref, library, citedIn] = await Promise.all([
+  const [ref, library, citedIn, identityPaper] = await Promise.all([
     getReference(referenceId, userId),
     getDefaultLibrary(userId),
     getReferenceCitedIn(referenceId, userId),
+    findIdentityPaperForReference(referenceId, userId),
   ]);
   if (!ref) notFound();
 
-  const papersInLib = library
-    ? await listPapersInLibrary(library.id, userId)
-    : [];
-
-  const attachedPaper = ref.paperId
-    ? (papersInLib.find((p) => p.id === ref.paperId) ?? null)
-    : null;
   const displayTitle =
     denormaliseForList(validateCslJson(ref.cslJson)).title.trim() ||
     ref.citationKey;
@@ -53,21 +47,17 @@ export default async function ReferencePage({
           referenceId={ref.id}
           citationKey={ref.citationKey}
         />
-        <ReferenceAttachToPaperButton
-          referenceId={ref.id}
-          currentPaperId={ref.paperId ?? null}
-          papers={papersInLib}
-        />
-        {attachedPaper && (
+        {identityPaper && (
           <Link
-            href={`/p/${attachedPaper.id}`}
-            className="inline-flex items-center gap-2 rounded-md border border-border/60 bg-muted/40 px-2 py-1 text-xs text-muted-foreground hover:bg-muted"
+            href={`/p/${identityPaper.paperId}`}
+            aria-label={`Open library paper: ${identityPaper.title?.trim() || "untitled"}`}
           >
-            <BookMarked className="h-3 w-3" aria-hidden />
-            <span className="truncate max-w-[28ch]">
-              Attached to: {attachedPaper.title?.trim() || attachedPaper.filename}
-            </span>
-            <span aria-hidden>→</span>
+            <Badge
+              variant="secondary"
+              className="cursor-pointer hover:bg-muted"
+            >
+              Is library paper
+            </Badge>
           </Link>
         )}
       </div>

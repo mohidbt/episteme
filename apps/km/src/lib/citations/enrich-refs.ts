@@ -1,13 +1,19 @@
 import { sql } from "drizzle-orm";
 import { db } from "@/lib/db";
+import { getCrossLibraryCiteCounts } from "@/lib/citations/cite-count";
 
-// D7.4 — enrich the references panel with per-row paper match + edge counts.
+// D7.4 + H-batch Step 7-8 — enrich the references panel with per-row paper
+// match + edge counts.
 //
 // Three small queries, run once per references panel render:
 //   1) DOI → paper_id map (user-scoped) so we can auto-promote a ref to a
 //      paper card whose target is the user's own paper.
-//   2) Cited-in counts grouped by cited_id  (cited_kind='reference').
-//   3) Citing  counts grouped by citer_id   (citer_kind='reference').
+//   2) citedInCount: CROSS-LIBRARY cluster count via getCrossLibraryCiteCounts
+//      (Step 7-8). For each docRef in the current paper's bibliography, count
+//      distinct papers in the user's library that cite the same underlying
+//      work (DOI exact / pg_trgm title fuzzy ≥ 0.6). The count includes the
+//      source paper itself, so a uniquely-cited ref shows 1.
+//   3) Citing counts grouped by citer_id (citer_kind='reference').
 //
 // We deliberately use db.execute(sql`...`) rather than the query-builder so
 // the IN-list parametrization stays simple for arbitrary-length ref arrays.
@@ -59,19 +65,17 @@ export async function enrichRefsWithPaperMatchAndEdges<T extends RefInput>(
     }
   }
 
-  // 2) citedIn counts: rows where cited_kind='reference' AND cited_id ∈ refIds
-  const citedInRes = await db.execute(sql`
-    SELECT cited_id, COUNT(*)::int AS n
-    FROM paper_citations
-    WHERE cited_kind = 'reference'
-      AND cited_id IN (${sql.join(refIdStrings.map((id) => sql`${id}`), sql`, `)})
-    GROUP BY cited_id
-  `);
-  const citedInRowsRaw = (citedInRes as { rows?: unknown[] }).rows ?? (citedInRes as unknown as unknown[]);
-  const citedInRows = Array.isArray(citedInRowsRaw) ? citedInRowsRaw : [];
-  const citedInMap = new Map<string, number>();
-  for (const row of citedInRows as Array<{ cited_id: string; n: number | string }>) {
-    citedInMap.set(String(row.cited_id), toNumber(row.n));
+  // 2) citedIn counts — H-batch Step 7-8: cross-library cluster count.
+  // For each docRef in this paper's bib, count distinct papers in the user's
+  // library that cite the same underlying work (DOI exact / pg_trgm title
+  // fuzzy ≥ 0.6). Best-effort: if the cluster query fails (missing pg_trgm
+  // in a way the helper didn't catch), fall back to 0 for all rows.
+  let citedInMap: Map<number, number>;
+  try {
+    citedInMap = await getCrossLibraryCiteCounts(userId, refIds);
+  } catch (err) {
+    console.warn("[enrich-refs] cross-library cite count failed", err);
+    citedInMap = new Map();
   }
 
   // 3) citing counts: rows where citer_kind='reference' AND citer_id ∈ refIds
@@ -92,7 +96,7 @@ export async function enrichRefsWithPaperMatchAndEdges<T extends RefInput>(
   return refs.map((r) => ({
     ...r,
     matchedPaperId: r.doi ? doiToPaper.get(r.doi) ?? null : null,
-    citedInCount: citedInMap.get(String(r.id)) ?? 0,
+    citedInCount: citedInMap.get(r.id) ?? 0,
     citingCount: citingMap.get(String(r.id)) ?? 0,
   }));
 }

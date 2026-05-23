@@ -43,10 +43,10 @@ describe("enrichRefsWithPaperMatchAndEdges", () => {
     expect(out[0].matchedPaperId).toBe("paper-uuid-1");
   });
 
-  it("attaches citedInCount + citingCount per ref from paper_citations", async () => {
+  it("attaches citedInCount (cross-library cluster) + citingCount per ref", async () => {
     stubExecute([
-      // citedIn: cited_id = '1' has 3 rows; '2' has 1
-      [{ cited_id: "1", n: 3 }, { cited_id: "2", n: 1 }],
+      // citedIn cluster (getCrossLibraryCiteCounts): input_id → n
+      [{ input_id: 1, n: 3 }, { input_id: 2, n: 1 }],
       // citing: citer_id = '2' has 5 rows
       [{ citer_id: "2", n: 5 }],
     ]);
