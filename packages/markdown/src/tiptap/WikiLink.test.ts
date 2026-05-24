@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Editor, generateJSON, type Content, type JSONContent } from "@tiptap/core";
 import { createExtensions } from "../extensions";
-import { WikiLink } from "./WikiLink";
+import { WikiLink, classifyWikiTarget } from "./WikiLink";
 
 // Build a Tiptap editor that has the WikiLink node + tiptap-markdown.
 function makeEditor(content: Content) {
@@ -264,5 +264,74 @@ describe("WikiLink markdown parse", () => {
     editor.commands.setContent("see [[Transformers]] today");
     expect(toMd(editor).trim()).toBe("see [[Transformers]] today");
     editor.destroy();
+  });
+});
+
+// K6: targetKind must be inferred from prefix at both ingress points
+// (markdown-it parse + input rule). Display label must NOT include the prefix.
+describe("WikiLink prefix classification (K6)", () => {
+  describe("markdown-it parse path", () => {
+    it("[[Name]] → kind=note, title=Name", () => {
+      const wiki = findNode(mdToJSON("see [[Name]] x"), "wikiLink");
+      expect(wiki?.attrs?.title).toBe("Name");
+      expect(wiki?.attrs?.targetKind).toBe("note");
+    });
+    it("[[@bibkey]] → kind=reference, title=bibkey", () => {
+      const wiki = findNode(mdToJSON("see [[@bibkey]] x"), "wikiLink");
+      expect(wiki?.attrs?.title).toBe("bibkey");
+      expect(wiki?.attrs?.targetKind).toBe("reference");
+    });
+    it("[[pdf:foo.pdf]] → kind=paper, title=foo.pdf", () => {
+      const wiki = findNode(mdToJSON("see [[pdf:foo.pdf]] x"), "wikiLink");
+      expect(wiki?.attrs?.title).toBe("foo.pdf");
+      expect(wiki?.attrs?.targetKind).toBe("paper");
+    });
+    it("[[p:foo]] → kind=paper, title=foo", () => {
+      const wiki = findNode(mdToJSON("see [[p:foo]] x"), "wikiLink");
+      expect(wiki?.attrs?.title).toBe("foo");
+      expect(wiki?.attrs?.targetKind).toBe("paper");
+    });
+    it("[[r:bar]] → kind=reference, title=bar", () => {
+      const wiki = findNode(mdToJSON("see [[r:bar]] x"), "wikiLink");
+      expect(wiki?.attrs?.title).toBe("bar");
+      expect(wiki?.attrs?.targetKind).toBe("reference");
+    });
+    it("[[p:foo]] renders svg icon for paper", () => {
+      const editor = new Editor({ extensions: [...createExtensions(), WikiLink] });
+      editor.commands.setContent("see [[p:foo]]");
+      const html = editor.getHTML();
+      expect(html).toContain('data-target-kind="paper"');
+      expect(html).toContain("<svg");
+      editor.destroy();
+    });
+    it("[[r:bar]] renders svg icon for reference", () => {
+      const editor = new Editor({ extensions: [...createExtensions(), WikiLink] });
+      editor.commands.setContent("see [[r:bar]]");
+      const html = editor.getHTML();
+      expect(html).toContain('data-target-kind="reference"');
+      expect(html).toContain("<svg");
+      editor.destroy();
+    });
+  });
+
+  describe("input rule classifier (used by InputRule handler)", () => {
+    // The input rule shares the same prefix classifier as the markdown-it
+    // parse path. Test the classifier directly — this is what the rule
+    // handler calls to set attrs.targetKind on the new wikiLink node.
+    it("[[Name]] → kind=note, title=Name", () => {
+      expect(classifyWikiTarget("Name")).toEqual({ kind: "note", title: "Name" });
+    });
+    it("[[@bibkey]] → kind=reference, title=bibkey", () => {
+      expect(classifyWikiTarget("@bibkey")).toEqual({ kind: "reference", title: "bibkey" });
+    });
+    it("[[pdf:foo.pdf]] → kind=paper, title=foo.pdf", () => {
+      expect(classifyWikiTarget("pdf:foo.pdf")).toEqual({ kind: "paper", title: "foo.pdf" });
+    });
+    it("[[p:foo]] → kind=paper, title=foo", () => {
+      expect(classifyWikiTarget("p:foo")).toEqual({ kind: "paper", title: "foo" });
+    });
+    it("[[r:bar]] → kind=reference, title=bar", () => {
+      expect(classifyWikiTarget("r:bar")).toEqual({ kind: "reference", title: "bar" });
+    });
   });
 });

@@ -3,6 +3,26 @@ import type { MdLike } from "./markdown-it-types";
 
 export type WikiLinkTargetKind = "note" | "reference" | "paper" | null;
 
+// Prefix classifier shared by the InputRule (typing `[[...]]` in the editor)
+// and the markdown-it parse rule (rendering saved markdown back to nodes).
+// Keep in sync with the regex-based classifier in
+// `packages/markdown/src/wiki-link-regex.ts` — these are the same syntax
+// rules; that one runs over raw markdown while this one runs inside the
+// Tiptap layer where we also need to strip the prefix from the display title.
+// Order matters: `p:` / `r:` short-forms take precedence over legacy
+// `@` / `pdf:`.
+export function classifyWikiTarget(inner: string): {
+  kind: "note" | "reference" | "paper";
+  title: string;
+} {
+  const t = inner.trim();
+  if (/^p:/i.test(t)) return { kind: "paper", title: t.replace(/^p:/i, "").trim() };
+  if (/^r:/i.test(t)) return { kind: "reference", title: t.replace(/^r:/i, "").trim() };
+  if (t.startsWith("@")) return { kind: "reference", title: t.slice(1).trim() };
+  if (/^pdf:/i.test(t)) return { kind: "paper", title: t.replace(/^pdf:/i, "").trim() };
+  return { kind: "note", title: t };
+}
+
 export interface WikiLinkAttrs {
   title: string;
   alias: string | null;
@@ -135,17 +155,21 @@ export const WikiLink = Node.create({
       new InputRule({
         find: /\[\[([^\[\]|\n]+)(?:\|([^\[\]\n]+))?\]\]$/,
         handler: ({ state, range, match }) => {
-          const rawTitle = match[1].trim();
+          const rawInner = match[1].trim();
           const rawAlias = match[2]?.trim() || null;
-          if (!rawTitle) return;
+          if (!rawInner) return;
+          // Classify by prefix so the pill renders the right icon
+          // immediately on typing — without waiting for markdown reload.
+          const { kind, title } = classifyWikiTarget(rawInner);
+          if (!title) return;
           const { tr } = state;
           tr.replaceWith(
             range.from,
             range.to,
             type.create({
-              title: rawTitle,
+              title,
               alias: rawAlias,
-              targetKind: null,
+              targetKind: kind,
               targetId: null,
             }),
           );
@@ -234,13 +258,18 @@ export const WikiLink = Node.create({
               const raw = src.slice(start, end);
               if (raw.length === 0 || raw.includes("[[")) return false;
               const pipeIdx = raw.indexOf("|");
-              const title = (pipeIdx === -1 ? raw : raw.slice(0, pipeIdx)).trim();
+              const innerRaw = (pipeIdx === -1 ? raw : raw.slice(0, pipeIdx)).trim();
               const alias =
                 pipeIdx === -1 ? null : raw.slice(pipeIdx + 1).trim() || null;
+              if (!innerRaw) return false;
+              // Classify prefix so the rendered span carries
+              // `data-target-kind` — without this, the parseHTML round-trip
+              // would leave targetKind=null and icons would not render.
+              const { kind, title } = classifyWikiTarget(innerRaw);
               if (!title) return false;
               if (silent) return true;
               const token = state.push(TOKEN, "", 0);
-              token.meta = { title, alias };
+              token.meta = { title, alias, targetKind: kind };
               state.pos = end + (escaped ? 4 : 2);
               return true;
             });
@@ -248,13 +277,15 @@ export const WikiLink = Node.create({
               const meta = tokens[idx].meta as {
                 title: string;
                 alias: string | null;
+                targetKind: "note" | "reference" | "paper";
               };
               const label = meta.alias ?? meta.title;
               const titleAttr = md.utils.escapeHtml(meta.title);
               const aliasAttr = meta.alias
                 ? ` data-alias="${md.utils.escapeHtml(meta.alias)}"`
                 : "";
-              return `<span data-type="wiki-link" data-title="${titleAttr}"${aliasAttr} data-resolved="false">${md.utils.escapeHtml(label)}</span>`;
+              const kindAttr = ` data-target-kind="${meta.targetKind}"`;
+              return `<span data-type="wiki-link" data-title="${titleAttr}"${aliasAttr}${kindAttr} data-resolved="false">${md.utils.escapeHtml(label)}</span>`;
             };
           },
         },
