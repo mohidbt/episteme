@@ -113,6 +113,7 @@ def _build_memory_backend(
     user_id: str,
     store: BaseStore,
     enabled_skills: list[str] | None = None,
+    personal_skills: list[dict] | None = None,
 ) -> CompositeBackend:
     """Build the deepagents filesystem backend with `/.episteme/agents/memories/`
     routed to real notes in the user's drive via NotesBackend.
@@ -125,6 +126,11 @@ def _build_memory_backend(
     `enabled_skills` (when not None) scopes the SkillsBackend allow-list so
     SkillsMiddleware's prompt advertisement only lists those skills.
 
+    `personal_skills` are user-authored skills (slug/name/description/
+    instructions dicts from /api/agents/skills/personal). They're surfaced as
+    first-class SkillSpecs by SkillsBackend — advertised by description,
+    instructions loaded on demand by read_file (progressive disclosure).
+
     `store` is unused here but kept on the signature because deepagents may
     still require a `BaseStore` for unrelated middleware plumbing.
     """
@@ -135,7 +141,10 @@ def _build_memory_backend(
         default=StateBackend(),
         routes={
             "/.episteme/agents/memories/": NotesBackend(user_id=user_id),
-            "/.episteme/agents/skills/":   SkillsBackend(enabled=skills_enabled),
+            "/.episteme/agents/skills/":   SkillsBackend(
+                enabled=skills_enabled,
+                personal_skills=personal_skills,
+            ),
         },
     )
 
@@ -371,28 +380,10 @@ async def build_km_agent(
 
     system_prompt = _MEMORY_SYSTEM_PROMPT
 
-    # Inject user-authored personal skills into the system prompt.
-    # Personal skills are simple (name + instructions) and don't have
-    # tools/subagents — they're inline instructions the agent follows.
+    # Personal (user-authored) skills are first-class SkillSpecs surfaced
+    # through SkillsMiddleware — name + description in the prompt, body
+    # loaded on demand by read_file. No unconditional concatenation.
     personal = await _fetch_personal_skills(user_id)
-    if personal:
-        skill_lines = []
-        for ps in personal:
-            name = ps.get("name") or ps.get("slug") or "unnamed"
-            desc = ps.get("description") or ""
-            instr = ps.get("instructions") or ""
-            if instr:
-                skill_lines.append(f"### {name}\n{desc}\n\n{instr}" if desc else f"### {name}\n{instr}")
-            elif desc:
-                skill_lines.append(f"### {name}\n{desc}")
-        if skill_lines:
-            system_prompt += (
-                "\n\n## Personal Skills (user-authored)\n\n"
-                "The user has defined these personal skills. Follow the "
-                "instructions when the user's request matches the skill "
-                "description.\n\n"
-                + "\n\n".join(skill_lines)
-            )
 
     return create_deep_agent(
         model=model,
@@ -403,7 +394,10 @@ async def build_km_agent(
         store=store,
         checkpointer=saver,
         backend=_build_memory_backend(
-            user_id=user_id, store=store, enabled_skills=enabled_skills
+            user_id=user_id,
+            store=store,
+            enabled_skills=enabled_skills,
+            personal_skills=personal,
         ),
         interrupt_on=_build_interrupt_on(approval_rules, loaded_skills=loaded),
         middleware=[GroundingGuard()],
