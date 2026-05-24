@@ -62,15 +62,19 @@ function citingLabel(
 }
 
 // Delay before treating a single click as a navigation. react-force-graph-2d
-// fires onNodeClick as part of every double-click, so we defer single-click
-// routing long enough for an incoming dblclick to cancel it. 250ms matches
-// the OS default double-click threshold and stays under perceived UI lag.
+// (v1.29.1) has no onNodeDblClick prop, so we implement dblclick inside
+// onNodeClick using a timestamp + last-clicked-node ref. The single-click
+// path runs on a timer; if a second click on the same node arrives within
+// DBLCLICK_WINDOW_MS, the timer is cancelled and we route to /p or /r.
 const CLICK_DEBOUNCE_MS = 250
+const DBLCLICK_WINDOW_MS = 300
 
 export default function GraphCanvas({ payload }: { payload: GraphPayload }) {
   const router = useRouter()
   const wrapperRef = useRef<HTMLDivElement | null>(null)
   const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const lastClickTimeRef = useRef<number>(0)
+  const lastClickedNodeIdRef = useRef<string | null>(null)
   const [size, setSize] = useState({ width: 900, height: 600 })
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null)
   const [open, setOpen] = useState(false)
@@ -219,23 +223,32 @@ export default function GraphCanvas({ payload }: { payload: GraphPayload }) {
         onNodeHover={(node: unknown) => setHoveredNodeId(node ? (node as CanvasNode).fgId : null)}
         onNodeClick={(node: unknown) => {
           const n = node as CanvasNode
+          const now = Date.now()
+          const isDblClick =
+            lastClickedNodeIdRef.current === n.fgId &&
+            now - lastClickTimeRef.current < DBLCLICK_WINDOW_MS
+          if (isDblClick) {
+            // Cancel pending single-click and route to detail page.
+            if (clickTimerRef.current) {
+              clearTimeout(clickTimerRef.current)
+              clickTimerRef.current = null
+            }
+            lastClickTimeRef.current = 0
+            lastClickedNodeIdRef.current = null
+            if (n.kind === 'paper') router.push(`/p/${n.id}`)
+            else if (n.kind === 'reference') router.push(`/r/${n.id}`)
+            return
+          }
+          lastClickTimeRef.current = now
+          lastClickedNodeIdRef.current = n.fgId
+          // Only papers have a graph subview today; notes/references on a
+          // single click do nothing until the dblclick window closes.
           if (n.kind !== 'paper') return
-          // Debounce: a dblclick will arrive within CLICK_DEBOUNCE_MS and
-          // cancel this navigation to prevent double-firing /graph + /p.
           if (clickTimerRef.current) clearTimeout(clickTimerRef.current)
           clickTimerRef.current = setTimeout(() => {
             clickTimerRef.current = null
             router.push(`/graph/${n.id}`)
           }, CLICK_DEBOUNCE_MS)
-        }}
-        onNodeDblClick={(node: unknown) => {
-          const n = node as CanvasNode
-          if (clickTimerRef.current) {
-            clearTimeout(clickTimerRef.current)
-            clickTimerRef.current = null
-          }
-          if (n.kind === 'paper') router.push(`/p/${n.id}`)
-          else if (n.kind === 'reference') router.push(`/r/${n.id}`)
         }}
         onLinkClick={(l: unknown) => void handleLinkClick(l as CanvasLink)}
         d3VelocityDecay={0.3}
