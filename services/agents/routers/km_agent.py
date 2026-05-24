@@ -1356,3 +1356,32 @@ async def debug_loaded_skills(
         }
         for s in specs
     ]
+
+
+@router.get("/skills/personal")
+async def diag_personal_skills(auth: InternalAuthDep):
+    """Diagnostic: return personal-skill state for the authed user.
+
+    Hits the same KM endpoint and parses the same shape as build_km_agent's
+    ``_fetch_personal_skills``, so the response answers "what would the agent
+    have seen if I called /invoke right now?". Useful for verifying K4
+    virtual SKILL.md plumbing in prod when the user reports "no skills found".
+
+    Returns: ``{count, slugs, raw_error}`` — ``raw_error`` is non-null when
+    KM returned a structured error dict.
+    """
+    _reject_guest(auth["user_id"])
+    user_id = auth["user_id"]
+    resp = await km_get("/api/agents/skills/personal", user_id=user_id)
+    if isinstance(resp, dict) and resp.get("error") is True:
+        return {
+            "count": 0,
+            "slugs": [],
+            "raw_error": {"status": resp.get("status"), "body": resp.get("body")},
+        }
+    skills: list = []
+    if isinstance(resp, dict) and isinstance(resp.get("skills"), list):
+        skills = [s for s in resp["skills"] if isinstance(s, dict)]
+    slugs = [str(s.get("slug") or s.get("name") or "") for s in skills]
+    slugs = [s for s in slugs if s]
+    return {"count": len(slugs), "slugs": slugs, "raw_error": None}

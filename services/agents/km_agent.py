@@ -41,13 +41,37 @@ async def _fetch_personal_skills(user_id: str) -> list[dict]:
 
     Returns a list of {slug, name, description, instructions} dicts.
     On failure returns [] (non-fatal — personal skills are best-effort).
+
+    Observability: logs an INFO line with the fetched count on success, and
+    a WARNING with the full error body when km_get returns its structured
+    error dict ({"error": True, "status": ..., "body": ...}) — without this
+    a silent 401/500 from KM looked identical to "user has 0 skills".
     """
     try:
         resp = await km_get("/api/agents/skills/personal", user_id=user_id)
-        if isinstance(resp, dict) and isinstance(resp.get("skills"), list):
-            return [s for s in resp["skills"] if isinstance(s, dict)]
     except Exception:  # noqa: BLE001
-        logger.warning("personal skills fetch failed for user %s", user_id)
+        logger.exception("personal_skills fetch raised for user=%s", user_id)
+        return []
+
+    if isinstance(resp, dict) and resp.get("error") is True:
+        logger.warning(
+            "personal_skills fetch returned error user=%s status=%s body=%r",
+            user_id,
+            resp.get("status"),
+            resp.get("body"),
+        )
+        return []
+
+    if isinstance(resp, dict) and isinstance(resp.get("skills"), list):
+        personal = [s for s in resp["skills"] if isinstance(s, dict)]
+        logger.info("personal_skills fetched count=%d user=%s", len(personal), user_id)
+        return personal
+
+    logger.warning(
+        "personal_skills fetch unexpected shape user=%s resp_type=%s",
+        user_id,
+        type(resp).__name__,
+    )
     return []
 
 
@@ -396,6 +420,29 @@ async def build_km_agent(
     # loaded on demand by read_file. No unconditional concatenation.
     personal = await _fetch_personal_skills(user_id)
 
+    backend = _build_memory_backend(
+        user_id=user_id,
+        store=store,
+        enabled_skills=enabled_skills,
+        personal_skills=personal,
+    )
+    # Observability: log how many personal slots SkillsBackend ended up with —
+    # this is what the SkillsMiddleware enumerates for the system prompt.
+    try:
+        from backends.skills_backend import SkillsBackend  # noqa: PLC0415
+        _skills_be = next(
+            (b for b in backend.routes.values() if isinstance(b, SkillsBackend)),
+            None,
+        )
+        if _skills_be is not None:
+            logger.info(
+                "SkillsBackend personal slots=%d user=%s",
+                len(_skills_be._personal),
+                user_id,
+            )
+    except Exception:  # noqa: BLE001
+        logger.exception("failed to introspect SkillsBackend slots user=%s", user_id)
+
     return create_deep_agent(
         model=model,
         tools=tools,
@@ -404,12 +451,7 @@ async def build_km_agent(
         system_prompt=system_prompt,
         store=store,
         checkpointer=saver,
-        backend=_build_memory_backend(
-            user_id=user_id,
-            store=store,
-            enabled_skills=enabled_skills,
-            personal_skills=personal,
-        ),
+        backend=backend,
         interrupt_on=_build_interrupt_on(approval_rules, loaded_skills=loaded),
         middleware=[GroundingGuard()],
     )
