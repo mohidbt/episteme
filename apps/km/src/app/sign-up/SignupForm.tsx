@@ -120,8 +120,12 @@ export function SignupForm({
   }
 
   function basePayload() {
+    const name = firstname.trim();
+    // Keep DB column firstName: use the first whitespace-delimited token
+    // (so "John Doe" → "John", "Madonna" → "Madonna").
+    const firstToken = name.split(/\s+/)[0] || name;
     return {
-      firstname: firstname.trim(),
+      firstname: firstToken,
       username: username.trim(),
       email: email.trim(),
       userType,
@@ -132,7 +136,7 @@ export function SignupForm({
 
   function validateStep(current: Step): string | null {
     if (current === "identity") {
-      if (!firstname.trim()) return "First name is required";
+      if (!firstname.trim()) return "Name is required";
       if (!username.trim()) return "Username is required";
       if (username.length < 3) return "Username must be at least 3 characters";
       if (!USERNAME_RE.test(username))
@@ -330,7 +334,7 @@ export function SignupForm({
             {step === "identity" && (
               <>
                 <div className="space-y-1.5">
-                  <Label htmlFor="firstname">First name</Label>
+                  <Label htmlFor="firstname">Name</Label>
                   <Input
                     id="firstname"
                     type="text"

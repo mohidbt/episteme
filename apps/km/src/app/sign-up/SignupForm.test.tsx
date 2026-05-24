@@ -57,9 +57,9 @@ async function continueStep() {
   fireEvent.click(screen.getByRole("button", { name: /continue/i }));
 }
 
-async function reachEmailStep() {
-  fireEvent.change(screen.getByLabelText(/first name/i), {
-    target: { value: "Alex" },
+async function reachEmailStep(nameValue = "Alex") {
+  fireEvent.change(screen.getByLabelText(/^name$/i), {
+    target: { value: nameValue },
   });
   fireEvent.change(screen.getByLabelText(/username/i), {
     target: { value: "Alex_99" },
@@ -283,6 +283,72 @@ describe("SignupForm", () => {
       industry: "Biotech",
     });
   });
+
+  it.each([
+    ["John Doe", "John"],
+    ["Madonna", "Madonna"],
+    ["  Jean Paul Sartre  ", "Jean"],
+  ])(
+    "parses first whitespace token of Name %p as firstname %p",
+    async (input, expected) => {
+      const onSuccess = vi.fn();
+      const fetchMock = mockFetch((url) => {
+        if (url.endsWith("/api/auth/get-session")) {
+          return json({ user: { isAnonymous: false } });
+        }
+        if (url.endsWith("/api/auth/invite/validate")) {
+          return json({ ok: true });
+        }
+        if (url.endsWith("/test/signup")) {
+          return json({ ok: true, userId: "u_test" });
+        }
+        return new Response("nope", { status: 404 });
+      });
+
+      render(<SignupForm endpoint="/test/signup" onSuccess={onSuccess} />);
+      // identity step with the parametrised name
+      fireEvent.change(screen.getByLabelText(/^name$/i), {
+        target: { value: input },
+      });
+      fireEvent.change(screen.getByLabelText(/username/i), {
+        target: { value: "alex_99" },
+      });
+      await continueStep();
+      // email
+      fireEvent.change(screen.getByLabelText(/^email$/i), {
+        target: { value: "alex@example.com" },
+      });
+      await continueStep();
+      // persona industry
+      fireEvent.click(screen.getByRole("radio", { name: /industry/i }));
+      await continueStep();
+      fireEvent.change(screen.getByLabelText(/job role/i), {
+        target: { value: "Product lead" },
+      });
+      fireEvent.change(screen.getByLabelText(/^industry$/i), {
+        target: { value: "Biotech" },
+      });
+      await continueStep();
+      fireEvent.click(screen.getByTestId("pokemon-bulbasaur"));
+      await continueStep();
+      fireEvent.change(screen.getByLabelText(/invite code/i), {
+        target: { value: "INVITE-ABC" },
+      });
+      await continueStep();
+      fireEvent.change(await screen.findByLabelText(/password/i), {
+        target: { value: "supersecret1" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: /create account/i }));
+
+      await waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(1));
+
+      const signupCall = fetchMock.mock.calls.find((c) =>
+        String(c[0]).endsWith("/test/signup"),
+      );
+      expect(signupCall).toBeDefined();
+      expect(bodyOf(signupCall!).firstname).toBe(expected);
+    },
+  );
 
   it("shows guest data warning when session is anonymous", async () => {
     mockFetch((url) => {
