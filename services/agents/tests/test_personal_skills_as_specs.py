@@ -145,6 +145,59 @@ async def test_personal_skill_body_loadable_via_backend():
 
 
 @pytest.mark.asyncio
+async def test_personal_skills_bypass_enabled_allowlist():
+    """Personal skills are always-on for that user; disk-skill allowlist gating
+    (enabled_skills frozenset) does NOT apply to them. Confirms intentional
+    bypass at skills_backend.py:70.
+
+    Asserts BOTH:
+      1. A disk skill NOT in enabled_skills is hidden (allowlist works for disk).
+      2. A personal skill NOT in enabled_skills IS visible (bypass intentional).
+    """
+    from backends.skills_backend import SkillsBackend  # noqa: PLC0415
+
+    # Disk skill name guaranteed to exist on-disk under services/agents/skills/.
+    # Use one not in the allowlist below to prove disk allowlist gating works.
+    from pathlib import Path  # noqa: PLC0415
+
+    disk_root = (
+        Path(__file__).resolve().parent.parent / "skills"
+    )
+    disk_skill_names = sorted(
+        p.name for p in disk_root.iterdir()
+        if p.is_dir() and not p.name.startswith("_")
+    )
+    assert disk_skill_names, "no on-disk skills found for test setup"
+    excluded_disk_skill = disk_skill_names[0]
+    # Allowlist contains only a synthetic name — guarantees excluded_disk_skill
+    # is NOT in the allowlist.
+    enabled = frozenset({"__never_matches__"})
+
+    backend = SkillsBackend(enabled=enabled, personal_skills=_PERSONAL)
+
+    # ls() — disk skill not in allowlist must be hidden; personal skill must appear.
+    ls_result = await backend.als(SKILLS_ROOT.rstrip("/"))
+    paths = [e["path"] for e in (ls_result.entries or [])]
+    flat = " ".join(paths)
+
+    assert "rasta" in flat, (
+        f"personal skill 'rasta' missing from ls despite not in enabled={enabled!r}: "
+        f"{paths!r}"
+    )
+    assert excluded_disk_skill not in flat, (
+        f"disk skill {excluded_disk_skill!r} leaked into ls despite allowlist "
+        f"excluding it: {paths!r}"
+    )
+
+    # read() — personal SKILL.md served even though slug not in enabled allowlist.
+    read_result = await backend.aread(f"{SKILLS_ROOT}rasta/SKILL.md")
+    assert read_result.error is None, (
+        f"personal SKILL.md read failed despite allowlist bypass: {read_result.error}"
+    )
+    assert "ya mon" in read_result.file_data["content"]
+
+
+@pytest.mark.asyncio
 async def test_personal_skill_listed_by_backend_ls():
     """SkillsBackend.als at the skills root must include the personal skill
     subdir — this is what SkillsMiddleware enumerates to build its advertisement."""
