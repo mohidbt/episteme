@@ -38,6 +38,30 @@ describe("extractLinks", () => {
     ]);
   });
 
+  it("classifies p:-prefixed inner as paper kind and strips p:", () => {
+    expect(extractLinks("[[p:crispr-paper.pdf]]")).toEqual([
+      { kind: "paper", raw: "crispr-paper.pdf", alias: null },
+    ]);
+  });
+
+  it("classifies r:-prefixed inner as reference kind and strips r:", () => {
+    expect(extractLinks("[[r:vaswani2017]]")).toEqual([
+      { kind: "reference", raw: "vaswani2017", alias: null },
+    ]);
+  });
+
+  it("p: prefix supports alias", () => {
+    expect(extractLinks("[[p:foo.pdf|Foo]]")).toEqual([
+      { kind: "paper", raw: "foo.pdf", alias: "Foo" },
+    ]);
+  });
+
+  it("r: prefix supports alias", () => {
+    expect(extractLinks("[[r:vaswani2017|V17]]")).toEqual([
+      { kind: "reference", raw: "vaswani2017", alias: "V17" },
+    ]);
+  });
+
   it("ignores backslash-escaped link opener", () => {
     expect(extractLinks("not a link: \\[[Escaped]]")).toEqual([]);
   });

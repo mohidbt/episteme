@@ -20,6 +20,10 @@ function stripCodeAndHeadings(md: string): string {
 
 function classify(inner: string): { kind: Link["kind"]; raw: string } {
   const trimmed = inner.trim();
+  // Newer short-form prefixes take precedence; they sit alongside the legacy
+  // `@` / `pdf:` prefixes for backward compat with existing notes.
+  if (/^p:/i.test(trimmed)) return { kind: "paper", raw: trimmed.replace(/^p:/i, "").trim() };
+  if (/^r:/i.test(trimmed)) return { kind: "reference", raw: trimmed.replace(/^r:/i, "").trim() };
   if (trimmed.startsWith("@")) return { kind: "reference", raw: trimmed.slice(1).trim() };
   if (/^pdf:/i.test(trimmed)) return { kind: "paper", raw: trimmed.replace(/^pdf:/i, "").trim() };
   return { kind: "note", raw: trimmed };
