@@ -1358,30 +1358,40 @@ async def debug_loaded_skills(
     ]
 
 
-@router.get("/skills/personal")
+@router.get("/skills/personal", include_in_schema=False)
 async def diag_personal_skills(auth: InternalAuthDep):
     """Diagnostic: return personal-skill state for the authed user.
 
+    INTERNAL-ONLY. Excluded from /docs OpenAPI (``include_in_schema=False``).
     Hits the same KM endpoint and parses the same shape as build_km_agent's
     ``_fetch_personal_skills``, so the response answers "what would the agent
     have seen if I called /invoke right now?". Useful for verifying K4
     virtual SKILL.md plumbing in prod when the user reports "no skills found".
 
-    Returns: ``{count, slugs, raw_error}`` — ``raw_error`` is non-null when
-    KM returned a structured error dict.
+    Returns ``{count, slugs, error_status, error_kind}``. We deliberately
+    strip the upstream response body to avoid leaking arbitrary content
+    from the KM service through this diagnostic surface.
     """
     _reject_guest(auth["user_id"])
     user_id = auth["user_id"]
     resp = await km_get("/api/agents/skills/personal", user_id=user_id)
     if isinstance(resp, dict) and resp.get("error") is True:
+        # NEVER echo resp.get("body") here — that's arbitrary upstream content.
+        # Surface only the structured shape (status + kind) for diagnosis.
         return {
             "count": 0,
             "slugs": [],
-            "raw_error": {"status": resp.get("status"), "body": resp.get("body")},
+            "error_status": resp.get("status"),
+            "error_kind": str(resp.get("kind") or "fetch_failed"),
         }
     skills: list = []
     if isinstance(resp, dict) and isinstance(resp.get("skills"), list):
         skills = [s for s in resp["skills"] if isinstance(s, dict)]
     slugs = [str(s.get("slug") or s.get("name") or "") for s in skills]
     slugs = [s for s in slugs if s]
-    return {"count": len(slugs), "slugs": slugs, "raw_error": None}
+    return {
+        "count": len(slugs),
+        "slugs": slugs,
+        "error_status": None,
+        "error_kind": None,
+    }

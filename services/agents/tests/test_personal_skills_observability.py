@@ -183,3 +183,60 @@ def test_diagnostic_personal_skills_route_returns_count_and_slugs():
     payload = r.json()
     assert payload.get("count") == 2, payload
     assert sorted(payload.get("slugs") or []) == ["check", "note"], payload
+
+
+def test_diagnostic_personal_skills_route_redacts_upstream_body_on_error():
+    """Security: when km_get returns an error-shaped dict the diag route MUST NOT
+    echo the upstream body — that body is arbitrary content from the KM service
+    and could leak credentials or PII through this internal diagnostic surface.
+
+    Only structured fields (count, slugs, error_status, error_kind) are allowed.
+    """
+    from app import app  # noqa: PLC0415
+
+    client = TestClient(app)
+    path = "/agents/km/skills/personal"
+
+    # Sentinel body content that must not appear anywhere in the response.
+    sentinel = "SUPER_SECRET_LEAK_TOKEN_xyz"
+    error_resp = {
+        "error": True,
+        "status": 502,
+        "kind": "fetch_failed",
+        "path": "/api/agents/skills/personal",
+        "body": f"upstream said: {sentinel}",
+    }
+
+    with patch(
+        "routers.km_agent.km_get",
+        new=AsyncMock(return_value=error_resp),
+    ):
+        r = client.get(path, headers=_signed_headers("GET", path))
+
+    assert r.status_code == 200, f"unexpected status: {r.status_code} body={r.text!r}"
+    # Raw body must never reach the wire.
+    assert sentinel not in r.text, (
+        f"raw_error body leaked into diag response: {r.text!r}"
+    )
+    payload = r.json()
+    # Structured shape — body/raw_error fields must be absent.
+    assert payload.get("count") == 0, payload
+    assert payload.get("slugs") == [], payload
+    assert payload.get("error_status") == 502, payload
+    assert payload.get("error_kind") == "fetch_failed", payload
+    assert "body" not in payload, payload
+    assert "raw_error" not in payload, payload
+
+
+def test_diagnostic_personal_skills_route_excluded_from_openapi_schema():
+    """The diag route is internal-only and MUST be excluded from /openapi.json
+    so it does not appear in /docs (Swagger UI)."""
+    from app import app  # noqa: PLC0415
+
+    client = TestClient(app)
+    schema = client.get("/openapi.json").json()
+    paths = schema.get("paths") or {}
+    # The route is registered under the /agents/km prefix on the router.
+    assert "/agents/km/skills/personal" not in paths, (
+        f"diag route leaked into OpenAPI schema: paths={list(paths)!r}"
+    )

@@ -66,8 +66,13 @@ function citingLabel(
 // onNodeClick using a timestamp + last-clicked-node ref. The single-click
 // path runs on a timer; if a second click on the same node arrives within
 // DBLCLICK_WINDOW_MS, the timer is cancelled and we route to /p or /r.
-const CLICK_DEBOUNCE_MS = 250
-const DBLCLICK_WINDOW_MS = 300
+// 500ms matches the OS accessibility standard for double-click thresholds
+// (Windows SPI_GETDOUBLECLICKTIME default, WCAG/macOS guidance) — gives users
+// with motor impairments enough time between clicks. CLICK_DEBOUNCE_MS must
+// be >= DBLCLICK_WINDOW_MS or the single-click route would fire before the
+// dblclick window closes, defeating the cancellation path.
+const DBLCLICK_WINDOW_MS = 500
+const CLICK_DEBOUNCE_MS = DBLCLICK_WINDOW_MS
 
 export default function GraphCanvas({ payload }: { payload: GraphPayload }) {
   const router = useRouter()

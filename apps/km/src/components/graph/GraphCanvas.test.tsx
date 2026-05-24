@@ -5,6 +5,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render } from "@testing-library/react";
 
+// Mirror the component constants so the test stays in lockstep with the
+// production OS-accessibility-aligned threshold (~500ms) without hard-coding
+// a number that drifts when the component changes.
+const DBLCLICK_WINDOW_MS = 500;
+const CLICK_DEBOUNCE_MS = DBLCLICK_WINDOW_MS;
+
 const pushMock = vi.fn();
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: pushMock }),
@@ -47,7 +53,7 @@ describe("GraphCanvas dblclick via timestamp (K11)", () => {
     expect(capturedProps.current?.onNodeDblClick).toBeUndefined();
   });
 
-  it("two clicks within 300ms on same paper node routes to /p/<id>, NOT /graph/<id>", () => {
+  it("two clicks within the dblclick window on same paper node routes to /p/<id>, NOT /graph/<id>", () => {
     vi.useFakeTimers();
     try {
       vi.setSystemTime(new Date(0));
@@ -58,10 +64,11 @@ describe("GraphCanvas dblclick via timestamp (K11)", () => {
       expect(click).toBeTypeOf("function");
       const node = { id: "abc", kind: "paper", label: "Paper A", fgId: "paper:abc" };
       click!(node);
-      vi.advanceTimersByTime(100);
+      // Second click well within the dblclick window.
+      vi.advanceTimersByTime(DBLCLICK_WINDOW_MS - 100);
       click!(node);
       // Flush any pending single-click debounce timer
-      vi.advanceTimersByTime(500);
+      vi.advanceTimersByTime(CLICK_DEBOUNCE_MS + 100);
       expect(pushMock).toHaveBeenCalledTimes(1);
       expect(pushMock).toHaveBeenCalledWith("/p/abc");
       expect(pushMock).not.toHaveBeenCalledWith("/graph/abc");
@@ -70,7 +77,7 @@ describe("GraphCanvas dblclick via timestamp (K11)", () => {
     }
   });
 
-  it("two clicks within 300ms on same reference node routes to /r/<id>", () => {
+  it("two clicks within the dblclick window on same reference node routes to /r/<id>", () => {
     vi.useFakeTimers();
     try {
       vi.setSystemTime(new Date(0));
@@ -80,9 +87,9 @@ describe("GraphCanvas dblclick via timestamp (K11)", () => {
         | undefined;
       const node = { id: "def", kind: "reference", label: "Ref D", fgId: "reference:def" };
       click!(node);
-      vi.advanceTimersByTime(100);
+      vi.advanceTimersByTime(DBLCLICK_WINDOW_MS - 100);
       click!(node);
-      vi.advanceTimersByTime(500);
+      vi.advanceTimersByTime(CLICK_DEBOUNCE_MS + 100);
       expect(pushMock).toHaveBeenCalledTimes(1);
       expect(pushMock).toHaveBeenCalledWith("/r/def");
     } finally {
@@ -90,7 +97,7 @@ describe("GraphCanvas dblclick via timestamp (K11)", () => {
     }
   });
 
-  it("two clicks >300ms apart on paper: second click navigates to /graph/<id> (treated as fresh single-click)", () => {
+  it("two clicks past the dblclick window on paper: second click navigates to /graph/<id> (treated as fresh single-click)", () => {
     vi.useFakeTimers();
     try {
       vi.setSystemTime(new Date(0));
@@ -100,12 +107,12 @@ describe("GraphCanvas dblclick via timestamp (K11)", () => {
         | undefined;
       const node = { id: "abc", kind: "paper", label: "Paper A", fgId: "paper:abc" };
       click!(node);
-      // Let first click's debounce fire and exceed the 300ms dblclick window
-      vi.advanceTimersByTime(310);
+      // Let first click's debounce fire and exceed the dblclick window.
+      vi.advanceTimersByTime(CLICK_DEBOUNCE_MS + 10);
       expect(pushMock).toHaveBeenLastCalledWith("/graph/abc");
-      // Second click >300ms after first
+      // Second click past the dblclick window relative to the first.
       click!(node);
-      vi.advanceTimersByTime(260);
+      vi.advanceTimersByTime(CLICK_DEBOUNCE_MS + 10);
       // Both clicks resolve to /graph/abc (single-click routing)
       expect(pushMock).toHaveBeenCalledTimes(2);
       expect(pushMock).toHaveBeenNthCalledWith(2, "/graph/abc");
@@ -114,7 +121,7 @@ describe("GraphCanvas dblclick via timestamp (K11)", () => {
     }
   });
 
-  it("two clicks within 300ms on DIFFERENT nodes: second click starts fresh single-click debounce", () => {
+  it("two clicks within the dblclick window on DIFFERENT nodes: second click starts fresh single-click debounce", () => {
     vi.useFakeTimers();
     try {
       vi.setSystemTime(new Date(0));
@@ -125,11 +132,11 @@ describe("GraphCanvas dblclick via timestamp (K11)", () => {
       const nodeA = { id: "abc", kind: "paper", label: "Paper A", fgId: "paper:abc" };
       const nodeB = { id: "xyz", kind: "paper", label: "Paper B", fgId: "paper:xyz" };
       click!(nodeA);
-      vi.advanceTimersByTime(100);
+      vi.advanceTimersByTime(DBLCLICK_WINDOW_MS - 100);
       click!(nodeB);
       // First click's pending debounce should have been cancelled (different node).
       // Second click starts a fresh debounce; advance past it.
-      vi.advanceTimersByTime(260);
+      vi.advanceTimersByTime(CLICK_DEBOUNCE_MS + 10);
       expect(pushMock).toHaveBeenCalledTimes(1);
       expect(pushMock).toHaveBeenCalledWith("/graph/xyz");
     } finally {
@@ -146,14 +153,14 @@ describe("GraphCanvas dblclick via timestamp (K11)", () => {
         | ((n: unknown) => void)
         | undefined;
       click!({ id: "abc", kind: "paper", label: "Paper A", fgId: "paper:abc" });
-      vi.advanceTimersByTime(300);
+      vi.advanceTimersByTime(CLICK_DEBOUNCE_MS + 10);
       expect(pushMock).toHaveBeenCalledWith("/graph/abc");
     } finally {
       vi.useRealTimers();
     }
   });
 
-  it("two clicks within 300ms on note node does nothing (no route)", () => {
+  it("two clicks within the dblclick window on note node does nothing (no route)", () => {
     vi.useFakeTimers();
     try {
       vi.setSystemTime(new Date(0));
@@ -163,9 +170,9 @@ describe("GraphCanvas dblclick via timestamp (K11)", () => {
         | undefined;
       const node = { id: "ghi", kind: "note", label: "Note G", fgId: "note:ghi" };
       click!(node);
-      vi.advanceTimersByTime(100);
+      vi.advanceTimersByTime(DBLCLICK_WINDOW_MS - 100);
       click!(node);
-      vi.advanceTimersByTime(500);
+      vi.advanceTimersByTime(CLICK_DEBOUNCE_MS + 100);
       expect(pushMock).not.toHaveBeenCalled();
     } finally {
       vi.useRealTimers();
