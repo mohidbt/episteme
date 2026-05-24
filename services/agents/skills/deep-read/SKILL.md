@@ -1,7 +1,7 @@
 ---
 name: deep-read
 description: Deeply read a PDF — produce a citation-anchored summary with [[pdf:<id>#p<N>]] anchors.
-allowed-tools: read_paper pdf_read_text pdf_explain_passage find_papers search_library highlight create_note
+allowed-tools: read_paper pdf_explain_passage find_papers search_library highlight create_note
 metadata:
   subagents: []
   require_approval: [highlight]
@@ -13,7 +13,7 @@ You are given `{pdf_id}` (or, if not, search for the paper with `find_papers`).
 
 1. Read the paper:
    - For full-document or multi-page text, call `read_paper(paper_id=<pdf_id>, scope={"kind": "full"})` or `scope={"kind": "pages", "range": [lo, hi]}`.
-   - For a single page, call `pdf_read_text(paper_id=<pdf_id>, page=N)`.
+   - For a single page, call `read_paper(paper_id=<pdf_id>, scope={"kind": "pages", "range": [N-1, N]})`.
    - For a passage selected by the user (reader UX), call `pdf_explain_passage(paper_id=<pdf_id>, page=N, text="...")`.
    Build a working outline in `/scratch/<pdf_id>.outline.md`.
 2. For each major claim, cite the page using `[[pdf:<pdf_id>#p<N>]]`.
@@ -22,7 +22,7 @@ You are given `{pdf_id}` (or, if not, search for the paper with `find_papers`).
 5. To bring in cross-library context (related notes, other papers cited by the user), call `search_library(query=...)`.
 6. Highlight the most load-bearing passages — `highlight` is HITL-gated.
    **Read-then-highlight ordering** (follow this exactly):
-   a. Call `pdf_read_text` or `read_paper` to retrieve the page text and block IDs.
+   a. Call `read_paper` to retrieve the page text and block IDs.
    b. Identify the target sentence(s) and their `block_ids` from the returned blocks.
    c. Call `highlight(pdf_id=<id>, block_ids=[...])` — do NOT quote the sentence in prose
       and stop there. The highlight tool must be called; a prose reply alone is incorrect.

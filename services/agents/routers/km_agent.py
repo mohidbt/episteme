@@ -40,6 +40,10 @@ from lib.message_metadata import (
     persist_message_metadata,
     schedule_persist,
 )
+from lib.thread_paper import (
+    list_threads_for_paper,
+    stamp_thread_paper_association,
+)
 
 # Per langgraph, ``recursion_limit`` bounds the number of super-steps a
 # graph executes before raising ``GraphRecursionError``. Deep Agents with
@@ -433,7 +437,7 @@ def _extra_events(ev: dict, mapped: tuple[str, dict]) -> list[tuple[str, dict]]:
         return []
     extras: list[tuple[str, dict]] = []
 
-    # Phase 1.5.1: pdf_read_text may include server-side extraction progress
+    # Phase 1.5.1: read_paper may include server-side extraction progress
     # in tool output. Surface explicit progress frames for the UI.
     output = mapped[1].get("output")
     if isinstance(output, dict):
@@ -488,8 +492,8 @@ def _build_reader_context_prefix(active_paper_id: str) -> str:
         f"paper_id={active_paper_id}. Prefer tools scoped to this paper:\n"
         f"- read_paper(paper_id=\"{active_paper_id}\", scope=...) for full or "
         f"multi-page text;\n"
-        f"- pdf_read_text(paper_id=\"{active_paper_id}\", page=N) for one page "
-        f"(page is required);\n"
+        f"- read_paper(paper_id=\"{active_paper_id}\", scope={{'kind': 'pages', "
+        f"'range': [n-1, n]}}) to read a single page;\n"
         f"- pdf_explain_passage(paper_id=\"{active_paper_id}\", page=N, "
         f"text=\"...\") to explain a selected passage;\n"
         f"- find_papers(query=\"...\") to find or list papers (omit query "
@@ -512,7 +516,7 @@ def _build_configurable(
 ) -> dict:
     """Build the ``configurable`` dict for ``RunnableConfig``.
 
-    Tools (read_paper, pdf_read_text, pdf_explain_passage) read
+    Tools (read_paper, pdf_explain_passage) read
     ``configurable.ocr_key`` via
     ``services/agents/tools/papers.py:_ocr_key_from_config`` and will fail
     fast if it's missing. The HMAC ``auth`` dict from
@@ -576,7 +580,7 @@ async def invoke(req: Request, auth: InternalAuthDep):
     # Page context (paperId/noteId/...) — when set, propagate via configurable
     # so tools can default to the active resource, AND prepend the reader
     # context as a SystemMessage so the model picks paper-scoped tools
-    # (read_paper / pdf_read_text / pdf_explain_passage / search_pdfs /
+    # (read_paper / pdf_explain_passage / search_pdfs /
     # list_pdfs) — see ``_build_reader_context_prefix`` for the exact tool
     # list named to the LLM.
     #
@@ -616,6 +620,17 @@ async def invoke(req: Request, auth: InternalAuthDep):
             active_paper_id=active_paper_id,
             run_id=invoke_run_id,
         )
+        # K8 — stamp thread→paper association so the reader sidebar can list
+        # past agent threads scoped to the open paper. Fire-and-forget with
+        # task retention; failures are logged + swallowed.
+        if active_paper_id:
+            schedule_persist(
+                stamp_thread_paper_association(
+                    thread_id=thread_id,
+                    paper_id=active_paper_id,
+                    user_id=user_id,
+                )
+            )
         try:
             try:
                 async for ev in agent.astream_events(
@@ -1096,6 +1111,21 @@ async def state(thread_id: str, auth: InternalAuthDep):
         "pending_interrupts": [],
         "messages": messages,
     }
+
+
+@router.get("/threads-for-paper/{paper_id}")
+async def threads_for_paper(paper_id: str, auth: InternalAuthDep):
+    """List recent agent threads for the given paper owned by the caller.
+
+    K8 — powers the reader sidebar's "past threads on this paper" dropdown.
+    Owner-scoped: filters by auth.user_id so cross-tenant thread_ids are
+    never disclosed. Returns at most 50 rows ordered by created_at DESC.
+    """
+    _reject_guest(auth["user_id"])
+    threads = await list_threads_for_paper(
+        paper_id=paper_id, user_id=auth["user_id"]
+    )
+    return {"threads": threads}
 
 
 @router.post("/config")

@@ -13,7 +13,7 @@
       "id": "deep_read_pdf_summary",
       "skill": "deep-read",
       "prompt": "Deep read paper 11111111-1111-1111-1111-111111111111 and create a cited summary note with page anchors.",
-      "expected_tools_all": ["search_pdfs", "read_paper", "pdf_read_text", "highlight", "create_note"],
+      "expected_tools_all": ["search_pdfs", "read_paper", "highlight", "create_note"],
       "expected_interrupt_tool": "highlight",
       "must_include_text": ["[[pdf:11111111-1111-1111-1111-111111111111#p"]
     },

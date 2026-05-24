@@ -183,9 +183,9 @@ def test_deep_read_skill_tools_list():
     names = set(loaded[0].tools)
     assert "pdf_read_tables" not in names
     assert "pdf_extract_data" not in names
+    assert "pdf_read_text" not in names
     assert {
         "read_paper",
-        "pdf_read_text",
         "pdf_explain_passage",
         "find_papers",
         "search_library",

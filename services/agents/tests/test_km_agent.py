@@ -136,16 +136,12 @@ def test_core_tools_include_read_paper_and_pdf_explain_passage():
     assert "read_paper" in names
     assert "pdf_explain_passage" in names
 
-    # pdf_read_text is named in the [reader-context] system prefix
-    # (routers/km_agent.py::_build_reader_context_prefix); it must survive
-    # skill filtering regardless of which skill is active so the model can
-    # actually call the tool it is told to use for single-page reads.
-    # deep-read happens to allowlist it, but other skills (e.g. lit-triage)
-    # do not — promoting to CORE is what guarantees availability.
+    # K7: pdf_read_text removed — read_paper(scope.kind="pages") replaces it.
     loaded_lt = load_skills(only=["lit-triage"])
     filtered_lt = _filter_tools_for_skills(list(ALL_TOOLS), loaded_skills=loaded_lt)
     names_lt = {t.name for t in filtered_lt}
-    assert "pdf_read_text" in names_lt
+    assert "pdf_read_text" not in names_lt
+    assert "read_paper" in names_lt
     # search_library must come via skill, not CORE. deep-read SKILL.md now
     # lists search_library in its tools allowlist, so it appears in the
     # deep-read filtered set but stays absent from lit-triage's set —

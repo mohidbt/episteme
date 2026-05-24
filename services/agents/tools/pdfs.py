@@ -169,29 +169,6 @@ async def search_pdfs(query: str, *, config: RunnableConfig) -> object:
 
 
 @tool
-async def pdf_read_text(
-    paper_id: str,
-    page: int,
-    *,
-    config: RunnableConfig,
-) -> object:
-    """Read text from a single page of a paper PDF.
-
-    For multi-page or full-document text, use ``read_paper`` with
-    ``scope={"kind": "pages", "range": [lo, hi]}`` or ``scope={"kind": "full"}``.
-
-    Args:
-        paper_id: Paper UUID.
-        page: 1-based page number (required).
-    """
-    user_id = user_id_from_config(config)
-    return await km_get(
-        f"/api/papers/{quote_plus(paper_id)}/pages/{page}/text",
-        user_id=user_id,
-    )
-
-
-@tool
 async def highlight(
     pdf_id: str,
     block_ids: list[str],
@@ -385,7 +362,6 @@ async def get_page_text(pdf_id: str, page: int, *, config: RunnableConfig) -> ob
 # for any non-LLM caller but are not exposed to the model.
 TOOLS = [
     find_papers,
-    pdf_read_text,
     highlight,
     pdf_explain_passage,
 ]

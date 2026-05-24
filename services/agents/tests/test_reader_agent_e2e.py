@@ -149,16 +149,6 @@ def test_read_paper_with_page_context(env_guard):
     assert not errs, f"errs={errs[:1]}"
 
 
-def test_pdf_read_text_with_page_context(env_guard):
-    tools, text, _, errs, _ = _invoke(
-        "Read page 1 of the current paper. Use pdf_read_text.",
-        page_context={"paperId": PAPER_ID},
-    )
-    assert "pdf_read_text" in tools, f"tools={tools}"
-    assert text.strip(), "expected non-empty model text"
-    assert not errs, f"errs={errs[:1]}"
-
-
 def test_pdf_explain_passage(env_guard):
     tools, text, _, errs, _ = _invoke(
         "Explain this passage from page 1 of the current paper: 'spontaneous switching'. "

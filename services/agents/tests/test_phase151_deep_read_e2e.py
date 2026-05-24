@@ -64,7 +64,7 @@ async def _deep_read_flow_events(input_, config, version):  # noqa: ARG001
         "data": {"chunk": MagicMock(content="Running deep-read workflow.")},
     }
     for idx, name in enumerate(
-        ["find_papers", "pdf_read_text", "read_paper", "highlight", "create_note"],
+        ["find_papers", "read_paper", "highlight", "create_note"],
         start=1,
     ):
         yield {
@@ -108,13 +108,13 @@ def test_phase151_debug_loaded_skills_includes_deep_read_and_new_tools():
     # read_paper / pdf_explain_passage / search_library are the wired surface.
     assert {
         "read_paper",
-        "pdf_read_text",
         "pdf_explain_passage",
         "find_papers",
         "search_library",
         "highlight",
         "create_note",
     } <= tools
+    assert "pdf_read_text" not in tools
     assert "extract_passages" not in tools
     assert "get_page_text" not in tools
 
@@ -137,7 +137,6 @@ def test_phase151_invoke_prompt_routes_through_deep_read_toolchain():
 
     tool_calls = [e["data"]["name"] for e in events if e["event"] == "tool_call"]
     assert "find_papers" in tool_calls
-    assert "pdf_read_text" in tool_calls
     assert "read_paper" in tool_calls
     assert "highlight" in tool_calls
     assert "create_note" in tool_calls

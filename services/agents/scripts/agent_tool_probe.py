@@ -112,7 +112,6 @@ PROBES: list[tuple[str, str, str, dict]] = [
     ("list_pdfs",        "List all the papers in my library. Use list_pdfs.",                                                          "list_pdfs",          {}),
     ("search_pdfs",      "Search my papers for one with 'finite-size scaling' or 'protein signalling' in the title. Use search_pdfs.", "search_pdfs",        {}),
     ("read_paper",       f"Read paper {PAPER_ID} fully. Use read_paper with scope full.",                                              "read_paper",         {"page_context": {"paperId": PAPER_ID}}),
-    ("pdf_read_text",    f"Read page 1 of paper {PAPER_ID}. Use pdf_read_text.",                                                       "pdf_read_text",      {"page_context": {"paperId": PAPER_ID}}),
     ("pdf_explain_passage", f"Explain this passage from paper {PAPER_ID} on page 1: 'spontaneous switching'. Use pdf_explain_passage.", "pdf_explain_passage", {"page_context": {"paperId": PAPER_ID}}),
     ("list_libraries",   "List my libraries. Use list_libraries.",                                                                     "list_libraries",     {}),
     ("list_notes",       "List my notes. Use list_notes.",                                                                             "list_notes",         {}),

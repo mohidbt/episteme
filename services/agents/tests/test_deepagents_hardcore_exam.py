@@ -76,8 +76,8 @@ def _fake_events_for_skill(skill: str):
             yield {"event": "on_tool_end", "run_id": "t1", "name": "search_pdfs", "data": {"output": {"count": 1}}}
             yield {"event": "on_tool_start", "run_id": "t2", "name": "read_paper", "data": {"input": {"paper_id": "11111111-1111-1111-1111-111111111111"}}}
             yield {"event": "on_tool_end", "run_id": "t2", "name": "read_paper", "data": {"output": {"ok": True}}}
-            yield {"event": "on_tool_start", "run_id": "t3", "name": "pdf_read_text", "data": {"input": {"paper_id": "11111111-1111-1111-1111-111111111111", "page": 2}}}
-            yield {"event": "on_tool_end", "run_id": "t3", "name": "pdf_read_text", "data": {"output": {"ok": True}}}
+            yield {"event": "on_tool_start", "run_id": "t3", "name": "read_paper", "data": {"input": {"paper_id": "11111111-1111-1111-1111-111111111111", "page": 2}}}
+            yield {"event": "on_tool_end", "run_id": "t3", "name": "read_paper", "data": {"output": {"ok": True}}}
             yield {
                 "event": "on_chain_end",
                 "run_id": "int-2",
@@ -147,7 +147,7 @@ def test_deepagents_tool_inventory_is_stable():
     from subagents import RESEARCHER_TOOL_NAMES, SYNTHESIZER_TOOL_NAMES, VERIFIER_TOOL_NAMES  # noqa: PLC0415
 
     tool_names = {t.name for t in ALL_TOOLS}
-    assert len(tool_names) == 25
+    assert len(tool_names) == 24
     assert _CORE_TOOL_NAMES.issubset(tool_names)
     assert set(RESEARCHER_TOOL_NAMES).issubset(tool_names | {"arxiv_search", "biorxiv_search", "pubmed_search"})
     assert set(SYNTHESIZER_TOOL_NAMES).issubset(tool_names)

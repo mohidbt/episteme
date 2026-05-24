@@ -161,7 +161,7 @@ class _ToolFlowAgent:
             yield {
                 "event": "on_tool_start",
                 "run_id": run,
-                "name": "pdf_read_text",
+                "name": "read_paper",
                 "data": {"input": {"paper_id": paper_id}},
             }
             if use_cache:
@@ -177,7 +177,7 @@ class _ToolFlowAgent:
             yield {
                 "event": "on_tool_end",
                 "run_id": run,
-                "name": "pdf_read_text",
+                "name": "read_paper",
                 "data": {"output": output},
             }
             return
@@ -186,13 +186,13 @@ class _ToolFlowAgent:
             yield {
                 "event": "on_tool_start",
                 "run_id": run,
-                "name": "pdf_read_text",
+                "name": "read_paper",
                 "data": {"input": {"paper_id": "paper-text", "page": 1}},
             }
             yield {
                 "event": "on_tool_end",
                 "run_id": run,
-                "name": "pdf_read_text",
+                "name": "read_paper",
                 "data": {"output": {"source": "pdfplumber", "pages": [{"pageNumber": 1, "text": "full text"}]}},
             }
             return
@@ -475,26 +475,6 @@ def test_live_pdf_to_embed_to_chat_end_to_end(live_server, monkeypatch):
     combined = "".join(e["content"] for e in token_events)
     assert "[[PDF Seeded Note]]" in combined
     assert "retrieval-augmented generation" in combined.lower()
-
-
-def test_live_km_invoke_prompt_deep_read_uses_pdf_read_text(live_server, monkeypatch):
-    agent = _ToolFlowAgent()
-    monkeypatch.setattr("routers.km_agent.build_km_agent", AsyncMock(return_value=agent))
-
-    path = "/agents/km/invoke"
-    body = json.dumps({"thread_id": "t-dr", "message": "Deep-read paper-text and summarize key claims."}).encode()
-    r = httpx.post(
-        f"{live_server}{path}",
-        content=body,
-        headers=_signed_headers("POST", path, body),
-        timeout=20,
-    )
-    assert r.status_code == 200, r.text
-    events = _parse_named_sse(r.text)
-    tool_calls = [e for e in events if e["event"] == "tool_call"]
-    assert tool_calls[0]["data"]["name"] == "pdf_read_text"
-    results = [e for e in events if e["event"] == "tool_result"]
-    assert results[0]["data"]["output"]["source"] == "pdfplumber"
 
 
 def test_live_km_invoke_fallback_then_cache_no_repeat_expensive_call(live_server, monkeypatch):

@@ -26,7 +26,6 @@ def test_reader_context_prefix_names_core_tools():
     # Each guaranteed-core tool we want the model to use is named
     for tool in (
         "read_paper",
-        "pdf_read_text",
         "pdf_explain_passage",
         "find_papers",
     ):
@@ -46,7 +45,7 @@ def test_reader_context_prefix_excludes_skill_gated_tools():
 
 
 def test_build_configurable_injects_ocr_and_llm_keys():
-    """Tools (read_paper, pdf_read_text, pdf_explain_passage) read
+    """Tools (read_paper, pdf_explain_passage) read
     ``configurable.ocr_key`` from RunnableConfig — see
     ``services/agents/tools/papers.py:_ocr_key_from_config``. The HMAC auth
     dict carries the per-user OCR/LLM keys; the configurable builder must
