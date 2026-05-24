@@ -237,10 +237,21 @@ _CORE_TOOL_NAMES: frozenset[str] = frozenset({
     # Without this, "list my papersets" silently routed to list_pdfs whenever
     # any skill was active (G-R6-15 / #107 round 6).
     "browse_papersets", "csv_read", "csv_write_cell",
-    # NOTE: web_search (Tavily) is intentionally NOT core — it is a fallback
-    # tool gated by per-user permission (`permissions.web_search`). As of K12
-    # the gate is default-ON: the tool is bound unless `permissions.web_search`
-    # is explicitly False. See `_filter_tools_for_permissions`.
+    # web_search (Tavily) — core, default-ON, permission-opt-out.
+    # Conceptually web_search is "always available unless the user explicitly
+    # opts out". It belongs in CORE because:
+    #   1. The permission filter (`_filter_tools_for_permissions`) is the
+    #      SINGLE source of truth for whether it is bound. CORE membership
+    #      keeps `_filter_tools_for_skills` from silently pruning it.
+    #   2. Authoring SKILL.md frontmatter to list `web_search` per-skill is
+    #      footgunny — every new skill would have to remember to opt in, or
+    #      else enabling that skill would silently disable the web. The K12
+    #      UI toggle was decorative until this was fixed (live bug: model
+    #      replied "there is no web_search tool" once any skill was on).
+    # The opt-out flow remains: settings_json.permissions.web_search = False
+    # → `_filter_tools_for_permissions` drops the tool after the skill
+    # filter has already kept it.
+    "web_search",
 })
 
 
