@@ -21,7 +21,9 @@ describe("/p/[paperId] PDF preview", () => {
     expect(source).not.toContain('"use client"');
     expect(source).not.toContain("dynamic(");
     expect(source).not.toContain("@episteme/reader");
-    expect(source).toContain('href={`/papers/${paperId}/read`}');
-    expect(source).toContain('href={`/api/papers/${paperId}/file`}');
+    expect(source).not.toContain('href={`/papers/${paperId}/read`}');
+    expect(source).not.toContain('href={`/api/papers/${paperId}/file`}');
+    expect(source).toContain('src={`/api/papers/${paperId}/cover`}');
+    expect(source).toContain("First page preview");
   });
 });

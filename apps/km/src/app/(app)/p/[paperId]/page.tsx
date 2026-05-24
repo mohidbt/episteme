@@ -129,7 +129,6 @@ export default async function PaperPage({
         <div className="relative h-full min-h-[60vh] overflow-hidden lg:min-h-0">
           <PaperPdfPreview
             paperId={paper.id}
-            filename={paper.filename}
             title={displayTitle}
           />
         </div>
