@@ -74,10 +74,12 @@ const MEMORIES_PREFIX = ".episteme/agents/memories/";
 // the directory under `services/agents/skills/<slug>/`, re-run codegen.
 
 function extractSkillSlug(path: string): string | null {
-  if (!path.startsWith(SKILLS_PREFIX)) return null;
-  const rest = path.slice(SKILLS_PREFIX.length);
+  const rest = path.startsWith(SKILLS_PREFIX)
+    ? path.slice(SKILLS_PREFIX.length)
+    : path;
   const slash = rest.indexOf("/");
-  return slash === -1 ? rest : rest.slice(0, slash);
+  const slug = slash === -1 ? rest : rest.slice(0, slash);
+  return slug.length > 0 ? slug : null;
 }
 
 const OAUTH_KEYS_TO_STRIP = new Set([
@@ -167,7 +169,15 @@ function decodeNotes(blob: string): Array<{ path: string; body: string }> {
  * in `services/agents/skills/` (or that got renamed). Path-prefix is exact.
  */
 export function filterExportableSkills(skills: SkillNote[]): SkillNote[] {
-  return skills.filter((s) => !s.path.startsWith(SKILLS_PREFIX));
+  return skills.filter((s) => {
+    // Primary: drop anything under `.episteme/agents/skills/`.
+    if (s.path.startsWith(SKILLS_PREFIX)) return false;
+    // Defense-in-depth (K1): even if a legacy/malformed row stored a system
+    // slug without the SKILLS_PREFIX, the allowlist still strips it.
+    const slug = extractSkillSlug(s.path);
+    if (slug !== null && SYSTEM_SKILL_SLUGS.has(slug)) return false;
+    return true;
+  });
 }
 
 export async function buildBundleFromSnapshot(

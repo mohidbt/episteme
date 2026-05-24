@@ -6,37 +6,36 @@ vi.mock("sonner", () => ({
   toast: { error: vi.fn(), success: vi.fn() },
 }));
 
-const mockGenerateAsync = vi.fn(async () => new Blob(["zip"], { type: "application/zip" }));
-const mockFile = vi.fn();
-vi.mock("jszip", () => {
-  return {
-    default: class MockJSZip {
-      file = mockFile;
-      generateAsync = mockGenerateAsync;
-    },
-  };
-});
-
 import { SkillToggles } from "./SkillToggles";
-import { SKILLS } from "@/lib/skills";
+
+const originalFetch = globalThis.fetch;
 
 beforeEach(() => {
-  mockFile.mockReset();
-  mockGenerateAsync.mockClear();
+  globalThis.fetch = vi.fn(async () => {
+    return new Response(new Blob(["zipbytes"], { type: "application/zip" }), {
+      status: 200,
+      headers: {
+        "Content-Type": "application/zip",
+        "Content-Disposition":
+          'attachment; filename="episteme-agent-config-u-1.zip"',
+      },
+    });
+  }) as unknown as typeof fetch;
 });
 
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  globalThis.fetch = originalFetch;
 });
 
-describe("SkillToggles export", () => {
+describe("SkillToggles export (K1 — server-side bundle)", () => {
   it("renders an Export skills button", () => {
     render(<SkillToggles enabledSkills={[]} onChange={() => {}} />);
     expect(screen.getByTestId("export-skills-button")).toBeTruthy();
   });
 
-  it("clicking Export triggers JSZip + a download", async () => {
+  it("clicking Export fetches /api/agent/export and triggers a download", async () => {
     const createUrl = vi.fn(() => "blob:mock");
     const revokeUrl = vi.fn();
     Object.defineProperty(URL, "createObjectURL", {
@@ -49,20 +48,16 @@ describe("SkillToggles export", () => {
     });
 
     render(<SkillToggles enabledSkills={[]} onChange={() => {}} />);
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
+    fetchMock.mockClear();
     fireEvent.click(screen.getByTestId("export-skills-button"));
 
     await waitFor(() => {
-      expect(mockGenerateAsync).toHaveBeenCalled();
-    });
-    // One file written per canonical skill.
-    expect(mockFile).toHaveBeenCalledTimes(SKILLS.length);
-    // Each file is named <skill>/SKILL.md.
-    for (const skill of SKILLS) {
-      const found = mockFile.mock.calls.some(
-        (args) => args[0] === `${skill.name}/SKILL.md`,
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/agent/export",
+        expect.objectContaining({ method: "GET" }),
       );
-      expect(found).toBe(true);
-    }
+    });
     expect(createUrl).toHaveBeenCalled();
   });
 });
@@ -72,7 +67,6 @@ describe("SkillToggles layout (#143)", () => {
     render(<SkillToggles enabledSkills={[]} onChange={() => {}} />);
     const heading = screen.getByTestId("system-skills-heading");
     const exportBtn = screen.getByTestId("export-skills-button");
-    // Export button should come AFTER the skills heading in DOM order
     expect(
       heading.compareDocumentPosition(exportBtn) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();

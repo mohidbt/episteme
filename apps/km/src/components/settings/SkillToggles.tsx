@@ -12,41 +12,16 @@ import {
   FieldContent,
 } from "@/components/ui/field";
 import { Empty, EmptyTitle, EmptyDescription } from "@/components/ui/empty";
-import { SKILLS, type Skill } from "@/lib/skills";
+import { SKILLS } from "@/lib/skills";
 import { PersonalSkills } from "./PersonalSkills";
 
-/**
- * Build a SKILL.md body for a single skill. Mirrors the deep-agents skill
- * format (frontmatter + description + instruction body) so an exported skill
- * round-trips when re-imported.
- */
-function buildSkillMarkdown(skill: Skill): string {
-  return [
-    "---",
-    `name: ${skill.name}`,
-    `title: ${skill.title}`,
-    "---",
-    "",
-    `# ${skill.title}`,
-    "",
-    skill.description,
-    "",
-    "## Instruction",
-    "",
-    skill.instruction,
-    "",
-  ].join("\n");
-}
-
-export async function exportSkillsZip(
-  skills: readonly Skill[],
-): Promise<Blob> {
-  const { default: JSZip } = await import("jszip");
-  const zip = new JSZip();
-  for (const skill of skills) {
-    zip.file(`${skill.name}/SKILL.md`, buildSkillMarkdown(skill));
-  }
-  return zip.generateAsync({ type: "blob" });
+// Pull a filename out of a Content-Disposition header. Falls back to a
+// stable default if the server didn't set one (or we can't parse it).
+function filenameFromDisposition(header: string | null): string {
+  const fallback = `episteme-agent-config-${Date.now()}.zip`;
+  if (!header) return fallback;
+  const match = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(header);
+  return match?.[1] ?? fallback;
 }
 
 export function SkillToggles({
@@ -68,11 +43,21 @@ export function SkillToggles({
   async function handleExport() {
     setExporting(true);
     try {
-      const blob = await exportSkillsZip(SKILLS);
+      // K1: route through the server-side bundler. Building the zip
+      // client-side from the SKILLS constant ships the entire system-skill
+      // catalog (paper-search, lit-triage, deep-read, synthesis, ...).
+      const res = await fetch("/api/agent/export", { method: "GET" });
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+      const blob = await res.blob();
+      const filename = filenameFromDisposition(
+        res.headers.get("Content-Disposition"),
+      );
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = "episteme-skills.zip";
+      a.download = filename;
       document.body.appendChild(a);
       a.click();
       a.remove();
