@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { AgentTranscript } from "@/components/agent/AgentTranscript";
+import { PastThreadsDropdown } from "@/components/agent/PastThreadsDropdown";
 import { useAgentBallStore } from "@/state/agent-ball";
 
 const Reader = dynamic(
@@ -123,13 +124,30 @@ function ReaderShellInner({ paperId }: { paperId: string }) {
     [openInReader, ensureThread, paperId],
   );
 
+  // K8 — past-threads-on-this-paper dropdown sits above the transcript. When
+  // the user picks a past thread we swap `activeThreadId` directly via the
+  // store, and the `key={activeThreadId}` on <AgentTranscript> below remounts
+  // it so the existing /state hydration path replays the chosen history.
+  const handlePickPastThread = useCallback((threadId: string) => {
+    useAgentBallStore.getState().setActiveThread(threadId);
+  }, []);
+
   const agentSlot = activeThreadId ? (
-    <AgentTranscript
-      key={activeThreadId}
-      threadId={activeThreadId}
-      fullHeight
-      pageContext={{ paperId }}
-    />
+    <div className="flex h-full min-h-0 flex-col">
+      <PastThreadsDropdown
+        paperId={paperId}
+        onSelect={handlePickPastThread}
+        activeThreadId={activeThreadId}
+      />
+      <div className="min-h-0 flex-1">
+        <AgentTranscript
+          key={activeThreadId}
+          threadId={activeThreadId}
+          fullHeight
+          pageContext={{ paperId }}
+        />
+      </div>
+    </div>
   ) : (
     <div className="p-3 text-xs text-muted-foreground">Loading…</div>
   );
