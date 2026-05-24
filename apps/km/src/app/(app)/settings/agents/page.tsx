@@ -40,12 +40,11 @@ export default async function AgentsSettingsPage() {
       string,
       "auto" | "require" | "never"
     >,
-    // Per-tool opt-in flags. Default off. Stored under settingsJson.permissions
-    // (existing jsonb column) so no migration is required.
-    permissions: (settingsJson.permissions ?? { web_search: false }) as Record<
-      string,
-      boolean
-    >,
+    // Per-tool opt-in flags. Stored under settingsJson.permissions (existing
+    // jsonb column) so no migration is required. K12: web_search defaults ON —
+    // start with an empty object so the UI's defaultOn metadata + the agent's
+    // `is False` filter both treat a missing key as "enabled".
+    permissions: (settingsJson.permissions ?? {}) as Record<string, boolean>,
   };
 
   return (

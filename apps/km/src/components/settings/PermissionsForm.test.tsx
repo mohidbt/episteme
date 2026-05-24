@@ -23,7 +23,10 @@ const initial = {
   attachedMcps: [] as Array<{ name: string; account?: string }>,
   modelPreference: "openai/gpt-5.4-nano",
   approvalRules: {} as Record<string, "auto" | "require" | "never">,
-  permissions: { web_search: false } as Record<string, boolean>,
+  // K12: web_search defaults ON. Empty permissions object matches what a
+  // freshly-onboarded user gets from the page loader, so the UI's defaultOn
+  // metadata drives the initial toggle state.
+  permissions: {} as Record<string, boolean>,
 };
 
 beforeEach(() => {
@@ -63,23 +66,25 @@ describe("PermissionsForm", () => {
     expect(screen.getByRole("button", { name: "Tools" })).toBeTruthy();
   });
 
-  it("renders web_search permission toggle defaulted to off", async () => {
+  it("renders web_search permission toggle defaulted to on (K12)", async () => {
     render(<PermissionsForm initial={initial} />);
     fireEvent.click(screen.getByTestId("perm-section-permissions"));
     await waitFor(() => {
       const toggle = screen.getByRole("switch", { name: /web search/i }) as HTMLButtonElement;
-      // shadcn Switch reflects state via aria-checked / data-state
-      expect(toggle.getAttribute("aria-checked")).toBe("false");
+      // shadcn Switch reflects state via aria-checked / data-state.
+      // Empty permissions + defaultOn:true → toggle is checked.
+      expect(toggle.getAttribute("aria-checked")).toBe("true");
     });
   });
 
-  it("toggling web_search and saving sends PATCH with permissions.web_search=true", async () => {
+  it("toggling web_search off and saving sends PATCH with permissions.web_search=false", async () => {
     render(<PermissionsForm initial={initial} />);
     fireEvent.click(screen.getByTestId("perm-section-permissions"));
 
     const toggle = await waitFor(() =>
       screen.getByRole("switch", { name: /web search/i }),
     );
+    // Initial state is on (default); clicking toggles to off.
     fireEvent.click(toggle);
 
     fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
@@ -95,7 +100,7 @@ describe("PermissionsForm", () => {
       );
       expect(patch).toBeTruthy();
       const body = JSON.parse(((patch![1] as RequestInit).body as string) ?? "{}");
-      expect(body.permissions).toEqual({ web_search: true });
+      expect(body.permissions).toEqual({ web_search: false });
     });
   });
 

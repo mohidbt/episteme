@@ -24,10 +24,10 @@ _DEFAULTS = {
         "external_send": "require",
         "write_note": "auto",
     },
-    # Per-tool opt-in flags. Default off; user must explicitly enable.
-    "permissions": {
-        "web_search": False,
-    },
+    # Per-tool flags. K12: web_search defaults ON — leave the dict empty so the
+    # km_agent `is False` filter sees a missing key as enabled. Only an explicit
+    # user toggle of False ever filters web_search out.
+    "permissions": {},
 }
 
 # Reduced loadout for guests — no skills, no approval rules. Phase 1.1 §5.2.
