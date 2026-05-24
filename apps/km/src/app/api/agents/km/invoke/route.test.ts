@@ -21,8 +21,13 @@ vi.mock("@/lib/agents/sign-request", () => ({
   })),
 }));
 
+vi.mock("@/lib/openrouter-usage", () => ({
+  recordUsage: vi.fn(async () => {}),
+}));
+
 import { getSessionInfo } from "@/lib/auth";
 import { getDecryptedApiKey } from "@episteme/auth/byok";
+import { recordUsage } from "@/lib/openrouter-usage";
 import { POST } from "./route";
 import {
   createTestUser,
@@ -325,6 +330,44 @@ describe("POST /api/agents/km/invoke", () => {
 
     const row = (await getThread(testUser.id, tid)) as AgentThreadRow;
     expect(row.status).toBe("idle");
+  });
+
+  it("K9: guest invoke passes guestSessionId (not userId) to recordUsage", async () => {
+    // Use the real test user id so thread upsert succeeds; flag the session
+    // as anonymous so the identity split kicks in.
+    vi.mocked(getSessionInfo).mockResolvedValue({
+      userId: testUser.id,
+      isAnonymous: true,
+    });
+    const tid = freshThreadId();
+    const sse =
+      'event: usage\ndata: {"model":"openai/gpt-5","prompt_tokens":10,"completion_tokens":5}\n\nevent: done\ndata: {}\n\n';
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(streamFromString(sse), { status: 200 }),
+    );
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const r = await POST(
+      req("/api/agents/km/invoke", {
+        method: "POST",
+        cookie: "session=x",
+        body: JSON.stringify({ thread_id: tid, message: "hi" }),
+      }),
+    );
+    await consumeBody(r);
+    await flushTaps();
+
+    expect(recordUsage).toHaveBeenCalledTimes(1);
+    expect(recordUsage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: null,
+        guestSessionId: testUser.id,
+        model: "openai/gpt-5",
+        promptTokens: 10,
+        completionTokens: 5,
+        source: "km-agent",
+      }),
+    );
   });
 
   it("flips status to error when upstream returns 500", async () => {

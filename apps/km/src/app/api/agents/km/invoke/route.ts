@@ -44,7 +44,13 @@ export async function POST(req: Request) {
     return Response.json({ error: "bad_request" }, { status: 400 });
   }
 
+  // Identity split for usage accounting: signed-in users get their userId,
+  // anonymous sessions get guestSessionId (the anon user id is a stable
+  // per-session key). DB-owner-scoped operations below (thread upsert/read)
+  // continue to use session.userId so guest threads still have a stable owner.
   const userId = session.userId;
+  const usageUserId = session.isAnonymous ? null : session.userId;
+  const usageGuestSessionId = session.isAnonymous ? session.userId : null;
   const threadId = body.thread_id;
 
   // Single-roundtrip UPSERT before kicking off upstream call.
@@ -144,8 +150,8 @@ export async function POST(req: Request) {
   const tapped = tapAgentEvents(upstream.body, setStatus, (u) => {
     // Fire-and-forget — recordUsage swallows DB errors via console.warn.
     void recordUsage({
-      userId,
-      guestSessionId: null,
+      userId: usageUserId,
+      guestSessionId: usageGuestSessionId,
       model: u.model,
       promptTokens: u.promptTokens,
       completionTokens: u.completionTokens,
