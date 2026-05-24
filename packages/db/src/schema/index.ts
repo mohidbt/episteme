@@ -37,6 +37,5 @@ export * from "./reference-embeddings";
 export * from "./pending-recompute";
 export * from "./openrouter-usage";
 export * from "./paper-citations";
-export * from "./citation-enrichment-jobs";
 export * from "./invite-codes";
 export * from "./signup";
