@@ -30,6 +30,7 @@ export * from "./agent-memories";
 export * from "./user-preferences";
 export * from "./agent-threads";
 export * from "./agent-message-metadata";
+export * from "./agent-thread-papers";
 export * from "./openrouter-catalog";
 export * from "./papersets";
 export * from "./semantic-edges";
