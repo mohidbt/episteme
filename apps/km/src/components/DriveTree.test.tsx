@@ -126,6 +126,16 @@ describe("DriveTree render", () => {
     expect(link?.getAttribute("href")).toBe("/d/ps1");
   });
 
+  it("renders Table2 icon next to paperset leaves (K5c)", () => {
+    render(
+      makeDriveTree({
+        papersets: [{ id: "ps1", title: "My Paperset", folderId: null }],
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /drive/i }));
+    expect(screen.getByTestId("drive-icon-paperset")).toBeTruthy();
+  });
+
   it("expansion state persists in localStorage", async () => {
     const { unmount } = render(makeDriveTree());
     const toggle = screen.getByRole("button", { name: /drive/i });

@@ -83,7 +83,7 @@ function leafIconKind(kind: ItemKind): FileTypeKind | null {
   if (kind === "paper") return "paper";
   if (kind === "reference") return "reference";
   if (kind === "note") return "note";
-  // papersets don't have a file-type icon — they render the folder chevron.
+  if (kind === "paperset") return "paperset";
   return null;
 }
 
