@@ -105,6 +105,62 @@ describe("TabBar — file-type icons (B14)", () => {
     expect(screen.queryByTestId("tab-icon-reference")).toBeNull();
   });
 
+  it("renders the Table2 icon for a paperset list tab (/papersets)", async () => {
+    const { TabBarProvider, TabBar } = await loadTabs();
+    seed(
+      [
+        { href: "/", title: "Drive" },
+        { href: "/papersets", title: "Papersets" },
+      ],
+      "/papersets",
+    );
+    await act(async () => {
+      render(
+        <TabBarProvider>
+          <TabBar />
+        </TabBarProvider>,
+      );
+    });
+    expect(screen.getByTestId("tab-icon-paperset")).toBeTruthy();
+  });
+
+  it("renders the Table2 icon for a paperset detail tab (/d/<id>)", async () => {
+    const { TabBarProvider, TabBar } = await loadTabs();
+    seed(
+      [
+        { href: "/", title: "Drive" },
+        { href: "/d/ps1", title: "My Paperset" },
+      ],
+      "/d/ps1",
+    );
+    await act(async () => {
+      render(
+        <TabBarProvider>
+          <TabBar />
+        </TabBarProvider>,
+      );
+    });
+    expect(screen.getByTestId("tab-icon-paperset")).toBeTruthy();
+  });
+
+  it("renders the Hexagon icon for an agent tab (/agents)", async () => {
+    const { TabBarProvider, TabBar } = await loadTabs();
+    seed(
+      [
+        { href: "/", title: "Drive" },
+        { href: "/agents", title: "Agent" },
+      ],
+      "/agents",
+    );
+    await act(async () => {
+      render(
+        <TabBarProvider>
+          <TabBar />
+        </TabBarProvider>,
+      );
+    });
+    expect(screen.getByTestId("tab-icon-agent")).toBeTruthy();
+  });
 });
 
 describe("TabBar — label truncation (K5a)", () => {
