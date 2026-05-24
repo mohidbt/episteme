@@ -207,14 +207,14 @@ _CORE_TOOL_NAMES: frozenset[str] = frozenset({
     "list_references", "get_reference",
     # libraries / folders
     "list_libraries", "list_folders",
-    # papers/PDFs (discovery + reader actions). read_paper / pdf_read_text / pdf_explain_passage
-    # power the reader side-panel agent (multi-page reads, single-page reads,
+    # papers/PDFs (discovery + reader actions). read_paper / pdf_explain_passage
+    # power the reader side-panel agent (multi-page reads, full-page reads,
     # SelectionToolbar "Explain") and are named verbatim in the
     # [reader-context] system prefix (see routers/km_agent.py::
     # _build_reader_context_prefix); without them in core, enabling any skill
     # whose tools list omits them (e.g. lit-triage) silently pruned them and
     # the LLM hallucinated calls to a name it could not actually invoke.
-    "find_papers", "read_paper", "pdf_read_text", "pdf_explain_passage",
+    "find_papers", "read_paper", "pdf_explain_passage",
     # reader annotation action — kept core so highlighting remains available
     # regardless of the currently enabled skill set.
     "highlight",
@@ -229,9 +229,9 @@ _CORE_TOOL_NAMES: frozenset[str] = frozenset({
     # any skill was active (G-R6-15 / #107 round 6).
     "browse_papersets", "csv_read", "csv_write_cell",
     # NOTE: web_search (Tavily) is intentionally NOT core — it is a fallback
-    # tool gated by per-user permission (`permissions.web_search`) and only
-    # bound to the agent when the user has opted in. See
-    # `_filter_tools_for_permissions`.
+    # tool gated by per-user permission (`permissions.web_search`). As of K12
+    # the gate is default-ON: the tool is bound unless `permissions.web_search`
+    # is explicitly False. See `_filter_tools_for_permissions`.
 })
 
 
@@ -246,15 +246,17 @@ def _filter_tools_for_permissions(
     tools: list[BaseTool],
     permissions: dict | None,
 ) -> list[BaseTool]:
-    """Drop permission-gated tools whose flag is not explicitly True.
+    """Drop permission-gated tools whose flag is explicitly False (K12).
 
-    Default-off semantics: missing key, None, False → tool excluded.
+    Default-ON semantics: missing key, None → tool included. Only an
+    explicit ``False`` value in ``permissions`` filters the tool out, so
+    users must take an explicit opt-out action via the settings UI.
     """
     permissions = permissions or {}
     blocked: set[str] = {
         tool_name
         for perm_key, tool_name in _PERMISSION_GATED_TOOLS.items()
-        if not permissions.get(perm_key)
+        if permissions.get(perm_key) is False
     }
     return [t for t in tools if t.name not in blocked]
 

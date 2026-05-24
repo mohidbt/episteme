@@ -7,9 +7,9 @@ fetch and markdownify each result page (the guide's optional second step) —
 Tavily's own `content` field already contains a usable snippet, and adding a
 fetch+markdownify pass would double the dependency surface for marginal gain.
 
-Set `TAVILY_API_KEY` in the agents service environment to enable. Even with
-the key set, the tool is only bound to the agent when the user has opted-in
-via `permissions.web_search = true` in their agent config.
+Set `TAVILY_API_KEY` in the agents service environment to enable. The tool
+is bound to the agent by default (K12) — users may explicitly opt out by
+setting `permissions.web_search = false` in their agent config.
 """
 from __future__ import annotations
 
