@@ -508,7 +508,7 @@ describe("agentStreamReducer — G1 done-sweep (stuck input-available cards)", (
 
   it("sweeps multiple stuck tool cards at once", () => {
     const s = fold([
-      { type: "tool_call", id: "tc-a", name: "pdf_read_text", args: {}, state: "input-available" },
+      { type: "tool_call", id: "tc-a", name: "read_paper", args: {}, state: "input-available" },
       { type: "tool_call", id: "tc-b", name: "km_get", args: {}, state: "input-available" },
       { type: "done", thread_id: "t1" },
     ]);
