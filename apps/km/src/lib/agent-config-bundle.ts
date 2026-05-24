@@ -159,24 +159,25 @@ function decodeNotes(blob: string): Array<{ path: string; body: string }> {
 }
 
 /**
- * Strip every `.episteme/agents/skills/` note from exports. Personal skills
- * live under `.episteme/agents/skills-personal/` and ship via the separate
- * `personalSkills` array; anything under `SKILLS_PREFIX` is by definition a
- * system skill (or stale seed) and never belongs in a user-bundle export.
+ * Drop only notes whose slug is in the auto-generated `SYSTEM_SKILL_SLUGS`
+ * allowlist (sourced from `services/agents/skills/*`). User-authored notes
+ * — including those that legitimately live under `.episteme/agents/skills/`
+ * — are kept.
  *
- * Allowlist-by-slug from `system-skills.generated.ts` is unreliable on prod
- * — old user drives still hold seeded notes for slugs that no longer exist
- * in `services/agents/skills/` (or that got renamed). Path-prefix is exact.
+ * The earlier K1 fix unconditionally stripped everything under SKILLS_PREFIX
+ * to plug a system-skill leak, but that also erased user-authored skill
+ * notes at the same path. The allowlist is regenerated at predev/prebuild
+ * time, so drift between disk skills and the allowlist is bounded.
  */
 export function filterExportableSkills(skills: SkillNote[]): SkillNote[] {
   return skills.filter((s) => {
-    // Primary: drop anything under `.episteme/agents/skills/`.
-    if (s.path.startsWith(SKILLS_PREFIX)) return false;
-    // Defense-in-depth (K1): even if a legacy/malformed row stored a system
-    // slug without the SKILLS_PREFIX, the allowlist still strips it.
+    // Drop notes whose first path segment (after stripping the optional
+    // SKILLS_PREFIX) is a known system slug. Covers both the canonical
+    // `.episteme/agents/skills/<slug>/SKILL.md` shape and the K1
+    // defense-in-depth shape `<slug>/SKILL.md` from malformed legacy rows.
     const slug = extractSkillSlug(s.path);
-    if (slug !== null && SYSTEM_SKILL_SLUGS.has(slug)) return false;
-    return true;
+    if (slug === null) return true;
+    return !SYSTEM_SKILL_SLUGS.has(slug);
   });
 }
 

@@ -21,9 +21,9 @@ describe("filterExportableSkills — allowlist defense-in-depth (K1)", () => {
     expect(out.map((s) => s.path)).toEqual(["my-notes/keepme.md"]);
   });
 
-  it("still drops via path-prefix branch for properly-prefixed system skills", () => {
+  it("still drops properly-prefixed system slugs via the allowlist", () => {
     const skills: SkillNote[] = [
-      { path: ".episteme/agents/skills/random-slug/SKILL.md", body: "sys" },
+      { path: ".episteme/agents/skills/paper-search/SKILL.md", body: "sys" },
       { path: "my-notes/keepme.md", body: "user" },
     ];
     const out = filterExportableSkills(skills);
