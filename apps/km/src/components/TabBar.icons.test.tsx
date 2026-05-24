@@ -104,4 +104,93 @@ describe("TabBar — file-type icons (B14)", () => {
     expect(screen.queryByTestId("tab-icon-note")).toBeNull();
     expect(screen.queryByTestId("tab-icon-reference")).toBeNull();
   });
+
+});
+
+describe("TabBar — label truncation (K5a)", () => {
+  it("strips .md suffix from note tab labels", async () => {
+    const { TabBarProvider, TabBar } = await loadTabs();
+    seed(
+      [
+        { href: "/", title: "Drive" },
+        { href: "/n/hello", title: "My Great Note.md" },
+      ],
+      "/n/hello",
+    );
+    await act(async () => {
+      render(
+        <TabBarProvider>
+          <TabBar />
+        </TabBarProvider>,
+      );
+    });
+    // The visible label should NOT contain ".md"
+    expect(screen.queryByText("My Great Note.md")).toBeNull();
+    expect(screen.getByText("My Great Note")).toBeTruthy();
+  });
+
+  it("strips .markdown suffix from note tab labels", async () => {
+    const { TabBarProvider, TabBar } = await loadTabs();
+    seed(
+      [
+        { href: "/", title: "Drive" },
+        { href: "/n/x", title: "Doc.markdown" },
+      ],
+      "/n/x",
+    );
+    await act(async () => {
+      render(
+        <TabBarProvider>
+          <TabBar />
+        </TabBarProvider>,
+      );
+    });
+    expect(screen.getByText("Doc")).toBeTruthy();
+  });
+
+  it("caps very long titles at 30 chars with ellipsis", async () => {
+    const { TabBarProvider, TabBar } = await loadTabs();
+    const longTitle = "This Is An Extremely Long Title That Exceeds Thirty Characters For Sure";
+    seed(
+      [
+        { href: "/", title: "Drive" },
+        { href: "/p/abc", title: longTitle },
+      ],
+      "/p/abc",
+    );
+    await act(async () => {
+      render(
+        <TabBarProvider>
+          <TabBar />
+        </TabBarProvider>,
+      );
+    });
+    // Visible text should be capped at 30 chars + ellipsis
+    const visible = screen.getByText((content) => content.startsWith("This Is An") && content.endsWith("…"));
+    expect(visible).toBeTruthy();
+    expect(visible.textContent!.length).toBeLessThanOrEqual(31);
+  });
+
+  it("sets browser tooltip (title attr) to the full original name", async () => {
+    const { TabBarProvider, TabBar } = await loadTabs();
+    seed(
+      [
+        { href: "/", title: "Drive" },
+        { href: "/n/x", title: "Full Original Name.md" },
+      ],
+      "/n/x",
+    );
+    await act(async () => {
+      render(
+        <TabBarProvider>
+          <TabBar />
+        </TabBarProvider>,
+      );
+    });
+    // The tab row should have a title attr equal to the full name
+    const tabs = screen.getAllByTestId("tab-bar-tab");
+    const noteTab = tabs.find((el) => el.getAttribute("data-href") === "/n/x");
+    expect(noteTab).toBeTruthy();
+    expect(noteTab!.getAttribute("title")).toBe("Full Original Name.md");
+  });
 });

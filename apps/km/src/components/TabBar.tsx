@@ -306,6 +306,25 @@ function titleFromHref(href: string): string {
   return lastSegment(href) || href;
 }
 
+/**
+ * Compute the visible label for a tab. Strips file extensions for note tabs,
+ * trims trailing punctuation for reference tabs, and caps very long titles
+ * with an ellipsis. The original title is preserved as the browser tooltip.
+ */
+export function displayTabLabel(href: string, title: string): string {
+  const kind = fileTypeKindFromHref(href);
+  let label = title;
+  if (kind === "note") {
+    label = label.replace(/\.(md|markdown)$/i, "");
+  } else if (kind === "reference") {
+    label = label.replace(/[.,;:!?]+$/u, "");
+  }
+  if (label.length > 30) {
+    label = label.slice(0, 30) + "…";
+  }
+  return label;
+}
+
 function TabIcon({ href }: { href: string }) {
   const kind = fileTypeKindFromHref(href);
   if (!kind) {
@@ -415,8 +434,9 @@ function SortableTab({
       aria-selected={active}
       data-testid="tab-bar-tab"
       data-href={tab.href}
+      title={tab.title}
       className={cn(
-        "group relative flex h-8 max-w-[280px] items-center gap-1.5 rounded-t-lg px-3 text-[12.5px]",
+        "group relative flex h-8 max-w-[180px] items-center gap-1.5 rounded-t-lg px-3 text-[12.5px]",
         active
           ? "z-10 -mb-px bg-background font-medium text-foreground"
           : "text-[var(--fg-muted)] hover:bg-[var(--bg-roof-2)]",
@@ -435,10 +455,9 @@ function SortableTab({
         type="button"
         onClick={() => onActivate(tab.href)}
         className="flex min-w-0 flex-1 items-center gap-1.5 truncate text-left"
-        title={tab.href}
       >
         <TabIcon href={tab.href} />
-        <span className="min-w-0 flex-1 truncate">{tab.title}</span>
+        <span className="min-w-0 flex-1 truncate">{displayTabLabel(tab.href, tab.title)}</span>
       </button>
       <button
         type="button"
