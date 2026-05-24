@@ -336,13 +336,11 @@ export function NoteEditor({
       // at the end. The Suggestion plugin (trigger char `[[`) re-opens the
       // typeahead with the stripped title as the query so the user can pick
       // a different target — or re-confirm the same one.
+      // Post-K6 (and post-self-heal) `node.attrs.title` is already the clean
+      // label with the `p:`/`r:`/`@`/`pdf:` prefix stripped. No need to strip
+      // again here.
       const rawTitle = (node.attrs.title as string) ?? "";
-      const stripped = rawTitle.startsWith("@")
-        ? rawTitle.slice(1)
-        : rawTitle.startsWith("pdf:")
-          ? rawTitle.slice(4)
-          : rawTitle;
-      const insertText = `[[${stripped}`;
+      const insertText = `[[${rawTitle}`;
       const caretOffset = insertText.length;
       // Use a raw schema text node (not `insertContentAt`) so tiptap-markdown
       // does NOT re-parse `[[...]]` into a new unresolved wikiLink atom.
@@ -378,15 +376,11 @@ export function NoteEditor({
           targetKind: "note" | "reference" | "paper";
           targetId: string | null;
         };
-        // Match the markdown prefixes used by extractLinks():
-        //   [[@key]]     → reference
-        //   [[pdf:name]] → paper
-        const titleWithPrefix =
-          p.targetKind === "reference"
-            ? `@${p.title}`
-            : p.targetKind === "paper"
-              ? `pdf:${p.title}`
-              : p.title;
+        // K6: WikiLink node `title` attr stores the STRIPPED label (no
+        // `p:`/`r:`/`@`/`pdf:` prefix). Serialize re-adds the prefix from
+        // `targetKind` so the saved markdown round-trips. Do NOT pre-prefix
+        // the title here — that would double-encode on serialize and
+        // produce `[[r:@bib]]` / `[[p:pdf:foo]]`.
         editor
           .chain()
           .focus()
@@ -395,7 +389,7 @@ export function NoteEditor({
             {
               type: "wikiLink",
               attrs: {
-                title: titleWithPrefix,
+                title: p.title,
                 alias: null,
                 targetKind: p.targetKind,
                 targetId: p.targetId,

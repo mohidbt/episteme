@@ -1,4 +1,5 @@
 import { InputRule, Node, mergeAttributes } from "@tiptap/core";
+import { Plugin, PluginKey } from "@tiptap/pm/state";
 import type { MdLike } from "./markdown-it-types";
 
 export type WikiLinkTargetKind = "note" | "reference" | "paper" | null;
@@ -66,6 +67,67 @@ const BOOK_MARKED_PATHS: ReadonlyArray<string> = [
 function iconSpec(paths: ReadonlyArray<string>): unknown[] {
   return ["svg", SVG_ATTRS, ...paths.map((d) => ["path", { d }])];
 }
+
+// K6 self-heal plugin: YJS-stored ProseMirror nodes that predate the K6
+// classifier have `targetKind: null` and `title: "pdf:foo"` / `"@bib"` /
+// `"p:foo"` / `"r:bar"` (raw, prefix included). They bypass markdown-it
+// because YJS hydrates ProseMirror state directly. On every transaction we
+// scan wikiLink nodes; if a node's title carries a known prefix, we rewrite
+// its attrs with the classified kind + stripped title. Idempotent —
+// already-classified (no prefix) nodes are skipped because
+// classifyWikiTarget returns `{kind: "note", title: t}` unchanged for them.
+const SELF_HEAL_KEY = new PluginKey("wikiLinkSelfHeal");
+function hasKnownPrefix(t: string): boolean {
+  return (
+    /^p:/i.test(t) || /^r:/i.test(t) || t.startsWith("@") || /^pdf:/i.test(t)
+  );
+}
+type PMState = { doc: import("@tiptap/pm/model").Node; tr: import("@tiptap/pm/state").Transaction };
+function buildHealTr(state: PMState): import("@tiptap/pm/state").Transaction | null {
+  const tr = state.tr;
+  let touched = false;
+  state.doc.descendants((node, pos) => {
+    if (node.type.name !== "wikiLink") return;
+    const title = typeof node.attrs.title === "string" ? node.attrs.title : "";
+    // Heal only when title carries a known prefix. Plain `[[Note]]` with
+    // null kind renders identically to kind="note" (renderHTML omits the
+    // attr + skips icon), so we avoid touching it to keep this transparent.
+    if (!title || !hasKnownPrefix(title)) return;
+    const { kind, title: stripped } = classifyWikiTarget(title);
+    if (stripped === title && node.attrs.targetKind === kind) return;
+    tr.setNodeMarkup(pos, undefined, {
+      ...node.attrs,
+      title: stripped,
+      targetKind: kind,
+    });
+    touched = true;
+  });
+  return touched ? tr : null;
+}
+
+const wikiLinkSelfHealPlugin = new Plugin({
+  key: SELF_HEAL_KEY,
+  // Heal on every transaction (covers later YJS sync events that hydrate
+  // stale nodes after initial mount).
+  appendTransaction(_trs, _oldState, newState) {
+    const tr = buildHealTr(newState);
+    if (tr === null) return null;
+    tr.setMeta("addToHistory", false);
+    return tr;
+  },
+  // Heal at initial view mount — `appendTransaction` does NOT fire for the
+  // initial state, only for dispatched transactions. Without this, a doc
+  // hydrated entirely from stale state at mount stays unhealed until the
+  // first edit.
+  view(view) {
+    const tr = buildHealTr(view.state);
+    if (tr !== null) {
+      tr.setMeta("addToHistory", false);
+      view.dispatch(tr);
+    }
+    return {};
+  },
+});
 
 // Inline atom node: a `[[Title]]` pill. The text the user sees is the alias
 // (if any) or the title; attrs are preserved for round-tripping and for the
@@ -178,18 +240,46 @@ export const WikiLink = Node.create({
     ];
   },
 
+  // K6 self-heal: YJS-stored ProseMirror nodes that predate the K6 classifier
+  // have `targetKind: null` and `title: "pdf:foo.pdf"` (raw, prefix included).
+  // They bypass markdown-it (YJS hydrates directly into ProseMirror), so the
+  // classifier never sees them. This plugin runs `classifyWikiTarget` over
+  // every wikiLink node on each transaction; if a node's stored title still
+  // carries a known prefix OR targetKind is null & title matches a prefix, it
+  // rewrites the attrs with the classified kind + stripped title. Idempotent:
+  // already-classified nodes are skipped.
+  addProseMirrorPlugins() {
+    return [wikiLinkSelfHealPlugin];
+  },
+
   addStorage() {
     return {
       markdown: {
         // tiptap-markdown reads `storage.markdown.serialize` per-extension and
         // invokes this for each node of our type. We write the raw `[[..]]`
         // token; nothing else needs escaping.
+        //
+        // K6: `targetKind` MUST be re-encoded into the markdown prefix.
+        // Both ingress paths (InputRule + markdown-it parse) strip the
+        // `p:` / `r:` / `@` / `pdf:` prefix from `title` and store the kind
+        // separately in `targetKind`. If we emit `[[${title}]]` with no
+        // prefix, the next reload re-parses with kind=note and the pill
+        // loses its icon / class. So `paper` → `p:`, `reference` → `r:`
+        // (the modern short forms; legacy `@` and `pdf:` still parse on
+        // ingress for back-compat).
         serialize(
           state: { write: (s: string) => void },
           node: { attrs: WikiLinkAttrs },
         ) {
-          const { title, alias } = node.attrs;
-          state.write(alias ? `[[${title}|${alias}]]` : `[[${title}]]`);
+          const { title, alias, targetKind } = node.attrs;
+          const prefix =
+            targetKind === "paper"
+              ? "p:"
+              : targetKind === "reference"
+                ? "r:"
+                : "";
+          const inner = `${prefix}${title}`;
+          state.write(alias ? `[[${inner}|${alias}]]` : `[[${inner}]]`);
         },
         // Inline markdown-it rule for `[[Title]]` / `[[Title|Alias]]`. The
         // renderer emits the same `span[data-type="wiki-link"]` HTML that
@@ -293,3 +383,4 @@ export const WikiLink = Node.create({
     };
   },
 });
+

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Editor, generateJSON, type Content, type JSONContent } from "@tiptap/core";
 import { createExtensions } from "../extensions";
-import { WikiLink, classifyWikiTarget } from "./WikiLink";
+import { WikiLink, classifyWikiTarget, type WikiLinkTargetKind } from "./WikiLink";
 
 // Build a Tiptap editor that has the WikiLink node + tiptap-markdown.
 function makeEditor(content: Content) {
@@ -257,6 +257,37 @@ describe("WikiLink markdown parse", () => {
     expect(inner?.text).toBe("[[Foo]]");
   });
 
+  // K6 prod regression: typing `[[p:Foo]]` rendered correctly on first paint
+  // but reloads showed kind=note because `serialize` dropped the `p:` prefix
+  // (title attr stores the STRIPPED label). The roundtrip must preserve kind.
+  it("K6: serialize(parse(`[[p:Foo]]`)) === `[[p:Foo]]` (kind round-trips)", () => {
+    const editor = new Editor({
+      extensions: [...createExtensions(), WikiLink],
+    });
+    editor.commands.setContent("see [[p:Foo]] x");
+    expect(toMd(editor).trim()).toBe("see [[p:Foo]] x");
+    editor.destroy();
+  });
+  it("K6: serialize(parse(`[[r:Bar]]`)) === `[[r:Bar]]` (kind round-trips)", () => {
+    const editor = new Editor({
+      extensions: [...createExtensions(), WikiLink],
+    });
+    editor.commands.setContent("see [[r:Bar]] x");
+    expect(toMd(editor).trim()).toBe("see [[r:Bar]] x");
+    editor.destroy();
+  });
+  it("K6: legacy `[[@bib]]` round-trips through modern `[[r:bib]]` form", () => {
+    // Ingress accepts legacy `@` and `pdf:`, but serialize normalizes to the
+    // modern short forms. Reload of the normalized markdown still classifies
+    // to `reference` / `paper`, preserving the icon.
+    const editor = new Editor({
+      extensions: [...createExtensions(), WikiLink],
+    });
+    editor.commands.setContent("see [[@bib]] x");
+    expect(toMd(editor).trim()).toBe("see [[r:bib]] x");
+    editor.destroy();
+  });
+
   it("is idempotent: serialize(parse([[Title]])) === [[Title]]", () => {
     const editor = new Editor({
       extensions: [...createExtensions(), WikiLink],
@@ -310,6 +341,182 @@ describe("WikiLink prefix classification (K6)", () => {
       const html = editor.getHTML();
       expect(html).toContain('data-target-kind="reference"');
       expect(html).toContain("<svg");
+      editor.destroy();
+    });
+  });
+
+  describe("input rule (live editor — actually types text)", () => {
+    // Simulate true typing through ProseMirror's `handleTextInput` so the
+    // `inputRules` plugin fires. Bypasses `setContent` (which goes through
+    // markdown-it) so this exclusively exercises the InputRule handler.
+    function typeText(editor: Editor, text: string) {
+      for (const ch of text) {
+        const view = editor.view;
+        const { from, to } = view.state.selection;
+        const handled = view.someProp("handleTextInput", (h) =>
+          // Cast — ProseMirror 1.34+ added a 5th `event` arg to
+          // handleTextInput, but at runtime our 4-arg call still triggers
+          // input rules in tests.
+          (h as (...args: unknown[]) => boolean)(view, from, to, ch),
+        );
+        if (!handled) {
+          const tr = view.state.tr.insertText(ch, from, to);
+          view.dispatch(tr);
+        }
+      }
+    }
+    it("typing `[[p:Test]]` → kind=paper, title=Test (live InputRule)", () => {
+      const editor = new Editor({
+        extensions: [...createExtensions(), WikiLink],
+      });
+      typeText(editor, "[[p:Test]]");
+      const html = editor.getHTML();
+      expect(html).toContain('data-target-kind="paper"');
+      expect(html).toContain('data-title="Test"');
+      expect(html).toContain("<svg");
+      editor.destroy();
+    });
+    it("typing `[[r:Ref]]` → kind=reference, title=Ref (live InputRule)", () => {
+      const editor = new Editor({
+        extensions: [...createExtensions(), WikiLink],
+      });
+      typeText(editor, "[[r:Ref]]");
+      const html = editor.getHTML();
+      expect(html).toContain('data-target-kind="reference"');
+      expect(html).toContain('data-title="Ref"');
+      expect(html).toContain("<svg");
+      editor.destroy();
+    });
+    it("typing `[[Just Note]]` → kind=note, title=Just Note (live InputRule)", () => {
+      const editor = new Editor({
+        extensions: [...createExtensions(), WikiLink],
+      });
+      typeText(editor, "[[Just Note]]");
+      const html = editor.getHTML();
+      expect(html).toContain('data-title="Just Note"');
+      // Note kind: no data-target-kind attribute (renderHTML omits when null)
+      // AND no svg icon (none rendered for note kind).
+      expect(html).not.toContain("<svg");
+      editor.destroy();
+    });
+  });
+
+  describe("K6 self-heal (YJS-hydrated stale nodes)", () => {
+    // Helper: find the first wikiLink node in a live editor's doc.
+    function findWiki(editor: Editor): { title: string; targetKind: WikiLinkTargetKind } | null {
+      let found: { title: string; targetKind: WikiLinkTargetKind } | null = null;
+      editor.state.doc.descendants((n) => {
+        if (n.type.name === "wikiLink" && !found) {
+          found = {
+            title: n.attrs.title as string,
+            targetKind: n.attrs.targetKind as WikiLinkTargetKind,
+          };
+        }
+      });
+      return found;
+    }
+
+    // Inject a stale ProseMirror JSON doc — title carries the prefix, kind null
+    // — exactly the shape YJS hydrates when Hocuspocus replays pre-K6 state.
+    // We build the editor empty then `setContent` the JSON, which dispatches
+    // a transaction and exercises the self-heal `appendTransaction` hook.
+    function staleDoc(title: string): JSONContent {
+      return {
+        type: "doc",
+        content: [
+          {
+            type: "paragraph",
+            content: [
+              {
+                type: "wikiLink",
+                attrs: { title, alias: null, targetKind: null, targetId: null },
+              },
+            ],
+          },
+        ],
+      };
+    }
+    function staleEditor(title: string): Editor {
+      const editor = new Editor({
+        extensions: [...createExtensions(), WikiLink],
+      });
+      // setContent with a JSON object (not a markdown string) skips the
+      // markdown-it parse path and writes the node attrs as-given — exactly
+      // mirroring YJS hydration of pre-K6 state.
+      editor.commands.setContent(staleDoc(title));
+      return editor;
+    }
+
+    it("heals stale `pdf:spontaneous.pdf` → kind=paper, title=spontaneous.pdf", () => {
+      const editor = staleEditor(("pdf:spontaneous.pdf"));
+      const wiki = findWiki(editor);
+      expect(wiki?.targetKind).toBe("paper");
+      expect(wiki?.title).toBe("spontaneous.pdf");
+      editor.destroy();
+    });
+
+    it("heals stale `@bibkey` → kind=reference, title=bibkey", () => {
+      const editor = staleEditor(("@bibkey"));
+      const wiki = findWiki(editor);
+      expect(wiki?.targetKind).toBe("reference");
+      expect(wiki?.title).toBe("bibkey");
+      editor.destroy();
+    });
+
+    it("heals stale `p:foo` → kind=paper, title=foo", () => {
+      const editor = staleEditor(("p:foo"));
+      const wiki = findWiki(editor);
+      expect(wiki?.targetKind).toBe("paper");
+      expect(wiki?.title).toBe("foo");
+      editor.destroy();
+    });
+
+    it("heals stale `r:bar` → kind=reference, title=bar", () => {
+      const editor = staleEditor(("r:bar"));
+      const wiki = findWiki(editor);
+      expect(wiki?.targetKind).toBe("reference");
+      expect(wiki?.title).toBe("bar");
+      editor.destroy();
+    });
+
+    it("plain `[[Note]]` with kind=null is a no-op (renders identically)", () => {
+      // No prefix → no transaction dispatched. Plain `note` renders the same
+      // whether targetKind is `null` or `"note"` (renderHTML omits attrs +
+      // skips icon in both cases), so heal would be transaction noise.
+      const editor = staleEditor(("PlainNote"));
+      const wiki = findWiki(editor);
+      expect(wiki?.targetKind).toBe(null);
+      expect(wiki?.title).toBe("PlainNote");
+      editor.destroy();
+    });
+
+    it("already-classified `kind=paper`, clean title is NOT re-touched (no-op)", () => {
+      const editor = makeEditor({
+        type: "doc",
+        content: [
+          {
+            type: "paragraph",
+            content: [
+              {
+                type: "wikiLink",
+                attrs: { title: "foo.pdf", alias: null, targetKind: "paper", targetId: null },
+              },
+            ],
+          },
+        ],
+      });
+      const wiki = findWiki(editor);
+      expect(wiki?.targetKind).toBe("paper");
+      expect(wiki?.title).toBe("foo.pdf");
+      editor.destroy();
+    });
+
+    it("self-heal renders the svg icon for healed paper nodes", () => {
+      const editor = staleEditor(("pdf:spontaneous.pdf"));
+      const html = editor.getHTML();
+      expect(html).toContain('data-target-kind="paper"');
+      expect(html).toContain("<svg");
+      expect(html).toContain('data-title="spontaneous.pdf"');
       editor.destroy();
     });
   });
