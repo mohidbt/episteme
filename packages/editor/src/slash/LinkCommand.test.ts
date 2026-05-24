@@ -40,7 +40,8 @@ describe("insertWikiLink", () => {
     expect(node?.attrs?.targetId).toBe("note-abc");
   });
 
-  it("inserts a wikiLink with reference targetKind (prefixed with @)", () => {
+  it("inserts a wikiLink with reference targetKind (title NOT pre-prefixed)", () => {
+    // K6: title attr stores stripped label; serialize re-adds `r:` prefix.
     const editor = makeEditor();
     insertWikiLink(editor, {
       title: "My Ref",
@@ -51,11 +52,12 @@ describe("insertWikiLink", () => {
     editor.destroy();
     const node = findWikiLinkNode(doc);
     expect(node).toBeTruthy();
-    expect(node?.attrs?.title).toBe("@My Ref");
+    expect(node?.attrs?.title).toBe("My Ref");
     expect(node?.attrs?.targetKind).toBe("reference");
   });
 
-  it("inserts a wikiLink with paper targetKind (prefixed with pdf:)", () => {
+  it("inserts a wikiLink with paper targetKind (title NOT pre-prefixed)", () => {
+    // K6: title attr stores stripped label; serialize re-adds `p:` prefix.
     const editor = makeEditor();
     insertWikiLink(editor, {
       title: "Great Paper",
@@ -66,7 +68,7 @@ describe("insertWikiLink", () => {
     editor.destroy();
     const node = findWikiLinkNode(doc);
     expect(node).toBeTruthy();
-    expect(node?.attrs?.title).toBe("pdf:Great Paper");
+    expect(node?.attrs?.title).toBe("Great Paper");
     expect(node?.attrs?.targetKind).toBe("paper");
   });
 });

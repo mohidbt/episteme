@@ -52,10 +52,13 @@ export default async function NotePage({
     .from(noteLinks)
     .leftJoin(notes, eq(notes.id, noteLinks.targetId))
     .where(eq(noteLinks.sourceNoteId, note.id));
-  // `note_links.target_title_raw` is stored STRIPPED of the `@` / `pdf:`
-  // prefix (see `classify()` in packages/markdown). But the WikiLink node's
-  // `title` attr round-trips WITH the prefix. Re-add the prefix here so the
-  // hydration lookup key matches node.title (lowercased).
+  // K6: WikiLink node `title` attr stores the STRIPPED label (no `p:` / `r:`
+  // / `@` / `pdf:` prefix). `note_links.target_title_raw` is also stored
+  // STRIPPED. Key the resolvedLinks map by `${kind}::${title.toLowerCase()}`
+  // so a paper "Foo" and a note "Foo" don't collide. Hydration in
+  // `hydrate-wiki-links.ts` reads `node.attrs.targetKind` and looks up the
+  // kind-qualified key, falling back to bare title for back-compat with
+  // pre-classifier nodes (targetKind=null).
   const resolvedLinks: Record<
     string,
     {
@@ -64,22 +67,14 @@ export default async function NotePage({
       targetSlug: string | null;
     }
   > = Object.fromEntries(
-    linkRows.map((r) => {
-      const prefix =
-        r.targetKind === "reference"
-          ? "@"
-          : r.targetKind === "paper"
-            ? "pdf:"
-            : "";
-      return [
-        `${prefix}${r.title}`.toLowerCase(),
-        {
-          targetKind: r.targetKind,
-          targetId: r.targetId,
-          targetSlug: r.targetKind === "note" ? r.targetSlug ?? null : null,
-        },
-      ];
-    }),
+    linkRows.map((r) => [
+      `${r.targetKind}::${r.title.toLowerCase()}`,
+      {
+        targetKind: r.targetKind,
+        targetId: r.targetId,
+        targetSlug: r.targetKind === "note" ? r.targetSlug ?? null : null,
+      },
+    ]),
   );
 
   const library = await getDefaultLibrary(userId);

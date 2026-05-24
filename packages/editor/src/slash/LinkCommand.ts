@@ -9,21 +9,13 @@ export interface LinkCommandPayload {
 /**
  * Insert a wikiLink node at cursor — same payload shape the [[ typeahead emits.
  *
- * Applies the same title prefixes that wikiLinkSuggestion.command uses in
- * NoteEditor.tsx so round-tripping through markdown works correctly:
- *   reference → @<title>
- *   paper     → pdf:<title>
- *   note      → <title>
+ * K6: WikiLink stores STRIPPED title + separate `targetKind` attr; the
+ * markdown serializer re-encodes the prefix (`p:` for paper, `r:` for
+ * reference) so reloads round-trip the kind. Do NOT pre-prefix the title
+ * here — that would double-encode on serialize.
  */
 export function insertWikiLink(editor: Editor, payload: LinkCommandPayload): void {
   const { title, targetKind, targetId } = payload;
-
-  const titleWithPrefix =
-    targetKind === "reference"
-      ? `@${title}`
-      : targetKind === "paper"
-        ? `pdf:${title}`
-        : title;
 
   editor
     .chain()
@@ -32,7 +24,7 @@ export function insertWikiLink(editor: Editor, payload: LinkCommandPayload): voi
       {
         type: "wikiLink",
         attrs: {
-          title: titleWithPrefix,
+          title,
           alias: null,
           targetKind,
           targetId,

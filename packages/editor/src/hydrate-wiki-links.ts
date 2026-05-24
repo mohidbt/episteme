@@ -12,9 +12,13 @@ export type ResolvedLinksMap = Record<string, WikiLinkResolution>;
 
 /**
  * Walk all `wikiLink` nodes in the editor doc and fill in `targetKind` /
- * `targetId` attrs from the given map (keyed by lowercased title). Dispatches
- * a single transaction flagged `addToHistory: false` so hydration does not
- * pollute the undo stack.
+ * `targetId` attrs from the given map. Dispatches a single transaction flagged
+ * `addToHistory: false` so hydration does not pollute the undo stack.
+ *
+ * Lookup keys are kind-qualified — `${kind}::${title.toLowerCase()}` — when
+ * the node carries a known `targetKind` (set by the K6 prefix classifier on
+ * ingress). Falls back to bare-title key for backward compatibility with
+ * notes saved before the classifier landed (`targetKind=null`).
  *
  * Returns `true` if any node was updated, `false` otherwise.
  */
@@ -30,7 +34,16 @@ export function hydrateWikiLinkResolutions(
     if (node.type.name !== "wikiLink") return;
     const title = typeof node.attrs.title === "string" ? node.attrs.title : "";
     if (!title) return;
-    const hit = resolvedLinks[title.toLowerCase()];
+    const kind = node.attrs.targetKind as
+      | "note"
+      | "reference"
+      | "paper"
+      | null
+      | undefined;
+    const lower = title.toLowerCase();
+    const hit =
+      (kind ? resolvedLinks[`${kind}::${lower}`] : undefined) ??
+      resolvedLinks[lower];
     if (!hit || !hit.targetId) return;
     tr.setNodeMarkup(pos, undefined, {
       ...node.attrs,

@@ -67,6 +67,24 @@ describe("hydrateWikiLinkResolutions", () => {
     editor.destroy();
   });
 
+  it("K6: kind-qualified lookup — paper `[[p:Foo]]` matches `paper::foo` not `note::foo`", () => {
+    const editor = makeEditor();
+    // [[p:Foo]] ingress → title="Foo", targetKind="paper"
+    editor.commands.setContent("see [[p:Foo]] x");
+
+    const result = hydrateWikiLinkResolutions(editor, {
+      // Note with same stripped title — must NOT match the paper pill.
+      "note::foo": { targetKind: "note", targetId: "wrong-note" },
+      "paper::foo": { targetKind: "paper", targetId: "right-paper" },
+    });
+
+    expect(result).toBe(true);
+    const foo = findWikiByTitle(editor, "Foo");
+    expect(foo?.attrs?.targetKind).toBe("paper");
+    expect(foo?.attrs?.targetId).toBe("right-paper");
+    editor.destroy();
+  });
+
   it("matches titles case-insensitively (title [[FOO]] matches key `foo`)", () => {
     const editor = makeEditor();
     editor.commands.setContent("hello [[FOO]] world");
