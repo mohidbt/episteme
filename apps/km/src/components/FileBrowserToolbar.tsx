@@ -143,7 +143,7 @@ export function FileBrowserToolbar({
                 <DialogHeader>
                   <DialogTitle>Import files</DialogTitle>
                   <DialogDescription>
-                    Drop or choose PDF, .md, or .bib files into this folder.
+                    Drop or choose PDFs, notes (.md), references (.bib, .ris, .csljson), or images (.jpg/.png/.webp) into this folder.
                   </DialogDescription>
                 </DialogHeader>
                 <UnifiedDropzone
