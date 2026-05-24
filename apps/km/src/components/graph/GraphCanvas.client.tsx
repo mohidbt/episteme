@@ -214,6 +214,11 @@ export default function GraphCanvas({ payload }: { payload: GraphPayload }) {
           const n = node as CanvasNode
           if (n.kind === 'paper') router.push(`/graph/${n.id}`)
         }}
+        onNodeDblClick={(node: unknown) => {
+          const n = node as CanvasNode
+          if (n.kind === 'paper') router.push(`/p/${n.id}`)
+          else if (n.kind === 'reference') router.push(`/r/${n.id}`)
+        }}
         onLinkClick={(l: unknown) => void handleLinkClick(l as CanvasLink)}
         d3VelocityDecay={0.3}
         d3AlphaDecay={0.02}
