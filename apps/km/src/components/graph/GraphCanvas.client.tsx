@@ -61,9 +61,16 @@ function citingLabel(
   return 'Citation'
 }
 
+// Delay before treating a single click as a navigation. react-force-graph-2d
+// fires onNodeClick as part of every double-click, so we defer single-click
+// routing long enough for an incoming dblclick to cancel it. 250ms matches
+// the OS default double-click threshold and stays under perceived UI lag.
+const CLICK_DEBOUNCE_MS = 250
+
 export default function GraphCanvas({ payload }: { payload: GraphPayload }) {
   const router = useRouter()
   const wrapperRef = useRef<HTMLDivElement | null>(null)
+  const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [size, setSize] = useState({ width: 900, height: 600 })
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null)
   const [open, setOpen] = useState(false)
@@ -212,10 +219,21 @@ export default function GraphCanvas({ payload }: { payload: GraphPayload }) {
         onNodeHover={(node: unknown) => setHoveredNodeId(node ? (node as CanvasNode).fgId : null)}
         onNodeClick={(node: unknown) => {
           const n = node as CanvasNode
-          if (n.kind === 'paper') router.push(`/graph/${n.id}`)
+          if (n.kind !== 'paper') return
+          // Debounce: a dblclick will arrive within CLICK_DEBOUNCE_MS and
+          // cancel this navigation to prevent double-firing /graph + /p.
+          if (clickTimerRef.current) clearTimeout(clickTimerRef.current)
+          clickTimerRef.current = setTimeout(() => {
+            clickTimerRef.current = null
+            router.push(`/graph/${n.id}`)
+          }, CLICK_DEBOUNCE_MS)
         }}
         onNodeDblClick={(node: unknown) => {
           const n = node as CanvasNode
+          if (clickTimerRef.current) {
+            clearTimeout(clickTimerRef.current)
+            clickTimerRef.current = null
+          }
           if (n.kind === 'paper') router.push(`/p/${n.id}`)
           else if (n.kind === 'reference') router.push(`/r/${n.id}`)
         }}

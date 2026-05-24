@@ -38,6 +38,45 @@ function payload(): GraphPayload {
   };
 }
 
+describe("GraphCanvas click/dblclick debounce (K11)", () => {
+  it("single-click then dblclick on paper within 250ms routes ONLY to /p/<id>", () => {
+    vi.useFakeTimers();
+    try {
+      render(<GraphCanvas payload={payload()} />);
+      const click = capturedProps.current?.onNodeClick as ((n: unknown) => void) | undefined;
+      const dbl = capturedProps.current?.onNodeDblClick as ((n: unknown) => void) | undefined;
+      expect(click).toBeTypeOf("function");
+      expect(dbl).toBeTypeOf("function");
+      const node = { id: "abc", kind: "paper", label: "Paper A", fgId: "paper:abc" };
+      click!(node);
+      // dblclick fires shortly after single click — well under the 250ms debounce
+      vi.advanceTimersByTime(50);
+      dbl!(node);
+      // Flush any pending timers
+      vi.advanceTimersByTime(500);
+      // Only the dblclick navigation should occur — single-click was cancelled
+      expect(pushMock).toHaveBeenCalledTimes(1);
+      expect(pushMock).toHaveBeenCalledWith("/p/abc");
+      expect(pushMock).not.toHaveBeenCalledWith("/graph/abc");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("single-click without dblclick still routes paper to /graph/<id> after debounce", () => {
+    vi.useFakeTimers();
+    try {
+      render(<GraphCanvas payload={payload()} />);
+      const click = capturedProps.current?.onNodeClick as ((n: unknown) => void) | undefined;
+      click!({ id: "abc", kind: "paper", label: "Paper A", fgId: "paper:abc" });
+      vi.advanceTimersByTime(300);
+      expect(pushMock).toHaveBeenCalledWith("/graph/abc");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
 describe("GraphCanvas dblclick", () => {
   it("dblclick on paper node opens /p/<id>", () => {
     render(<GraphCanvas payload={payload()} />);
