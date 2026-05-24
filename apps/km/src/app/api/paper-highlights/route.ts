@@ -2,6 +2,7 @@ import { and, asc, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { paperHighlights, papers } from "@episteme/db/schema";
 import { getAuthedUserId, MissingInternalSecretError } from "@/lib/internal-auth";
+import { requireNonGuestAuthed } from "@/lib/auth/require-non-guest";
 import { paperHighlightCreateManySchema } from "@/lib/validators";
 import { jsonError, requireOwned } from "@/lib/crud";
 
@@ -46,14 +47,11 @@ export async function POST(req: Request) {
   // Dual-auth: cookie session OR HMAC (used by agent `highlight` tool).
   // Read raw body first so we can pass it to the HMAC verifier.
   const rawBody = await req.text();
-  let authed;
-  try { authed = await getAuthedUserId(req, rawBody); }
-  catch (e) {
-    if (e instanceof MissingInternalSecretError) return jsonError(500, "internal auth misconfigured");
-    throw e;
-  }
-  if (!authed) return jsonError(401, "unauthorized");
-  const userId = authed.userId;
+  // K9: anonymous guests cannot create highlights via the cookie path; the
+  // agent's `highlight` tool keeps working via HMAC.
+  const gate = await requireNonGuestAuthed(req, rawBody);
+  if (!gate.ok) return gate.response;
+  const userId = gate.userId;
   const body = (() => { try { return JSON.parse(rawBody); } catch { return null; } })();
   const parsed = paperHighlightCreateManySchema.safeParse(body);
   if (!parsed.success) return jsonError(400, "validation", { issues: parsed.error.issues });

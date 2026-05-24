@@ -17,6 +17,9 @@ import {
 } from "../../../_test-utils";
 import { ensureMinIOReady } from "../../../_minio-setup";
 import { storage, paperSourceKey, paperCoverKey } from "@/lib/storage";
+import { eq } from "drizzle-orm";
+import { db } from "@/lib/db";
+import { libraries, papers, folders, TRASH_FOLDER_NAME } from "@episteme/db/schema";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SAMPLE_PDF_PATH = path.join(
@@ -45,14 +48,24 @@ beforeAll(async () => {
     }),
   );
   libraryId = (await r.json()).id;
-  const anonLib = await POST_LIB(
-    req("/api/libraries", {
-      method: "POST",
-      cookie: anon.cookie,
-      body: JSON.stringify({ name: "Anon File Lib" }),
-    }),
-  );
-  anonLibraryId = (await anonLib.json()).id;
+  // K9: guest-gated POST /api/libraries means we seed the anon user's
+  // library via direct DB insert. The anon-side test exercises that the
+  // FILE-GET path (reader image streaming) works for guests on a paper
+  // they already own — uploading new content is a separate, gated path.
+  const [anonLib] = await db
+    .insert(libraries)
+    .values({ userId: anon.id, name: "Anon File Lib" })
+    .returning();
+  anonLibraryId = anonLib.id;
+  // Seed the trash folder (matches what POST /api/libraries does) so DELETE
+  // can move the paper to trash before the cleanup step.
+  await db.insert(folders).values({
+    libraryId: anonLibraryId,
+    userId: anon.id,
+    parentId: null,
+    name: TRASH_FOLDER_NAME,
+    isTrash: true,
+  });
   sampleBytes = await readFile(SAMPLE_PDF_PATH);
 }, 60_000);
 
@@ -93,29 +106,32 @@ async function initAndUpload(): Promise<string> {
 }
 
 async function initAndUploadAnon(): Promise<string> {
-  const r = await POST_PAPER(
-    req("/api/papers", {
-      method: "POST",
-      cookie: anon.cookie,
-      body: JSON.stringify({
-        libraryId: anonLibraryId,
-        filename: "anon-sample.pdf",
-        contentType: "application/pdf",
-        sizeBytes: sampleBytes.length,
-      }),
-    }),
+  // K9: POST /api/papers is now guest-gated. For the FILE-GET test (which
+  // only exercises that anon owners can read their own paper bytes), seed
+  // the row + storage object directly — bypassing the upload-init gate is
+  // exactly what the seed path does in production for anon users.
+  const [row] = await db
+    .insert(papers)
+    .values({
+      libraryId: anonLibraryId,
+      userId: anon.id,
+      filename: "anon-sample.pdf",
+      title: "Anon Sample",
+      sizeBytes: sampleBytes.length,
+      storageUrl: "",
+    })
+    .returning();
+  await storage.uploadObject(
+    paperSourceKey(row.id),
+    Buffer.from(sampleBytes),
+    "application/pdf",
   );
-  if (r.status !== 201) throw new Error(`anon init failed: ${r.status}`);
-  const body = await r.json();
-  const paperId: string = body.paperId;
-  createdPaperIds.push(paperId);
-  const put = await fetch(body.uploadUrl, {
-    method: "PUT",
-    body: new Uint8Array(sampleBytes),
-    headers: { "content-type": "application/pdf" },
-  });
-  if (!put.ok) throw new Error(`anon PUT failed: ${put.status}`);
-  return paperId;
+  await db
+    .update(papers)
+    .set({ storageUrl: paperSourceKey(row.id) })
+    .where(eq(papers.id, row.id));
+  createdPaperIds.push(row.id);
+  return row.id;
 }
 
 const MISSING_ID = "00000000-0000-0000-0000-000000000000";

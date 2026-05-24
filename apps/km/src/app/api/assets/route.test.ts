@@ -8,6 +8,7 @@ import {
 } from "./[id]/route";
 import { POST as POST_LIB } from "../libraries/route";
 import {
+  createAnonTestUser,
   createTestUser,
   deleteTestUser,
   params,
@@ -92,6 +93,28 @@ describe("assets", () => {
       }),
     );
     expect(r.status).toBe(403);
+  });
+
+  // K9: anonymous guests cannot init asset uploads (parallel to papers
+  // POST and library import — same OR-spend-bypass concern).
+  it("403 guest_forbidden for anonymous session", async () => {
+    const anon = await createAnonTestUser();
+    const r = await POST(
+      req("/api/assets", {
+        method: "POST",
+        cookie: anon.cookie,
+        body: JSON.stringify({
+          libraryId,
+          filename: "fig.png",
+          contentType: "image/png",
+          sizeBytes: 2048,
+        }),
+      }),
+    );
+    expect(r.status).toBe(403);
+    const body = await r.json();
+    expect(body.error).toBe("guest_forbidden");
+    await deleteTestUser(anon.id);
   });
 
   it("POST returns presigned uploadUrl + assetId; row stores filename/mime/size", async () => {

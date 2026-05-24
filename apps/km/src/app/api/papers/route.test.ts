@@ -8,6 +8,7 @@ import {
 } from "./[id]/route";
 import { POST as POST_LIB } from "../libraries/route";
 import {
+  createAnonTestUser,
   createTestUser,
   deleteTestUser,
   params,
@@ -93,6 +94,29 @@ describe("papers", () => {
       req("/api/papers", { method: "POST", cookie: other.cookie, body: JSON.stringify(initUpload()) }),
     );
     expect(r.status).toBe(403);
+  });
+
+  // K9: anonymous guests cannot init paper uploads — would bypass the
+  // guest OR-spend soft cap by smuggling in arbitrary PDFs. Gate runs
+  // before body parse/ownership, so any libraryId works.
+  it("403 guest_forbidden for anonymous session", async () => {
+    const anon = await createAnonTestUser();
+    const r = await POST(
+      req("/api/papers", {
+        method: "POST",
+        cookie: anon.cookie,
+        body: JSON.stringify({
+          libraryId,
+          filename: "a.pdf",
+          contentType: "application/pdf",
+          sizeBytes: 1024,
+        }),
+      }),
+    );
+    expect(r.status).toBe(403);
+    const body = await r.json();
+    expect(body.error).toBe("guest_forbidden");
+    await deleteTestUser(anon.id);
   });
 
   it("POST returns presigned uploadUrl with X-Amz-Signature", async () => {

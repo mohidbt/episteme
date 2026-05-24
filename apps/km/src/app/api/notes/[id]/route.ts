@@ -2,6 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { notes } from "@episteme/db/schema";
 import { getAuthedUserId, MissingInternalSecretError } from "@/lib/internal-auth";
+import { requireNonGuestAuthed } from "@/lib/auth/require-non-guest";
 import { noteUpdateSchema } from "@/lib/validators";
 import { jsonError, requireOwned, resolveNoteSlug } from "@/lib/crud";
 import { getTrashFolderId, moveItemToFolder } from "@/lib/folders-server";
@@ -38,11 +39,11 @@ export async function PATCH(req: Request, { params }: Ctx) {
   // Read body once so HMAC verification (when present) can be done over the
   // exact bytes; then parse the cached string.
   const rawBody = await req.text();
-  let authed;
-  try { authed = await getAuthedUserId(req, rawBody); }
-  catch (e) { if (e instanceof MissingInternalSecretError) return jsonError(500, "internal auth misconfigured"); throw e; }
-  if (!authed) return jsonError(401, "unauthorized");
-  const userId = authed.userId;
+  // K9: anonymous guests cannot edit notes. HMAC callers (agent edit_note
+  // tool) pass through.
+  const gate = await requireNonGuestAuthed(req, rawBody);
+  if (!gate.ok) return gate.response;
+  const userId = gate.userId;
   const { id } = await params;
   let body: unknown = null;
   try { body = JSON.parse(rawBody); } catch { /* leaves body=null */ }

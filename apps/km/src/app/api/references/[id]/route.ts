@@ -2,6 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { references_, noteLinks } from "@episteme/db/schema";
 import { getAuthedUserId, MissingInternalSecretError } from "@/lib/internal-auth";
+import { requireNonGuestAuthed } from "@/lib/auth/require-non-guest";
 import { referenceUpdateSchema } from "@/lib/validators";
 import { jsonError, requireOwned } from "@/lib/crud";
 import { getTrashFolderId, moveItemToFolder } from "@/lib/folders-server";
@@ -27,12 +28,11 @@ export async function GET(req: Request, { params }: Ctx) {
 }
 
 export async function PATCH(req: Request, { params }: Ctx) {
-  let authed;
   const rawBody = await req.text();
-  try { authed = await getAuthedUserId(req, rawBody); }
-  catch (e) { if (e instanceof MissingInternalSecretError) return misconfiguredResponse(); throw e; }
-  if (!authed) return jsonError(401, "unauthorized");
-  const userId = authed.userId;
+  // K9: anonymous guests cannot edit references. HMAC callers pass through.
+  const gate = await requireNonGuestAuthed(req, rawBody);
+  if (!gate.ok) return gate.response;
+  const userId = gate.userId;
   const { id } = await params;
   const body = JSON.parse(rawBody);
   const parsed = referenceUpdateSchema.safeParse(body);

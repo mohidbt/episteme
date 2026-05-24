@@ -2,6 +2,7 @@ import { and, desc, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { papers, libraries } from "@episteme/db/schema";
 import { getAuthedUserId, MissingInternalSecretError } from "@/lib/internal-auth";
+import { requireNonGuestAuthed } from "@/lib/auth/require-non-guest";
 import { paperUploadInitSchema } from "@/lib/validators";
 import { jsonError, requireOwned } from "@/lib/crud";
 import { storage, paperSourceKey } from "@/lib/storage";
@@ -42,14 +43,12 @@ export async function POST(req: Request) {
   // Dual-auth: cookie session OR HMAC (for agent tools like agentic_fetch_papers).
   // Read raw body first so the HMAC verifier can sign over it.
   const rawBody = await req.text();
-  let authed;
-  try { authed = await getAuthedUserId(req, rawBody); }
-  catch (e) {
-    if (e instanceof MissingInternalSecretError) return jsonError(500, "internal auth misconfigured");
-    throw e;
-  }
-  if (!authed) return jsonError(401, "unauthorized");
-  const userId = authed.userId;
+  // K9: anonymous guests cannot init PDF uploads — uploads chain into OR spend
+  // (parse/extract/embed), bypassing the guest soft cap. HMAC callers
+  // (server-to-server agents) pass through.
+  const gate = await requireNonGuestAuthed(req, rawBody);
+  if (!gate.ok) return gate.response;
+  const userId = gate.userId;
   const body = (() => { try { return JSON.parse(rawBody); } catch { return null; } })();
   const parsed = paperUploadInitSchema.safeParse(body);
   if (!parsed.success) return jsonError(400, "validation", { issues: parsed.error.issues });

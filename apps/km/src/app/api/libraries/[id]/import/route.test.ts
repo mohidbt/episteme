@@ -237,26 +237,19 @@ describe("POST /api/libraries/:id/import", () => {
 
   it("403 guest_forbidden for anonymous session", async () => {
     const anon = await createAnonTestUser();
-    // Anon user gets their own library auto-seeded? Not in test path
-    // (see createAnonTestUser comment). Create one explicitly so we hit the
-    // guest gate, not the library lookup.
-    const libRes = await POST_LIB(
-      req("/api/libraries", {
-        method: "POST",
-        cookie: anon.cookie,
-        body: JSON.stringify({ name: "AnonLib" }),
-      }),
-    );
-    const anonLibId: number = (await libRes.json()).id;
-
+    // Use the real user's libraryId — gate runs before ownership check, so
+    // we never need to create a library for the anon user. (Previously this
+    // test called POST /api/libraries with the anon cookie; that route is
+    // now also guest-gated as part of K9, so the inline lib-create path
+    // would itself 403.)
     const form = new FormData();
     form.set(
       "file",
       new File(["body"], "anon.md", { type: "text/markdown" }),
     );
     const r = await POST(
-      formRequest(`/api/libraries/${anonLibId}/import`, form, anon.cookie),
-      params({ id: String(anonLibId) }),
+      formRequest(`/api/libraries/${libraryId}/import`, form, anon.cookie),
+      params({ id: String(libraryId) }),
     );
     expect(r.status).toBe(403);
     const body = await r.json();

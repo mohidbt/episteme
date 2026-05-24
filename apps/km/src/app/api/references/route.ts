@@ -1,8 +1,8 @@
 import { and, asc, eq, ilike, or, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { references_, libraries, papers } from "@episteme/db/schema";
-import { getUserIdFromRequest } from "@/lib/auth";
 import { getAuthedUserId, MissingInternalSecretError } from "@/lib/internal-auth";
+import { requireNonGuestSession } from "@/lib/auth/require-non-guest";
 import {
   referenceCreateSchema,
   referenceCreateFromCslSchema,
@@ -111,8 +111,11 @@ async function insertReference(values: InsertValues) {
 }
 
 export async function POST(req: Request) {
-  const userId = await getUserIdFromRequest(req);
-  if (!userId) return jsonError(401, "unauthorized");
+  // K9: anonymous guests cannot create references (they're already seeded
+  // a populated library; manual references via UI are a real-user-only flow).
+  const gate = await requireNonGuestSession(req);
+  if (!gate.ok) return gate.response;
+  const userId = gate.userId;
   const body = await req.json().catch(() => null);
 
   const hasDoi = typeof (body as { doi?: unknown })?.doi === "string";

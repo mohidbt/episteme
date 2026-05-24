@@ -16,6 +16,7 @@ import {
   getAuthedUserId,
   MissingInternalSecretError,
 } from "@episteme/auth/internal";
+import { requireNonGuestAuthed } from "@/lib/auth/require-non-guest";
 
 export const runtime = "nodejs";
 
@@ -84,17 +85,11 @@ export async function POST(req: Request) {
   // sender signed; subsequent JSON.parse uses the same string.
   const rawBody = await req.text();
 
-  let authed;
-  try {
-    authed = await getAuthedUserId(req, rawBody);
-  } catch (e) {
-    if (e instanceof MissingInternalSecretError) {
-      return jsonError(500, "internal_auth_misconfigured");
-    }
-    throw e;
-  }
-  if (!authed) return jsonError(401, "unauthorized");
-  const userId = authed.userId;
+  // K9: anonymous guests cannot create highlights via the API. HMAC callers
+  // (agent tools) pass through.
+  const gate = await requireNonGuestAuthed(req, rawBody);
+  if (!gate.ok) return gate.response;
+  const userId = gate.userId;
 
   let body: unknown = null;
   try { body = JSON.parse(rawBody); } catch { /* leave null */ }

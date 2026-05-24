@@ -3,6 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { papersets } from "@episteme/db/schema";
 import { getAuthedUserId, MissingInternalSecretError } from "@/lib/internal-auth";
+import { requireNonGuestAuthed } from "@/lib/auth/require-non-guest";
 import { getDefaultLibrary } from "@/lib/default-library";
 import { jsonError } from "@/lib/crud";
 
@@ -49,14 +50,11 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   const rawBody = await req.text();
-  let authed;
-  try { authed = await getAuthedUserId(req, rawBody); }
-  catch (e) {
-    if (e instanceof MissingInternalSecretError) return misconfiguredResponse();
-    throw e;
-  }
-  if (!authed) return jsonError(401, "unauthorized");
-  const userId = authed.userId;
+  // K9: anonymous guests cannot create papersets (seeded library already has
+  // the PSM demo paperset). HMAC callers (agent tools) pass through.
+  const gate = await requireNonGuestAuthed(req, rawBody);
+  if (!gate.ok) return gate.response;
+  const userId = gate.userId;
 
   let body: unknown = null;
   try { body = JSON.parse(rawBody); } catch { /* body=null → validation 400 */ }

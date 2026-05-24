@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { notes } from "@episteme/db/schema";
 import { libraries } from "@episteme/db/schema";
 import { getAuthedUserId, MissingInternalSecretError } from "@/lib/internal-auth";
+import { requireNonGuestAuthed } from "@/lib/auth/require-non-guest";
 import { noteCreateSchema } from "@/lib/validators";
 import { jsonError, requireOwned, resolveNoteSlug } from "@/lib/crud";
 import { resolveUnresolvedNoteLinks, createRevisionIfNeeded } from "@episteme/notes-core";
@@ -55,11 +56,12 @@ async function resolveDefaultLibraryId(userId: string): Promise<number | null> {
 
 export async function POST(req: Request) {
   const rawBody = await req.text();
-  let authed;
-  try { authed = await getAuthedUserId(req, rawBody); }
-  catch (e) { if (e instanceof MissingInternalSecretError) return misconfiguredResponse(); throw e; }
-  if (!authed) return jsonError(401, "unauthorized");
-  const userId = authed.userId;
+  // K9: anonymous guests cannot create notes via the API; HMAC callers
+  // (agent tools) pass through.
+  const gate = await requireNonGuestAuthed(req, rawBody);
+  if (!gate.ok) return gate.response;
+  const userId = gate.userId;
+  const authed = { userId, viaHmac: gate.viaHmac };
   let body: Record<string, unknown> | null = null;
   try { body = JSON.parse(rawBody); } catch { /* leaves body=null */ }
   // Agent tools (HMAC path) often omit `libraryId`. Resolve user's default

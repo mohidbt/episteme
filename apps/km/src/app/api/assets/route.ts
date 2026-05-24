@@ -2,6 +2,7 @@ import { and, desc, eq, isNull } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { assets, libraries } from "@episteme/db/schema";
 import { getUserIdFromRequest } from "@/lib/auth";
+import { requireNonGuestSession } from "@/lib/auth/require-non-guest";
 import { assetUploadInitSchema } from "@/lib/validators";
 import { jsonError, requireOwned } from "@/lib/crud";
 import { storage, assetSourceKey } from "@/lib/storage";
@@ -38,8 +39,12 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const userId = await getUserIdFromRequest(req);
-  if (!userId) return jsonError(401, "unauthorized");
+  // K9: anonymous guests cannot init asset uploads — same OR-spend-bypass
+  // concern as papers/import (image uploads can be referenced from notes
+  // that then drive embed/extract work).
+  const gate = await requireNonGuestSession(req);
+  if (!gate.ok) return gate.response;
+  const userId = gate.userId;
   const body = await req.json().catch(() => null);
   const parsed = assetUploadInitSchema.safeParse(body);
   if (!parsed.success) return jsonError(400, "validation", { issues: parsed.error.issues });

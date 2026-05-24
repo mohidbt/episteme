@@ -23,10 +23,17 @@ const mocks = vi.hoisted(() => {
 
 vi.mock("@/lib/auth", () => ({
   getUserIdFromRequest: vi.fn(async () => "user-1"),
+  // K9: requireNonGuestAuthed falls back to getSessionInfo for cookie callers.
+  // The HMAC-mocked path below should short-circuit (viaHmac=true), but the
+  // mock must still exist for the import to resolve.
+  getSessionInfo: vi.fn(async () => ({ userId: "user-1", isAnonymous: false })),
 }));
 
 vi.mock("@episteme/auth/internal", () => ({
-  getAuthedUserId: vi.fn(async () => ({ userId: "user-1" })),
+  // viaHmac=true so requireNonGuestAuthed short-circuits without hitting
+  // getSessionInfo (matches what the schema-mismatch path exercises:
+  // server-to-server HMAC calls from the agent).
+  getAuthedUserId: vi.fn(async () => ({ userId: "user-1", viaHmac: true })),
   MissingInternalSecretError: class MissingInternalSecretError extends Error {},
 }));
 

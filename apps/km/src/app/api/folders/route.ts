@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { libraries, folders } from "@episteme/db/schema";
 import { and, asc, eq, isNull } from "drizzle-orm";
 import { getAuthedUserId, MissingInternalSecretError } from "@/lib/internal-auth";
+import { requireNonGuestAuthed } from "@/lib/auth/require-non-guest";
 import { jsonError } from "@/lib/crud";
 
 /**
@@ -75,14 +76,12 @@ const Body = z.object({
 
 export async function POST(req: Request) {
   const rawBody = await req.text();
-  let authed;
-  try { authed = await getAuthedUserId(req, rawBody); }
-  catch (e) {
-    if (e instanceof MissingInternalSecretError) return jsonError(500, "internal auth misconfigured");
-    throw e;
-  }
-  if (!authed) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  const userId = authed.userId;
+  // K9: anonymous guests cannot create folders (UI-side gate already hides
+  // the action; this is the server-side enforcement). HMAC callers
+  // (agent tools) pass through.
+  const gate = await requireNonGuestAuthed(req, rawBody);
+  if (!gate.ok) return gate.response;
+  const userId = gate.userId;
 
   let parsedJson: unknown = null;
   try { parsedJson = JSON.parse(rawBody); } catch { /* leaves null */ }
