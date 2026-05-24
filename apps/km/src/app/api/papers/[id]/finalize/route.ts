@@ -54,6 +54,10 @@ export async function POST(req: Request, { params }: Ctx) {
   if (Number.isFinite(len) && len > MAX_PDF_BYTES) {
     return jsonError(413, "payload_too_large");
   }
+  // Capture the real Content-Length so finalize can overwrite the
+  // client-claimed sizeBytes — defense-in-depth against forged init payloads
+  // and the source of zero-byte legacy rows that the backfill route handles.
+  const actualSizeBytes = Number.isFinite(len) && len > 0 ? len : null;
 
   const getUrl = await storage.getPresignedGet(sourceKey, 120);
   const sourceRes = await fetch(getUrl);
@@ -115,6 +119,7 @@ export async function POST(req: Request, { params }: Ctx) {
         string | null
       >`CASE WHEN ${papers.doi} IS NULL THEN ${metaDoi}::text ELSE ${papers.doi} END`,
       storageUrl: sourceKey,
+      ...(actualSizeBytes !== null ? { sizeBytes: actualSizeBytes } : {}),
     })
     .where(eq(papers.id, id))
     .returning();

@@ -5,6 +5,7 @@ import { POST as POST_LIB } from "../../route";
 import { db } from "@/lib/db";
 import { notes } from "@episteme/db/schema";
 import {
+  createAnonTestUser,
   createTestUser,
   deleteTestUser,
   params,
@@ -232,6 +233,35 @@ describe("POST /api/libraries/:id/import", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0].folderId).toBe(folderId);
     await deleteTestUser(folderUser.id);
+  });
+
+  it("403 guest_forbidden for anonymous session", async () => {
+    const anon = await createAnonTestUser();
+    // Anon user gets their own library auto-seeded? Not in test path
+    // (see createAnonTestUser comment). Create one explicitly so we hit the
+    // guest gate, not the library lookup.
+    const libRes = await POST_LIB(
+      req("/api/libraries", {
+        method: "POST",
+        cookie: anon.cookie,
+        body: JSON.stringify({ name: "AnonLib" }),
+      }),
+    );
+    const anonLibId: number = (await libRes.json()).id;
+
+    const form = new FormData();
+    form.set(
+      "file",
+      new File(["body"], "anon.md", { type: "text/markdown" }),
+    );
+    const r = await POST(
+      formRequest(`/api/libraries/${anonLibId}/import`, form, anon.cookie),
+      params({ id: String(anonLibId) }),
+    );
+    expect(r.status).toBe(403);
+    const body = await r.json();
+    expect(body.error).toBe("guest_forbidden");
+    await deleteTestUser(anon.id);
   });
 
   it("200 .md import without folderId leaves note's folderId null", async () => {

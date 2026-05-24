@@ -76,10 +76,22 @@ export default async function DataSettingsPage() {
             <div>
               <div className="text-sm font-medium">Import from file</div>
               <div className="text-xs text-muted-foreground">
-                Upload a .zip previously exported from Episteme, or an Episteme compatible single file.
+                {session.isAnonymous
+                  ? "Sign in to import notes, papers, and references."
+                  : "Upload a .zip previously exported from Episteme, or an Episteme compatible single file."}
               </div>
             </div>
-            <ImportControls libraryId={lib.id} folders={folders} />
+            {session.isAnonymous ? (
+              <a
+                href="/sign-up"
+                data-testid="settings-import-signup-cta"
+                className="inline-flex items-center justify-center whitespace-nowrap rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+              >
+                Sign up to import
+              </a>
+            ) : (
+              <ImportControls libraryId={lib.id} folders={folders} />
+            )}
           </div>
         </div>
       )}

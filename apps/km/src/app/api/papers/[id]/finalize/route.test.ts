@@ -17,6 +17,9 @@ import {
 } from "../../../_test-utils";
 import { ensureMinIOReady } from "../../../_minio-setup";
 import { storage, paperSourceKey, paperCoverKey } from "@/lib/storage";
+import { db } from "@/lib/db";
+import { papers } from "@episteme/db/schema";
+import { eq } from "drizzle-orm";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SAMPLE_PDF_PATH = path.join(
@@ -188,6 +191,48 @@ describe("POST /api/papers/:id/finalize", () => {
       // Year + authors were already set by the first finalize; they should remain.
       expect(paper.year).toBe(2017);
       expect(paper.authors).toContain("Ashish Vaswani");
+
+      await DEL_PAPER(
+        req(`/api/papers/${paperId}`, { method: "DELETE", cookie: u.cookie }),
+        params({ id: paperId }),
+      );
+    },
+    30_000,
+  );
+
+  it(
+    "overwrites papers.sizeBytes with actual R2 content-length",
+    async () => {
+      // Init with a deliberately wrong claimed sizeBytes (1 byte) — finalize
+      // must overwrite with the real Content-Length from the R2 HEAD.
+      const r = await POST_PAPER(
+        req("/api/papers", {
+          method: "POST",
+          cookie: u.cookie,
+          body: JSON.stringify({
+            libraryId,
+            filename: "sample-size.pdf",
+            contentType: "application/pdf",
+            sizeBytes: 1,
+          }),
+        }),
+      );
+      expect(r.status).toBe(201);
+      const { paperId, uploadUrl } = await r.json();
+      createdPaperIds.push(paperId);
+      await putSource(uploadUrl, sampleBytes);
+
+      const fin = await POST_FINALIZE(
+        req(`/api/papers/${paperId}/finalize`, { method: "POST", cookie: u.cookie }),
+        params({ id: paperId }),
+      );
+      expect(fin.status).toBe(200);
+
+      const [row] = await db
+        .select({ sizeBytes: papers.sizeBytes })
+        .from(papers)
+        .where(eq(papers.id, paperId));
+      expect(row.sizeBytes).toBe(sampleBytes.length);
 
       await DEL_PAPER(
         req(`/api/papers/${paperId}`, { method: "DELETE", cookie: u.cookie }),

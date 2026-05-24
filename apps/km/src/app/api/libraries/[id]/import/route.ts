@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { libraries, notes } from "@episteme/db/schema";
-import { getUserIdFromRequest } from "@/lib/auth";
+import { getSessionInfo } from "@/lib/auth";
 import { jsonError, requireOwned, resolveNoteSlug } from "@/lib/crud";
 import { toSlug } from "@/lib/slug";
 import { parseFrontmatter } from "@/lib/io/md-frontmatter";
@@ -99,8 +99,12 @@ function classifyUpload(
 }
 
 export async function POST(req: Request, { params }: Ctx) {
-  const userId = await getUserIdFromRequest(req);
-  if (!userId) return jsonError(401, "unauthorized");
+  const session = await getSessionInfo(req);
+  if (!session) return jsonError(401, "unauthorized");
+  // Guests get a free-tier read-only experience; import would let them
+  // bypass the OR spend cap by smuggling in arbitrary content.
+  if (session.isAnonymous) return jsonError(403, "guest_forbidden");
+  const userId = session.userId;
 
   const { id } = await params;
   const libId = Number(id);
