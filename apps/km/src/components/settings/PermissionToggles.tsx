@@ -16,12 +16,14 @@ const PERMISSIONS: Array<{
   name: keyof PermissionsMap;
   title: string;
   description: string;
+  defaultOn: boolean;
 }> = [
   {
     name: "web_search",
     title: "Web search",
     description:
-      "Allow the agent to fall back to web search when internal library and specialized paper-search tools fail. Backup only — disabled by default.",
+      "Allow the agent to fall back to web search when internal library and specialized paper-search tools fail. Backup only — enabled by default; toggle off to opt out.",
+    defaultOn: true,
   },
 ];
 
@@ -39,7 +41,10 @@ export function PermissionToggles({
   return (
     <FieldGroup>
       {PERMISSIONS.map((perm) => {
-        const checked = Boolean(permissions[perm.name]);
+        // K12: default-ON semantics — missing/undefined treated as enabled.
+        // Only an explicit `false` renders the switch off.
+        const raw = permissions[perm.name];
+        const checked = raw === undefined || raw === null ? perm.defaultOn : Boolean(raw);
         return (
           <Field key={perm.name}>
             <FieldContent>

@@ -121,6 +121,8 @@ function toResponse(row: typeof agentConfigs.$inferSelect) {
     attachedMcps: row.attachedMcps,
     modelPreference: row.modelPreference,
     approvalRules: row.approvalRules,
-    permissions: settingsJson.permissions ?? { web_search: false },
+    // K12: empty default → UI applies default-ON semantics for gated tools
+    // (web_search). Explicit per-user opt-outs are stored as `false` here.
+    permissions: settingsJson.permissions ?? {},
   };
 }
