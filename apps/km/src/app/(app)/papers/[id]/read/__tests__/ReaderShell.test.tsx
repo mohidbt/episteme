@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import type React from "react";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, cleanup, waitFor } from "@testing-library/react";
 
@@ -15,7 +16,12 @@ vi.mock("next/dynamic", () => ({
   default: () => {
     const Stub = (props: Record<string, unknown>) => {
       readerPropsRef.value = props;
-      return <div data-testid="reader-stub" />;
+      // Render the agentSlot so children (PastThreadsDropdown) mount in tests.
+      return (
+        <div data-testid="reader-stub">
+          {props.agentSlot as React.ReactNode}
+        </div>
+      );
     };
     return Stub;
   },
@@ -27,19 +33,42 @@ vi.mock("@/components/agent/AgentTranscript", () => ({
   AgentTranscript: () => <div data-testid="agent-transcript" />,
 }));
 
+const pastThreadsPropsRef: { value: Record<string, unknown> | null } = {
+  value: null,
+};
+
+vi.mock("@/components/agent/PastThreadsDropdown", () => ({
+  PastThreadsDropdown: (props: Record<string, unknown>) => {
+    pastThreadsPropsRef.value = props;
+    return <div data-testid="past-threads-dropdown-stub" />;
+  },
+}));
+
+const storeStateRef: {
+  value: {
+    panelOpen: boolean;
+    mountPoint: string;
+    activeThreadId: string | null;
+  };
+} = {
+  value: {
+    panelOpen: false,
+    mountPoint: "reader-side-panel",
+    activeThreadId: null,
+  },
+};
+
 vi.mock("@/state/agent-ball", () => ({
   useAgentBallStore: Object.assign(
     (selector: (s: unknown) => unknown) =>
       selector({
-        panelOpen: false,
-        mountPoint: "reader-side-panel",
-        activeThreadId: null,
+        ...storeStateRef.value,
         openInReader: () => {},
         close: () => {},
       }),
     {
       getState: () => ({
-        activeThreadId: null,
+        activeThreadId: storeStateRef.value.activeThreadId,
         setActiveThread: () => {},
         close: () => {},
       }),
@@ -51,6 +80,12 @@ afterEach(() => {
   cleanup();
   searchParamsRef.value = new URLSearchParams();
   readerPropsRef.value = null;
+  pastThreadsPropsRef.value = null;
+  storeStateRef.value = {
+    panelOpen: false,
+    mountPoint: "reader-side-panel",
+    activeThreadId: null,
+  };
 });
 
 describe("ReaderShell ?p= deep link (BG2a follow-up: prop-based)", () => {
@@ -126,6 +161,64 @@ describe("ReaderShell explain-passage handler (K8 follow-up)", () => {
     expect(body.thread_id).toBe("tid-xyz");
     expect(body.page_context).toBeDefined();
     expect(body.page_context?.paperId).toBe("paper-explain");
+
+    vi.unstubAllGlobals();
+  });
+});
+
+describe("ReaderShell PastThreadsDropdown refresh signal (codex NEEDS-FIX)", () => {
+  it("bumps refreshKey AFTER /invoke resolves so dropdown refetches post-stamp", async () => {
+    // Activate the activeThreadId branch so <PastThreadsDropdown> renders.
+    storeStateRef.value = {
+      panelOpen: true,
+      mountPoint: "reader-side-panel",
+      activeThreadId: "tid-existing",
+    };
+
+    // Gate the /invoke response so we can observe refreshKey BEFORE and AFTER.
+    type ResolveFn = (r: Response) => void;
+    const resolver: { fn: ResolveFn | null } = { fn: null };
+    const fetchMock = vi.fn((input: string | URL | Request) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.includes("/api/agents/km/invoke")) {
+        return new Promise<Response>((res) => {
+          resolver.fn = res;
+        });
+      }
+      return Promise.resolve(new Response("{}", { status: 200 }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    vi.resetModules();
+    const { ReaderShell } = await import("../ReaderShell");
+    render(<ReaderShell paperId="paper-refresh" />);
+
+    await waitFor(() => {
+      expect(pastThreadsPropsRef.value).not.toBeNull();
+    });
+    const initialKey = pastThreadsPropsRef.value?.refreshKey as number;
+    expect(typeof initialKey).toBe("number");
+
+    const onExplain = readerPropsRef.value?.onExplainPassage as (a: {
+      page: number;
+      text: string;
+    }) => Promise<void>;
+
+    // Fire /invoke — still pending.
+    const explainPromise = onExplain({ page: 1, text: "x" });
+
+    // While /invoke is pending, refreshKey MUST NOT have changed yet (otherwise
+    // the dropdown would race the stamping write on the python side).
+    await new Promise((r) => setTimeout(r, 10));
+    expect(pastThreadsPropsRef.value?.refreshKey).toBe(initialKey);
+
+    // Resolve /invoke. Now refreshKey should bump.
+    resolver.fn?.(new Response("{}", { status: 200 }));
+    await explainPromise;
+
+    await waitFor(() => {
+      expect(pastThreadsPropsRef.value?.refreshKey).toBe(initialKey + 1);
+    });
 
     vi.unstubAllGlobals();
   });

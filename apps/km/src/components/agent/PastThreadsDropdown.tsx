@@ -13,6 +13,13 @@ interface Props {
   onSelect: (threadId: string) => void;
   /** Highlight the active thread; rows for this id show as "(current)". */
   activeThreadId?: string | null;
+  /**
+   * Bump this to force a refetch — the parent (ReaderShell) increments it
+   * after `/invoke` resolves so we don't race the thread→paper stamping
+   * write on the python side. Changing `activeThreadId` is NOT enough:
+   * `setActiveThread` fires before `/invoke` completes.
+   */
+  refreshKey?: number;
 }
 
 /**
@@ -22,14 +29,23 @@ interface Props {
  * existing /state hydration path in AgentTranscript.
  *
  * Always renders — even with zero threads we show a disabled empty-state so
- * users can see the feature exists. Refetches whenever `activeThreadId`
- * changes so a newly-stamped thread appears after the first /invoke.
+ * users can see the feature exists. Refetches whenever the parent bumps
+ * `refreshKey` (post-`/invoke`) so a newly-stamped thread appears without
+ * a full page reload.
  */
-export function PastThreadsDropdown({ paperId, onSelect, activeThreadId }: Props) {
+export function PastThreadsDropdown({
+  paperId,
+  onSelect,
+  activeThreadId,
+  refreshKey = 0,
+}: Props) {
   const [threads, setThreads] = useState<PastThread[] | null>(null);
 
   useEffect(() => {
     let cancelled = false;
+    // Reset to the loading sentinel so we never flash a stale empty-state
+    // between the refetch trigger and the new response.
+    setThreads(null);
     void (async () => {
       try {
         const r = await fetch(
@@ -49,10 +65,10 @@ export function PastThreadsDropdown({ paperId, onSelect, activeThreadId }: Props
     return () => {
       cancelled = true;
     };
-    // Refetch on activeThreadId change too — the first /invoke after the
-    // dropdown mounts stamps a new thread, and we want it to appear without
-    // a full page reload.
-  }, [paperId, activeThreadId]);
+    // Deps on `refreshKey` (not `activeThreadId`): the parent bumps the key
+    // AFTER `/invoke` resolves, which is the only point at which the
+    // thread→paper row is guaranteed to be stamped.
+  }, [paperId, refreshKey]);
 
   // Still mid-fetch — render nothing for one tick to avoid flashing the
   // empty state before the response arrives.

@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useMemo, useRef } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
@@ -42,6 +42,12 @@ function ReaderShellInner({ paperId }: { paperId: string }) {
 
   const threadCtlRef = useRef<AbortController | null>(null);
   const threadInFlightRef = useRef<Promise<string | null> | null>(null);
+
+  // K8 follow-up (codex NEEDS-FIX): the thread→paper row is stamped on the
+  // python side during `/invoke`, NOT when `setActiveThread` fires. Bump
+  // this counter only after `/invoke` resolves so the PastThreadsDropdown
+  // refetch sees the newly-stamped row.
+  const [pastThreadsRefreshKey, setPastThreadsRefreshKey] = useState(0);
 
   const ensureThread = useCallback((): Promise<string | null> => {
     const existing = useAgentBallStore.getState().activeThreadId;
@@ -112,7 +118,7 @@ function ReaderShellInner({ paperId }: { paperId: string }) {
       openInReader();
       const tid = await ensureThread();
       if (!tid) return;
-      await fetch("/api/agents/km/invoke", {
+      const res = await fetch("/api/agents/km/invoke", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -123,6 +129,11 @@ function ReaderShellInner({ paperId }: { paperId: string }) {
           page_context: { paperId },
         }),
       });
+      // Stamping happens inside `/invoke`. Only bump the dropdown's refresh
+      // key after it returns OK — otherwise we'd race the python write.
+      if (res.ok) {
+        setPastThreadsRefreshKey((k) => k + 1);
+      }
     },
     [openInReader, ensureThread, paperId],
   );
@@ -141,6 +152,7 @@ function ReaderShellInner({ paperId }: { paperId: string }) {
         paperId={paperId}
         onSelect={handlePickPastThread}
         activeThreadId={activeThreadId}
+        refreshKey={pastThreadsRefreshKey}
       />
       <div className="min-h-0 flex-1">
         <AgentTranscript

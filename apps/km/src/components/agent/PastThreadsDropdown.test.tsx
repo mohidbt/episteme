@@ -76,7 +76,7 @@ describe("PastThreadsDropdown", () => {
     expect(onSelect).toHaveBeenCalledWith("t1");
   });
 
-  it("refetches threads when activeThreadId changes (picks up newly-stamped threads)", async () => {
+  it("refetches threads when refreshKey changes (parent signals post-stamp)", async () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(
@@ -101,7 +101,8 @@ describe("PastThreadsDropdown", () => {
       <PastThreadsDropdown
         paperId={PAPER}
         onSelect={() => {}}
-        activeThreadId={null}
+        activeThreadId="t-new"
+        refreshKey={0}
       />,
     );
 
@@ -109,16 +110,96 @@ describe("PastThreadsDropdown", () => {
       expect(fetchMock).toHaveBeenCalledTimes(1);
     });
 
+    // Same activeThreadId — only refreshKey bump should re-fetch.
     rerender(
       <PastThreadsDropdown
         paperId={PAPER}
         onSelect={() => {}}
         activeThreadId="t-new"
+        refreshKey={1}
       />,
     );
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it("does NOT flash empty-state while refetching — resets to null during fetch", async () => {
+    // 1st fetch: populated. 2nd fetch: hangs until we resolve it.
+    type ResolveFn = (v: Response) => void;
+    const resolver: { fn: ResolveFn | null } = { fn: null };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            threads: [
+              { thread_id: "t-a", created_at: "2026-05-01T00:00:00Z" },
+            ],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise<Response>((res) => {
+            resolver.fn = res;
+          }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { rerender, container } = render(
+      <PastThreadsDropdown
+        paperId={PAPER}
+        onSelect={() => {}}
+        activeThreadId="t-a"
+        refreshKey={0}
+      />,
+    );
+
+    // First load completes.
+    await waitFor(() => {
+      expect(
+        container.querySelector("[data-testid=past-threads-dropdown]"),
+      ).not.toBeNull();
+    });
+
+    // Bump refreshKey — should immediately hide the dropdown (threads === null)
+    // rather than keep showing the stale state until the next response arrives.
+    rerender(
+      <PastThreadsDropdown
+        paperId={PAPER}
+        onSelect={() => {}}
+        activeThreadId="t-a"
+        refreshKey={1}
+      />,
+    );
+
+    // While the 2nd fetch is in-flight, the component must render nothing
+    // (threads === null) so it never flashes the empty-state placeholder.
+    await waitFor(() => {
+      expect(
+        container.querySelector("[data-testid=past-threads-dropdown]"),
+      ).toBeNull();
+    });
+    expect(screen.queryByText(/no past chats on this paper/i)).toBeNull();
+
+    // Now finish the fetch — dropdown reappears with the new payload.
+    resolver.fn?.(
+      new Response(
+        JSON.stringify({
+          threads: [
+            { thread_id: "t-a", created_at: "2026-05-01T00:00:00Z" },
+            { thread_id: "t-b", created_at: "2026-05-24T00:00:00Z" },
+          ],
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/Past threads \(2\)/i)).toBeTruthy();
     });
   });
 });
