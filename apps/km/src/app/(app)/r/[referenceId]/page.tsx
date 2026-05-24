@@ -46,6 +46,7 @@ export default async function ReferencePage({
         <ReferenceAgenticSearchButton
           referenceId={ref.id}
           citationKey={ref.citationKey}
+          identityPaper={identityPaper}
         />
         {identityPaper && (
           <Link
@@ -56,7 +57,7 @@ export default async function ReferencePage({
               variant="secondary"
               className="cursor-pointer hover:bg-muted"
             >
-              Is library paper
+              Paper in library
             </Badge>
           </Link>
         )}

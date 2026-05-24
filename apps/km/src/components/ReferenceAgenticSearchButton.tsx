@@ -6,9 +6,16 @@ import { useAgentBall } from "@/components/agent/agent-ball-context";
 interface Props {
   referenceId: string;
   citationKey: string;
+  /** When truthy, the reference is already linked to a library paper, so
+   *  agentic PDF search is unnecessary and the button is disabled. */
+  identityPaper?: unknown;
 }
 
-export function ReferenceAgenticSearchButton({ referenceId, citationKey }: Props) {
+export function ReferenceAgenticSearchButton({
+  referenceId,
+  citationKey,
+  identityPaper,
+}: Props) {
   const { openWithPrompt } = useAgentBall();
 
   return (
@@ -16,6 +23,7 @@ export function ReferenceAgenticSearchButton({ referenceId, citationKey }: Props
       variant="outline"
       size="sm"
       type="button"
+      disabled={!!identityPaper}
       onClick={() =>
         openWithPrompt(
           `Find a paper PDF for this reference: ${citationKey}\nReference ID: ${referenceId}`,
