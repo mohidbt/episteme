@@ -76,7 +76,10 @@ export async function POST(req: Request) {
       folderId: parsed.data.folderId ?? null,
       filename: cleanFilename,
       title: placeholderTitle,
-      sizeBytes: parsed.data.sizeBytes,
+      // Do not trust client-supplied sizeBytes here — finalize overwrites with
+      // the real R2 HEAD Content-Length. If finalize fails, sizeBytes stays 0
+      // and the existing backfill route can re-attempt later.
+      sizeBytes: 0,
     })
     .returning();
 

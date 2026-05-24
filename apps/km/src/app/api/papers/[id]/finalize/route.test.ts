@@ -201,6 +201,80 @@ describe("POST /api/papers/:id/finalize", () => {
   );
 
   it(
+    "POST /papers does not persist client-supplied sizeBytes (stays 0 until finalize)",
+    async () => {
+      const r = await POST_PAPER(
+        req("/api/papers", {
+          method: "POST",
+          cookie: u.cookie,
+          body: JSON.stringify({
+            libraryId,
+            filename: "sample-noinit.pdf",
+            contentType: "application/pdf",
+            sizeBytes: 999_999,
+          }),
+        }),
+      );
+      expect(r.status).toBe(201);
+      const { paperId } = await r.json();
+      createdPaperIds.push(paperId);
+
+      const [row] = await db
+        .select({ sizeBytes: papers.sizeBytes })
+        .from(papers)
+        .where(eq(papers.id, paperId));
+      // Client-supplied 999_999 must NOT be persisted — only finalize HEAD writes real bytes.
+      expect(row.sizeBytes).toBe(0);
+
+      await DEL_PAPER(
+        req(`/api/papers/${paperId}`, { method: "DELETE", cookie: u.cookie }),
+        params({ id: paperId }),
+      );
+    },
+    30_000,
+  );
+
+  it(
+    "sizeBytes stays 0 when finalize HEAD fails (source missing)",
+    async () => {
+      const r = await POST_PAPER(
+        req("/api/papers", {
+          method: "POST",
+          cookie: u.cookie,
+          body: JSON.stringify({
+            libraryId,
+            filename: "sample-headfail.pdf",
+            contentType: "application/pdf",
+            sizeBytes: 12345,
+          }),
+        }),
+      );
+      expect(r.status).toBe(201);
+      const { paperId } = await r.json();
+      createdPaperIds.push(paperId);
+
+      // Skip PUT — finalize HEAD will 404.
+      const fin = await POST_FINALIZE(
+        req(`/api/papers/${paperId}/finalize`, { method: "POST", cookie: u.cookie }),
+        params({ id: paperId }),
+      );
+      expect(fin.status).toBe(422);
+
+      const [row] = await db
+        .select({ sizeBytes: papers.sizeBytes })
+        .from(papers)
+        .where(eq(papers.id, paperId));
+      expect(row.sizeBytes).toBe(0);
+
+      await DEL_PAPER(
+        req(`/api/papers/${paperId}`, { method: "DELETE", cookie: u.cookie }),
+        params({ id: paperId }),
+      );
+    },
+    30_000,
+  );
+
+  it(
     "overwrites papers.sizeBytes with actual R2 content-length",
     async () => {
       // Init with a deliberately wrong claimed sizeBytes (1 byte) — finalize
