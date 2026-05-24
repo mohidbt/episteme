@@ -128,6 +128,20 @@
   background: oklch(0.58 0.18 27 / 0.08);
   color: oklch(0.52 0.18 27);
 }
+/* Inline kind icon (FileText / BookMarked) injected by WikiLink renderHTML. */
+.episteme-prose .wiki-link svg {
+  width: 14px;
+  height: 14px;
+  display: inline-block;
+  margin-right: 0.25rem;
+  vertical-align: text-bottom;
+}
+.episteme-prose .wiki-link--paper svg {
+  color: var(--accent-paper, oklch(0.58 0.18 250));
+}
+.episteme-prose .wiki-link--reference svg {
+  color: var(--accent-reference, oklch(0.58 0.20 295));
+}
 
 /* Tag pill — clickable to navigate to /tags/:tag. */
 .episteme-prose [data-type="tag"] {

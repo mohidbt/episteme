@@ -94,6 +94,70 @@ describe("WikiLink tiptap node", () => {
     editor.destroy();
   });
 
+  it("renders an inline svg icon for paper targetKind", () => {
+    const editor = makeEditor({
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          content: [
+            {
+              type: "wikiLink",
+              attrs: { title: "crispr-paper.pdf", alias: null, targetKind: "paper", targetId: null },
+            },
+          ],
+        },
+      ],
+    });
+    const html = editor.getHTML();
+    expect(html).toContain('data-target-kind="paper"');
+    expect(html).toContain("<svg");
+    expect(html).toContain("wiki-link--paper");
+    editor.destroy();
+  });
+
+  it("renders an inline svg icon for reference targetKind", () => {
+    const editor = makeEditor({
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          content: [
+            {
+              type: "wikiLink",
+              attrs: { title: "vaswani2017", alias: null, targetKind: "reference", targetId: null },
+            },
+          ],
+        },
+      ],
+    });
+    const html = editor.getHTML();
+    expect(html).toContain('data-target-kind="reference"');
+    expect(html).toContain("<svg");
+    expect(html).toContain("wiki-link--reference");
+    editor.destroy();
+  });
+
+  it("does not render svg icon for note targetKind", () => {
+    const editor = makeEditor({
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          content: [
+            {
+              type: "wikiLink",
+              attrs: { title: "Note A", alias: null, targetKind: "note", targetId: null },
+            },
+          ],
+        },
+      ],
+    });
+    const html = editor.getHTML();
+    expect(html).not.toContain("<svg");
+    editor.destroy();
+  });
+
   it("renders data-resolved=false when targetId is null", () => {
     const editor = makeEditor({
       type: "doc",

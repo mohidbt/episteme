@@ -15,6 +15,38 @@ export interface WikiLinkAttrs {
 // (Tailwind v4 doesn't scan workspace package sources by default).
 const PILL_CLASS = "wiki-link";
 
+// Lucide icon path data (v0). Kept as inline DOMOutputSpec children so the
+// renderHTML output stays a single synchronous DOM spec (no React, no async).
+const SVG_ATTRS = {
+  xmlns: "http://www.w3.org/2000/svg",
+  viewBox: "0 0 24 24",
+  fill: "none",
+  stroke: "currentColor",
+  "stroke-width": "2",
+  "stroke-linecap": "round",
+  "stroke-linejoin": "round",
+  "aria-hidden": "true",
+};
+
+// lucide FileText
+const FILE_TEXT_PATHS: ReadonlyArray<string> = [
+  "M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z",
+  "M14 2v4a2 2 0 0 0 2 2h4",
+  "M10 9H8",
+  "M16 13H8",
+  "M16 17H8",
+];
+
+// lucide BookMarked
+const BOOK_MARKED_PATHS: ReadonlyArray<string> = [
+  "M10 2v8l3-3 3 3V2",
+  "M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z",
+];
+
+function iconSpec(paths: ReadonlyArray<string>): unknown[] {
+  return ["svg", SVG_ATTRS, ...paths.map((d) => ["path", { d }])];
+}
+
 // Inline atom node: a `[[Title]]` pill. The text the user sees is the alias
 // (if any) or the title; attrs are preserved for round-tripping and for the
 // backlinks/resolver layer. Markdown serialization emits the literal
@@ -65,15 +97,32 @@ export const WikiLink = Node.create({
     const attrs = node.attrs as WikiLinkAttrs;
     const resolved = attrs.targetId != null;
     const label = attrs.alias ?? attrs.title;
+    const kindClass =
+      attrs.targetKind === "paper"
+        ? " wiki-link--paper"
+        : attrs.targetKind === "reference"
+          ? " wiki-link--reference"
+          : "";
+    const icon =
+      attrs.targetKind === "paper"
+        ? iconSpec(FILE_TEXT_PATHS)
+        : attrs.targetKind === "reference"
+          ? iconSpec(BOOK_MARKED_PATHS)
+          : null;
     return [
       "span",
       mergeAttributes(HTMLAttributes, {
         "data-type": "wiki-link",
         "data-resolved": resolved ? "true" : "false",
-        class: PILL_CLASS,
+        class: PILL_CLASS + kindClass,
       }),
+      ...(icon ? [icon] : []),
       label,
-    ];
+      // Tiptap's DOMOutputSpec union is narrower than what we emit (a span
+      // with mixed-arity children: optional svg + text). Cast keeps the
+      // public types untouched while letting ProseMirror serialize it as a
+      // standard DOM spec.
+    ] as never;
   },
 
   // Fires the moment the user types the closing `]]` of a `[[Title]]` or
