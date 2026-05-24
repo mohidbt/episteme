@@ -83,3 +83,50 @@ describe("ReaderShell ?p= deep link (BG2a follow-up: prop-based)", () => {
     expect(readerPropsRef.value?.initialPage).toBeUndefined();
   });
 });
+
+describe("ReaderShell explain-passage handler (K8 follow-up)", () => {
+  it("POSTs /api/agents/km/invoke with page_context.paperId so threads get stamped", async () => {
+    // Stub fetch for thread creation + invoke.
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.includes("/api/agent/threads")) {
+        return new Response(
+          JSON.stringify({ thread: { threadId: "tid-xyz" } }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      return new Response("{}", { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { ReaderShell } = await import("../ReaderShell");
+    render(<ReaderShell paperId="paper-explain" />);
+    await waitFor(() => {
+      expect(readerPropsRef.value).not.toBeNull();
+    });
+
+    const onExplain = readerPropsRef.value?.onExplainPassage as (a: {
+      page: number;
+      text: string;
+    }) => Promise<void>;
+    expect(typeof onExplain).toBe("function");
+
+    await onExplain({ page: 4, text: "selected snippet" });
+
+    const invokeCall = fetchMock.mock.calls.find((c) =>
+      String(c[0]).includes("/api/agents/km/invoke"),
+    );
+    expect(invokeCall).toBeDefined();
+    const init = invokeCall![1] as RequestInit;
+    const body = JSON.parse(String(init.body)) as {
+      thread_id: string;
+      message: string;
+      page_context?: { paperId?: string };
+    };
+    expect(body.thread_id).toBe("tid-xyz");
+    expect(body.page_context).toBeDefined();
+    expect(body.page_context?.paperId).toBe("paper-explain");
+
+    vi.unstubAllGlobals();
+  });
+});

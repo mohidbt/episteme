@@ -46,15 +46,17 @@ describe("PastThreadsDropdown", () => {
     expect(select.querySelectorAll("option")).toHaveLength(3);
   });
 
-  it("hides itself when the paper has no past threads", async () => {
+  it("renders a disabled empty-state when the paper has no past threads", async () => {
     vi.stubGlobal("fetch", fetchOk({ threads: [] }));
     const { container } = render(
       <PastThreadsDropdown paperId={PAPER} onSelect={() => {}} />,
     );
-    // Briefly wait for the fetch microtask to flush.
     await waitFor(() => {
-      expect(container.querySelector("[data-testid=past-threads-dropdown]")).toBeNull();
+      expect(
+        container.querySelector("[data-testid=past-threads-dropdown]"),
+      ).not.toBeNull();
     });
+    expect(screen.getByText(/no past chats on this paper/i)).toBeTruthy();
   });
 
   it("invokes onSelect with the picked thread id", async () => {
@@ -72,5 +74,51 @@ describe("PastThreadsDropdown", () => {
     const select = await screen.findByRole("combobox");
     fireEvent.change(select, { target: { value: "t1" } });
     expect(onSelect).toHaveBeenCalledWith("t1");
+  });
+
+  it("refetches threads when activeThreadId changes (picks up newly-stamped threads)", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ threads: [] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            threads: [
+              { thread_id: "t-new", created_at: "2026-05-24T00:00:00Z" },
+            ],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { rerender } = render(
+      <PastThreadsDropdown
+        paperId={PAPER}
+        onSelect={() => {}}
+        activeThreadId={null}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    rerender(
+      <PastThreadsDropdown
+        paperId={PAPER}
+        onSelect={() => {}}
+        activeThreadId="t-new"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
   });
 });

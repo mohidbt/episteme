@@ -118,6 +118,9 @@ function ReaderShellInner({ paperId }: { paperId: string }) {
         body: JSON.stringify({
           thread_id: tid,
           message: `Explain this passage from page ${page} of paper ${paperId}: "${text}"`,
+          // K8 follow-up: stamp the thread with the current paper so it
+          // shows up in the PastThreadsDropdown on subsequent visits.
+          page_context: { paperId },
         }),
       });
     },

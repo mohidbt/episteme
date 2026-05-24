@@ -21,7 +21,9 @@ interface Props {
  * parent (ReaderShell) to swap `activeThreadId`, which triggers the
  * existing /state hydration path in AgentTranscript.
  *
- * Hidden when there are zero past threads — there's nothing useful to show.
+ * Always renders — even with zero threads we show a disabled empty-state so
+ * users can see the feature exists. Refetches whenever `activeThreadId`
+ * changes so a newly-stamped thread appears after the first /invoke.
  */
 export function PastThreadsDropdown({ paperId, onSelect, activeThreadId }: Props) {
   const [threads, setThreads] = useState<PastThread[] | null>(null);
@@ -47,9 +49,16 @@ export function PastThreadsDropdown({ paperId, onSelect, activeThreadId }: Props
     return () => {
       cancelled = true;
     };
-  }, [paperId]);
+    // Refetch on activeThreadId change too — the first /invoke after the
+    // dropdown mounts stamps a new thread, and we want it to appear without
+    // a full page reload.
+  }, [paperId, activeThreadId]);
 
-  if (!threads || threads.length === 0) return null;
+  // Still mid-fetch — render nothing for one tick to avoid flashing the
+  // empty state before the response arrives.
+  if (threads === null) return null;
+
+  const isEmpty = threads.length === 0;
 
   return (
     <div
@@ -57,18 +66,27 @@ export function PastThreadsDropdown({ paperId, onSelect, activeThreadId }: Props
       className="border-b px-3 py-2 text-xs text-muted-foreground"
     >
       <label className="flex items-center gap-2">
-        <span>Past threads ({threads.length})</span>
+        <span>
+          {isEmpty ? "Past threads" : `Past threads (${threads.length})`}
+        </span>
         <select
-          className="flex-1 rounded border bg-background px-1 py-0.5 text-xs"
+          className="flex-1 rounded border bg-background px-1 py-0.5 text-xs disabled:opacity-60"
           value={activeThreadId ?? ""}
+          disabled={isEmpty}
           onChange={(e) => {
             const id = e.target.value;
             if (id) onSelect(id);
           }}
         >
-          <option value="" disabled>
-            Select a thread…
-          </option>
+          {isEmpty ? (
+            <option value="" disabled>
+              No past chats on this paper
+            </option>
+          ) : (
+            <option value="" disabled>
+              Select a thread…
+            </option>
+          )}
           {threads.map((t) => {
             const isCurrent = t.thread_id === activeThreadId;
             const when = new Date(t.created_at).toLocaleString();
