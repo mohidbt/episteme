@@ -77,20 +77,19 @@ def test_web_search_missing_key_returns_clear_error():
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_web_search_excluded_when_permission_off():
-    """With permissions={'web_search': False} (the default), the agent's tool
-    list must NOT contain web_search."""
+async def test_web_search_included_when_permission_missing():
+    """K12: web_search defaults ON. Missing permission means tool is bound."""
     from km_agent import _filter_tools_for_permissions
 
     pool = list(ALL_TOOLS)
     out = _filter_tools_for_permissions(pool, permissions={})
     names = [t.name for t in out]
-    assert "web_search" not in names
+    assert "web_search" in names
 
 
 @pytest.mark.asyncio
 async def test_web_search_included_when_permission_on():
-    """With permissions={'web_search': True}, the tool is in the agent's list."""
+    """Explicit True keeps web_search in the agent's tool list."""
     from km_agent import _filter_tools_for_permissions
 
     pool = list(ALL_TOOLS)
@@ -101,7 +100,7 @@ async def test_web_search_included_when_permission_on():
 
 @pytest.mark.asyncio
 async def test_web_search_excluded_when_permission_explicitly_false():
-    """Explicit False is the same as missing — the tool stays out."""
+    """K12: only explicit False opts out — missing/None stays default-ON."""
     from km_agent import _filter_tools_for_permissions
 
     pool = list(ALL_TOOLS)
