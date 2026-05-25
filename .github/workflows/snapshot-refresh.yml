@@ -5,11 +5,19 @@ name: snapshot-refresh
 # bot) so nightly snapshot-diff stays clean.
 on:
   workflow_dispatch:
+  # Auto-chain: after apply-migrations succeeds on main, refresh snapshot
+  # so the nightly schema-snapshot-diff doesn't false-positive next push.
+  workflow_run:
+    workflows: ["apply-migrations"]
+    types: [completed]
+    branches: [main]
 
 jobs:
   refresh:
     name: refresh schema snapshot
     runs-on: ubuntu-latest
+    # Manual dispatch always runs; chained run only if upstream succeeded.
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     permissions:
       contents: write
     env:
