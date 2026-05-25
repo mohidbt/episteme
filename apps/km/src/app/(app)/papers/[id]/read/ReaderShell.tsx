@@ -146,6 +146,15 @@ function ReaderShellInner({ paperId }: { paperId: string }) {
     useAgentBallStore.getState().setActiveThread(threadId);
   }, []);
 
+  // K8 follow-up: chat-input messages go through AgentTranscript.defaultSend
+  // → POST /api/agents/km/invoke (NOT through `handleExplainPassage`). The
+  // server stamps thread→paper during that /invoke, so the dropdown's
+  // refetch must be triggered after AgentTranscript's SSE stream completes —
+  // not just after the explain-passage POST resolves.
+  const handleAgentStreamDone = useCallback(() => {
+    setPastThreadsRefreshKey((k) => k + 1);
+  }, []);
+
   const agentSlot = activeThreadId ? (
     <div className="flex h-full min-h-0 flex-col">
       <PastThreadsDropdown
@@ -160,6 +169,7 @@ function ReaderShellInner({ paperId }: { paperId: string }) {
           threadId={activeThreadId}
           fullHeight
           pageContext={{ paperId }}
+          onStreamDone={handleAgentStreamDone}
         />
       </div>
     </div>

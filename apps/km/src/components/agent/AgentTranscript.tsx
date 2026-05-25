@@ -130,6 +130,16 @@ export interface AgentTranscriptProps {
     citations?: Citation[];
   }>;
   onPdfExtractProgress?: (progress: { paperId: string; stage: string } | null) => void;
+  /**
+   * K8 follow-up: fired after each /invoke (or /resume) stream completes —
+   * regardless of OK / stalled / EOF / aborted. Lets the parent refetch
+   * paper-stamped side data (e.g. PastThreadsDropdown) once the python side
+   * is guaranteed to have written the thread→paper row. POST-resolve is NOT
+   * enough on its own — the actual stamping happens during stream handling —
+   * but by the time this fires the SSE pipeline has drained, which is the
+   * latest point at which the row can have been written.
+   */
+  onStreamDone?: () => void;
 }
 
 // G-R3-07 #78 — same regex used by the live SSE reducer (#64). Some models
@@ -223,6 +233,7 @@ export function AgentTranscript({
   initialSkill,
   initialMessages,
   onPdfExtractProgress,
+  onStreamDone,
 }: AgentTranscriptProps) {
   const [state, dispatch] = useReducer(
     agentStreamReducer,
@@ -310,6 +321,12 @@ export function AgentTranscript({
     onPdfExtractProgress?.(state.pdfExtractProgress ?? null);
   }, [onPdfExtractProgress, state.pdfExtractProgress]);
   const abortRef = useRef<AbortController | null>(null);
+  // K8 follow-up: hold the latest onStreamDone in a ref so defaultSend /
+  // sendDecision can call it without putting the callback in their deps
+  // (which would re-create them on every parent render and break the
+  // initial-prompt auto-send gate).
+  const onStreamDoneRef = useRef<(() => void) | undefined>(onStreamDone);
+  onStreamDoneRef.current = onStreamDone;
   const initialPromptSent = useRef(false);
   const defaultSendRef = useRef<((text: string) => Promise<void>) | null>(null);
   const initialSkillRef = useRef(initialSkill);
@@ -410,6 +427,10 @@ export function AgentTranscript({
       } finally {
         setStreaming(false);
         onPdfExtractProgress?.(null);
+        // K8 follow-up: signal parent that the SSE stream finished so it can
+        // refetch paper-stamped side data (PastThreadsDropdown). Fires on
+        // every terminal path — success, stall, unexpected-EOF, abort, error.
+        onStreamDoneRef.current?.();
       }
     },
     [threadId, pageContext, router, onPdfExtractProgress, onBeforeSendMessage],
@@ -562,6 +583,7 @@ export function AgentTranscript({
       } finally {
         setStreaming(false);
         onPdfExtractProgress?.(null);
+        onStreamDoneRef.current?.();
       }
     },
     [threadId, router, onPdfExtractProgress],

@@ -29,8 +29,15 @@ vi.mock("next/dynamic", () => ({
 
 vi.mock("sonner", () => ({ toast: Object.assign(() => {}, { error: () => {} }) }));
 
+const agentTranscriptPropsRef: { value: Record<string, unknown> | null } = {
+  value: null,
+};
+
 vi.mock("@/components/agent/AgentTranscript", () => ({
-  AgentTranscript: () => <div data-testid="agent-transcript" />,
+  AgentTranscript: (props: Record<string, unknown>) => {
+    agentTranscriptPropsRef.value = props;
+    return <div data-testid="agent-transcript" />;
+  },
 }));
 
 const pastThreadsPropsRef: { value: Record<string, unknown> | null } = {
@@ -81,6 +88,7 @@ afterEach(() => {
   searchParamsRef.value = new URLSearchParams();
   readerPropsRef.value = null;
   pastThreadsPropsRef.value = null;
+  agentTranscriptPropsRef.value = null;
   storeStateRef.value = {
     panelOpen: false,
     mountPoint: "reader-side-panel",
@@ -215,6 +223,47 @@ describe("ReaderShell PastThreadsDropdown refresh signal (codex NEEDS-FIX)", () 
     // Resolve /invoke. Now refreshKey should bump.
     resolver.fn?.(new Response("{}", { status: 200 }));
     await explainPromise;
+
+    await waitFor(() => {
+      expect(pastThreadsPropsRef.value?.refreshKey).toBe(initialKey + 1);
+    });
+
+    vi.unstubAllGlobals();
+  });
+
+  it("bumps refreshKey when AgentTranscript's onStreamDone fires (chat-send path)", async () => {
+    // Reproduces the user's E2E bug: chat-input messages flow through
+    // AgentTranscript.defaultSend, NOT through ReaderShell.handleExplainPassage,
+    // so the dropdown never refetched after a chat send. ReaderShell must
+    // subscribe to AgentTranscript via `onStreamDone` and bump the key from
+    // there.
+    storeStateRef.value = {
+      panelOpen: true,
+      mountPoint: "reader-side-panel",
+      activeThreadId: "tid-existing",
+    };
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("{}", { status: 200 })),
+    );
+
+    vi.resetModules();
+    const { ReaderShell } = await import("../ReaderShell");
+    render(<ReaderShell paperId="paper-stream-done" />);
+
+    await waitFor(() => {
+      expect(pastThreadsPropsRef.value).not.toBeNull();
+      expect(agentTranscriptPropsRef.value).not.toBeNull();
+    });
+    const initialKey = pastThreadsPropsRef.value?.refreshKey as number;
+
+    const onStreamDone = agentTranscriptPropsRef.value?.onStreamDone as
+      | (() => void)
+      | undefined;
+    expect(typeof onStreamDone).toBe("function");
+
+    onStreamDone?.();
 
     await waitFor(() => {
       expect(pastThreadsPropsRef.value?.refreshKey).toBe(initialKey + 1);

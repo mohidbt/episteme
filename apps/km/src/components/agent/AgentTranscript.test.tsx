@@ -1230,4 +1230,28 @@ describe("AgentTranscript", () => {
       );
     });
   });
+
+  // K8 follow-up: ReaderShell relies on this callback to bump
+  // PastThreadsDropdown's refreshKey after the chat send finishes. The
+  // user-visible bug: dropdown stuck at "Past threads (1)" after a chat send,
+  // because no signal ever flowed from AgentTranscript back to ReaderShell.
+  it("fires onStreamDone after the SSE stream completes (K8 dropdown refresh)", async () => {
+    const events: AgentEvent[] = [
+      { type: "text", id: "r1", delta: "ok" },
+      { type: "done", thread_id: "t-done" },
+    ];
+    (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+      streamResponse(events),
+    );
+
+    const onStreamDone = vi.fn();
+    render(<AgentTranscript threadId="t-done" onStreamDone={onStreamDone} />);
+    const ta = screen.getByLabelText("Message agent") as HTMLTextAreaElement;
+    fireEvent.change(ta, { target: { value: "hello" } });
+    fireEvent.click(screen.getByRole("button", { name: /send/i }));
+
+    await waitFor(() => {
+      expect(onStreamDone).toHaveBeenCalledTimes(1);
+    });
+  });
 });
