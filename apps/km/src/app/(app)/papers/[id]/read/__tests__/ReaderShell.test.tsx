@@ -272,6 +272,105 @@ describe("ReaderShell PastThreadsDropdown refresh signal (codex NEEDS-FIX)", () 
     vi.unstubAllGlobals();
   });
 
+  it("does NOT mount AgentTranscript while /state is in flight (N8 codex follow-up)", async () => {
+    storeStateRef.value = {
+      panelOpen: true,
+      mountPoint: "reader-side-panel",
+      activeThreadId: "tid-pending",
+    };
+
+    // Gate /state so it never resolves during the assertion window.
+    const fetchMock = vi.fn((input: string | URL | Request) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.includes("/api/agents/km/state/")) {
+        return new Promise<Response>(() => {
+          /* never resolves */
+        });
+      }
+      return Promise.resolve(new Response("{}", { status: 200 }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    vi.resetModules();
+    const { ReaderShell } = await import("../ReaderShell");
+    render(<ReaderShell paperId="paper-pending" />);
+
+    // Past-threads dropdown sits next to the skeleton — it should mount even
+    // while we're waiting on /state.
+    await waitFor(() => {
+      expect(pastThreadsPropsRef.value).not.toBeNull();
+    });
+    // AgentTranscript must NOT have mounted yet — its useReducer initializer
+    // runs once on mount and would freeze in the empty state.
+    expect(agentTranscriptPropsRef.value).toBeNull();
+
+    vi.unstubAllGlobals();
+  });
+
+  it("URL-encodes the threadId in the /state fetch (N8 codex follow-up)", async () => {
+    const weirdId = "tid with/slash";
+    storeStateRef.value = {
+      panelOpen: true,
+      mountPoint: "reader-side-panel",
+      activeThreadId: weirdId,
+    };
+
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    vi.resetModules();
+    const { ReaderShell } = await import("../ReaderShell");
+    render(<ReaderShell paperId="p-encode" />);
+
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some((c) =>
+          String(c[0]).includes(
+            `/api/agents/km/state/${encodeURIComponent(weirdId)}`,
+          ),
+        ),
+      ).toBe(true);
+    });
+    // The raw id (containing a slash) must NOT appear in the URL.
+    expect(
+      fetchMock.mock.calls.some((c) =>
+        String(c[0]).includes(`/api/agents/km/state/${weirdId}`),
+      ),
+    ).toBe(false);
+
+    vi.unstubAllGlobals();
+  });
+
+  it("mounts AgentTranscript with empty messages on /state fetch failure (N8 codex follow-up)", async () => {
+    storeStateRef.value = {
+      panelOpen: true,
+      mountPoint: "reader-side-panel",
+      activeThreadId: "tid-fail",
+    };
+
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.includes("/api/agents/km/state/")) {
+        return new Response("nope", { status: 500 });
+      }
+      return new Response("{}", { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    vi.resetModules();
+    const { ReaderShell } = await import("../ReaderShell");
+    render(<ReaderShell paperId="paper-fail" />);
+
+    // On fetch failure we should still mount the transcript (with empty
+    // messages) so the UI proceeds instead of hanging in the skeleton.
+    await waitFor(() => {
+      expect(agentTranscriptPropsRef.value).not.toBeNull();
+      expect(agentTranscriptPropsRef.value?.initialMessages).toEqual([]);
+    });
+
+    vi.unstubAllGlobals();
+  });
+
   it("bumps refreshKey when AgentTranscript's onStreamDone fires (chat-send path)", async () => {
     // Reproduces the user's E2E bug: chat-input messages flow through
     // AgentTranscript.defaultSend, NOT through ReaderShell.handleExplainPassage,

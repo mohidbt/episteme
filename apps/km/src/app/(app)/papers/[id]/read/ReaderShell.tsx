@@ -78,21 +78,30 @@ function ReaderShellInner({ paperId }: { paperId: string }) {
     // AgentTranscript while the fetch is in flight.
     setHydratedMessages(null);
     const ctl = new AbortController();
+    const tid = activeThreadId;
     void (async () => {
       try {
         const res = await fetch(
-          `/api/agents/km/state/${activeThreadId}`,
+          `/api/agents/km/state/${encodeURIComponent(tid)}`,
           { credentials: "include", signal: ctl.signal },
         );
-        if (!res.ok) return;
+        if (ctl.signal.aborted) return;
+        if (!res.ok) {
+          // Codex follow-up: on fetch failure, still mount the transcript with
+          // an empty history so the UI proceeds (otherwise the skeleton hangs
+          // forever). The threadId match below gates the mount.
+          setHydratedMessages({ threadId: tid, messages: [] });
+          return;
+        }
         const data = (await res.json()) as { messages?: HydratedMessage[] };
         if (ctl.signal.aborted) return;
         setHydratedMessages({
-          threadId: activeThreadId,
+          threadId: tid,
           messages: Array.isArray(data.messages) ? data.messages : [],
         });
       } catch {
-        // Best-effort: empty transcript is the same UX as before this fix.
+        if (ctl.signal.aborted) return;
+        setHydratedMessages({ threadId: tid, messages: [] });
       }
     })();
     return () => ctl.abort();
@@ -213,18 +222,18 @@ function ReaderShellInner({ paperId }: { paperId: string }) {
         refreshKey={pastThreadsRefreshKey}
       />
       <div className="min-h-0 flex-1">
-        <AgentTranscript
-          key={activeThreadId}
-          threadId={activeThreadId}
-          fullHeight
-          pageContext={{ paperId }}
-          onStreamDone={handleAgentStreamDone}
-          initialMessages={
-            hydratedMessages?.threadId === activeThreadId
-              ? hydratedMessages.messages
-              : undefined
-          }
-        />
+        {hydratedMessages?.threadId === activeThreadId ? (
+          <AgentTranscript
+            key={activeThreadId}
+            threadId={activeThreadId}
+            fullHeight
+            pageContext={{ paperId }}
+            onStreamDone={handleAgentStreamDone}
+            initialMessages={hydratedMessages.messages}
+          />
+        ) : (
+          <div className="p-3 text-xs text-muted-foreground">Loading thread…</div>
+        )}
       </div>
     </div>
   ) : (
