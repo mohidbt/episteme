@@ -17,6 +17,7 @@ Two skill sources are merged at the virtual root /.episteme/agents/skills/:
 """
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Iterable, Mapping
 
@@ -25,6 +26,7 @@ from deepagents.backends.protocol import (
     FileData,
     FileDownloadResponse,
     FileInfo,
+    GlobResult,
     LsResult,
     ReadResult,
     WriteResult,
@@ -32,6 +34,43 @@ from deepagents.backends.protocol import (
 
 _VIRTUAL_ROOT = "/.episteme/agents/skills"
 _DISK_ROOT = Path(__file__).resolve().parent.parent / "skills"
+
+
+def _glob_match(pattern: str, path: str) -> bool:
+    """Match ``path`` against a glob ``pattern`` with ``**`` recursive support.
+
+    Mirrors ``NotesBackend._glob_match`` so the two route-mounted backends use
+    a single, consistent glob dialect. Translates ``**/`` to match zero or
+    more path segments, ``*`` to any non-slash chars, then defers to a regex
+    built piece-by-piece (we cannot use ``fnmatch.translate`` directly because
+    it does not understand recursive ``**``).
+    """
+    i = 0
+    out = ["(?s:"]
+    while i < len(pattern):
+        c = pattern[i]
+        if c == "*":
+            if i + 1 < len(pattern) and pattern[i + 1] == "*":
+                if i + 2 < len(pattern) and pattern[i + 2] == "/":
+                    out.append("(?:.*/)?")
+                    i += 3
+                else:
+                    out.append(".*")
+                    i += 2
+                continue
+            out.append("[^/]*")
+            i += 1
+        elif c == "?":
+            out.append("[^/]")
+            i += 1
+        elif c in ".+(){}|^$\\":
+            out.append("\\" + c)
+            i += 1
+        else:
+            out.append(re.escape(c) if not c.isalnum() and c not in "/-_" else c)
+            i += 1
+    out.append(")\\Z")
+    return re.match("".join(out), path) is not None
 
 
 def _virtual_to_disk(virtual_path: str) -> Path:
@@ -156,6 +195,51 @@ class SkillsBackend(BackendProtocol):
             else:
                 results.append(FileDownloadResponse(path=path, content=disk_path.read_bytes()))
         return results
+
+    # ---------------------------------------------------------------- glob
+    def glob(self, pattern: str, path: str = "/") -> GlobResult:
+        """Enumerate SKILL.md virtual paths matching ``pattern``.
+
+        Implements the ``BackendProtocol.glob`` contract so the deepagents
+        ``glob`` tool (which flows through ``CompositeBackend.aglob`` and the
+        base ``aglob`` default that delegates to ``glob`` via to_thread) does
+        not raise ``NotImplementedError`` and kill the LangGraph stream.
+
+        Reports paths relative to the backend's virtual root — CompositeBackend
+        re-prefixes them with the mount point on the way back to the agent.
+        """
+        rel_pattern = pattern.lstrip("/")
+        candidates: list[str] = []
+
+        # On-disk skills (respect allow-list).
+        if _DISK_ROOT.is_dir():
+            for skill_dir in sorted(_DISK_ROOT.iterdir()):
+                if not skill_dir.is_dir() or skill_dir.name.startswith("_"):
+                    continue
+                if self._enabled is not None and skill_dir.name not in self._enabled:
+                    continue
+                for file_path in skill_dir.rglob("*"):
+                    if not file_path.is_file():
+                        continue
+                    rel = file_path.relative_to(_DISK_ROOT).as_posix()
+                    candidates.append("/" + rel)
+
+        # Personal skills — each slug owns a single virtual SKILL.md.
+        for slug in self._personal:
+            candidates.append(f"/{slug}/SKILL.md")
+
+        base = path.rstrip("/")
+        matches: list[FileInfo] = []
+        seen: set[str] = set()
+        for cand in candidates:
+            if base and not cand.startswith(base + "/") and cand != base:
+                continue
+            rel = cand[len(base):].lstrip("/") if base else cand.lstrip("/")
+            if _glob_match(rel_pattern, rel) and cand not in seen:
+                seen.add(cand)
+                matches.append(FileInfo(path=cand, is_dir=False))
+        matches.sort(key=lambda fi: fi["path"])
+        return GlobResult(matches=matches)
 
     # --------------------------------------------------------------- write
     def write(self, file_path: str, content: str) -> WriteResult:
