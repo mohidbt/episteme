@@ -5,6 +5,8 @@ import { useEffect, useState } from "react";
 interface PastThread {
   thread_id: string;
   created_at: string;
+  /** N8 — derived thread title; falls back to timestamp if null/blank. */
+  title?: string | null;
 }
 
 interface Props {
@@ -105,10 +107,13 @@ export function PastThreadsDropdown({
           )}
           {threads.map((t) => {
             const isCurrent = t.thread_id === activeThreadId;
-            const when = new Date(t.created_at).toLocaleString();
+            const trimmedTitle = t.title?.trim();
+            const label = trimmedTitle
+              ? trimmedTitle
+              : new Date(t.created_at).toLocaleString();
             return (
               <option key={t.thread_id} value={t.thread_id}>
-                {when}
+                {label}
                 {isCurrent ? " (current)" : ""}
               </option>
             );

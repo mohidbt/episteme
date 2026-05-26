@@ -54,10 +54,15 @@ async def list_threads_for_paper(
     user_id: str,
     limit: int = 50,
 ) -> list[dict]:
-    """Return [{thread_id, created_at(iso)}, ...] for (paper_id, user_id).
+    """Return [{thread_id, created_at(iso), title}, ...] for (paper_id, user_id).
 
     Owner-scoped: filters by user_id so thread_ids from other tenants are
     never returned. Empty list on missing pool or DB error.
+
+    N8 — LEFT JOIN agent_threads so the UI can label rows by their derived
+    title instead of just a timestamp. `title` may be NULL for legacy threads
+    that pre-date the title column being populated; the UI falls back to the
+    timestamp in that case.
     """
     pool = db_module._pool
     if pool is None:
@@ -66,10 +71,12 @@ async def list_threads_for_paper(
         async with pool.acquire() as conn:
             rows = await conn.fetch(
                 """
-                SELECT thread_id, created_at
-                FROM agent_thread_papers
-                WHERE paper_id = $1::uuid AND user_id = $2
-                ORDER BY created_at DESC
+                SELECT atp.thread_id, atp.created_at, at.title
+                FROM agent_thread_papers atp
+                LEFT JOIN agent_threads at
+                  ON at.thread_id = atp.thread_id AND at.user_id = atp.user_id
+                WHERE atp.paper_id = $1::uuid AND atp.user_id = $2
+                ORDER BY atp.created_at DESC
                 LIMIT $3
                 """,
                 paper_id,
@@ -83,6 +90,10 @@ async def list_threads_for_paper(
         )
         return []
     return [
-        {"thread_id": r["thread_id"], "created_at": r["created_at"].isoformat()}
+        {
+            "thread_id": r["thread_id"],
+            "created_at": r["created_at"].isoformat(),
+            "title": r["title"],
+        }
         for r in rows
     ]

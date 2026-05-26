@@ -59,6 +59,29 @@ describe("PastThreadsDropdown", () => {
     expect(screen.getByText(/no past chats on this paper/i)).toBeTruthy();
   });
 
+  it("renders the thread title when present, falling back to timestamp otherwise (N8)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      fetchOk({
+        threads: [
+          { thread_id: "t2", created_at: "2026-01-03T12:00:00.000Z", title: "Explain page 4" },
+          { thread_id: "t1", created_at: "2026-01-02T12:00:00.000Z", title: null },
+          { thread_id: "t0", created_at: "2026-01-01T12:00:00.000Z", title: "   " },
+        ],
+      }),
+    );
+    render(<PastThreadsDropdown paperId={PAPER} onSelect={() => {}} />);
+    const select = (await screen.findByRole("combobox")) as HTMLSelectElement;
+    const opts = Array.from(select.querySelectorAll("option")).filter(
+      (o) => o.value !== "",
+    );
+    // t2 → title, t1 → timestamp fallback (null), t0 → timestamp fallback (whitespace-only)
+    expect(opts[0].textContent).toContain("Explain page 4");
+    expect(opts[1].textContent).toMatch(/\d/);
+    expect(opts[1].textContent).not.toContain("null");
+    expect(opts[2].textContent).toMatch(/\d/);
+  });
+
   it("invokes onSelect with the picked thread id", async () => {
     vi.stubGlobal(
       "fetch",

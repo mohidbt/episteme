@@ -46,8 +46,8 @@ def _signed_headers(method: str, path: str, body: bytes, user_id: str = "user_a"
 PAPER_ID = "00000000-0000-0000-0000-000000000001"
 
 
-def _row(thread_id: str, when: datetime) -> dict:
-    return {"thread_id": thread_id, "created_at": when}
+def _row(thread_id: str, when: datetime, title: str | None = None) -> dict:
+    return {"thread_id": thread_id, "created_at": when, "title": title}
 
 
 def _mock_pool(rows: list[dict]) -> MagicMock:
@@ -91,6 +91,48 @@ def test_threads_for_paper_returns_descending() -> None:
     # Inspect the conn.fetch arguments via the closure on _Acquire's conn:
     # easier: just assert no rows leak when filter omits.
     # (We already checked the result; SQL string is exercised in cross-tenant test.)
+
+
+def test_threads_for_paper_returns_title_when_joined() -> None:
+    """N8 — list_threads_for_paper LEFT JOINs agent_threads and surfaces title.
+
+    Legacy rows may have a NULL title (older threads predate the title column
+    being populated); the route must still return them with title=None so the
+    UI can fall back to a timestamp label.
+    """
+    t0 = datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc)
+    t1 = datetime(2026, 1, 2, 12, 0, tzinfo=timezone.utc)
+    rows = [_row("t1", t1, "Explain page 4"), _row("t0", t0, None)]
+    pool = _mock_pool(rows)
+
+    path = f"/agents/km/threads-for-paper/{PAPER_ID}"
+    with patch("lib.thread_paper.db_module._pool", pool):
+        r = client.get(path, headers=_signed_headers("GET", path, b""))
+
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["threads"][0]["title"] == "Explain page 4"
+    assert body["threads"][1]["title"] is None
+    # SQL must JOIN agent_threads to surface the title.
+    inner_conn_acquire = pool.acquire.return_value
+    # Grab the conn.fetch call from the closure; simpler: re-derive via the mock.
+    # We stored conn inside _mock_pool's closure — instead inspect via the
+    # _Acquire __aenter__ result by calling it once more.
+
+    # The fetched SQL string is on conn.fetch's positional args.
+    # Because _mock_pool builds a fresh conn per acquire(), grab from the manager.
+    # Simpler approach: assert the SQL contains the JOIN by reading from the
+    # last-built _Acquire via its closure-bound `conn`.
+    # Pull conn off the manager via __aenter__:
+    import asyncio
+    async def _peek_sql():
+        async with pool.acquire() as conn:
+            # conn.fetch already called inside the route; we just read .await_args
+            return conn.fetch.await_args.args[0]
+    sql = asyncio.get_event_loop().run_until_complete(_peek_sql())
+    assert "JOIN" in sql.upper()
+    assert "agent_threads" in sql
+    assert "title" in sql
 
 
 def test_threads_for_paper_owner_scoped() -> None:

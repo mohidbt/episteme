@@ -231,6 +231,47 @@ describe("ReaderShell PastThreadsDropdown refresh signal (codex NEEDS-FIX)", () 
     vi.unstubAllGlobals();
   });
 
+  it("fetches /state and passes initialMessages to AgentTranscript on activeThreadId (N8)", async () => {
+    storeStateRef.value = {
+      panelOpen: true,
+      mountPoint: "reader-side-panel",
+      activeThreadId: "tid-with-history",
+    };
+
+    const persisted = [
+      { id: "m1", role: "user", text: "hi" },
+      { id: "m2", role: "assistant", text: "hello back" },
+    ];
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.includes("/api/agents/km/state/tid-with-history")) {
+        return new Response(
+          JSON.stringify({ messages: persisted }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      return new Response("{}", { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    vi.resetModules();
+    const { ReaderShell } = await import("../ReaderShell");
+    render(<ReaderShell paperId="paper-hydrate" />);
+
+    await waitFor(() => {
+      expect(agentTranscriptPropsRef.value).not.toBeNull();
+      expect(agentTranscriptPropsRef.value?.initialMessages).toEqual(persisted);
+    });
+    // State endpoint must have been hit for the active thread.
+    expect(
+      fetchMock.mock.calls.some((c) =>
+        String(c[0]).includes("/api/agents/km/state/tid-with-history"),
+      ),
+    ).toBe(true);
+
+    vi.unstubAllGlobals();
+  });
+
   it("bumps refreshKey when AgentTranscript's onStreamDone fires (chat-send path)", async () => {
     // Reproduces the user's E2E bug: chat-input messages flow through
     // AgentTranscript.defaultSend, NOT through ReaderShell.handleExplainPassage,

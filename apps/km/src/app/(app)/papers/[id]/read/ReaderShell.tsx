@@ -1,5 +1,6 @@
 "use client";
 
+import type { ComponentProps } from "react";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { useSearchParams } from "next/navigation";
@@ -7,6 +8,13 @@ import { toast } from "sonner";
 import { AgentTranscript } from "@/components/agent/AgentTranscript";
 import { PastThreadsDropdown } from "@/components/agent/PastThreadsDropdown";
 import { useAgentBallStore } from "@/state/agent-ball";
+
+// N8 — historical messages prop shape (mirror of AgentTranscript.initialMessages).
+// Kept loose: the route is uncached on the python side and the SSE merger is
+// resilient to extra fields, so we just pass through whatever /state returned.
+type HydratedMessage = NonNullable<
+  ComponentProps<typeof AgentTranscript>["initialMessages"]
+>[number];
 
 const Reader = dynamic(
   () => import("@episteme/reader").then((m) => m.Reader),
@@ -48,6 +56,47 @@ function ReaderShellInner({ paperId }: { paperId: string }) {
   // this counter only after `/invoke` resolves so the PastThreadsDropdown
   // refetch sees the newly-stamped row.
   const [pastThreadsRefreshKey, setPastThreadsRefreshKey] = useState(0);
+
+  // N8 — when the user picks a past thread from <PastThreadsDropdown>, the
+  // reader-side <AgentTranscript> mounts with `key={activeThreadId}` but
+  // without `initialMessages`, so its hydration path renders an empty
+  // transcript. Mirror the /agents/[id] server-component behaviour by
+  // fetching persisted messages here and passing them down. Held in local
+  // state keyed by the thread id we fetched for, so a stale response for a
+  // since-superseded thread doesn't overwrite a newer hydration.
+  const [hydratedMessages, setHydratedMessages] = useState<{
+    threadId: string;
+    messages: HydratedMessage[];
+  } | null>(null);
+
+  useEffect(() => {
+    if (!activeThreadId) {
+      setHydratedMessages(null);
+      return;
+    }
+    // Reset so we don't pass a previous thread's history into the newly-keyed
+    // AgentTranscript while the fetch is in flight.
+    setHydratedMessages(null);
+    const ctl = new AbortController();
+    void (async () => {
+      try {
+        const res = await fetch(
+          `/api/agents/km/state/${activeThreadId}`,
+          { credentials: "include", signal: ctl.signal },
+        );
+        if (!res.ok) return;
+        const data = (await res.json()) as { messages?: HydratedMessage[] };
+        if (ctl.signal.aborted) return;
+        setHydratedMessages({
+          threadId: activeThreadId,
+          messages: Array.isArray(data.messages) ? data.messages : [],
+        });
+      } catch {
+        // Best-effort: empty transcript is the same UX as before this fix.
+      }
+    })();
+    return () => ctl.abort();
+  }, [activeThreadId]);
 
   const ensureThread = useCallback((): Promise<string | null> => {
     const existing = useAgentBallStore.getState().activeThreadId;
@@ -170,6 +219,11 @@ function ReaderShellInner({ paperId }: { paperId: string }) {
           fullHeight
           pageContext={{ paperId }}
           onStreamDone={handleAgentStreamDone}
+          initialMessages={
+            hydratedMessages?.threadId === activeThreadId
+              ? hydratedMessages.messages
+              : undefined
+          }
         />
       </div>
     </div>
