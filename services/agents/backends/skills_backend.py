@@ -40,18 +40,22 @@ def _glob_match(pattern: str, path: str) -> bool:
     """Match ``path`` against a glob ``pattern`` with ``**`` recursive support.
 
     Mirrors ``NotesBackend._glob_match`` so the two route-mounted backends use
-    a single, consistent glob dialect. Translates ``**/`` to match zero or
-    more path segments, ``*`` to any non-slash chars, then defers to a regex
-    built piece-by-piece (we cannot use ``fnmatch.translate`` directly because
-    it does not understand recursive ``**``).
+    a single, consistent glob dialect. Translates:
+
+    * ``**`` → any chars (including ``/``); ``**/`` → zero-or-more path segments
+    * ``*``  → any non-slash chars
+    * ``?``  → single non-slash char
+    * ``[...]`` / ``[!...]`` → fnmatch character class (``!`` → ``^``)
+    * everything else → regex-escaped literal
     """
     i = 0
     out = ["(?s:"]
-    while i < len(pattern):
+    n = len(pattern)
+    while i < n:
         c = pattern[i]
         if c == "*":
-            if i + 1 < len(pattern) and pattern[i + 1] == "*":
-                if i + 2 < len(pattern) and pattern[i + 2] == "/":
+            if i + 1 < n and pattern[i + 1] == "*":
+                if i + 2 < n and pattern[i + 2] == "/":
                     out.append("(?:.*/)?")
                     i += 3
                 else:
@@ -63,9 +67,29 @@ def _glob_match(pattern: str, path: str) -> bool:
         elif c == "?":
             out.append("[^/]")
             i += 1
-        elif c in ".+(){}|^$\\":
-            out.append("\\" + c)
-            i += 1
+        elif c == "[":
+            # fnmatch-style character class. Find the matching ].
+            j = i + 1
+            if j < n and pattern[j] == "!":
+                j += 1
+            if j < n and pattern[j] == "]":
+                # First char after `[` (or after `[!`) is a literal `]`.
+                j += 1
+            while j < n and pattern[j] != "]":
+                j += 1
+            if j >= n:
+                # No closing bracket — treat `[` as literal.
+                out.append("\\[")
+                i += 1
+                continue
+            cls = pattern[i + 1 : j]
+            if cls.startswith("!"):
+                cls = "^" + cls[1:]
+            # Backslashes inside a class are literal in fnmatch; escape them
+            # so the regex engine doesn't interpret them.
+            cls = cls.replace("\\", "\\\\")
+            out.append("[" + cls + "]")
+            i = j + 1
         else:
             out.append(re.escape(c) if not c.isalnum() and c not in "/-_" else c)
             i += 1
@@ -209,6 +233,13 @@ class SkillsBackend(BackendProtocol):
         re-prefixes them with the mount point on the way back to the agent.
         """
         rel_pattern = pattern.lstrip("/")
+        # Codex follow-up: callers may pass the full virtual root
+        # (`/.episteme/agents/skills` or `/.episteme/agents/skills/<slug>`) as
+        # `path`. Strip it so the per-candidate prefix check below operates on
+        # the same root-relative form that we generate for `candidates`. Mirrors
+        # `_maybe_personal_body`'s acceptance of both forms.
+        if path.startswith(_VIRTUAL_ROOT):
+            path = path[len(_VIRTUAL_ROOT):] or "/"
         candidates: list[str] = []
 
         # On-disk skills (respect allow-list).
