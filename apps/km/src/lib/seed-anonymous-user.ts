@@ -378,6 +378,7 @@ export async function seedAnonymousUser(userId: string): Promise<void> {
     title: WELCOME_NOTE_TITLE,
     slug,
     contentMd,
+    sizeBytes: Buffer.byteLength(contentMd, "utf8"),
   });
 
   const pdfPath = path.join(process.cwd(), SEED_DIR, SEED_PAPER_FILE);
@@ -394,6 +395,7 @@ export async function seedAnonymousUser(userId: string): Promise<void> {
       doi: SEED_PAPER_DOI,
       authors: SEED_PAPER_AUTHORS,
       year: SEED_PAPER_YEAR,
+      sizeBytes: pdfBuf.byteLength,
     })
     .returning();
   await storage.uploadObject(
@@ -495,6 +497,7 @@ export async function seedAnonymousUser(userId: string): Promise<void> {
         authors: meta.authors,
         year: meta.year,
         doi: meta.doi,
+        sizeBytes: buf.byteLength,
       })
       .returning();
     await storage.uploadObject(
@@ -584,6 +587,7 @@ export async function seedAnonymousUser(userId: string): Promise<void> {
         authors: [...meta.authors],
         year: meta.year,
         doi: meta.doi,
+        sizeBytes: buf.byteLength,
       })
       .returning();
     await storage.uploadObject(
@@ -632,6 +636,7 @@ export async function seedAnonymousUser(userId: string): Promise<void> {
       title: BIO_NOTE_FUNGAL_TITLE,
       slug: fungalSlug,
       contentMd: BIO_NOTE_FUNGAL_MD,
+      sizeBytes: Buffer.byteLength(BIO_NOTE_FUNGAL_MD, "utf8"),
     })
     .returning();
   const ecoliSlug = await resolveNoteSlug(userId, BIO_NOTE_ECOLI_TITLE);
@@ -645,6 +650,7 @@ export async function seedAnonymousUser(userId: string): Promise<void> {
       title: BIO_NOTE_ECOLI_TITLE,
       slug: ecoliSlug,
       contentMd: BIO_NOTE_ECOLI_MD,
+      sizeBytes: Buffer.byteLength(BIO_NOTE_ECOLI_MD, "utf8"),
     })
     .returning();
 
