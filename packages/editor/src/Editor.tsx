@@ -9,7 +9,11 @@ import {
   type CollabOptions,
   type FileUploadOptions,
 } from "./extensions";
-import { hydrateWikiLinkResolutions, type ResolvedLinksMap } from "./hydrate-wiki-links";
+import {
+  hydrateWikiLinkResolutions,
+  attachWikiLinkRehydration,
+  type ResolvedLinksMap,
+} from "./hydrate-wiki-links";
 import "./styles.css";
 
 export interface EditorProps {
@@ -80,8 +84,19 @@ export function Editor({
 
   useEffect(() => {
     if (!editor || !resolvedLinks) return;
+    // First pass: hydrate against whatever the doc has right now. In non-collab
+    // mode this is the seeded markdown; in collab mode the doc is usually
+    // still empty here because the YJS provider hasn't synced yet.
     hydrateWikiLinkResolutions(editor, resolvedLinks);
-  }, [editor, resolvedLinks]);
+    // Re-fire when the provider's initial sync completes and on later YJS
+    // updates — covers wikiLink nodes that materialize from Y.Doc after the
+    // mount-time effect already ran with targetId=null. (N6 fix.)
+    if (!collab) return;
+    return attachWikiLinkRehydration(editor, resolvedLinks, {
+      provider: collab.provider as never,
+      ydoc: collab.ydoc as never,
+    });
+  }, [editor, resolvedLinks, collab]);
 
   useEffect(() => {
     if (!editor || !onReady) return;

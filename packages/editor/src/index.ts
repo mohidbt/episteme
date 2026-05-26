@@ -5,7 +5,7 @@ export type { Editor as TiptapEditor } from "@tiptap/react";
 export { editorExtensions, SlashCommand, SlashCommandPluginKey, userColor, buildCursorElement, isInsideCodeBlock, isPrecededByBackslash } from "./extensions";
 export type { WikiLinkSuggestion, SlashCommandSuggestion, CollabOptions, FileUploadOptions } from "./extensions";
 export { CollapsibleHeading, CollapsibleHeadingPluginKey } from "./collapsible-heading";
-export { hydrateWikiLinkResolutions } from "./hydrate-wiki-links";
+export { hydrateWikiLinkResolutions, attachWikiLinkRehydration } from "./hydrate-wiki-links";
 export type { ResolvedLinksMap, WikiLinkResolution } from "./hydrate-wiki-links";
 export { createCollabProvider } from "./collab";
 export type { CollabProvider, CollabProviderArgs } from "./collab";
