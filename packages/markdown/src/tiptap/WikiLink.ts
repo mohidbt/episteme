@@ -1,4 +1,5 @@
 import { InputRule, Node, mergeAttributes } from "@tiptap/core";
+import type { Node as PMNode } from "@tiptap/pm/model";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import type { MdLike } from "./markdown-it-types";
 
@@ -238,6 +239,78 @@ export const WikiLink = Node.create({
         },
       }),
     ];
+  },
+
+  // N6 v3 REAL RC: ProseMirror's DOMOutputSpec creates elements via
+  // `document.createElement`, which puts `<svg>` in the XHTML namespace and
+  // makes its `<path>` children render at 0×0 (invisible icon). The
+  // serialization path (renderHTML → getHTML string) still works because the
+  // HTML parser re-applies the SVG namespace when reading the string. But
+  // live editor rendering bypasses that string parser, so we install a
+  // NodeView that builds the icon via `createElementNS` with the correct
+  // namespace.
+  addNodeView() {
+    return ({ node, HTMLAttributes }: { node: PMNode; HTMLAttributes: Record<string, unknown> }) => {
+      const buildDom = (n: PMNode): HTMLSpanElement => {
+        const attrs = n.attrs as WikiLinkAttrs;
+        const resolved = attrs.targetId != null;
+        const kindClass =
+          attrs.targetKind === "paper"
+            ? " wiki-link--paper"
+            : attrs.targetKind === "reference"
+              ? " wiki-link--reference"
+              : "";
+        const label = attrs.alias ?? attrs.title;
+        const merged = mergeAttributes(HTMLAttributes, {
+          "data-type": "wiki-link",
+          "data-resolved": resolved ? "true" : "false",
+          "data-title": attrs.title,
+          ...(attrs.alias ? { "data-alias": attrs.alias } : {}),
+          ...(attrs.targetKind ? { "data-target-kind": attrs.targetKind } : {}),
+          ...(attrs.targetId ? { "data-target-id": attrs.targetId } : {}),
+          class: PILL_CLASS + kindClass,
+        });
+        const span = document.createElement("span");
+        for (const [k, v] of Object.entries(merged)) {
+          if (v == null) continue;
+          span.setAttribute(k, String(v));
+        }
+        const paths =
+          attrs.targetKind === "paper"
+            ? FILE_TEXT_PATHS
+            : attrs.targetKind === "reference"
+              ? BOOK_MARKED_PATHS
+              : null;
+        if (paths) {
+          const SVG_NS = "http://www.w3.org/2000/svg";
+          const svg = document.createElementNS(SVG_NS, "svg");
+          for (const [k, v] of Object.entries(SVG_ATTRS)) {
+            svg.setAttribute(k, String(v));
+          }
+          for (const d of paths) {
+            const path = document.createElementNS(SVG_NS, "path");
+            path.setAttribute("d", d);
+            svg.appendChild(path);
+          }
+          span.appendChild(svg);
+        }
+        span.appendChild(document.createTextNode(label));
+        return span;
+      };
+      let dom = buildDom(node);
+      return {
+        dom,
+        // Atom node: no editable content child. ProseMirror won't try to
+        // manage descendants.
+        update(updatedNode: PMNode) {
+          if (updatedNode.type.name !== "wikiLink") return false;
+          const fresh = buildDom(updatedNode);
+          dom.replaceWith(fresh);
+          dom = fresh;
+          return true;
+        },
+      };
+    };
   },
 
   // K6 self-heal: YJS-stored ProseMirror nodes that predate the K6 classifier

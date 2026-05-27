@@ -142,6 +142,15 @@
 .episteme-prose .wiki-link--reference svg {
   color: var(--accent-reference, oklch(0.58 0.20 295));
 }
+/* Unresolved pill: icon color must match the red dashed border, not the
+   resolved blue/green. The `--paper` / `--reference` rules above would
+   otherwise win by specificity; this `[data-resolved="false"]` selector adds
+   another attribute to match their specificity and override the color via
+   `inherit` from the pill's red `color:`. */
+.episteme-prose .wiki-link[data-resolved="false"].wiki-link--paper svg,
+.episteme-prose .wiki-link[data-resolved="false"].wiki-link--reference svg {
+  color: inherit;
+}
 
 /* Tag pill — clickable to navigate to /tags/:tag. */
 .episteme-prose [data-type="tag"] {

@@ -94,6 +94,56 @@ describe("WikiLink tiptap node", () => {
     editor.destroy();
   });
 
+  // N6 v3 REAL RC: ProseMirror's DOMOutputSpec creates elements with
+  // `document.createElement`, which puts `<svg>` in the XHTML namespace
+  // (http://www.w3.org/1999/xhtml). Browsers paint zero-sized children on a
+  // non-SVG-namespaced root, so the icon was invisible. The fix uses a
+  // NodeView that builds the SVG via `createElementNS` with the correct
+  // namespace. Asserting `namespaceURI` here is the regression guard.
+  it("renders svg in the SVG namespace (paper) — N6 v3 RC", () => {
+    const editor = makeEditor({
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          content: [
+            {
+              type: "wikiLink",
+              attrs: { title: "crispr.pdf", alias: null, targetKind: "paper", targetId: null },
+            },
+          ],
+        },
+      ],
+    });
+    const svg = editor.view.dom.querySelector("svg");
+    expect(svg).not.toBeNull();
+    expect(svg?.namespaceURI).toBe("http://www.w3.org/2000/svg");
+    const path = svg?.querySelector("path");
+    expect(path?.namespaceURI).toBe("http://www.w3.org/2000/svg");
+    editor.destroy();
+  });
+
+  it("renders svg in the SVG namespace (reference) — N6 v3 RC", () => {
+    const editor = makeEditor({
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          content: [
+            {
+              type: "wikiLink",
+              attrs: { title: "vaswani2017", alias: null, targetKind: "reference", targetId: null },
+            },
+          ],
+        },
+      ],
+    });
+    const svg = editor.view.dom.querySelector("svg");
+    expect(svg).not.toBeNull();
+    expect(svg?.namespaceURI).toBe("http://www.w3.org/2000/svg");
+    editor.destroy();
+  });
+
   it("renders an inline svg icon for paper targetKind", () => {
     const editor = makeEditor({
       type: "doc",
