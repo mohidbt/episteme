@@ -96,7 +96,10 @@ export function Editor({
       provider: collab.provider as never,
       ydoc: collab.ydoc as never,
     });
-  }, [editor, resolvedLinks, collab]);
+    // N6 fix: depend on the stable inner refs, not the `collab` object — parents
+    // sometimes recreate `{ provider, ydoc, user }` per render, which would
+    // detach/reattach the YJS listener and clear the debounce timer needlessly.
+  }, [editor, resolvedLinks, collab?.provider, collab?.ydoc]);
 
   useEffect(() => {
     if (!editor || !onReady) return;
