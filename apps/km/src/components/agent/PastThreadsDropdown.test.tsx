@@ -82,6 +82,52 @@ describe("PastThreadsDropdown", () => {
     expect(opts[2].textContent).toMatch(/\d/);
   });
 
+  it("truncates titles longer than 80 chars with an ellipsis (N8 UI defense)", async () => {
+    const long = "a".repeat(200);
+    vi.stubGlobal(
+      "fetch",
+      fetchOk({
+        threads: [
+          { thread_id: "t-long", created_at: "2026-05-01T00:00:00Z", title: long },
+        ],
+      }),
+    );
+    render(<PastThreadsDropdown paperId={PAPER} onSelect={() => {}} />);
+    const select = (await screen.findByRole("combobox")) as HTMLSelectElement;
+    const opts = Array.from(select.querySelectorAll("option")).filter(
+      (o) => o.value !== "",
+    );
+    const text = opts[0].textContent ?? "";
+    // 80 chars + "…" = 81; allow " (current)" suffix etc. but cap title body.
+    expect(text.length).toBeLessThanOrEqual(83);
+    expect(text).toContain("…");
+  });
+
+  it("strips control chars and line breaks from titles (N8 UI defense)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      fetchOk({
+        threads: [
+          {
+            thread_id: "t-nl",
+            created_at: "2026-05-01T00:00:00Z",
+            title: "first line\nsecond\tline\x07bell",
+          },
+        ],
+      }),
+    );
+    render(<PastThreadsDropdown paperId={PAPER} onSelect={() => {}} />);
+    const select = (await screen.findByRole("combobox")) as HTMLSelectElement;
+    const opts = Array.from(select.querySelectorAll("option")).filter(
+      (o) => o.value !== "",
+    );
+    const text = opts[0].textContent ?? "";
+    expect(text).not.toContain("\n");
+    expect(text).not.toContain("\t");
+    expect(text).not.toContain("\x07");
+    expect(text).toContain("first line second line bell");
+  });
+
   it("invokes onSelect with the picked thread id", async () => {
     vi.stubGlobal(
       "fetch",

@@ -9,6 +9,21 @@ interface PastThread {
   title?: string | null;
 }
 
+/**
+ * N8 — UI defense. Thread titles come from model output via
+ * `deriveThreadTitle(firstUserText)`, which means they can be arbitrarily long
+ * or contain hostile control characters / line breaks. Collapse control chars
+ * and newlines to a single space, then hard-truncate to 80 chars + ellipsis.
+ */
+const MAX_TITLE_CHARS = 80;
+// eslint-disable-next-line no-control-regex
+const CONTROL_CHARS = /[\x00-\x1F\x7F]+/g;
+function sanitizeTitle(raw: string): string {
+  const cleaned = raw.replace(CONTROL_CHARS, " ").replace(/\s+/g, " ").trim();
+  if (cleaned.length <= MAX_TITLE_CHARS) return cleaned;
+  return cleaned.slice(0, MAX_TITLE_CHARS) + "…";
+}
+
 interface Props {
   paperId: string;
   /** Called when the user picks a past thread. Parent re-hydrates via /state. */
@@ -109,7 +124,7 @@ export function PastThreadsDropdown({
             const isCurrent = t.thread_id === activeThreadId;
             const trimmedTitle = t.title?.trim();
             const label = trimmedTitle
-              ? trimmedTitle
+              ? sanitizeTitle(trimmedTitle)
               : new Date(t.created_at).toLocaleString();
             return (
               <option key={t.thread_id} value={t.thread_id}>
