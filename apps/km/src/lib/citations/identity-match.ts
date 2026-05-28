@@ -1,6 +1,6 @@
 import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { references_ } from "@episteme/db/schema";
+import { papers, references_ } from "@episteme/db/schema";
 
 // H-batch Step 6: identity match between a library reference and a library
 // paper. Returns the user's paper that is the *same entity* as the given
@@ -35,12 +35,29 @@ export async function findIdentityPaperForReference(
 ): Promise<IdentityPaperHit | null> {
   // 1. Load reference scoped to user — cross-user isolation.
   const refRows = await db
-    .select({ cslJson: references_.cslJson })
+    .select({ cslJson: references_.cslJson, paperId: references_.paperId })
     .from(references_)
     .where(and(eq(references_.id, referenceId), eq(references_.userId, userId)))
     .limit(1);
 
   if (refRows.length === 0) return null;
+
+  // O2: explicit manual attach overrides DOI/title derivation. references_.paperId
+  // is set by attachReferenceToPaper / cleared by detachReferenceFromPaper.
+  // We still scope by userId on the paper lookup so a stale pointer to a
+  // deleted or transferred paper degrades to no badge instead of leaking.
+  const explicitPaperId = refRows[0].paperId;
+  if (explicitPaperId) {
+    const paperRows = await db
+      .select({ id: papers.id, title: papers.title })
+      .from(papers)
+      .where(and(eq(papers.id, explicitPaperId), eq(papers.userId, userId)))
+      .limit(1);
+    const p = paperRows[0];
+    if (p) return { paperId: p.id, title: p.title ?? null };
+    // Stale pointer (paper deleted / cross-user). Fall through to derivation
+    // so the badge isn't silently wrong if DOI/title still agree elsewhere.
+  }
 
   const csl = (refRows[0].cslJson ?? {}) as Record<string, unknown>;
   const doi = typeof csl.DOI === "string" ? csl.DOI.trim() : null;

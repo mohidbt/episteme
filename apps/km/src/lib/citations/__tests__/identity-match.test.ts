@@ -175,6 +175,34 @@ describe("findIdentityPaperForReference", () => {
     expect(hit?.paperId).not.toBe(paperDoiId);
   });
 
+  it("O2: explicit references_.paperId override wins over DOI derivation", async () => {
+    // Override refDoi to point at the title-paper instead of the DOI-paper.
+    // findIdentityPaperForReference should return paperTitleId, not paperDoiId.
+    await db.execute(sql`
+      UPDATE "references" SET paper_id = ${paperTitleId} WHERE id = ${refDoi}
+    `);
+    try {
+      const hit = await findIdentityPaperForReference(refDoi, u.id);
+      expect(hit?.paperId).toBe(paperTitleId);
+    } finally {
+      await db.execute(sql`UPDATE "references" SET paper_id = NULL WHERE id = ${refDoi}`);
+    }
+  });
+
+  it("O2: stale override (paper deleted/cross-user) falls back to DOI derivation", async () => {
+    // Point refDoi at a paper that's not the user's. Lookup should silently
+    // fall through to DOI match so we never leak the cross-user paper.
+    await db.execute(sql`
+      UPDATE "references" SET paper_id = ${paperOtherUserId} WHERE id = ${refDoi}
+    `);
+    try {
+      const hit = await findIdentityPaperForReference(refDoi, u.id);
+      expect(hit?.paperId).toBe(paperDoiId);
+    } finally {
+      await db.execute(sql`UPDATE "references" SET paper_id = NULL WHERE id = ${refDoi}`);
+    }
+  });
+
   it("returns null for a non-existent reference id", async () => {
     const hit = await findIdentityPaperForReference(
       "00000000-0000-0000-0000-000000000000",

@@ -1,7 +1,7 @@
 import { cache } from "react";
 import { and, desc, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { references_ } from "@episteme/db/schema";
+import { papers, references_ } from "@episteme/db/schema";
 
 /** Returns all references for the library regardless of folder. Used by /references page. */
 export const listAllReferences = cache(
@@ -43,6 +43,24 @@ export const getReference = cache(async (id: string, userId: string) => {
     .limit(1);
   return rows[0] ?? null;
 });
+
+// O2: papers picker for the manual attach UI on /r/[id]. Restored from
+// pre-b8b7556 (deletion was over-eager — see commit message).
+export const listPapersInLibrary = cache(
+  async (libraryId: number, userId: string) =>
+    db
+      .select({
+        id: papers.id,
+        title: papers.title,
+        filename: papers.filename,
+        year: papers.year,
+      })
+      .from(papers)
+      .where(and(eq(papers.libraryId, libraryId), eq(papers.userId, userId)))
+      .orderBy(desc(papers.addedAt)),
+);
+
+export type PaperPickerRow = Awaited<ReturnType<typeof listPapersInLibrary>>[number];
 
 export const getReferencesForPaper = cache(
   async (paperId: string, userId: string) =>

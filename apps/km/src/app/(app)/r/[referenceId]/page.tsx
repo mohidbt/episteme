@@ -2,10 +2,11 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getRequiredUserId } from "@/lib/session";
 import { getDefaultLibrary } from "@/lib/default-library";
-import { getReference } from "@/lib/references-server";
+import { getReference, listPapersInLibrary } from "@/lib/references-server";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { ReferenceForm } from "@/components/ReferenceForm";
 import { ReferenceAgenticSearchButton } from "@/components/ReferenceAgenticSearchButton";
+import { ReferenceAttachPaperControl } from "@/components/ReferenceAttachPaperControl";
 import { TabTitleUpdater } from "@/components/TabBar";
 import { Badge } from "@/components/ui/badge";
 import { denormaliseForList, validateCslJson } from "@/lib/csl";
@@ -26,6 +27,12 @@ export default async function ReferencePage({
     findIdentityPaperForReference(referenceId, userId),
   ]);
   if (!ref) notFound();
+
+  // O2: manual attach picker needs the user's library papers. Only fetch when
+  // we'll actually render the picker (identity not yet established).
+  const pickerPapers = identityPaper
+    ? []
+    : await listPapersInLibrary(ref.libraryId, userId);
 
   const displayTitle =
     denormaliseForList(validateCslJson(ref.cslJson)).title.trim() ||
@@ -48,18 +55,31 @@ export default async function ReferencePage({
           citationKey={ref.citationKey}
           identityPaper={identityPaper}
         />
-        {identityPaper && (
-          <Link
-            href={`/p/${identityPaper.paperId}`}
-            aria-label={`Open library paper: ${identityPaper.title?.trim() || "untitled"}`}
-          >
-            <Badge
-              variant="secondary"
-              className="cursor-pointer hover:bg-muted"
+        {identityPaper ? (
+          <>
+            <Link
+              href={`/p/${identityPaper.paperId}`}
+              aria-label={`Open library paper: ${identityPaper.title?.trim() || "untitled"}`}
             >
-              Paper in library
-            </Badge>
-          </Link>
+              <Badge
+                variant="secondary"
+                className="cursor-pointer hover:bg-muted"
+              >
+                Paper in library
+              </Badge>
+            </Link>
+            <ReferenceAttachPaperControl
+              referenceId={ref.id}
+              attachedPaperId={identityPaper.paperId}
+              papers={[]}
+            />
+          </>
+        ) : (
+          <ReferenceAttachPaperControl
+            referenceId={ref.id}
+            attachedPaperId={null}
+            papers={pickerPapers}
+          />
         )}
       </div>
       <ReferenceForm reference={ref} />
