@@ -86,6 +86,102 @@ describe("attachWikiLinkRehydration", () => {
     editor.destroy();
   });
 
+  it("fires hydration once at attach if provider is already synced (subscribe-time-state race)", () => {
+    // Fast prod / warm cache: YJS finishes syncing BEFORE the React effect
+    // that calls attachWikiLinkRehydration runs. The 'synced' event has
+    // already fired; subscribing now would never see it. The guard reads
+    // provider.synced at attach time and fires once synchronously.
+    const editor = makeEditor();
+    const provider = makeFakeEmitter() as ReturnType<typeof makeFakeEmitter> & {
+      synced: boolean;
+    };
+    provider.synced = true;
+
+    // Seed the doc with an unresolved wiki link, as if YJS just materialized it.
+    editor.commands.setContent("hi [[Foo]] there");
+
+    const cleanup = attachWikiLinkRehydration(
+      editor,
+      { "note::foo": { targetKind: "note", targetId: "abc" } },
+      { provider: provider as never },
+    );
+
+    const findFoo = (j: ReturnType<typeof editor.getJSON>): Record<string, unknown> | undefined => {
+      const walk = (nodes: unknown[] | undefined): Record<string, unknown> | undefined => {
+        if (!nodes) return undefined;
+        for (const n of nodes as Array<Record<string, unknown>>) {
+          if (n.type === "wikiLink" && (n.attrs as { title?: string })?.title === "Foo") return n;
+          const hit = walk(n.content as unknown[] | undefined);
+          if (hit) return hit;
+        }
+        return undefined;
+      };
+      return walk(j.content as unknown[] | undefined);
+    };
+
+    expect(findFoo(editor.getJSON())?.attrs).toMatchObject({
+      targetId: "abc",
+      targetKind: "note",
+    });
+
+    cleanup();
+    editor.destroy();
+  });
+
+  it("is idempotent when synced=true at attach AND a later `synced` event fires", () => {
+    // After the attach-time fire resolves the link, a subsequent 'synced'
+    // emit must leave the doc in the same final state (no error, no corruption).
+    const editor = makeEditor();
+    const provider = makeFakeEmitter() as ReturnType<typeof makeFakeEmitter> & {
+      synced: boolean;
+    };
+    provider.synced = true;
+
+    editor.commands.setContent("[[Foo]]");
+
+    const cleanup = attachWikiLinkRehydration(
+      editor,
+      { "note::foo": { targetKind: "note", targetId: "abc" } },
+      { provider: provider as never },
+    );
+
+    const after1 = JSON.stringify(editor.getJSON());
+    provider.emit("synced");
+    const after2 = JSON.stringify(editor.getJSON());
+
+    expect(after2).toBe(after1);
+    expect(after1).toContain('"targetId":"abc"');
+
+    cleanup();
+    editor.destroy();
+  });
+
+  it("does NOT fire at attach when provider.synced is false (preserves event-driven path)", () => {
+    const editor = makeEditor();
+    const provider = makeFakeEmitter() as ReturnType<typeof makeFakeEmitter> & {
+      synced: boolean;
+    };
+    provider.synced = false;
+
+    editor.commands.setContent("[[Foo]]");
+    const dispatchSpy = vi.spyOn(editor.view, "dispatch");
+
+    const cleanup = attachWikiLinkRehydration(
+      editor,
+      { "note::foo": { targetKind: "note", targetId: "abc" } },
+      { provider: provider as never },
+    );
+
+    // No attach-time dispatch — must wait for the event.
+    expect(dispatchSpy).not.toHaveBeenCalled();
+
+    provider.emit("synced");
+    expect(dispatchSpy).toHaveBeenCalled();
+
+    cleanup();
+    editor.destroy();
+  });
+
   it("re-hydrates on debounced ydoc `update` after first sync", async () => {
     // Covers late-arriving YJS updates that materialize wikiLink nodes AFTER
     // the synced event has already fired.

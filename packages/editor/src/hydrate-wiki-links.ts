@@ -64,6 +64,11 @@ type EmitterLike = {
   off: (evt: string, fn: (...args: unknown[]) => void) => void;
 };
 
+// HocuspocusProvider exposes a boolean `synced` flag reflecting whether the
+// initial sync completed. We read it (when present) to guard against the
+// subscribe-time-state race where sync finishes BEFORE this attach runs.
+type ProviderLike = EmitterLike & { synced?: boolean };
+
 /**
  * Wire late-arriving YJS sync events to re-run `hydrateWikiLinkResolutions`.
  *
@@ -88,7 +93,7 @@ type EmitterLike = {
 export function attachWikiLinkRehydration(
   editor: Editor,
   resolvedLinks: ResolvedLinksMap,
-  opts: { provider?: EmitterLike; ydoc?: EmitterLike } = {},
+  opts: { provider?: ProviderLike; ydoc?: EmitterLike } = {},
 ): () => void {
   const run = () => {
     if (editor.isDestroyed) return;
@@ -109,6 +114,13 @@ export function attachWikiLinkRehydration(
 
   provider?.on("synced", onSynced as (...args: unknown[]) => void);
   ydoc?.on("update", onUpdate as (...args: unknown[]) => void);
+
+  // Subscribe-time-state guard: if the provider already finished syncing
+  // BEFORE this function ran (fast prod / warm cache), the 'synced' event
+  // already fired and our listener will never see it. Fire once now so the
+  // initial sync is covered. `hydrateWikiLinkResolutions` is idempotent, so
+  // a later 'synced' emit is a safe no-op.
+  if (provider?.synced) run();
 
   return () => {
     provider?.off("synced", onSynced as (...args: unknown[]) => void);
