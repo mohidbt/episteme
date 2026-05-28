@@ -195,6 +195,76 @@ describe("rebuildLinks — resolution", () => {
     }
   });
 
+  it("resolves [[r:Title]] against references_.cslJson.title (case-insensitive)", async () => {
+    // The WikiLink typeahead inserts `r:<reference.title>` — not the citation
+    // key. Verify rebuildLinks resolves the title form so pills don't go red.
+    const [titled] = await db
+      .insert(references_)
+      .values({
+        userId: u.id,
+        libraryId,
+        citationKey: "brown2020language",
+        cslJson: { title: "Language Models are Few-Shot Learners" },
+      })
+      .returning({ id: references_.id });
+    try {
+      await rebuildLinks(
+        sourceNoteId,
+        "[[r:Language Models are Few-Shot Learners]]",
+        u.id,
+      );
+      const rows = await linksOf(sourceNoteId);
+      const ref = rows.find((r) => r.targetKind === "reference");
+      expect(ref?.targetId).toBe(titled.id);
+    } finally {
+      await db.delete(references_).where(eq(references_.id, titled.id));
+    }
+  });
+
+  it("still resolves [[r:citationKey]] (regression: citation-key path)", async () => {
+    const [titled] = await db
+      .insert(references_)
+      .values({
+        userId: u.id,
+        libraryId,
+        citationKey: "brown2020language",
+        cslJson: { title: "Language Models are Few-Shot Learners" },
+      })
+      .returning({ id: references_.id });
+    try {
+      await rebuildLinks(sourceNoteId, "[[r:brown2020language]]", u.id);
+      const rows = await linksOf(sourceNoteId);
+      const ref = rows.find((r) => r.targetKind === "reference");
+      expect(ref?.targetId).toBe(titled.id);
+    } finally {
+      await db.delete(references_).where(eq(references_.id, titled.id));
+    }
+  });
+
+  it("resolves reference title case-insensitively", async () => {
+    const [titled] = await db
+      .insert(references_)
+      .values({
+        userId: u.id,
+        libraryId,
+        citationKey: "brown2020language",
+        cslJson: { title: "Language Models are Few-Shot Learners" },
+      })
+      .returning({ id: references_.id });
+    try {
+      await rebuildLinks(
+        sourceNoteId,
+        "[[r:LANGUAGE MODELS ARE FEW-SHOT LEARNERS]]",
+        u.id,
+      );
+      const rows = await linksOf(sourceNoteId);
+      const ref = rows.find((r) => r.targetKind === "reference");
+      expect(ref?.targetId).toBe(titled.id);
+    } finally {
+      await db.delete(references_).where(eq(references_.id, titled.id));
+    }
+  });
+
   it("resolves [[pdf:Title]] against papers.title (case-insensitive)", async () => {
     // The WikiLink typeahead inserts `pdf:<paper.title>` — not the filename.
     // Verify rebuildLinks resolves the title form so pills don't go red on

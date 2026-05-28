@@ -58,10 +58,25 @@ export async function rebuildLinks(
       : Promise.resolve([] as { id: string; titleLower: string }[]),
     refRaws.length > 0
       ? db
-          .select({ id: references_.id, citationKey: references_.citationKey })
+          .select({
+            id: references_.id,
+            citationKey: references_.citationKey,
+            title: sql<string | null>`${references_.cslJson}->>'title'`.as("ref_title"),
+          })
           .from(references_)
-          .where(and(eq(references_.userId, userId), inArray(references_.citationKey, refRaws)))
-      : Promise.resolve([] as { id: string; citationKey: string }[]),
+          .where(
+            and(
+              eq(references_.userId, userId),
+              or(
+                inArray(references_.citationKey, refRaws),
+                inArray(
+                  sql`lower(${references_.cslJson}->>'title')`,
+                  refRaws.map((r) => r.toLowerCase()),
+                ),
+              ),
+            ),
+          )
+      : Promise.resolve([] as { id: string; citationKey: string; title: string | null }[]),
     paperRaws.length > 0
       ? db
           .select({
@@ -97,8 +112,20 @@ export async function rebuildLinks(
   const noteByTitle = new Map<string, string>();
   for (const r of noteRows) noteByTitle.set(r.titleLower, r.id);
 
+  // Mirror paper resolution: try citation_key (exact) first, then
+  // cslJson.title (case-insensitive). Slash typeahead persists
+  // `[[r:<title>]]`, so the title path is the common case.
   const refByKey = new Map<string, string>();
-  for (const r of refRows) refByKey.set(r.citationKey, r.id);
+  const refByTitleLower = new Map<string, string>();
+  for (const r of refRows) {
+    if (r.citationKey && !refByKey.has(r.citationKey)) {
+      refByKey.set(r.citationKey, r.id);
+    }
+    if (r.title) {
+      const k = r.title.toLowerCase();
+      if (!refByTitleLower.has(k)) refByTitleLower.set(k, r.id);
+    }
+  }
 
   // Resolve papers by filename (exact) first, then by title (case-insensitive)
   // as a fallback. Separate namespaces so a legacy `[[pdf:<filename>]]` link
@@ -119,7 +146,11 @@ export async function rebuildLinks(
   const resolved: ResolvedLink[] = links.map((l) => {
     let targetId: string | null = null;
     if (l.kind === "note") targetId = noteByTitle.get(l.raw.toLowerCase()) ?? null;
-    else if (l.kind === "reference") targetId = refByKey.get(l.raw) ?? null;
+    else if (l.kind === "reference")
+      targetId =
+        refByKey.get(l.raw) ??
+        refByTitleLower.get(l.raw.toLowerCase()) ??
+        null;
     else if (l.kind === "paper") {
       targetId =
         paperByFilename.get(l.raw) ??
