@@ -369,6 +369,33 @@ describe("AgentBall", () => {
       const panel = await waitFor(() => screen.getByTestId("agent-panel"));
       expect(panel.style.left).toBe("150px");
     });
+
+    it("O3 — clamps panel drag to viewport right edge (480px panel width)", async () => {
+      Object.defineProperty(window, "innerWidth", {
+        configurable: true,
+        value: 1024,
+      });
+      renderBall();
+      fireEvent.click(screen.getByTestId("agent-ball"));
+      const panel = await waitFor(() => screen.getByTestId("agent-panel"));
+      // Drag handle is the header div (first child of panel).
+      const handle = panel.firstElementChild as HTMLElement;
+      fireEvent.pointerDown(handle, { clientX: 100, clientY: 100, pointerId: 1 });
+      fireEvent.pointerMove(handle, {
+        clientX: window.innerWidth + 200,
+        clientY: 120,
+        pointerId: 1,
+      });
+      fireEvent.pointerUp(handle, {
+        clientX: window.innerWidth + 200,
+        clientY: 120,
+        pointerId: 1,
+      });
+      // Panel is 480px wide, so left must be clamped to innerWidth - 480 = 544.
+      const left = Number.parseInt(panel.style.left, 10);
+      expect(left).toBeLessThanOrEqual(window.innerWidth - 480);
+      expect(left).toBeGreaterThanOrEqual(0);
+    });
   });
 
   describe("G10 #39 — collapsible & fullscreen agent convo", () => {

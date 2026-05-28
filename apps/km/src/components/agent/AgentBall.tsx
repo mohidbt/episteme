@@ -106,7 +106,9 @@ export function AgentBall(_props: AgentBallProps) {
     // Align ball's bottom with the agent panel's bottom edge (Tailwind `bottom-4` = 16px).
     bottomInsetPx: 16,
   });
-  const panelDrag = useDragX({ storageKey: "agent-convo-x", elementWidth: 400 });
+  // O3 — elementWidth must match the rendered panel width (panelSizeClass uses
+  // 480px) so the right-side clamp prevents dragging the panel off-viewport.
+  const panelDrag = useDragX({ storageKey: "agent-convo-x", elementWidth: 480 });
   const ballRef = useRef<HTMLButtonElement | null>(null);
   const newThreadIdsRef = useRef<Set<string>>(new Set());
   const firstMessageSeenRef = useRef<Set<string>>(new Set());
