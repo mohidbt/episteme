@@ -6,6 +6,13 @@ import type { papers } from "@episteme/db/schema";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { InPapersetsBadge } from "@/components/InPapersetsBadge";
 
 type PaperRow = typeof papers.$inferSelect;
@@ -22,7 +29,11 @@ interface PaperMetadataPanelProps {
   papersetCount?: number;
   /** Paperset list shown in the badge popover. */
   papersets?: PapersetItem[];
+  /** Folder paths available in this library, plus optional "" root. */
+  folderOptions?: string[];
 }
+
+const ROOT_VALUE = "__root__";
 
 interface FormState {
   title: string;
@@ -88,9 +99,18 @@ function diffPatch(
   return patch;
 }
 
-export function PaperMetadataPanel({ paper, onSaved, papersetCount = 0, papersets = [] }: PaperMetadataPanelProps) {
+export function PaperMetadataPanel({
+  paper,
+  onSaved,
+  papersetCount = 0,
+  papersets = [],
+  folderOptions = [],
+}: PaperMetadataPanelProps) {
   const [form, setForm] = useState<FormState>(() => toForm(paper));
   const [busy, setBusy] = useState(false);
+
+  const folderChoices = Array.from(new Set(["", ...folderOptions, paper.folderPath]));
+  const doiUrl = form.doi.trim() ? `https://doi.org/${form.doi.trim()}` : "";
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -185,16 +205,41 @@ export function PaperMetadataPanel({ paper, onSaved, papersetCount = 0, paperset
       </div>
 
       <div className="grid gap-2">
+        <Label htmlFor="paper-url">URL</Label>
+        {doiUrl ? (
+          <a
+            id="paper-url"
+            href={doiUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="block truncate rounded-md border border-input bg-muted/30 px-2.5 py-1.5 text-sm text-foreground hover:underline"
+          >
+            {doiUrl}
+          </a>
+        ) : (
+          <p className="rounded-md border border-input bg-muted/30 px-2.5 py-1.5 text-sm text-muted-foreground">
+            Add a DOI to generate a URL.
+          </p>
+        )}
+      </div>
+
+      <div className="grid gap-2">
         <Label htmlFor="paper-folder">Folder</Label>
-        <Input
-          id="paper-folder"
-          value={form.folderPath}
-          onChange={(e) => set("folderPath", e.currentTarget.value)}
-          placeholder="projects/phd/"
-        />
-        <p className="text-xs text-muted-foreground">
-          Trailing &ldquo;/&rdquo; or leave blank for library root.
-        </p>
+        <Select
+          value={form.folderPath === "" ? ROOT_VALUE : form.folderPath}
+          onValueChange={(v) => set("folderPath", !v || v === ROOT_VALUE ? "" : v)}
+        >
+          <SelectTrigger id="paper-folder" className="w-full">
+            <SelectValue placeholder="Library root" />
+          </SelectTrigger>
+          <SelectContent>
+            {folderChoices.map((path) => (
+              <SelectItem key={path || ROOT_VALUE} value={path === "" ? ROOT_VALUE : path}>
+                {path === "" ? "Library root" : path}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       <div className="flex justify-end">

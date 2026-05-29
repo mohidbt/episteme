@@ -31,6 +31,30 @@ const loadPaper = cache(async (paperId: string, userId: string): Promise<PaperRo
   return rows[0] ?? null;
 });
 
+function buildFolderPaths(
+  folders: { id: string; parentId: string | null; name: string; isTrash: boolean }[],
+): string[] {
+  const byId = new Map(folders.map((f) => [f.id, f]));
+  const pathOf = (id: string): string => {
+    const parts: string[] = [];
+    let cur: string | null = id;
+    const seen = new Set<string>();
+    while (cur && !seen.has(cur)) {
+      seen.add(cur);
+      const f = byId.get(cur);
+      if (!f) break;
+      parts.unshift(f.name);
+      cur = f.parentId;
+    }
+    return `${parts.join("/")}/`;
+  };
+  const paths = folders
+    .filter((f) => !f.isTrash)
+    .map((f) => pathOf(f.id))
+    .sort((a, b) => a.localeCompare(b));
+  return Array.from(new Set(paths));
+}
+
 function refYear(cslJson: unknown): number | null {
   try {
     return denormaliseForList(validateCslJson(cslJson)).year;
@@ -64,6 +88,7 @@ export default async function PaperPage({
   const allFolders = library
     ? await listAllFolders(library.id, userId)
     : [];
+  const folderOptions = buildFolderPaths(allFolders);
   const displayTitle = paper.title && paper.title.trim().length > 0 ? paper.title : paper.filename;
   const firstRef = refs[0];
   const firstRefYear = firstRef ? refYear(firstRef.cslJson) : null;
@@ -125,15 +150,20 @@ export default async function PaperPage({
           </div>
         </div>
       </div>
-      <div className="mt-4 grid min-h-0 flex-1 grid-cols-1 border-t border-border/60 lg:grid-cols-[minmax(0,1fr)_420px]">
-        <div className="relative h-full min-h-[60vh] overflow-hidden lg:min-h-0">
+      <div className="mt-4 flex min-h-0 flex-1 flex-col border-t border-border/60 lg:flex-row">
+        <div className="flex h-full min-h-[60vh] shrink-0 items-center justify-center overflow-hidden p-6 lg:min-h-0">
           <PaperPdfPreview
             paperId={paper.id}
             title={displayTitle}
           />
         </div>
-        <aside className="flex flex-col gap-8 overflow-y-auto border-t border-border/60 p-6 lg:border-t-0 lg:border-l">
-          <PaperMetadataPanel paper={paper} papersetCount={papersetCount} papersets={papersetList} />
+        <aside className="flex min-w-0 flex-1 flex-col gap-8 overflow-y-auto border-t border-border/60 p-6 lg:border-t-0 lg:border-l">
+          <PaperMetadataPanel
+            paper={paper}
+            papersetCount={papersetCount}
+            papersets={papersetList}
+            folderOptions={folderOptions}
+          />
           <PaperHighlightsList paperId={paper.id} />
           <PaperCitationsList paperId={paper.id} />
         </aside>

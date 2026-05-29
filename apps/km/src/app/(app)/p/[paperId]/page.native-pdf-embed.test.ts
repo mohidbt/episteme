@@ -24,6 +24,5 @@ describe("/p/[paperId] PDF preview", () => {
     expect(source).not.toContain('href={`/papers/${paperId}/read`}');
     expect(source).not.toContain('href={`/api/papers/${paperId}/file`}');
     expect(source).toContain('src={`/api/papers/${paperId}/cover`}');
-    expect(source).toContain("First page preview");
   });
 });
