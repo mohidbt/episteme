@@ -10,10 +10,13 @@ import { Label } from "@/components/ui/label";
 import { validateCslJson, type CslItem } from "@/lib/csl";
 import { sanitizeAbstract } from "@/lib/strip-jats";
 import type { ReferenceRow } from "@/lib/references-server";
+import { FolderDestinationPicker } from "@/components/FolderDestinationPicker";
+import type { FolderRow } from "@/lib/folders";
 import { cn } from "@/lib/utils";
 
 interface ReferenceFormProps {
   reference: ReferenceRow;
+  folders?: FolderRow[];
 }
 
 interface AuthorFields {
@@ -23,7 +26,7 @@ interface AuthorFields {
 
 interface FormState {
   citationKey: string;
-  folderPath: string;
+  folderId: string | null;
   title: string;
   authors: AuthorFields[];
   year: string;
@@ -65,7 +68,7 @@ function toForm(ref: ReferenceRow): FormState {
   }
   return {
     citationKey: ref.citationKey,
-    folderPath: ref.folderPath,
+    folderId: ref.folderId,
     title: csl.title ?? "",
     authors: toAuthors(csl),
     year: readYear(csl),
@@ -111,7 +114,7 @@ function deepEqual(a: unknown, b: unknown): boolean {
   return JSON.stringify(a) === JSON.stringify(b);
 }
 
-export function ReferenceForm({ reference }: ReferenceFormProps) {
+export function ReferenceForm({ reference, folders = [] }: ReferenceFormProps) {
   const router = useRouter();
   const [initial, setInitial] = useState<ReferenceRow>(reference);
   const initialCsl = (initial.cslJson ?? { id: initial.id, type: "article" }) as CslItem;
@@ -210,8 +213,8 @@ export function ReferenceForm({ reference }: ReferenceFormProps) {
     if (form.citationKey.trim() !== initial.citationKey) {
       patch.citationKey = form.citationKey.trim();
     }
-    if (form.folderPath !== initial.folderPath) {
-      patch.folderPath = form.folderPath;
+    if (form.folderId !== initial.folderId) {
+      patch.folderId = form.folderId;
     }
     if (!deepEqual(nextCsl, initialCsl)) {
       patch.cslJson = nextCsl;
@@ -285,11 +288,11 @@ export function ReferenceForm({ reference }: ReferenceFormProps) {
             </div>
             <div className="grid gap-2">
               <Label htmlFor="ref-folder">Folder</Label>
-              <Input
-                id="ref-folder"
-                value={form.folderPath}
-                onChange={(e) => set("folderPath", e.currentTarget.value)}
-                placeholder="projects/phd/"
+              <FolderDestinationPicker
+                folders={folders}
+                value={form.folderId}
+                onChange={(id) => set("folderId", id)}
+                triggerTestId="ref-folder"
               />
             </div>
           </div>

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getRequiredUserId } from "@/lib/session";
 import { getDefaultLibrary } from "@/lib/default-library";
+import { listAllFolders } from "@/lib/folders-server";
 import { getReference, listPapersInLibrary } from "@/lib/references-server";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { ReferenceForm } from "@/components/ReferenceForm";
@@ -30,9 +31,10 @@ export default async function ReferencePage({
 
   // O2: manual attach picker needs the user's library papers. Only fetch when
   // we'll actually render the picker (identity not yet established).
-  const pickerPapers = identityPaper
-    ? []
-    : await listPapersInLibrary(ref.libraryId, userId);
+  const [pickerPapers, allFolders] = await Promise.all([
+    identityPaper ? Promise.resolve([]) : listPapersInLibrary(ref.libraryId, userId),
+    library ? listAllFolders(library.id, userId) : Promise.resolve([]),
+  ]);
 
   const displayTitle =
     denormaliseForList(validateCslJson(ref.cslJson)).title.trim() ||
@@ -82,7 +84,7 @@ export default async function ReferencePage({
           />
         )}
       </div>
-      <ReferenceForm reference={ref} />
+      <ReferenceForm reference={ref} folders={allFolders} />
 
       <section className="mt-8 border-t border-border/60 pt-6">
         <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">

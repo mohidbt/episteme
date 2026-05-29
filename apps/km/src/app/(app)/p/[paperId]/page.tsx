@@ -31,30 +31,6 @@ const loadPaper = cache(async (paperId: string, userId: string): Promise<PaperRo
   return rows[0] ?? null;
 });
 
-function buildFolderPaths(
-  folders: { id: string; parentId: string | null; name: string; isTrash: boolean }[],
-): string[] {
-  const byId = new Map(folders.map((f) => [f.id, f]));
-  const pathOf = (id: string): string => {
-    const parts: string[] = [];
-    let cur: string | null = id;
-    const seen = new Set<string>();
-    while (cur && !seen.has(cur)) {
-      seen.add(cur);
-      const f = byId.get(cur);
-      if (!f) break;
-      parts.unshift(f.name);
-      cur = f.parentId;
-    }
-    return `${parts.join("/")}/`;
-  };
-  const paths = folders
-    .filter((f) => !f.isTrash)
-    .map((f) => pathOf(f.id))
-    .sort((a, b) => a.localeCompare(b));
-  return Array.from(new Set(paths));
-}
-
 function refYear(cslJson: unknown): number | null {
   try {
     return denormaliseForList(validateCslJson(cslJson)).year;
@@ -88,7 +64,6 @@ export default async function PaperPage({
   const allFolders = library
     ? await listAllFolders(library.id, userId)
     : [];
-  const folderOptions = buildFolderPaths(allFolders);
   const displayTitle = paper.title && paper.title.trim().length > 0 ? paper.title : paper.filename;
   const firstRef = refs[0];
   const firstRefYear = firstRef ? refYear(firstRef.cslJson) : null;
@@ -162,7 +137,7 @@ export default async function PaperPage({
             paper={paper}
             papersetCount={papersetCount}
             papersets={papersetList}
-            folderOptions={folderOptions}
+            folders={allFolders}
           />
           <PaperHighlightsList paperId={paper.id} />
           <PaperCitationsList paperId={paper.id} />

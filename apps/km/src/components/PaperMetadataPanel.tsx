@@ -6,14 +6,9 @@ import type { papers } from "@episteme/db/schema";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { FolderDestinationPicker } from "@/components/FolderDestinationPicker";
 import { InPapersetsBadge } from "@/components/InPapersetsBadge";
+import type { FolderRow } from "@/lib/folders";
 
 type PaperRow = typeof papers.$inferSelect;
 
@@ -29,18 +24,16 @@ interface PaperMetadataPanelProps {
   papersetCount?: number;
   /** Paperset list shown in the badge popover. */
   papersets?: PapersetItem[];
-  /** Folder paths available in this library, plus optional "" root. */
-  folderOptions?: string[];
+  /** All folders in the library — fed to the folder picker. */
+  folders?: FolderRow[];
 }
-
-const ROOT_VALUE = "__root__";
 
 interface FormState {
   title: string;
   authors: string;
   year: string;
   doi: string;
-  folderPath: string;
+  folderId: string | null;
 }
 
 function toForm(p: PaperRow): FormState {
@@ -49,7 +42,7 @@ function toForm(p: PaperRow): FormState {
     authors: (p.authors ?? []).join(", "),
     year: p.year != null ? String(p.year) : "",
     doi: p.doi ?? "",
-    folderPath: p.folderPath,
+    folderId: p.folderId,
   };
 }
 
@@ -67,9 +60,8 @@ function arraysEqual(a: string[], b: string[]): boolean {
 }
 
 // Build a minimal PATCH body containing only changed fields. Matches
-// paperUpdateSchema (strict): title/authors/year/doi/folderPath.
-// Empty-string semantics vary per schema: title keeps-on-empty (NOT NULL + min 1),
-// year keeps-on-empty (schema disallows null), doi/authors/folderPath clear-on-empty.
+// paperUpdateSchema (strict). Folder changes sent as `folderId` — the route
+// derives `folderPath` via moveItemToFolder.
 function diffPatch(
   form: FormState,
   paper: PaperRow,
@@ -83,9 +75,7 @@ function diffPatch(
   if (!arraysEqual(newAuthors, paper.authors ?? [])) patch.authors = newAuthors;
 
   const yearTrim = form.year.trim();
-  if (yearTrim === "") {
-    // schema doesn't accept null for year; only send if user typed a value
-  } else {
+  if (yearTrim !== "") {
     const n = Number(yearTrim);
     if (Number.isFinite(n) && n !== paper.year) patch.year = n;
   }
@@ -94,7 +84,7 @@ function diffPatch(
   if (doiTrim === "" && paper.doi != null) patch.doi = null;
   else if (doiTrim !== "" && doiTrim !== (paper.doi ?? "")) patch.doi = doiTrim;
 
-  if (form.folderPath !== paper.folderPath) patch.folderPath = form.folderPath;
+  if (form.folderId !== paper.folderId) patch.folderId = form.folderId;
 
   return patch;
 }
@@ -104,12 +94,11 @@ export function PaperMetadataPanel({
   onSaved,
   papersetCount = 0,
   papersets = [],
-  folderOptions = [],
+  folders = [],
 }: PaperMetadataPanelProps) {
   const [form, setForm] = useState<FormState>(() => toForm(paper));
   const [busy, setBusy] = useState(false);
 
-  const folderChoices = Array.from(new Set(["", ...folderOptions, paper.folderPath]));
   const doiUrl = form.doi.trim() ? `https://doi.org/${form.doi.trim()}` : "";
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
@@ -225,21 +214,12 @@ export function PaperMetadataPanel({
 
       <div className="grid gap-2">
         <Label htmlFor="paper-folder">Folder</Label>
-        <Select
-          value={form.folderPath === "" ? ROOT_VALUE : form.folderPath}
-          onValueChange={(v) => set("folderPath", !v || v === ROOT_VALUE ? "" : v)}
-        >
-          <SelectTrigger id="paper-folder" className="w-full">
-            <SelectValue placeholder="Library root" />
-          </SelectTrigger>
-          <SelectContent>
-            {folderChoices.map((path) => (
-              <SelectItem key={path || ROOT_VALUE} value={path === "" ? ROOT_VALUE : path}>
-                {path === "" ? "Library root" : path}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <FolderDestinationPicker
+          folders={folders}
+          value={form.folderId}
+          onChange={(id) => set("folderId", id)}
+          triggerTestId="paper-folder"
+        />
       </div>
 
       <div className="flex justify-end">
