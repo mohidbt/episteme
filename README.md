@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-**Research management software** built for the agentic era. Papers, references, highlights, notes, and reading in one workspace. One context layer. Deepagents with full CRUD baked in.
+**Research management software** for people who actually want to use agents on their work. Papers, references, highlights, notes, and reading in one workspace, with deepagents that can read and write all of it.
 
 > *"I have 47 tabs open, 12 PDFs in Acrobat, half my highlights in Zotero, the other half scribbled in Obsidian, and ChatGPT doesn't know about any of it."*
 
@@ -18,20 +18,20 @@ Researchers today live in a duct-taped stack:
 | Agents with full CRUD | ❌ | ❌ | ❌ | ⚠️ chatbot only | ⚠️ chatbot only | ✅ |
 | Unified context | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
 
-Most "AI for research" tools are RAG chatbots stuck answering questions. Episteme gives agents tools, so they *do* the work across your whole knowledge graph.
+Most "AI for research" tools are RAG chatbots that answer questions about your stuff. Episteme gives the agents tools, so they can also change your stuff: write notes, link references, highlight PDFs, file papers.
 
 ---
 
 ### What this unlocks
 
-The point isn't tool consolidation. It's that **unified context = agents that can actually help**.
+Consolidating tools is fine, but it's not really the point. The point is that once everything lives in one graph, the agent has enough context to do something useful with it.
 
-* **Academic story**: trace any claim in your notes back through papers, references, and citation chains.
-* **Reverse highlight**: add a new paper, agent auto-highlights every line that touches your prior claims. Reading becomes diffing against your worldview.
-* **Agentic distillation**: 50 papers to skim for methodology? Don't ask a chatbot 50 times. Spin up 50 subagents, get a table.
-* **Research handovers**: hand the whole library to the next PhD. Done.
+* **Academic story**: trace any claim in your notes back through the papers, references, and citation chains it came from.
+* **Reverse highlight**: drop in a new paper, the agent highlights every line that touches something you've already written. Reading turns into diffing against your own worldview.
+* **Agentic distillation**: got 50 papers to skim for methodology? Don't ask a chatbot 50 times. Fan out 50 subagents and get a table back.
+* **Research handovers**: hand the whole library to the next PhD and be done with it.
 
-> *Long-term bet: once models can write papers, the moat is whose context they're grounded in. We want that context to live in Episteme.*
+> *Long-term bet: once models can write papers on their own, the thing that matters is whose context they're grounded in. I want that context to live in Episteme.*
 
 ---
 
@@ -46,9 +46,9 @@ The point isn't tool consolidation. It's that **unified context = agents that ca
 
 ### Status
 
-Alpha shipped. Onboarding PhDs gradually. Beta next.
+Alpha is out. Onboarding PhDs one at a time. Beta after that.
 
-Try it at [app.tryepisteme.com](https://app.tryepisteme.com). Landing at [tryepisteme.com](https://tryepisteme.com).
+App: [app.tryepisteme.com](https://app.tryepisteme.com). Landing: [tryepisteme.com](https://tryepisteme.com).
 
 ---
 
@@ -65,6 +65,6 @@ docs/        # PRD, plans, specs
 
 ### Contributing
 
-Early days. If you're a researcher who wants a sane stack, ping me. If you're an engineer who likes local-first + agents + document infra, also ping me.
+Early days. If you're a researcher who wants a saner stack, ping me. Same if you're an engineer who likes local-first, agents, or document infra.
 
 [MIT License](LICENSE)
