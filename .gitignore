@@ -31,3 +31,4 @@ test-results
 .claude/worktrees/
 .claude/scheduled_tasks.lock
 .playwright-mcp/
+.tmp/tour-record/
