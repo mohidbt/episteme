@@ -66,7 +66,10 @@ export function FileBrowserToolbar({
     drivePillOptions[drivePillOptions.length - 1]?.value ?? "/";
 
   return (
-    <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-2">
+    <div
+      data-testid="tour-drive-header"
+      className="flex items-center justify-between gap-3 border-b border-border px-4 py-2"
+    >
       <PillSwitcher
         value={currentDrivePath}
         onValueChange={(nextPath) => {
@@ -131,6 +134,7 @@ export function FileBrowserToolbar({
             />
 
             <Button
+              data-testid="tour-import-button"
               variant="outline"
               size="sm"
               onClick={() => setImportOpen(true)}

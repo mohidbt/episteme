@@ -27,7 +27,7 @@ export function ByTypeNav() {
       icon={<LayoutList className={sidebarSectionIconClassName} aria-hidden />}
     >
       {LINKS.map(({ label, href, Icon }) => (
-        <SidebarMenuItem key={href}>
+        <SidebarMenuItem key={href} data-testid={`tour-nav-${label.toLowerCase()}`}>
           <SidebarMenuButton
             render={<Link href={href} />}
             isActive={pathname === href}
