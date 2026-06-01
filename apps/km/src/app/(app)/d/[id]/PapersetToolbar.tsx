@@ -54,7 +54,7 @@ export function PapersetToolbar({
         size="sm"
         onClick={runEnrichment}
         disabled={!canRun}
-        data-testid="run-enrichment-btn"
+        data-testid="paperset-enrich-all"
       >
         {isRunning ? (
           <Loader2 className="size-4 animate-spin" aria-hidden />

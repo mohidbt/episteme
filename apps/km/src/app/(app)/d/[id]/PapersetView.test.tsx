@@ -67,7 +67,7 @@ describe("PapersetView", () => {
 
   it("clicking an empty cell selects it and enables Run enrichment", async () => {
     render(<PapersetView {...baseProps} />);
-    const runBtn = screen.getByTestId("run-enrichment-btn") as HTMLButtonElement;
+    const runBtn = screen.getByTestId("paperset-enrich-all") as HTMLButtonElement;
     expect(runBtn.disabled).toBe(true);
     const cell = screen.getByTestId("cell-0-x");
     fireEvent.mouseDown(cell, { button: 0 });
@@ -128,7 +128,7 @@ describe("PapersetView", () => {
 
     render(<PapersetView {...baseProps} />);
     fireEvent.mouseDown(screen.getByTestId("cell-0-x"), { button: 0 });
-    const runBtn = screen.getByTestId("run-enrichment-btn") as HTMLButtonElement;
+    const runBtn = screen.getByTestId("paperset-enrich-all") as HTMLButtonElement;
     await waitFor(() => expect(runBtn.disabled).toBe(false));
 
     await act(async () => {
@@ -171,7 +171,7 @@ describe("PapersetView", () => {
     render(<PapersetView {...baseProps} />);
     fireEvent.mouseDown(screen.getByTestId("cell-0-x"), { button: 0 });
     const runBtn = screen.getByTestId(
-      "run-enrichment-btn",
+      "paperset-enrich-all",
     ) as HTMLButtonElement;
     await act(async () => {
       fireEvent.click(runBtn);
@@ -451,7 +451,7 @@ describe("PapersetView", () => {
     // Cell 0:y is empty and selectable
     fireEvent.mouseDown(screen.getByTestId("cell-0-y"), { button: 0 });
     const runBtn = screen.getByTestId(
-      "run-enrichment-btn",
+      "paperset-enrich-all",
     ) as HTMLButtonElement;
     await act(async () => {
       fireEvent.click(runBtn);

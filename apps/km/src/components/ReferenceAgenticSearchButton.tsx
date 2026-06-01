@@ -23,6 +23,7 @@ export function ReferenceAgenticSearchButton({
       variant="outline"
       size="sm"
       type="button"
+      data-testid="reference-agentic-search"
       disabled={!!identityPaper}
       onClick={() =>
         openWithPrompt(
