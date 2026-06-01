@@ -1,9 +1,17 @@
 // @vitest-environment jsdom
+import type * as React from "react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, cleanup, waitFor } from "@testing-library/react";
 import { resetTourDoneForTest, setTourDone, getTourDone } from "@/lib/guest-tour/tour-state";
 
 const joyrideSpy = vi.fn();
+
+vi.mock("next/image", () => ({
+  default: (props: Record<string, unknown>) => {
+    // eslint-disable-next-line @next/next/no-img-element, jsx-a11y/alt-text
+    return <img {...(props as React.ImgHTMLAttributes<HTMLImageElement>)} />;
+  },
+}));
 
 vi.mock("react-joyride", async () => {
   const STATUS = {
@@ -138,7 +146,7 @@ describe("GuestTour", () => {
     expect(getTourDone()).toBe(true);
   });
 
-  it("ships 4 spotlight steps with stable ids", async () => {
+  it("ships 9 steps (4 spotlights + 5 preview cards) with stable ids", async () => {
     const { GuestTour } = await import("../GuestTour");
     render(<GuestTour isAnonymous={true} />);
     await waitFor(() => {
@@ -146,13 +154,100 @@ describe("GuestTour", () => {
     });
     const lastCall = joyrideSpy.mock.calls.at(-1)?.[0];
     const steps = lastCall?.steps as Array<{ id: string }>;
-    expect(steps).toHaveLength(4);
+    expect(steps).toHaveLength(9);
     expect(steps.map((s) => s.id)).toEqual([
       "drive_intro",
       "notes_collection",
       "papers_refs_collection",
       "agentball_hint",
+      "graph_intro",
+      "wow_refs_fill",
+      "wow_reader_highlight",
+      "wow_deepread",
+      "wow_extract",
     ]);
+  });
+
+  it("preview steps target body (center-screen, no router nav)", async () => {
+    const { GuestTour } = await import("../GuestTour");
+    render(<GuestTour isAnonymous={true} />);
+    await waitFor(() => {
+      expect(joyrideSpy).toHaveBeenCalled();
+    });
+    const lastCall = joyrideSpy.mock.calls.at(-1)?.[0];
+    const steps = lastCall?.steps as Array<{
+      id: string;
+      target: string;
+      data?: { next?: string };
+    }>;
+    const previewIds = [
+      "graph_intro",
+      "wow_refs_fill",
+      "wow_reader_highlight",
+      "wow_deepread",
+      "wow_extract",
+    ];
+    for (const id of previewIds) {
+      const step = steps.find((s) => s.id === id);
+      expect(step?.target).toBe("body");
+      expect(step?.data?.next).toBeUndefined();
+    }
+  });
+
+  it("preview steps render TourPreviewCard content with title + caption", async () => {
+    const { GuestTour } = await import("../GuestTour");
+    const { render: renderRTL } = await import("@testing-library/react");
+    render(<GuestTour isAnonymous={true} />);
+    await waitFor(() => {
+      expect(joyrideSpy).toHaveBeenCalled();
+    });
+    const lastCall = joyrideSpy.mock.calls.at(-1)?.[0];
+    const steps = lastCall?.steps as Array<{
+      id: string;
+      content: React.ReactNode;
+    }>;
+    const expectations: Array<{ id: string; title: string; captionStart: string }> = [
+      { id: "graph_intro", title: "Graph view", captionStart: "Lines are set connections" },
+      { id: "wow_refs_fill", title: "Fill missing reference fields", captionStart: "Drop a half-filled BibTeX" },
+      { id: "wow_reader_highlight", title: "Highlight numerical findings", captionStart: "Ask the agent to highlight" },
+      { id: "wow_deepread", title: "Agentic PDF search", captionStart: "Ask one question" },
+      { id: "wow_extract", title: "Paperset enrich (concurrent)", captionStart: "Define columns once" },
+    ];
+    for (const { id, title, captionStart } of expectations) {
+      const step = steps.find((s) => s.id === id);
+      const { getByText, getByTestId, unmount } = renderRTL(<>{step?.content}</>);
+      expect(getByText(title)).toBeDefined();
+      expect(getByText((txt) => txt.startsWith(captionStart))).toBeDefined();
+      expect(getByTestId("tour-preview-badge")).toBeDefined();
+      unmount();
+    }
+  });
+
+  it("preview step (target=body) does NOT trigger router.push when advanced", async () => {
+    const { GuestTour } = await import("../GuestTour");
+    render(<GuestTour isAnonymous={true} />);
+    await waitFor(() => {
+      expect(joyrideSpy).toHaveBeenCalled();
+    });
+    const lastCall = joyrideSpy.mock.calls.at(-1)?.[0];
+    const onEvent = lastCall?.onEvent as (
+      data: Record<string, unknown>,
+      controls: unknown,
+    ) => void;
+
+    // Step index 4 = graph_intro; advancing it should NOT push a route.
+    onEvent(
+      {
+        type: "step:after",
+        action: "next",
+        status: "running",
+        index: 4,
+        lifecycle: "complete",
+        step: { data: {} },
+      },
+      {},
+    );
+    expect(routerPushSpy).not.toHaveBeenCalled();
   });
 
   it("navigates on STEP_AFTER when step.data.next is set", async () => {

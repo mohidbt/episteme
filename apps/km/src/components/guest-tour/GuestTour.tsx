@@ -12,6 +12,7 @@ import {
 } from "react-joyride";
 import { getTourDone, setTourDone } from "@/lib/guest-tour/tour-state";
 import { waitForSelector } from "@/lib/guest-tour/wait-for-selector";
+import { TourPreviewCard } from "./TourPreviewCard";
 
 /**
  * Routes where guest tour autostart is allowed. Anything else (sign-in/up,
@@ -64,6 +65,76 @@ function buildSteps(): Step[] {
       skipBeacon: true,
       content:
         "Press space twice anywhere to summon the agent. Ask anything about your library.",
+    },
+    {
+      id: "graph_intro",
+      target: "body",
+      placement: "center",
+      skipBeacon: true,
+      content: (
+        <TourPreviewCard
+          title="Graph view"
+          caption="Lines are set connections. Proximity is semantic similarity — papers that read alike sit closer."
+          mediaSrc="/tour/graph_intro.svg"
+          mediaAlt="Graph view illustration with nodes and edges"
+        />
+      ),
+    },
+    {
+      id: "wow_refs_fill",
+      target: "body",
+      placement: "center",
+      skipBeacon: true,
+      content: (
+        <TourPreviewCard
+          title="Fill missing reference fields"
+          caption="Drop a half-filled BibTeX entry. The agent fills in DOI, authors, year, and abstract."
+          mediaSrc="/tour/wow_refs_fill.svg"
+          mediaAlt="Reference row going from sparse to filled"
+        />
+      ),
+    },
+    {
+      id: "wow_reader_highlight",
+      target: "body",
+      placement: "center",
+      skipBeacon: true,
+      content: (
+        <TourPreviewCard
+          title="Highlight numerical findings"
+          caption="Ask the agent to highlight quantitative claims. It returns inline spans rendered right in the reader."
+          mediaSrc="/tour/wow_reader_highlight.svg"
+          mediaAlt="Reader page with highlighted numerical spans"
+        />
+      ),
+    },
+    {
+      id: "wow_deepread",
+      target: "body",
+      placement: "center",
+      skipBeacon: true,
+      content: (
+        <TourPreviewCard
+          title="Agentic PDF search"
+          caption="Ask one question across all your PDFs. The agent searches, cites, and summarizes."
+          mediaSrc="/tour/wow_deepread.svg"
+          mediaAlt="Cross-paper question with cited answers"
+        />
+      ),
+    },
+    {
+      id: "wow_extract",
+      target: "body",
+      placement: "center",
+      skipBeacon: true,
+      content: (
+        <TourPreviewCard
+          title="Paperset enrich (concurrent)"
+          caption="Define columns once. The agent enriches every row in parallel."
+          mediaSrc="/tour/wow_extract.svg"
+          mediaAlt="Paperset grid with cells filling concurrently"
+        />
+      ),
     },
   ];
 }
