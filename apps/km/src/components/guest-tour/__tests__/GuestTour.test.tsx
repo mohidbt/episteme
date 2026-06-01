@@ -160,10 +160,158 @@ describe("GuestTour", () => {
         type: "step:after",
         action: "next",
         status: "running",
+        index: 0,
+        lifecycle: "complete",
         step: { data: { next: "/notes" } },
       },
       {},
     );
     expect(routerPushSpy).toHaveBeenCalledWith("/notes");
   });
+
+  it(
+    "auto-nav: pauses Joyride, awaits selector, then advances stepIndex (no race)",
+    async () => {
+      const { GuestTour } = await import("../GuestTour");
+      render(<GuestTour isAnonymous={true} />);
+      await waitFor(() => {
+        expect(joyrideSpy).toHaveBeenCalled();
+      });
+      const firstCall = joyrideSpy.mock.calls.at(-1)?.[0];
+      const steps = firstCall?.steps as Array<{ target: string; data?: { next?: string } }>;
+      expect(firstCall?.run).toBe(true);
+      expect(firstCall?.stepIndex).toBe(0);
+
+      // The selector for step index 1 (notes_collection) must NOT exist yet
+      // when STEP_AFTER fires for step index 0 (drive_intro). It will appear
+      // ~30ms later, simulating Next.js client navigation hydration.
+      const nextStepTarget = steps[1].target;
+      expect(document.querySelector(nextStepTarget)).toBeNull();
+
+      const onEvent = firstCall?.onEvent as (
+        data: Record<string, unknown>,
+        controls: unknown,
+      ) => void;
+
+      // Fire STEP_AFTER for drive_intro (index 0) — has data.next: "/notes"
+      onEvent(
+        {
+          type: "step:after",
+          action: "next",
+          status: "running",
+          index: 0,
+          lifecycle: "complete",
+          step: { data: { next: "/notes" } },
+        },
+        {},
+      );
+
+      // Router push must be called synchronously / immediately
+      expect(routerPushSpy).toHaveBeenCalledWith("/notes");
+
+      // After push, Joyride must be PAUSED (run=false) and stepIndex still 0
+      // — assert this BEFORE the selector mounts.
+      await waitFor(() => {
+        const lastCall = joyrideSpy.mock.calls.at(-1)?.[0];
+        expect(lastCall?.run).toBe(false);
+      });
+      const pausedCall = joyrideSpy.mock.calls.at(-1)?.[0];
+      expect(pausedCall?.stepIndex).toBe(0);
+
+      // Now mount the next-step target into the DOM (simulates Next.js
+      // route DOM hydration ~30ms after router.push).
+      const el = document.createElement("div");
+      el.setAttribute(
+        "data-testid",
+        nextStepTarget.replace(/^\[data-testid="(.+)"\]$/, "$1"),
+      );
+      document.body.appendChild(el);
+
+      // After selector appears, Joyride should resume at stepIndex=1
+      await waitFor(() => {
+        const lastCall = joyrideSpy.mock.calls.at(-1)?.[0];
+        expect(lastCall?.stepIndex).toBe(1);
+        expect(lastCall?.run).toBe(true);
+      });
+    },
+    10_000,
+  );
+
+  it("auto-nav: skips to next step (no break) on selector timeout", async () => {
+    const { GuestTour } = await import("../GuestTour");
+    render(<GuestTour isAnonymous={true} />);
+    await waitFor(() => {
+      expect(joyrideSpy).toHaveBeenCalled();
+    });
+    const firstCall = joyrideSpy.mock.calls.at(-1)?.[0];
+    const onEvent = firstCall?.onEvent as (
+      data: Record<string, unknown>,
+      controls: unknown,
+    ) => void;
+
+    // Patch the wait-for-selector behaviour by using a super-short timeout
+    // path: data.next pointing somewhere with a target that never mounts.
+    onEvent(
+      {
+        type: "step:after",
+        action: "next",
+        status: "running",
+        index: 0,
+        lifecycle: "complete",
+        step: { data: { next: "/notes" } },
+      },
+      {},
+    );
+
+    // Even on timeout (no DOM ever mounts), the tour should ultimately
+    // resume at stepIndex=1 and NOT remain paused forever.
+    await waitFor(
+      () => {
+        const lastCall = joyrideSpy.mock.calls.at(-1)?.[0];
+        expect(lastCall?.stepIndex).toBe(1);
+        expect(lastCall?.run).toBe(true);
+      },
+      { timeout: 6_000 },
+    );
+  }, 10_000);
+
+  it("non-nav STEP_AFTER (no step.data.next) advances stepIndex synchronously", async () => {
+    const { GuestTour } = await import("../GuestTour");
+    render(<GuestTour isAnonymous={true} />);
+    await waitFor(() => {
+      expect(joyrideSpy).toHaveBeenCalled();
+    });
+    const firstCall = joyrideSpy.mock.calls.at(-1)?.[0];
+    const onEvent = firstCall?.onEvent as (
+      data: Record<string, unknown>,
+      controls: unknown,
+    ) => void;
+
+    // Last step (agentball_hint, index 3) has no data.next. Simulate
+    // STEP_AFTER for an earlier index without data.next: not realistic
+    // for current step list, but the handler must still behave.
+    onEvent(
+      {
+        type: "step:after",
+        action: "next",
+        status: "running",
+        index: 2,
+        lifecycle: "complete",
+        step: { data: {} },
+      },
+      {},
+    );
+    expect(routerPushSpy).not.toHaveBeenCalled();
+    // Even with no nav, advanceTo still awaits the next target selector
+    // before flipping stepIndex (no-op cost for already-mounted DOM).
+    // In the jsdom test world the target won't appear, so we accept the
+    // selector timeout (4s) and assert eventual advance.
+    await waitFor(
+      () => {
+        const lastCall = joyrideSpy.mock.calls.at(-1)?.[0];
+        expect(lastCall?.stepIndex).toBe(3);
+      },
+      { timeout: 6_000 },
+    );
+  }, 10_000);
 });

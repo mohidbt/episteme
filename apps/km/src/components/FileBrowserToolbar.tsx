@@ -134,7 +134,6 @@ export function FileBrowserToolbar({
             />
 
             <Button
-              data-testid="tour-import-button"
               variant="outline"
               size="sm"
               onClick={() => setImportOpen(true)}
