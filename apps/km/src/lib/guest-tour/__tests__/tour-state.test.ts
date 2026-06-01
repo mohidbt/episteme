@@ -6,6 +6,8 @@ import {
   resetTourDoneForTest,
 } from "../tour-state";
 
+const STORAGE_KEY = "km:guest_tour_done";
+
 beforeEach(() => {
   resetTourDoneForTest();
 });
@@ -20,8 +22,13 @@ describe("tour-state", () => {
     expect(getTourDone()).toBe(true);
   });
 
+  it("persists under namespaced storage key", () => {
+    setTourDone();
+    expect(window.localStorage.getItem(STORAGE_KEY)).toBe("true");
+  });
+
   it("returns false on malformed JSON in storage", () => {
-    window.localStorage.setItem("guest_tour_done", "{not json");
+    window.localStorage.setItem(STORAGE_KEY, "{not json");
     expect(getTourDone()).toBe(false);
   });
 

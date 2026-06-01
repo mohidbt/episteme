@@ -1,4 +1,4 @@
-const STORAGE_KEY = "guest_tour_done";
+const STORAGE_KEY = "km:guest_tour_done";
 
 export function getTourDone(): boolean {
   if (typeof window === "undefined") return false;
