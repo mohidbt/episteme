@@ -49,6 +49,14 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  // Some tests manually append DOM nodes (target stubs) via
+  // document.body.appendChild — React's cleanup() doesn't remove those, and
+  // their presence leaks into the next test's waitForSelector (resolves
+  // synchronously when it shouldn't). Strip leftover children that aren't
+  // React roots.
+  document.body
+    .querySelectorAll("[data-testid^='tour-nav-']")
+    .forEach((el) => el.remove());
 });
 
 describe("GuestTour", () => {
@@ -274,6 +282,86 @@ describe("GuestTour", () => {
       { timeout: 6_000 },
     );
   }, 10_000);
+
+  it(
+    "pathname change mid-advance does NOT re-enable run before selector resolves",
+    async () => {
+      const { GuestTour } = await import("../GuestTour");
+      const { rerender } = render(<GuestTour isAnonymous={true} />);
+      await waitFor(() => {
+        expect(joyrideSpy).toHaveBeenCalled();
+      });
+      const firstCall = joyrideSpy.mock.calls.at(-1)?.[0];
+      const steps = firstCall?.steps as Array<{ target: string; data?: { next?: string } }>;
+      expect(firstCall?.run).toBe(true);
+
+      const onEvent = firstCall?.onEvent as (
+        data: Record<string, unknown>,
+        controls: unknown,
+      ) => void;
+
+      // Kick off advanceTo: sets advancingRef=true, setRun(false), pushes "/notes".
+      onEvent(
+        {
+          type: "step:after",
+          action: "next",
+          status: "running",
+          index: 0,
+          lifecycle: "complete",
+          step: { data: { next: "/notes" } },
+        },
+        {},
+      );
+
+      // After STEP_AFTER, Joyride should be paused.
+      await waitFor(() => {
+        const lastCall = joyrideSpy.mock.calls.at(-1)?.[0];
+        expect(lastCall?.run).toBe(false);
+      });
+
+      // Simulate Next.js completing client navigation BEFORE the next-step
+      // target has mounted: pathname flips to "/notes" (an allowed route).
+      // The pathname effect must NOT setRun(true) while advancingRef is set.
+      pathnameRef.current = "/notes";
+      rerender(<GuestTour isAnonymous={true} />);
+
+      // Give React a tick to flush the effect.
+      await new Promise((r) => setTimeout(r, 50));
+
+      // Joyride must still be paused — pathname effect was guarded.
+      const midCall = joyrideSpy.mock.calls.at(-1)?.[0];
+      expect(midCall?.run).toBe(false);
+      expect(midCall?.stepIndex).toBe(0);
+
+      // Mount target → advanceTo's finally clears advancingRef and resumes.
+      const nextStepTarget = steps[1].target;
+      const el = document.createElement("div");
+      el.setAttribute(
+        "data-testid",
+        nextStepTarget.replace(/^\[data-testid="(.+)"\]$/, "$1"),
+      );
+      document.body.appendChild(el);
+
+      await waitFor(() => {
+        const lastCall = joyrideSpy.mock.calls.at(-1)?.[0];
+        expect(lastCall?.stepIndex).toBe(1);
+        expect(lastCall?.run).toBe(true);
+      });
+    },
+    10_000,
+  );
+
+  it("Joyride options hide the back button (forward-only tour)", async () => {
+    const { GuestTour } = await import("../GuestTour");
+    render(<GuestTour isAnonymous={true} />);
+    await waitFor(() => {
+      expect(joyrideSpy).toHaveBeenCalled();
+    });
+    const lastCall = joyrideSpy.mock.calls.at(-1)?.[0];
+    const options = lastCall?.options as { buttons?: string[] };
+    expect(options?.buttons).not.toContain("back");
+    expect(options?.buttons).toEqual(["skip", "primary"]);
+  });
 
   it("non-nav STEP_AFTER (no step.data.next) advances stepIndex synchronously", async () => {
     const { GuestTour } = await import("../GuestTour");

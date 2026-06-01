@@ -82,6 +82,12 @@ export function GuestTour({ isAnonymous }: { isAnonymous: boolean }) {
   const advancingRef = useRef(false);
 
   useEffect(() => {
+    // Don't toggle `run` back to true while an advanceTo() is in flight —
+    // advanceTo intentionally pauses (setRun(false)) before router.push, and
+    // the pathname change that push triggers would otherwise re-fire this
+    // effect and resume Joyride BEFORE waitForSelector resolves, regenerating
+    // the auto-nav race we fixed in Round 2.5.
+    if (advancingRef.current) return;
     if (!isAnonymous) return;
     if (getTourDone()) return;
     if (!isTourAllowedRoute(pathname)) return;
@@ -152,7 +158,10 @@ export function GuestTour({ isAnonymous }: { isAnonymous: boolean }) {
       stepIndex={stepIndex}
       steps={steps}
       continuous
-      options={{ buttons: ["back", "skip", "primary"], showProgress: true }}
+      // Forward-only tour: omit "back" from buttons. Joyride v3 has no
+      // `hideBackButton` option; the buttons array IS the back/skip/primary
+      // toggle. Back would desync controlled `stepIndex` mode anyway.
+      options={{ buttons: ["skip", "primary"], showProgress: true }}
       onEvent={handleEvent}
     />
   );
