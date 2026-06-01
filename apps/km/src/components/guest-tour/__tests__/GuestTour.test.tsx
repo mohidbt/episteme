@@ -146,7 +146,7 @@ describe("GuestTour", () => {
     expect(getTourDone()).toBe(true);
   });
 
-  it("ships 9 steps (4 spotlights + 5 preview cards) with stable ids", async () => {
+  it("ships 10 steps (4 spotlights + 5 preview cards + signup_cta) with stable ids", async () => {
     const { GuestTour } = await import("../GuestTour");
     render(<GuestTour isAnonymous={true} />);
     await waitFor(() => {
@@ -154,7 +154,7 @@ describe("GuestTour", () => {
     });
     const lastCall = joyrideSpy.mock.calls.at(-1)?.[0];
     const steps = lastCall?.steps as Array<{ id: string }>;
-    expect(steps).toHaveLength(9);
+    expect(steps).toHaveLength(10);
     expect(steps.map((s) => s.id)).toEqual([
       "drive_intro",
       "notes_collection",
@@ -165,7 +165,99 @@ describe("GuestTour", () => {
       "wow_reader_highlight",
       "wow_deepread",
       "wow_extract",
+      "signup_cta",
     ]);
+  });
+
+  it("signup_cta step renders CTA button with correct href, and click fires setTourDone BEFORE navigation", async () => {
+    const { GuestTour } = await import("../GuestTour");
+    const { render: renderRTL } = await import("@testing-library/react");
+    render(<GuestTour isAnonymous={true} />);
+    await waitFor(() => {
+      expect(joyrideSpy).toHaveBeenCalled();
+    });
+    const lastCall = joyrideSpy.mock.calls.at(-1)?.[0];
+    const steps = lastCall?.steps as Array<{
+      id: string;
+      target: string;
+      content: React.ReactNode;
+    }>;
+    const step = steps.find((s) => s.id === "signup_cta");
+    expect(step?.target).toBe("body");
+    const { getByTestId, getByText, queryByTestId, unmount } = renderRTL(
+      <>{step?.content}</>,
+    );
+    expect(getByText("Ready to make this yours?")).toBeDefined();
+    // No preview badge for the terminus step.
+    expect(queryByTestId("tour-preview-badge")).toBeNull();
+    const cta = getByTestId("tour-cta-button") as HTMLAnchorElement;
+    expect(cta.getAttribute("href")).toBe("/sign-up");
+    expect(cta.textContent).toContain("Sign up free");
+
+    // Done flag must be set BEFORE the navigation (the link's default
+    // navigation runs after onClick). Assert: clicking the CTA flips
+    // localStorage to "true".
+    expect(getTourDone()).toBe(false);
+    cta.addEventListener("click", (e) => e.preventDefault(), true);
+    cta.click();
+    expect(getTourDone()).toBe(true);
+    unmount();
+  });
+
+  it("Esc / close action fires done flag (dismissed path)", async () => {
+    const { GuestTour } = await import("../GuestTour");
+    render(<GuestTour isAnonymous={true} />);
+    await waitFor(() => {
+      expect(joyrideSpy).toHaveBeenCalled();
+    });
+    const lastCall = joyrideSpy.mock.calls.at(-1)?.[0];
+    const onEvent = lastCall?.onEvent as (
+      data: Record<string, unknown>,
+      controls: unknown,
+    ) => void;
+    onEvent({ status: "running", action: "close", type: "tour:end" }, {});
+    expect(getTourDone()).toBe(true);
+  });
+
+  it("prefers-reduced-motion propagates to Joyride options (skipScroll + scrollDuration=0)", async () => {
+    // Stub matchMedia BEFORE importing GuestTour (module reads it via prefersReducedMotion).
+    const original = window.matchMedia;
+    Object.defineProperty(window, "matchMedia", {
+      configurable: true,
+      writable: true,
+      value: (q: string) => ({
+        matches: q.includes("reduce"),
+        media: q,
+        onchange: null,
+        addListener: () => {},
+        removeListener: () => {},
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        dispatchEvent: () => false,
+      }),
+    });
+    try {
+      vi.resetModules();
+      const { GuestTour } = await import("../GuestTour");
+      render(<GuestTour isAnonymous={true} />);
+      await waitFor(() => {
+        expect(joyrideSpy).toHaveBeenCalled();
+      });
+      const lastCall = joyrideSpy.mock.calls.at(-1)?.[0];
+      const options = lastCall?.options as {
+        skipScroll?: boolean;
+        scrollDuration?: number;
+      };
+      expect(options?.skipScroll).toBe(true);
+      expect(options?.scrollDuration).toBe(0);
+    } finally {
+      Object.defineProperty(window, "matchMedia", {
+        configurable: true,
+        writable: true,
+        value: original,
+      });
+      vi.resetModules();
+    }
   });
 
   it("preview steps target body (center-screen, no router nav)", async () => {

@@ -1,5 +1,8 @@
+import Link from "next/link";
 import Image from "next/image";
 import { Badge } from "@/components/ui/badge";
+import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import {
   Card,
   CardAction,
@@ -9,12 +12,19 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 
+export type TourPreviewCardCta = {
+  label: string;
+  href: string;
+  onClick?: () => void;
+};
+
 export type TourPreviewCardProps = {
   title: string;
   caption: string;
   mediaSrc?: string;
   mediaAlt: string;
   previewBadge?: boolean;
+  cta?: TourPreviewCardCta;
 };
 
 export function TourPreviewCard({
@@ -23,6 +33,7 @@ export function TourPreviewCard({
   mediaSrc,
   mediaAlt,
   previewBadge = true,
+  cta,
 }: TourPreviewCardProps) {
   return (
     <Card
@@ -56,6 +67,18 @@ export function TourPreviewCard({
       <CardContent className="px-0">
         <CardDescription className="leading-snug">{caption}</CardDescription>
       </CardContent>
+      {cta ? (
+        <CardContent className="px-0 pt-1">
+          <Link
+            href={cta.href}
+            onClick={cta.onClick}
+            data-testid="tour-cta-button"
+            className={cn(buttonVariants({ size: "lg" }))}
+          >
+            {cta.label}
+          </Link>
+        </CardContent>
+      ) : null}
     </Card>
   );
 }

@@ -29,7 +29,18 @@ function isTourAllowedRoute(pathname: string | null): boolean {
   return false;
 }
 
-function buildSteps(): Step[] {
+function prefersReducedMotion(): boolean {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+    return false;
+  }
+  try {
+    return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  } catch {
+    return false;
+  }
+}
+
+function buildSteps(onCtaClick: () => void): Step[] {
   return [
     {
       id: "drive_intro",
@@ -136,6 +147,21 @@ function buildSteps(): Step[] {
         />
       ),
     },
+    {
+      id: "signup_cta",
+      target: "body",
+      placement: "center",
+      skipBeacon: true,
+      content: (
+        <TourPreviewCard
+          title="Ready to make this yours?"
+          caption="Sign up to keep your work, run real agents, and connect your library."
+          mediaAlt=""
+          previewBadge={false}
+          cta={{ label: "Sign up free", href: "/sign-up", onClick: onCtaClick }}
+        />
+      ),
+    },
   ];
 }
 
@@ -148,7 +174,17 @@ export function GuestTour({ isAnonymous }: { isAnonymous: boolean }) {
   const [stepIndex, setStepIndex] = useState(0);
   const pathname = usePathname();
   const router = useRouter();
-  const steps = useMemo(buildSteps, []);
+  const reduceMotion = useMemo(prefersReducedMotion, []);
+  // CTA click handler: flag tour done BEFORE navigation so a sign-up cancel +
+  // reload doesn't retrigger the tour.
+  const handleCtaClick = useMemo(
+    () => () => {
+      setTourDone();
+      setRun(false);
+    },
+    [],
+  );
+  const steps = useMemo(() => buildSteps(handleCtaClick), [handleCtaClick]);
   // Guard against double-advance from overlapping STEP_AFTER events.
   const advancingRef = useRef(false);
 
@@ -200,14 +236,14 @@ export function GuestTour({ isAnonymous }: { isAnonymous: boolean }) {
 
   function handleEvent(data: EventData, _controls: Controls) {
     const status = data.status as string;
-    if (status === STATUS.FINISHED || status === STATUS.SKIPPED) {
+    const action = (data as { action?: string }).action;
+    if (status === STATUS.FINISHED || status === STATUS.SKIPPED || action === "close") {
       setTourDone();
       setRun(false);
       return;
     }
 
     const type = (data as { type?: string }).type;
-    const action = (data as { action?: string }).action;
     const lifecycle = (data as { lifecycle?: string }).lifecycle;
     const index = (data as { index?: number }).index;
     const step = (data as { step?: { data?: { next?: string } } }).step;
@@ -232,7 +268,15 @@ export function GuestTour({ isAnonymous }: { isAnonymous: boolean }) {
       // Forward-only tour: omit "back" from buttons. Joyride v3 has no
       // `hideBackButton` option; the buttons array IS the back/skip/primary
       // toggle. Back would desync controlled `stepIndex` mode anyway.
-      options={{ buttons: ["skip", "primary"], showProgress: true }}
+      options={{
+        buttons: ["skip", "primary"],
+        showProgress: true,
+        // Reduced-motion support: kill scroll-into-view animation when
+        // `prefers-reduced-motion: reduce` matches. Joyride v3 routes both
+        // toggles through `options`; there's no top-level disableScrolling or
+        // floaterProps prop on the v3 Joyride component.
+        ...(reduceMotion ? { skipScroll: true, scrollDuration: 0 } : {}),
+      }}
       onEvent={handleEvent}
     />
   );
