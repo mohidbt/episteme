@@ -1,5 +1,13 @@
 import Image from "next/image";
 import { Badge } from "@/components/ui/badge";
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 
 export type TourPreviewCardProps = {
   title: string;
@@ -17,28 +25,37 @@ export function TourPreviewCard({
   previewBadge = true,
 }: TourPreviewCardProps) {
   return (
-    <div data-testid="tour-preview-card" className="flex flex-col gap-3 text-left">
-      <div className="flex items-center justify-between gap-2">
-        <h3 className="text-base font-semibold leading-tight">{title}</h3>
+    <Card
+      data-testid="tour-preview-card"
+      className="gap-3 border-0 bg-transparent py-0 text-left shadow-none"
+    >
+      <CardHeader className="px-0">
+        <CardTitle className="text-base leading-tight">{title}</CardTitle>
         {previewBadge ? (
-          <Badge variant="secondary" data-testid="tour-preview-badge">
-            Preview
-          </Badge>
+          <CardAction>
+            <Badge variant="secondary" data-testid="tour-preview-badge">
+              Preview
+            </Badge>
+          </CardAction>
         ) : null}
-      </div>
+      </CardHeader>
       {mediaSrc ? (
-        <div className="overflow-hidden rounded-md border border-border bg-muted">
-          <Image
-            src={mediaSrc}
-            alt={mediaAlt}
-            width={480}
-            height={270}
-            className="h-auto w-full"
-            unoptimized
-          />
-        </div>
+        <CardContent className="px-0">
+          <div className="overflow-hidden rounded-md border border-border bg-muted">
+            <Image
+              src={mediaSrc}
+              alt={mediaAlt}
+              width={480}
+              height={270}
+              className="h-auto w-full"
+              unoptimized
+            />
+          </div>
+        </CardContent>
       ) : null}
-      <p className="text-sm leading-snug text-muted-foreground">{caption}</p>
-    </div>
+      <CardContent className="px-0">
+        <CardDescription className="leading-snug">{caption}</CardDescription>
+      </CardContent>
+    </Card>
   );
 }
