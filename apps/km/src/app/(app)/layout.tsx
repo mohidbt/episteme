@@ -8,6 +8,7 @@ import { AgentBall } from "@/components/agent/AgentBall";
 import { AgentBallProvider } from "@/components/agent/agent-ball-context";
 import { AutoRefreshOnFocus } from "@/components/AutoRefreshOnFocus";
 import { TabBar, TabBarProvider } from "@/components/TabBar";
+import { GuestTour } from "@/components/guest-tour/GuestTour";
 
 export default async function AppLayout({ children }: { children: ReactNode }) {
   const session = await getCurrentSession();
@@ -30,6 +31,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
           </div>
           <AgentBall userId={session.userId} />
           <AutoRefreshOnFocus />
+          <GuestTour isAnonymous={session.isAnonymous} />
         </SidebarProvider>
       </TabBarProvider>
     </AgentBallProvider>

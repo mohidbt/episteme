@@ -59,6 +59,7 @@
     "react-dom": "19.2.4",
     "react-dropzone": "^15.0.0",
     "react-force-graph-2d": "^1.29.1",
+    "react-joyride": "3.1.0",
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
     "shadcn": "^4.3.1",
