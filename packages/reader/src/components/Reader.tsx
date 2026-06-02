@@ -342,17 +342,21 @@ export function Reader({
   // refetch increased the count), surface them: open the highlights sidebar
   // and switch its segment to "AI". Initial mount load is ignored — we only
   // react to upward transitions after first paint.
-  const prevAiCountRef = useRef<number | null>(null);
+  //
+  // Keyed by paperId so navigating between papers re-baselines the count
+  // instead of treating the new paper's pre-existing AI highlights as
+  // "newly arrived" and force-opening the sidebar (codex review #2).
+  const prevAiCountRef = useRef<{ paperId: string; count: number } | null>(null);
   useEffect(() => {
     const count = aiSidebarHighlights.length;
     const prev = prevAiCountRef.current;
-    prevAiCountRef.current = count;
-    if (prev === null) return;
-    if (count > prev) {
+    prevAiCountRef.current = { paperId, count };
+    if (!prev || prev.paperId !== paperId) return;
+    if (count > prev.count) {
       setSidebarOpen(true);
       setOpenHighlightsToAiNonce((n) => n + 1);
     }
-  }, [aiSidebarHighlights.length]);
+  }, [aiSidebarHighlights.length, paperId]);
   // Derive runs from chat-agent highlights (paper_highlights.runId) so each
   // tool invocation that produced highlights shows up as a sidebar entry,
   // even when no ai_highlight_runs row exists (chat-agent highlight tool path).

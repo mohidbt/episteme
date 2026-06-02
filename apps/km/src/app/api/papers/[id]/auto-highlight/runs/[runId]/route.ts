@@ -38,6 +38,7 @@ export async function DELETE(request: NextRequest, { params }: Ctx) {
         .where(
           and(
             eq(userHighlights.userId, session.user.id),
+            eq(userHighlights.paperId, paperId),
             eq(userHighlights.layerId, runId),
           ),
         );

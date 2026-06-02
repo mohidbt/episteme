@@ -45,4 +45,87 @@ describe("DELETE /api/papers/[id]/auto-highlight/runs/[runId]", () => {
     const res = await DELETE(buildReq(), routeParams);
     expect(res.status).toBe(404);
   });
+
+  it("404 when run found by paperId but no rows match across all three tables", async () => {
+    vi.mocked(auth.api.getSession).mockResolvedValue({ user: { id: "u1" } } as never);
+    // Paper ownership check passes.
+    vi.mocked(db.select).mockReturnValueOnce({
+      from: () => ({
+        where: () => ({ limit: async () => [{ id: PAPER_ID, userId: "u1" }] }),
+      }),
+    } as never);
+    vi.mocked(db.transaction).mockImplementationOnce(async (cb: never) => {
+      const tx = {
+        delete: () => ({ where: async () => ({ rowCount: 0 }) }),
+      };
+      return (cb as unknown as (t: typeof tx) => Promise<number>)(tx);
+    });
+    const res = await DELETE(buildReq(), routeParams);
+    expect(res.status).toBe(404);
+  });
+
+  it("cascades across user_highlights + paper_highlights + ai_highlight_runs, scoping each by paperId", async () => {
+    const { userHighlights, paperHighlights, aiHighlightRuns } = await import(
+      "@episteme/db/schema"
+    );
+
+    vi.mocked(auth.api.getSession).mockResolvedValue({ user: { id: "u1" } } as never);
+    vi.mocked(db.select).mockReturnValueOnce({
+      from: () => ({
+        where: () => ({ limit: async () => [{ id: PAPER_ID, userId: "u1" }] }),
+      }),
+    } as never);
+
+    // Capture each tx.delete() target + its `and(...)` where-clause. Drizzle
+    // `and(...)` returns an SQL object whose `queryChunks` array references
+    // the columns being filtered on; we walk it to assert paperId is one
+    // of those columns for each delete (codex review fix #2 — without the
+    // paperId filter on user_highlights, a same-user runId collision across
+    // papers could delete the wrong paper's highlights).
+    const calls: { table: unknown; clause: unknown }[] = [];
+    vi.mocked(db.transaction).mockImplementationOnce(async (cb: never) => {
+      const tx = {
+        delete: (table: unknown) => ({
+          where: async (clause: unknown) => {
+            calls.push({ table, clause });
+            return { rowCount: 1 };
+          },
+        }),
+      };
+      return (cb as unknown as (t: typeof tx) => Promise<number>)(tx);
+    });
+
+    const res = await DELETE(buildReq(), routeParams);
+    expect(res.status).toBe(200);
+
+    expect(calls.map((c) => c.table)).toEqual([
+      userHighlights,
+      paperHighlights,
+      aiHighlightRuns,
+    ]);
+
+    const referencesPaperIdColumn = (clause: unknown, table: { paperId: unknown }): boolean => {
+      const seen = new WeakSet<object>();
+      const stack: unknown[] = [clause];
+      while (stack.length) {
+        const node = stack.pop();
+        if (node === table.paperId) return true;
+        if (node && typeof node === "object") {
+          if (seen.has(node as object)) continue;
+          seen.add(node as object);
+          for (const v of Object.values(node as Record<string, unknown>)) {
+            if (Array.isArray(v)) {
+              for (const item of v) stack.push(item);
+            } else if (v && typeof v === "object") {
+              stack.push(v);
+            }
+          }
+        }
+      }
+      return false;
+    };
+    expect(referencesPaperIdColumn(calls[0].clause, userHighlights)).toBe(true);
+    expect(referencesPaperIdColumn(calls[1].clause, paperHighlights)).toBe(true);
+    expect(referencesPaperIdColumn(calls[2].clause, { paperId: aiHighlightRuns.paperId })).toBe(true);
+  });
 });
