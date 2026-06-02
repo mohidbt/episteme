@@ -5,6 +5,7 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import dynamic from "next/dynamic";
 import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
+import { postHighlightsChange } from "@episteme/reader/highlights-channel";
 import { AgentTranscript } from "@/components/agent/AgentTranscript";
 import { PastThreadsDropdown } from "@/components/agent/PastThreadsDropdown";
 import { useAgentBallStore } from "@/state/agent-ball";
@@ -222,7 +223,11 @@ function ReaderShellInner({ paperId }: { paperId: string }) {
   // not just after the explain-passage POST resolves.
   const handleAgentStreamDone = useCallback(() => {
     setPastThreadsRefreshKey((k) => k + 1);
-  }, []);
+    // Chat-agent tools may have written paper_highlights rows (AI highlight
+    // tool). Fan-out a channel event so the reader's usePaperHighlights hook
+    // refetches immediately instead of waiting for the 5-min backstop / focus.
+    postHighlightsChange({ paperId, source: "ai" });
+  }, [paperId]);
 
   const agentSlot = activeThreadId ? (
     <div className="flex h-full min-h-0 flex-col">

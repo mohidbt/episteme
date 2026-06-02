@@ -12,6 +12,10 @@
     "./citation-card": {
       "types": "./src/components/CitationCard.tsx",
       "default": "./src/components/CitationCard.tsx"
+    },
+    "./highlights-channel": {
+      "types": "./src/lib/highlights-channel.ts",
+      "default": "./src/lib/highlights-channel.ts"
     }
   },
   "scripts": {

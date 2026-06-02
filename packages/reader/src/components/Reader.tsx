@@ -183,6 +183,7 @@ export function Reader({
   const { url } = usePdfDocument(paperId);
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [openHighlightsToAiNonce, setOpenHighlightsToAiNonce] = useState(0);
   const [refreshKey, setRefreshKey] = useState(0);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [outlineOpen, setOutlineOpen] = useState(false);
@@ -336,6 +337,22 @@ export function Reader({
     ],
     [aiSidebarHighlights, sidebarHighlights],
   );
+
+  // When new AI highlights arrive (chat-agent tool wrote rows + channel/poll
+  // refetch increased the count), surface them: open the highlights sidebar
+  // and switch its segment to "AI". Initial mount load is ignored — we only
+  // react to upward transitions after first paint.
+  const prevAiCountRef = useRef<number | null>(null);
+  useEffect(() => {
+    const count = aiSidebarHighlights.length;
+    const prev = prevAiCountRef.current;
+    prevAiCountRef.current = count;
+    if (prev === null) return;
+    if (count > prev) {
+      setSidebarOpen(true);
+      setOpenHighlightsToAiNonce((n) => n + 1);
+    }
+  }, [aiSidebarHighlights.length]);
   // Derive runs from chat-agent highlights (paper_highlights.runId) so each
   // tool invocation that produced highlights shows up as a sidebar entry,
   // even when no ai_highlight_runs row exists (chat-agent highlight tool path).
@@ -761,6 +778,7 @@ export function Reader({
       node: (
         <HighlightsSidebar
           open={sidebarOpen}
+          openToAiNonce={openHighlightsToAiNonce}
           aiHighlights={aiSidebarHighlights}
           userHighlights={sidebarHighlights.map((h) => ({ ...h, source: h.source ?? ("user" as const) }))}
           runs={allRuns}

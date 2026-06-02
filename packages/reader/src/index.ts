@@ -19,6 +19,9 @@ export type { ReaderSidePanelProps } from "./components/ReaderSidePanel";
 
 export type { ReaderPlugin, ReaderMode } from "./plugins/types";
 
+export { postHighlightsChange, subscribeHighlightsChange } from "./lib/highlights-channel";
+export type { HighlightsChannelEvent } from "./lib/highlights-channel";
+
 export { useExplainPassage } from "./hooks/use-explain-passage";
 export type { UseExplainPassageOptions, ExplainPassageArgs } from "./hooks/use-explain-passage";
 

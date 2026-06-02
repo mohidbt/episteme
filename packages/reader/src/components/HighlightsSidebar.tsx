@@ -56,6 +56,12 @@ type Segment = "ai" | "user";
 
 interface HighlightsSidebarProps {
   open: boolean;
+  /**
+   * Monotonic counter — when it changes (and is > 0), force the segment to
+   * "ai". Lets the parent surface a newly-arrived AI highlight run without
+   * fighting the user's persisted segment choice for normal mounts.
+   */
+  openToAiNonce?: number;
   /** AI-sourced highlights (source === "ai-auto") */
   aiHighlights: AiHighlight[];
   /** User-created highlights */
@@ -86,6 +92,7 @@ function readPersistedSegment(paperId: string, hasAiRuns: boolean): Segment {
 
 export function HighlightsSidebar({
   open,
+  openToAiNonce = 0,
   aiHighlights,
   userHighlights,
   runs = [],
@@ -132,6 +139,13 @@ export function HighlightsSidebar({
     },
     [paperId],
   );
+
+  // Parent bumps `openToAiNonce` when new AI highlights arrive. Force the
+  // segment to "ai" so the just-rendered highlights are visible without an
+  // extra tab-switch click.
+  useEffect(() => {
+    if (openToAiNonce > 0) switchSegment("ai");
+  }, [openToAiNonce, switchSegment]);
 
   const navigate = useCallback(
     (runId: string, delta: number) => {
