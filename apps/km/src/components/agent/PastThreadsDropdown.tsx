@@ -1,5 +1,6 @@
 "use client";
 
+import { ChevronDown } from "lucide-react";
 import { useEffect, useState } from "react";
 
 interface PastThread {
@@ -28,7 +29,7 @@ interface Props {
   paperId: string;
   /** Called when the user picks a past thread. Parent re-hydrates via /state. */
   onSelect: (threadId: string) => void;
-  /** Highlight the active thread; rows for this id show as "(current)". */
+  /** Highlight the active thread; the row for this id appears as "(current)". */
   activeThreadId?: string | null;
   /**
    * Bump this to force a refetch — the parent (ReaderShell) increments it
@@ -40,15 +41,14 @@ interface Props {
 }
 
 /**
- * K8 — Past agent threads for the current paper. Renders a compact native
- * `<select>` above the reader's agent panel; selecting a thread asks the
- * parent (ReaderShell) to swap `activeThreadId`, which triggers the
- * existing /state hydration path in AgentTranscript.
+ * K8 — Past agent threads for the current paper. Restyled per the Episteme
+ * design system: Instrument Serif section label, Geist Mono micro-count,
+ * hairline trigger at the 32 px tier, sentence-case copy, Lucide chevron.
  *
- * Always renders — even with zero threads we show a disabled empty-state so
- * users can see the feature exists. Refetches whenever the parent bumps
- * `refreshKey` (post-`/invoke`) so a newly-stamped thread appears without
- * a full page reload.
+ * Still a native `<select>` underneath — the option list is rendered by the
+ * OS for keyboard + screen-reader parity, but the trigger chrome is
+ * absolute-overlaid so the user sees the design-system surface, not the
+ * platform default.
  */
 export function PastThreadsDropdown({
   paperId,
@@ -95,43 +95,56 @@ export function PastThreadsDropdown({
   // When `activeThreadId` is a freshly-created thread not yet stamped to
   // this paper (the default state when the reader panel auto-opens), it
   // won't be in `threads`. A controlled <select> with a value that matches
-  // no <option> falls back to displaying the first option — which makes
-  // the dropdown look like that first thread is "current". Picking it then
-  // fires no `change` event (value already matches), so setActiveThread
-  // never runs. Coerce to "" in that case so the placeholder shows and any
-  // pick fires a real change.
+  // no <option> falls back to displaying the first option — making it look
+  // like that first thread is current. Picking it then fires no `change`
+  // event (value already matches), so setActiveThread never runs. Coerce
+  // to "" so the placeholder shows and any pick fires a real change.
   const selectValue =
     activeThreadId && threads.some((t) => t.thread_id === activeThreadId)
       ? activeThreadId
       : "";
 
+  const activeTitle = (() => {
+    if (!selectValue) return null;
+    const t = threads.find((x) => x.thread_id === selectValue);
+    if (!t) return null;
+    const trimmed = t.title?.trim();
+    return trimmed
+      ? sanitizeTitle(trimmed)
+      : new Date(t.created_at).toLocaleString();
+  })();
+
+  const placeholder = isEmpty
+    ? "No past chats on this paper"
+    : "Select a thread…";
+
   return (
     <div
       data-testid="past-threads-dropdown"
-      className="border-b px-3 py-2 text-xs text-muted-foreground"
+      className="border-b border-border/60 bg-background px-3 pt-3 pb-2.5"
     >
-      <label className="flex items-center gap-2">
-        <span>
-          {isEmpty ? "Past threads" : `Past threads (${threads.length})`}
+      <div className="mb-1.5 flex items-baseline justify-between">
+        <span className="font-display text-[15px] leading-none tracking-[-0.01em] text-foreground">
+          Past threads
         </span>
+        <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground tabular-nums">
+          {isEmpty ? "none" : `${threads.length} on this paper`}
+        </span>
+      </div>
+      <div className="group relative h-8">
         <select
-          className="flex-1 rounded border bg-background px-1 py-0.5 text-xs disabled:opacity-60"
+          className="peer absolute inset-0 h-full w-full cursor-pointer rounded-[10px] border border-border bg-background pr-8 pl-3 text-sm text-transparent outline-none transition-colors hover:border-foreground/30 focus-visible:border-foreground/40 focus-visible:ring-2 focus-visible:ring-ring/40 disabled:cursor-not-allowed disabled:opacity-50 [&>option]:text-foreground"
           value={selectValue}
           disabled={isEmpty}
+          aria-label={isEmpty ? placeholder : "Past threads on this paper"}
           onChange={(e) => {
             const id = e.target.value;
             if (id) onSelect(id);
           }}
         >
-          {isEmpty ? (
-            <option value="" disabled>
-              No past chats on this paper
-            </option>
-          ) : (
-            <option value="" disabled>
-              Select a thread…
-            </option>
-          )}
+          <option value="" disabled>
+            {placeholder}
+          </option>
           {threads.map((t) => {
             const isCurrent = t.thread_id === activeThreadId;
             const trimmedTitle = t.title?.trim();
@@ -146,7 +159,24 @@ export function PastThreadsDropdown({
             );
           })}
         </select>
-      </label>
+        {/* Visual surface — matches the native <select> at pixel level so the
+            chevron + label appear over it without intercepting clicks. */}
+        <div className="pointer-events-none absolute inset-0 flex h-full items-center gap-1.5 rounded-[10px] border border-transparent pr-8 pl-3">
+          <span
+            className={
+              activeTitle
+                ? "truncate text-sm text-foreground"
+                : "truncate text-sm text-muted-foreground"
+            }
+          >
+            {activeTitle ?? placeholder}
+          </span>
+        </div>
+        <ChevronDown
+          aria-hidden
+          className="pointer-events-none absolute top-1/2 right-2.5 size-3.5 -translate-y-1/2 text-muted-foreground transition-colors group-hover:text-foreground"
+        />
+      </div>
     </div>
   );
 }

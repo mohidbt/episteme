@@ -39,7 +39,7 @@ describe("PastThreadsDropdown", () => {
     render(<PastThreadsDropdown paperId={PAPER} onSelect={() => {}} />);
 
     await waitFor(() => {
-      expect(screen.getByText(/Past threads \(2\)/i)).toBeTruthy();
+      expect(screen.getByText(/2 on this paper/i)).toBeTruthy();
     });
     const select = screen.getByRole("combobox") as HTMLSelectElement;
     // two thread options + the disabled placeholder
@@ -56,7 +56,9 @@ describe("PastThreadsDropdown", () => {
         container.querySelector("[data-testid=past-threads-dropdown]"),
       ).not.toBeNull();
     });
-    expect(screen.getByText(/no past chats on this paper/i)).toBeTruthy();
+    // Empty placeholder appears twice now — once as the visual overlay span,
+    // once as the disabled <option> — that's fine, getAllByText covers both.
+    expect(screen.getAllByText(/no past chats on this paper/i).length).toBeGreaterThan(0);
   });
 
   it("renders the thread title when present, falling back to timestamp otherwise (N8)", async () => {
@@ -268,7 +270,7 @@ describe("PastThreadsDropdown", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText(/Past threads \(2\)/i)).toBeTruthy();
+      expect(screen.getByText(/2 on this paper/i)).toBeTruthy();
     });
   });
 });
