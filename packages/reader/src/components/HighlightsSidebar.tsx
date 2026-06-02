@@ -1,8 +1,9 @@
 "use client";
 
 import { type ReactNode, useState, useCallback, useEffect } from "react";
-import { Trash2, ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "./ui/button";
+import { ConfirmDeleteButton } from "./ui/confirm-delete-button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "./ui/empty";
 
 export interface AiHighlight {
@@ -346,7 +347,6 @@ function RunRow({
   onNext: () => void;
   onDelete?: () => Promise<boolean> | void;
 }) {
-  const [deleting, setDeleting] = useState(false);
   // Total rects across all highlights in the group, and the cursor's flat
   // position. Highlights without rect data count as 1 navigable target each.
   // Normalize the cursor — if the group shrank since the cursor was set,
@@ -360,16 +360,7 @@ function RunRow({
   let flatPos = safeRIdx;
   for (let i = 0; i < safeHIdx; i++) flatPos += rectCount(group[i]);
   const isMulti = totalRects > 1;
-  const handleDelete = async () => {
-    if (!onDelete || deleting) return;
-    if (!window.confirm(`Delete this AI highlight run (${group.length} highlight${group.length === 1 ? "" : "s"})?`)) return;
-    setDeleting(true);
-    try {
-      await onDelete();
-    } finally {
-      setDeleting(false);
-    }
-  };
+  const highlightCountLabel = `${group.length} highlight${group.length === 1 ? "" : "s"}`;
   return (
     <div className="space-y-2 rounded-lg border bg-card p-3">
       <div className="flex items-start justify-between gap-2">
@@ -383,16 +374,13 @@ function RunRow({
           <p className="line-clamp-2 text-sm font-medium leading-snug">{label}</p>
         </button>
         {onDelete && (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-6 w-6 shrink-0 text-muted-foreground hover:text-destructive"
-            aria-label="Delete highlight run"
-            disabled={deleting}
-            onClick={handleDelete}
-          >
-            <Trash2 className="size-3.5" />
-          </Button>
+          <ConfirmDeleteButton
+            ariaLabel="Delete highlight run"
+            title="Delete AI highlight run?"
+            description={`This removes ${highlightCountLabel} from the PDF. This cannot be undone.`}
+            triggerClassName="shrink-0"
+            onConfirm={onDelete}
+          />
         )}
       </div>
       {isMulti && (
@@ -459,18 +447,12 @@ function UserHighlightRow({
             </Button>
           )}
           {onDelete && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-5 px-2 text-[10px] text-destructive hover:text-destructive"
-              aria-label="Delete"
-              onClick={() => {
-                if (!window.confirm("Delete this highlight?")) return;
-                onDelete(h.id);
-              }}
-            >
-              <Trash2 className="size-3.5" />
-            </Button>
+            <ConfirmDeleteButton
+              ariaLabel="Delete"
+              title="Delete this highlight?"
+              description="This cannot be undone."
+              onConfirm={() => onDelete(h.id)}
+            />
           )}
         </div>
       </div>

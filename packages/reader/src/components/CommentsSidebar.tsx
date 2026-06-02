@@ -1,8 +1,8 @@
 "use client";
 
 import { useMemo, type ReactNode } from "react";
-import { Trash2 } from "lucide-react";
 import { Button } from "./ui/button";
+import { ConfirmDeleteButton } from "./ui/confirm-delete-button";
 import {
   Empty,
   EmptyDescription,
@@ -121,19 +121,14 @@ export function CommentsSidebar({
                       </Button>
                     )}
                     {onDelete && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-5 px-2 text-[10px] text-destructive hover:text-destructive"
-                        aria-label="Delete"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (!window.confirm("Delete this highlight?")) return;
-                          onDelete(h.id);
-                        }}
-                      >
-                        <Trash2 className="size-3.5" />
-                      </Button>
+                      <div onClick={(e) => e.stopPropagation()}>
+                        <ConfirmDeleteButton
+                          ariaLabel="Delete"
+                          title="Delete this highlight?"
+                          description="This cannot be undone."
+                          onConfirm={() => onDelete(h.id)}
+                        />
+                      </div>
                     )}
                   </div>
                 </div>
