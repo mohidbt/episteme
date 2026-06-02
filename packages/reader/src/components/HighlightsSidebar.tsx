@@ -72,6 +72,12 @@ interface HighlightsSidebarProps {
   paperId: string;
   onAskAi?: (text: string, pageNumber: number) => void;
   onDelete?: (highlightId: number | string) => void;
+  /**
+   * Delete an entire AI highlight run (cascade: ai_highlight_runs row +
+   * derived user_highlights rows + paper_highlights rows). Resolves true
+   * on success so the row can defer optimistic UI updates.
+   */
+  onDeleteRun?: (runId: string) => Promise<boolean>;
   onNavigateHighlight?: (highlightId: number | string, rectIndex?: number) => void;
   dockControl?: ReactNode;
 }
@@ -101,6 +107,7 @@ export function HighlightsSidebar({
   paperId,
   onAskAi,
   onDelete,
+  onDeleteRun,
   onNavigateHighlight,
   dockControl,
 }: HighlightsSidebarProps) {
@@ -293,11 +300,14 @@ export function HighlightsSidebar({
                       onNavigateFirst={() => onNavigateHighlight?.(group[0].id, 0)}
                       onPrev={() => navigate(id, -1)}
                       onNext={() => navigate(id, 1)}
+                      onDelete={onDeleteRun ? () => onDeleteRun(id) : undefined}
                     />
                   );
                 })}
 
-                {/* Manual / no-runId bucket — single collapsed row */}
+                {/* Manual / no-runId bucket — single collapsed row. No
+                    onDelete: there is no run-level identifier to cascade on,
+                    so deletion stays per-highlight via the PDF overlay. */}
                 {manualGroup.length > 0 && (
                   <RunRow
                     label="Manual AI highlights"
@@ -326,6 +336,7 @@ function RunRow({
   onNavigateFirst,
   onPrev,
   onNext,
+  onDelete,
 }: {
   label: string;
   group: AiHighlight[];
@@ -333,7 +344,9 @@ function RunRow({
   onNavigateFirst: () => void;
   onPrev: () => void;
   onNext: () => void;
+  onDelete?: () => Promise<boolean> | void;
 }) {
+  const [deleting, setDeleting] = useState(false);
   // Total rects across all highlights in the group, and the cursor's flat
   // position. Highlights without rect data count as 1 navigable target each.
   // Normalize the cursor — if the group shrank since the cursor was set,
@@ -347,17 +360,41 @@ function RunRow({
   let flatPos = safeRIdx;
   for (let i = 0; i < safeHIdx; i++) flatPos += rectCount(group[i]);
   const isMulti = totalRects > 1;
+  const handleDelete = async () => {
+    if (!onDelete || deleting) return;
+    if (!window.confirm(`Delete this AI highlight run (${group.length} highlight${group.length === 1 ? "" : "s"})?`)) return;
+    setDeleting(true);
+    try {
+      await onDelete();
+    } finally {
+      setDeleting(false);
+    }
+  };
   return (
     <div className="space-y-2 rounded-lg border bg-card p-3">
-      <button
-        type="button"
-        className="w-full text-left"
-        aria-label={label}
-        title={label}
-        onClick={onNavigateFirst}
-      >
-        <p className="line-clamp-2 text-sm font-medium leading-snug">{label}</p>
-      </button>
+      <div className="flex items-start justify-between gap-2">
+        <button
+          type="button"
+          className="flex-1 text-left"
+          aria-label={label}
+          title={label}
+          onClick={onNavigateFirst}
+        >
+          <p className="line-clamp-2 text-sm font-medium leading-snug">{label}</p>
+        </button>
+        {onDelete && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6 shrink-0 text-muted-foreground hover:text-destructive"
+            aria-label="Delete highlight run"
+            disabled={deleting}
+            onClick={handleDelete}
+          >
+            <Trash2 className="size-3.5" />
+          </Button>
+        )}
+      </div>
       {isMulti && (
         <div className="flex items-center justify-between gap-2">
           <p className="text-[10px] text-muted-foreground">

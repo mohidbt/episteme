@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@episteme/auth/server";
 import { db } from "@/lib/db";
-import { aiHighlightRuns, papers, userHighlights } from "@episteme/db/schema";
+import { aiHighlightRuns, paperHighlights, papers, userHighlights } from "@episteme/db/schema";
 import { and, eq } from "drizzle-orm";
 import { jsonError, requireOwned } from "@/lib/crud";
 
@@ -23,23 +23,17 @@ export async function DELETE(request: NextRequest, { params }: Ctx) {
   if (!owned.ok) return jsonError(owned.status, owned.status === 404 ? "not_found" : "forbidden");
 
   try {
-    // layer_id on user_highlights has no FK to ai_highlight_runs, so the
-    // cascade must be done manually. Run both deletes in a single tx.
+    // Three writers can produce rows under a single runId:
+    //   1. ai_highlight_runs   — auto-highlight pipeline + chat-agent path
+    //   2. user_highlights     — layer_id = runId, no FK so cascade manually
+    //   3. paper_highlights    — chat-agent `create_highlights` tool inserts
+    //                            geometry rows here, NOT into user_highlights
+    // Chat-agent runs always also create the ai_highlight_runs parent row
+    // (see services/agents/routers/chat.py `ensure_run_id`), but some
+    // historical or partial runs may only have paper_highlights rows. Treat
+    // the run as "found" if any of the three tables yielded a delete.
     const result = await db.transaction(async (tx) => {
-      const [run] = await tx
-        .select({ id: aiHighlightRuns.id })
-        .from(aiHighlightRuns)
-        .where(
-          and(
-            eq(aiHighlightRuns.id, runId),
-            eq(aiHighlightRuns.paperId, paperId),
-            eq(aiHighlightRuns.userId, session.user.id),
-          ),
-        )
-        .limit(1);
-      if (!run) return null;
-
-      await tx
+      const userDel = await tx
         .delete(userHighlights)
         .where(
           and(
@@ -47,11 +41,31 @@ export async function DELETE(request: NextRequest, { params }: Ctx) {
             eq(userHighlights.layerId, runId),
           ),
         );
-      await tx.delete(aiHighlightRuns).where(eq(aiHighlightRuns.id, runId));
-      return run.id;
+      const paperDel = await tx
+        .delete(paperHighlights)
+        .where(
+          and(
+            eq(paperHighlights.userId, session.user.id),
+            eq(paperHighlights.paperId, paperId),
+            eq(paperHighlights.runId, runId),
+          ),
+        );
+      const runDel = await tx
+        .delete(aiHighlightRuns)
+        .where(
+          and(
+            eq(aiHighlightRuns.id, runId),
+            eq(aiHighlightRuns.paperId, paperId),
+            eq(aiHighlightRuns.userId, session.user.id),
+          ),
+        );
+      const userCount = userDel.rowCount ?? 0;
+      const paperCount = paperDel.rowCount ?? 0;
+      const runCount = runDel.rowCount ?? 0;
+      return userCount + paperCount + runCount;
     });
 
-    if (!result) return jsonError(404, "not_found");
+    if (result === 0) return jsonError(404, "not_found");
     return NextResponse.json({ ok: true });
   } catch {
     return jsonError(500, "internal server error");

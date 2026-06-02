@@ -529,6 +529,25 @@ export function Reader({
     [deleteHighlight]
   );
 
+  const handleSidebarDeleteRun = useCallback(
+    async (runId: string): Promise<boolean> => {
+      try {
+        const res = await fetch(
+          `/api/papers/${paperId}/auto-highlight/runs/${runId}`,
+          { method: "DELETE" },
+        );
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        setRefreshKey((k) => k + 1);
+        postHighlightsChange({ paperId, source: "ai" });
+        return true;
+      } catch {
+        setSaveError("Failed to delete highlight run.");
+        return false;
+      }
+    },
+    [paperId],
+  );
+
   // Click delegation for existing-highlight overlays — opens toolbar in erase mode.
   useEffect(() => {
     const el = pdfScrollRef.current;
@@ -797,6 +816,7 @@ export function Reader({
             />
           }
           onDelete={handleSidebarDelete}
+          onDeleteRun={handleSidebarDeleteRun}
         />
       ),
     });
