@@ -92,6 +92,18 @@ export function PastThreadsDropdown({
   if (threads === null) return null;
 
   const isEmpty = threads.length === 0;
+  // When `activeThreadId` is a freshly-created thread not yet stamped to
+  // this paper (the default state when the reader panel auto-opens), it
+  // won't be in `threads`. A controlled <select> with a value that matches
+  // no <option> falls back to displaying the first option — which makes
+  // the dropdown look like that first thread is "current". Picking it then
+  // fires no `change` event (value already matches), so setActiveThread
+  // never runs. Coerce to "" in that case so the placeholder shows and any
+  // pick fires a real change.
+  const selectValue =
+    activeThreadId && threads.some((t) => t.thread_id === activeThreadId)
+      ? activeThreadId
+      : "";
 
   return (
     <div
@@ -104,7 +116,7 @@ export function PastThreadsDropdown({
         </span>
         <select
           className="flex-1 rounded border bg-background px-1 py-0.5 text-xs disabled:opacity-60"
-          value={activeThreadId ?? ""}
+          value={selectValue}
           disabled={isEmpty}
           onChange={(e) => {
             const id = e.target.value;
