@@ -38,10 +38,7 @@ describe("PastThreadsDropdown", () => {
 
     render(<PastThreadsDropdown paperId={PAPER} onSelect={() => {}} />);
 
-    await waitFor(() => {
-      expect(screen.getByText(/2 on this paper/i)).toBeTruthy();
-    });
-    const select = screen.getByRole("combobox") as HTMLSelectElement;
+    const select = (await screen.findByRole("combobox")) as HTMLSelectElement;
     // two thread options + the disabled placeholder
     expect(select.querySelectorAll("option")).toHaveLength(3);
   });
@@ -270,7 +267,9 @@ describe("PastThreadsDropdown", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText(/2 on this paper/i)).toBeTruthy();
+      const sel = screen.getByRole("combobox") as HTMLSelectElement;
+      // 2 thread options + placeholder
+      expect(sel.querySelectorAll("option")).toHaveLength(3);
     });
   });
 });

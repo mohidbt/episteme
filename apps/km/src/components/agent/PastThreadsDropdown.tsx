@@ -123,12 +123,9 @@ export function PastThreadsDropdown({
       data-testid="past-threads-dropdown"
       className="border-b border-border/60 bg-background px-3 pt-3 pb-2.5"
     >
-      <div className="mb-1.5 flex items-baseline justify-between">
+      <div className="mb-1.5">
         <span className="font-display text-[15px] leading-none tracking-[-0.01em] text-foreground">
           Past threads
-        </span>
-        <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground tabular-nums">
-          {isEmpty ? "none" : `${threads.length} on this paper`}
         </span>
       </div>
       <div className="group relative h-8">
