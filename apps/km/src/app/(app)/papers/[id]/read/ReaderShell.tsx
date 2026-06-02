@@ -90,6 +90,9 @@ function ReaderShellInner({ paperId }: { paperId: string }) {
           // Codex follow-up: on fetch failure, still mount the transcript with
           // an empty history so the UI proceeds (otherwise the skeleton hangs
           // forever). The threadId match below gates the mount.
+          // Surface status so a silently-failing 401/403/500 doesn't look
+          // identical to a genuinely empty thread.
+          console.error("[reader] /state fetch failed", { threadId: tid, status: res.status });
           setHydratedMessages({ threadId: tid, messages: [] });
           return;
         }
@@ -117,6 +120,10 @@ function ReaderShellInner({ paperId }: { paperId: string }) {
     const p = createThread(ctl.signal).then((id) => {
       threadInFlightRef.current = null;
       if (ctl.signal.aborted) return null;
+      // Race guard: if user picked a past thread from the dropdown while
+      // this create was in flight, do NOT overwrite their selection with
+      // the freshly-created empty thread id.
+      if (useAgentBallStore.getState().activeThreadId) return null;
       if (id) useAgentBallStore.getState().setActiveThread(id);
       return id;
     });
@@ -201,6 +208,10 @@ function ReaderShellInner({ paperId }: { paperId: string }) {
   // store, and the `key={activeThreadId}` on <AgentTranscript> below remounts
   // it so the existing /state hydration path replays the chosen history.
   const handlePickPastThread = useCallback((threadId: string) => {
+    // Abort any in-flight `ensureThread()` POST so its .then() can't
+    // overwrite the user's pick with a freshly-created empty thread id.
+    threadCtlRef.current?.abort();
+    threadInFlightRef.current = null;
     useAgentBallStore.getState().setActiveThread(threadId);
   }, []);
 
