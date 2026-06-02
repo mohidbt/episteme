@@ -1,5 +1,6 @@
 "use client";
 
+import type * as React from "react";
 import { AlertDialog as AlertDialogPrimitive } from "@base-ui/react/alert-dialog";
 
 import { cn } from "../../lib/utils";
@@ -61,6 +62,25 @@ function AlertDialogContent({
   );
 }
 
+/**
+ * Plain button styled as the primary destructive action. Does NOT close the
+ * dialog by itself — callers control open state, so async handlers can keep
+ * the dialog open while work resolves or on failure.
+ */
+function AlertDialogAction({
+  className,
+  ...props
+}: React.ComponentProps<"button">) {
+  return (
+    <button
+      type="button"
+      data-slot="alert-dialog-action"
+      className={cn(buttonVariants({ variant: "destructive" }), className)}
+      {...props}
+    />
+  );
+}
+
 function AlertDialogHeader({
   className,
   ...props
@@ -116,25 +136,16 @@ function AlertDialogDescription({
   );
 }
 
-function AlertDialogAction({
-  className,
-  ...props
-}: AlertDialogPrimitive.Close.Props) {
-  return (
-    <AlertDialogPrimitive.Close
-      data-slot="alert-dialog-action"
-      className={cn(buttonVariants({ variant: "destructive" }), className)}
-      {...props}
-    />
-  );
-}
-
 function AlertDialogCancel({
   className,
+  ref,
   ...props
-}: AlertDialogPrimitive.Close.Props) {
+}: AlertDialogPrimitive.Close.Props & {
+  ref?: React.Ref<HTMLButtonElement>;
+}) {
   return (
     <AlertDialogPrimitive.Close
+      ref={ref}
       data-slot="alert-dialog-cancel"
       className={cn(buttonVariants({ variant: "outline" }), className)}
       {...props}

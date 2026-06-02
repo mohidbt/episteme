@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { Trash2 } from "lucide-react";
+import { toast } from "sonner";
 
 import { Button } from "./button";
 import {
@@ -20,11 +21,17 @@ import { cn } from "../../lib/utils";
 interface ConfirmDeleteButtonProps {
   title: string;
   description?: ReactNode;
-  /** Resolves true/void on success; sync errors are surfaced via console. */
+  /**
+   * Returning `false` keeps the dialog open (e.g. the action failed and the
+   * caller surfaced its own error UI). Returning `void` / `true` closes it.
+   * Thrown errors keep the dialog open and surface a generic toast.
+   */
   onConfirm: () => void | boolean | Promise<void | boolean>;
   ariaLabel: string;
   confirmLabel?: string;
   cancelLabel?: string;
+  /** Toast shown when onConfirm throws. */
+  failureMessage?: string;
   disabled?: boolean;
   /** Style passthrough for the trigger button only. */
   triggerClassName?: string;
@@ -37,6 +44,13 @@ interface ConfirmDeleteButtonProps {
  * delete actions render as an accessible, themeable modal instead of the
  * browser's native window.confirm() (which can't be mocked in tests and
  * doesn't match the design system).
+ *
+ * Implementation notes:
+ *   - The destructive action is a plain <button>, NOT a DialogClose
+ *     wrapper. We control `open` ourselves so async handlers can keep the
+ *     dialog mounted while work resolves and reopen on failure.
+ *   - `initialFocus` defaults to the cancel button per WCAG guidance for
+ *     destructive alertdialogs (the safer default).
  */
 export function ConfirmDeleteButton({
   title,
@@ -45,24 +59,24 @@ export function ConfirmDeleteButton({
   ariaLabel,
   confirmLabel = "Delete",
   cancelLabel = "Cancel",
+  failureMessage = "Action failed. Please try again.",
   disabled = false,
   triggerClassName,
   triggerIcon,
 }: ConfirmDeleteButtonProps) {
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(false);
+  const cancelRef = useRef<HTMLButtonElement>(null);
 
-  const handleConfirm = async (event: React.MouseEvent<HTMLButtonElement>) => {
-    // Hold the dialog open until the async work resolves so the user sees a
-    // pending state instead of an instant close that hides any error.
-    event.preventDefault();
+  const handleConfirm = async () => {
     if (pending) return;
     setPending(true);
     try {
-      await onConfirm();
-      setOpen(false);
+      const outcome = await onConfirm();
+      if (outcome !== false) setOpen(false);
     } catch (err) {
       console.error("[confirm-delete] action failed", err);
+      toast.error(failureMessage);
     } finally {
       setPending(false);
     }
@@ -86,7 +100,7 @@ export function ConfirmDeleteButton({
           </Button>
         }
       />
-      <AlertDialogContent>
+      <AlertDialogContent initialFocus={cancelRef}>
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>
           {description && (
@@ -94,7 +108,9 @@ export function ConfirmDeleteButton({
           )}
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={pending}>{cancelLabel}</AlertDialogCancel>
+          <AlertDialogCancel ref={cancelRef} disabled={pending}>
+            {cancelLabel}
+          </AlertDialogCancel>
           <AlertDialogAction onClick={handleConfirm} disabled={pending}>
             {pending ? `${confirmLabel}…` : confirmLabel}
           </AlertDialogAction>
