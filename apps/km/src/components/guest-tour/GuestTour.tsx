@@ -169,6 +169,66 @@ function buildSteps(onCtaClick: () => void): Step[] {
 // On timeout we resume Joyride anyway so the tour never dead-ends.
 const NEXT_TARGET_TIMEOUT_MS = 4000;
 
+// Design-system theme for the tour chrome. We map every color onto the app's
+// CSS variables (globals.css), so the tour reads as native black-on-white and
+// flips to dark mode for free — react-joyride applies these as inline styles,
+// so var(--…) resolves at runtime. v3 reads color tokens from `options`.
+const TOUR_THEME = {
+  primaryColor: "var(--primary)",
+  backgroundColor: "var(--popover)",
+  arrowColor: "var(--popover)",
+  textColor: "var(--foreground)",
+  // Spotlight contrast; intentionally mode-agnostic (overlay sits above content).
+  overlayColor: "oklch(0 0 0 / 0.45)",
+  spotlightRadius: 10, // matches --radius (0.625rem)
+  width: 360,
+  zIndex: 200,
+};
+
+// Per-element CSS. The design system says borders carry weight, not shadows —
+// a single hairline + low-spread popover shadow. Titles/body use the app fonts;
+// the popover shadow is inlined because --shadow-pop lives only in the design
+// bundle, not globals.css.
+const TOUR_STYLES = {
+  tooltip: {
+    borderRadius: "var(--radius)",
+    border: "1px solid var(--border)",
+    boxShadow:
+      "0 4px 16px -8px oklch(0 0 0 / 0.18), 0 2px 4px -2px oklch(0 0 0 / 0.06)",
+    fontFamily: "var(--font-sans)",
+    padding: 16,
+  },
+  tooltipContainer: { textAlign: "left" as const },
+  tooltipTitle: {
+    fontFamily: "var(--font-display)",
+    fontSize: 16,
+    fontWeight: 400,
+  },
+  tooltipContent: {
+    padding: "8px 0 0",
+    fontSize: 14,
+    lineHeight: "22px",
+    textAlign: "left" as const,
+    color: "var(--foreground)",
+  },
+  tooltipFooter: { marginTop: 12 },
+  buttonPrimary: {
+    backgroundColor: "var(--primary)",
+    color: "var(--primary-foreground)",
+    borderRadius: "var(--radius)",
+    fontFamily: "var(--font-sans)",
+    fontSize: 14,
+    fontWeight: 500,
+    padding: "8px 14px",
+  },
+  buttonSkip: {
+    color: "var(--muted-foreground)",
+    fontFamily: "var(--font-sans)",
+    fontSize: 14,
+  },
+  buttonClose: { color: "var(--muted-foreground)" },
+};
+
 export function GuestTour({ isAnonymous }: { isAnonymous: boolean }) {
   const [run, setRun] = useState(false);
   const [stepIndex, setStepIndex] = useState(0);
@@ -265,12 +325,18 @@ export function GuestTour({ isAnonymous }: { isAnonymous: boolean }) {
       stepIndex={stepIndex}
       steps={steps}
       continuous
+      // Sentence-case button labels (design system). "Done" replaces the
+      // library default "Last" on the final step.
+      locale={{ skip: "Skip", next: "Next", last: "Done", back: "Back", close: "Close" }}
+      styles={TOUR_STYLES}
       // Forward-only tour: omit "back" from buttons. Joyride v3 has no
       // `hideBackButton` option; the buttons array IS the back/skip/primary
       // toggle. Back would desync controlled `stepIndex` mode anyway.
       options={{
         buttons: ["skip", "primary"],
         showProgress: true,
+        // Design tokens (colors, radius, width) — see TOUR_THEME.
+        ...TOUR_THEME,
         // Reduced-motion support: kill scroll-into-view animation when
         // `prefers-reduced-motion: reduce` matches. Joyride v3 routes both
         // toggles through `options`; there's no top-level disableScrolling or

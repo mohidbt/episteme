@@ -69,7 +69,7 @@ export function TourPreviewCard({
       className="gap-3 border-0 bg-transparent py-0 text-left shadow-none"
     >
       <CardHeader className="px-0">
-        <CardTitle className="text-base leading-tight">{title}</CardTitle>
+        <CardTitle className="font-display text-base leading-tight">{title}</CardTitle>
         {previewBadge ? (
           <CardAction>
             <Badge variant="secondary" data-testid="tour-preview-badge">
@@ -80,7 +80,7 @@ export function TourPreviewCard({
       </CardHeader>
       {mediaSrc ? (
         <CardContent className="px-0">
-          <div className="overflow-hidden rounded-md border border-border bg-muted">
+          <div className="overflow-hidden rounded-md border border-border/60 bg-muted">
             {isVideo ? (
               showPosterFallback ? (
                 // eslint-disable-next-line @next/next/no-img-element
