@@ -22,10 +22,8 @@ import { TourPreviewCard } from "./TourPreviewCard";
 function isTourAllowedRoute(pathname: string | null): boolean {
   if (!pathname) return false;
   if (pathname === "/") return true;
-  if (pathname.startsWith("/notes")) return true;
-  if (pathname.startsWith("/papers")) return true;
-  if (pathname.startsWith("/references")) return true;
-  if (pathname.startsWith("/r/")) return true;
+  if (pathname.startsWith("/drive/")) return true;
+  if (pathname === "/trash") return true;
   return false;
 }
 

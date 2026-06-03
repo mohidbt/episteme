@@ -110,6 +110,50 @@ describe("GuestTour", () => {
     expect(lastCall?.run).toBe(false);
   });
 
+  it("does NOT autostart on /papers/[id]/read (no tour-drive-header in DOM)", async () => {
+    pathnameRef.current = "/papers/abc/read";
+    const { GuestTour } = await import("../GuestTour");
+    render(<GuestTour isAnonymous={true} />);
+    await waitFor(() => {
+      expect(joyrideSpy).toHaveBeenCalled();
+    });
+    const lastCall = joyrideSpy.mock.calls.at(-1)?.[0];
+    expect(lastCall?.run).toBe(false);
+  });
+
+  it("does NOT autostart on /notes list page (no tour-drive-header in DOM)", async () => {
+    pathnameRef.current = "/notes";
+    const { GuestTour } = await import("../GuestTour");
+    render(<GuestTour isAnonymous={true} />);
+    await waitFor(() => {
+      expect(joyrideSpy).toHaveBeenCalled();
+    });
+    const lastCall = joyrideSpy.mock.calls.at(-1)?.[0];
+    expect(lastCall?.run).toBe(false);
+  });
+
+  it("autostarts on /drive/folder-1 (FileBrowser route)", async () => {
+    pathnameRef.current = "/drive/folder-1";
+    const { GuestTour } = await import("../GuestTour");
+    render(<GuestTour isAnonymous={true} />);
+    await waitFor(() => {
+      expect(joyrideSpy).toHaveBeenCalled();
+      const lastCall = joyrideSpy.mock.calls.at(-1)?.[0];
+      expect(lastCall?.run).toBe(true);
+    });
+  });
+
+  it("autostarts on /trash (FileBrowser route)", async () => {
+    pathnameRef.current = "/trash";
+    const { GuestTour } = await import("../GuestTour");
+    render(<GuestTour isAnonymous={true} />);
+    await waitFor(() => {
+      expect(joyrideSpy).toHaveBeenCalled();
+      const lastCall = joyrideSpy.mock.calls.at(-1)?.[0];
+      expect(lastCall?.run).toBe(true);
+    });
+  });
+
   it("does NOT autostart on guest welcome note redirect target", async () => {
     pathnameRef.current = "/n/welcome-to-episteme";
     const { GuestTour } = await import("../GuestTour");
