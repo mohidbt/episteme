@@ -256,8 +256,32 @@ export function GuestTour({ isAnonymous }: { isAnonymous: boolean }) {
     if (!isAnonymous) return;
     if (getTourDone()) return;
     if (!isTourAllowedRoute(pathname)) return;
-    setRun(true);
-  }, [isAnonymous, pathname]);
+
+    // Preflight: route gating alone is insufficient. `/` can render an
+    // empty-library state (no FileBrowser → no `[data-testid="tour-drive-header"]`),
+    // and Joyride would paint a dim overlay with no spotlight. Wait for the
+    // step-0 target to actually exist before flipping run=true.
+    const firstTarget = steps[0]?.target;
+    if (typeof firstTarget !== "string") return;
+
+    let cancelled = false;
+    const targetPathname = pathname;
+    void waitForSelector(firstTarget, 1500).then((el) => {
+      if (cancelled) return;
+      // Re-check every gate — pathname/isAnonymous/done-flag may have changed
+      // while the promise was pending.
+      if (advancingRef.current) return;
+      if (!isAnonymous) return;
+      if (getTourDone()) return;
+      if (pathname !== targetPathname) return;
+      if (!el) return;
+      setRun(true);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isAnonymous, pathname, steps]);
 
   /**
    * Drive the controlled Joyride step pointer ourselves.

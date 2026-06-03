@@ -65,10 +65,25 @@ afterEach(() => {
   document.body
     .querySelectorAll("[data-testid^='tour-nav-']")
     .forEach((el) => el.remove());
+  document.body
+    .querySelectorAll("[data-testid='tour-drive-header']")
+    .forEach((el) => el.remove());
 });
+
+/**
+ * Mount a stub `[data-testid="tour-drive-header"]` so the autostart
+ * preflight (waitForSelector on step 0's target) resolves immediately.
+ * Cleaned up by the global afterEach.
+ */
+function mountDriveHeaderStub() {
+  const el = document.createElement("div");
+  el.setAttribute("data-testid", "tour-drive-header");
+  document.body.appendChild(el);
+}
 
 describe("GuestTour", () => {
   it("autostarts for anonymous user when done flag unset and on allowed route", async () => {
+    mountDriveHeaderStub();
     const { GuestTour } = await import("../GuestTour");
     render(<GuestTour isAnonymous={true} />);
     await waitFor(() => {
@@ -110,7 +125,7 @@ describe("GuestTour", () => {
     expect(lastCall?.run).toBe(false);
   });
 
-  it("does NOT autostart on /papers/[id]/read (no tour-drive-header in DOM)", async () => {
+  it("does NOT autostart on /papers/[id]/read (not a FileBrowser route)", async () => {
     pathnameRef.current = "/papers/abc/read";
     const { GuestTour } = await import("../GuestTour");
     render(<GuestTour isAnonymous={true} />);
@@ -121,7 +136,7 @@ describe("GuestTour", () => {
     expect(lastCall?.run).toBe(false);
   });
 
-  it("does NOT autostart on /notes list page (no tour-drive-header in DOM)", async () => {
+  it("does NOT autostart on /notes list page (not a FileBrowser route)", async () => {
     pathnameRef.current = "/notes";
     const { GuestTour } = await import("../GuestTour");
     render(<GuestTour isAnonymous={true} />);
@@ -134,6 +149,7 @@ describe("GuestTour", () => {
 
   it("autostarts on /drive/folder-1 (FileBrowser route)", async () => {
     pathnameRef.current = "/drive/folder-1";
+    mountDriveHeaderStub();
     const { GuestTour } = await import("../GuestTour");
     render(<GuestTour isAnonymous={true} />);
     await waitFor(() => {
@@ -145,6 +161,7 @@ describe("GuestTour", () => {
 
   it("autostarts on /trash (FileBrowser route)", async () => {
     pathnameRef.current = "/trash";
+    mountDriveHeaderStub();
     const { GuestTour } = await import("../GuestTour");
     render(<GuestTour isAnonymous={true} />);
     await waitFor(() => {
@@ -153,6 +170,80 @@ describe("GuestTour", () => {
       expect(lastCall?.run).toBe(true);
     });
   });
+
+  it(
+    "does NOT autostart on / when tour-drive-header is absent from DOM (preflight gate)",
+    async () => {
+      // Anon, no done flag, allowed route — but the empty-library state on /
+      // doesn't render FileBrowser, so the step-0 selector never appears.
+      // The preflight must keep run=false so Joyride doesn't paint a dim
+      // overlay with no spotlight.
+      pathnameRef.current = "/";
+      const { GuestTour } = await import("../GuestTour");
+      render(<GuestTour isAnonymous={true} />);
+      await waitFor(() => {
+        expect(joyrideSpy).toHaveBeenCalled();
+      });
+      // Wait past the 1500ms preflight timeout, then assert run never flipped.
+      await new Promise((r) => setTimeout(r, 1800));
+      const calls = joyrideSpy.mock.calls.map((c) => c[0] as { run: boolean });
+      expect(calls.every((c) => c.run === false)).toBe(true);
+    },
+    5_000,
+  );
+
+  it(
+    "preflight cancelled when pathname changes to disallowed route before selector resolves",
+    async () => {
+      // Anon on / with NO stub mounted — preflight will sit waiting.
+      // Before it times out, pathname flips to /sign-in (disallowed).
+      // The preflight's cancelled flag (and the pathname re-check on resolve)
+      // must prevent setRun(true) even if the selector later appears.
+      pathnameRef.current = "/";
+      const { GuestTour } = await import("../GuestTour");
+      const { rerender } = render(<GuestTour isAnonymous={true} />);
+      await waitFor(() => {
+        expect(joyrideSpy).toHaveBeenCalled();
+      });
+      // Flip pathname mid-preflight (well before the 1500ms timeout).
+      await new Promise((r) => setTimeout(r, 50));
+      pathnameRef.current = "/sign-in";
+      rerender(<GuestTour isAnonymous={true} />);
+      // Now mount the stub — if the original preflight hadn't been cancelled
+      // it would resolve and flip run=true.
+      mountDriveHeaderStub();
+      // Wait past both the original preflight horizon and React's microtasks.
+      await new Promise((r) => setTimeout(r, 200));
+      const calls = joyrideSpy.mock.calls.map((c) => c[0] as { run: boolean });
+      expect(calls.every((c) => c.run === false)).toBe(true);
+    },
+    5_000,
+  );
+
+  it(
+    "preflight resolve is a no-op when setTourDone() fired while waiting",
+    async () => {
+      // Anon on /, no stub yet — preflight starts and waits.
+      // We synchronously flag tour done, THEN mount the stub. The preflight's
+      // getTourDone() re-check on resolve must short-circuit setRun(true).
+      pathnameRef.current = "/";
+      const { GuestTour } = await import("../GuestTour");
+      render(<GuestTour isAnonymous={true} />);
+      await waitFor(() => {
+        expect(joyrideSpy).toHaveBeenCalled();
+      });
+      // Let the effect's preflight microtask start.
+      await new Promise((r) => setTimeout(r, 50));
+      // Fire setTourDone BEFORE the stub appears, so the preflight's resolve
+      // callback sees getTourDone() === true and bails.
+      setTourDone();
+      mountDriveHeaderStub();
+      await new Promise((r) => setTimeout(r, 200));
+      const calls = joyrideSpy.mock.calls.map((c) => c[0] as { run: boolean });
+      expect(calls.every((c) => c.run === false)).toBe(true);
+    },
+    5_000,
+  );
 
   it("does NOT autostart on guest welcome note redirect target", async () => {
     pathnameRef.current = "/n/welcome-to-episteme";
@@ -411,6 +502,7 @@ describe("GuestTour", () => {
   it(
     "auto-nav: pauses Joyride, awaits selector, then advances stepIndex (no race)",
     async () => {
+      mountDriveHeaderStub();
       const { GuestTour } = await import("../GuestTour");
       render(<GuestTour isAnonymous={true} />);
       await waitFor(() => {
@@ -517,6 +609,7 @@ describe("GuestTour", () => {
   it(
     "pathname change mid-advance does NOT re-enable run before selector resolves",
     async () => {
+      mountDriveHeaderStub();
       const { GuestTour } = await import("../GuestTour");
       const { rerender } = render(<GuestTour isAnonymous={true} />);
       await waitFor(() => {
