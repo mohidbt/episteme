@@ -1,6 +1,9 @@
 const STORAGE_KEY = "km:guest_tour_done";
 
+let memoryDone = false;
+
 export function getTourDone(): boolean {
+  if (memoryDone) return true;
   if (typeof window === "undefined") return false;
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
@@ -12,6 +15,7 @@ export function getTourDone(): boolean {
 }
 
 export function setTourDone(): void {
+  memoryDone = true;
   if (typeof window === "undefined") return;
   try {
     window.localStorage.setItem(STORAGE_KEY, "true");
@@ -21,6 +25,7 @@ export function setTourDone(): void {
 }
 
 export function resetTourDoneForTest(): void {
+  memoryDone = false;
   if (typeof window === "undefined") return;
   try {
     window.localStorage.removeItem(STORAGE_KEY);

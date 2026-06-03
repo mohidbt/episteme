@@ -48,4 +48,44 @@ describe("tour-state", () => {
     resetTourDoneForTest();
     expect(getTourDone()).toBe(false);
   });
+
+  it("memoryDone short-circuits when localStorage.setItem throws", () => {
+    const origSetItem = window.localStorage.setItem.bind(window.localStorage);
+    window.localStorage.setItem = () => {
+      throw new Error("QuotaExceededError");
+    };
+    try {
+      expect(() => setTourDone()).not.toThrow();
+      expect(getTourDone()).toBe(true);
+      // restore for the read-side check
+      window.localStorage.setItem = origSetItem;
+      expect(window.localStorage.getItem(STORAGE_KEY)).toBe(null);
+    } finally {
+      window.localStorage.setItem = origSetItem;
+    }
+  });
+
+  it("resetTourDoneForTest clears both localStorage and memoryDone", () => {
+    // Phase 1: working LS — set + reset clears via LS path.
+    setTourDone();
+    expect(getTourDone()).toBe(true);
+    resetTourDoneForTest();
+    expect(getTourDone()).toBe(false);
+
+    // Phase 2: prove memoryDone (not just LS) was cleared. Break setItem so
+    // only the memory fallback could be holding the flag, then reset, then
+    // confirm getTourDone returns false even with broken LS.
+    const origSetItem = window.localStorage.setItem.bind(window.localStorage);
+    window.localStorage.setItem = () => {
+      throw new Error("QuotaExceededError");
+    };
+    try {
+      setTourDone(); // memoryDone = true, LS write fails
+      expect(getTourDone()).toBe(true);
+      resetTourDoneForTest();
+      expect(getTourDone()).toBe(false);
+    } finally {
+      window.localStorage.setItem = origSetItem;
+    }
+  });
 });
