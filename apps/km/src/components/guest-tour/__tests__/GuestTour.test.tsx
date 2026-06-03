@@ -3,6 +3,7 @@ import type * as React from "react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, cleanup, waitFor } from "@testing-library/react";
 import { resetTourDoneForTest, setTourDone, getTourDone } from "@/lib/guest-tour/tour-state";
+import * as waitForSelectorModule from "@/lib/guest-tour/wait-for-selector";
 
 const joyrideSpy = vi.fn();
 
@@ -171,79 +172,118 @@ describe("GuestTour", () => {
     });
   });
 
-  it(
-    "does NOT autostart on / when tour-drive-header is absent from DOM (preflight gate)",
-    async () => {
-      // Anon, no done flag, allowed route — but the empty-library state on /
-      // doesn't render FileBrowser, so the step-0 selector never appears.
-      // The preflight must keep run=false so Joyride doesn't paint a dim
-      // overlay with no spotlight.
-      pathnameRef.current = "/";
+  it("does NOT autostart on / when tour-drive-header is absent from DOM (preflight gate)", async () => {
+    // Anon, no done flag, allowed route — but the empty-library state on /
+    // doesn't render FileBrowser, so the step-0 selector never appears.
+    // The preflight must keep run=false so Joyride doesn't paint a dim
+    // overlay with no spotlight.
+    //
+    // Spy on waitForSelector so we control resolution deterministically:
+    // resolve with null (selector never appeared) and assert run stayed false.
+    pathnameRef.current = "/";
+    let resolveSelector!: (el: Element | null) => void;
+    const spy = vi
+      .spyOn(waitForSelectorModule, "waitForSelector")
+      .mockImplementation(
+        () =>
+          new Promise<Element | null>((resolve) => {
+            resolveSelector = resolve;
+          }),
+      );
+    try {
       const { GuestTour } = await import("../GuestTour");
       render(<GuestTour isAnonymous={true} />);
       await waitFor(() => {
         expect(joyrideSpy).toHaveBeenCalled();
+        expect(spy).toHaveBeenCalled();
       });
-      // Wait past the 1500ms preflight timeout, then assert run never flipped.
-      await new Promise((r) => setTimeout(r, 1800));
+      // Simulate preflight timeout: resolve with null.
+      resolveSelector(null);
+      // Flush microtasks.
+      await Promise.resolve();
+      await Promise.resolve();
       const calls = joyrideSpy.mock.calls.map((c) => c[0] as { run: boolean });
       expect(calls.every((c) => c.run === false)).toBe(true);
-    },
-    5_000,
-  );
+    } finally {
+      spy.mockRestore();
+    }
+  });
 
-  it(
-    "preflight cancelled when pathname changes to disallowed route before selector resolves",
-    async () => {
-      // Anon on / with NO stub mounted — preflight will sit waiting.
-      // Before it times out, pathname flips to /sign-in (disallowed).
-      // The preflight's cancelled flag (and the pathname re-check on resolve)
-      // must prevent setRun(true) even if the selector later appears.
-      pathnameRef.current = "/";
+  it("preflight cancelled when pathname changes to disallowed route before selector resolves", async () => {
+    // Anon on / with NO stub mounted — preflight will sit waiting.
+    // Before it resolves, pathname flips to /sign-in (disallowed).
+    // The preflight's cancelled flag (and the pathname re-check on resolve)
+    // must prevent setRun(true) even if the selector later appears.
+    pathnameRef.current = "/";
+    let resolveSelector!: (el: Element | null) => void;
+    const spy = vi
+      .spyOn(waitForSelectorModule, "waitForSelector")
+      .mockImplementation(
+        () =>
+          new Promise<Element | null>((resolve) => {
+            resolveSelector = resolve;
+          }),
+      );
+    try {
       const { GuestTour } = await import("../GuestTour");
       const { rerender } = render(<GuestTour isAnonymous={true} />);
       await waitFor(() => {
         expect(joyrideSpy).toHaveBeenCalled();
+        expect(spy).toHaveBeenCalled();
       });
-      // Flip pathname mid-preflight (well before the 1500ms timeout).
-      await new Promise((r) => setTimeout(r, 50));
+      // Flip pathname mid-preflight.
       pathnameRef.current = "/sign-in";
       rerender(<GuestTour isAnonymous={true} />);
-      // Now mount the stub — if the original preflight hadn't been cancelled
-      // it would resolve and flip run=true.
-      mountDriveHeaderStub();
-      // Wait past both the original preflight horizon and React's microtasks.
-      await new Promise((r) => setTimeout(r, 200));
+      // Now resolve the original preflight with a stub Element — if cancellation
+      // didn't fire, this would flip run=true.
+      const stub = document.createElement("div");
+      stub.setAttribute("data-testid", "tour-drive-header");
+      resolveSelector(stub);
+      await Promise.resolve();
+      await Promise.resolve();
       const calls = joyrideSpy.mock.calls.map((c) => c[0] as { run: boolean });
       expect(calls.every((c) => c.run === false)).toBe(true);
-    },
-    5_000,
-  );
+    } finally {
+      spy.mockRestore();
+    }
+  });
 
-  it(
-    "preflight resolve is a no-op when setTourDone() fired while waiting",
-    async () => {
-      // Anon on /, no stub yet — preflight starts and waits.
-      // We synchronously flag tour done, THEN mount the stub. The preflight's
-      // getTourDone() re-check on resolve must short-circuit setRun(true).
-      pathnameRef.current = "/";
+  it("preflight resolve is a no-op when setTourDone() fired while waiting", async () => {
+    // Anon on /, no stub yet — preflight starts and waits.
+    // We synchronously flag tour done, THEN resolve the selector. The
+    // preflight's getTourDone() re-check on resolve must short-circuit
+    // setRun(true).
+    pathnameRef.current = "/";
+    let resolveSelector!: (el: Element | null) => void;
+    const spy = vi
+      .spyOn(waitForSelectorModule, "waitForSelector")
+      .mockImplementation(
+        () =>
+          new Promise<Element | null>((resolve) => {
+            resolveSelector = resolve;
+          }),
+      );
+    try {
       const { GuestTour } = await import("../GuestTour");
       render(<GuestTour isAnonymous={true} />);
       await waitFor(() => {
         expect(joyrideSpy).toHaveBeenCalled();
+        expect(spy).toHaveBeenCalled();
       });
-      // Let the effect's preflight microtask start.
-      await new Promise((r) => setTimeout(r, 50));
-      // Fire setTourDone BEFORE the stub appears, so the preflight's resolve
+      // Fire setTourDone BEFORE resolving, so the preflight's resolve
       // callback sees getTourDone() === true and bails.
       setTourDone();
-      mountDriveHeaderStub();
-      await new Promise((r) => setTimeout(r, 200));
+      const stub = document.createElement("div");
+      stub.setAttribute("data-testid", "tour-drive-header");
+      resolveSelector(stub);
+      await Promise.resolve();
+      await Promise.resolve();
       const calls = joyrideSpy.mock.calls.map((c) => c[0] as { run: boolean });
       expect(calls.every((c) => c.run === false)).toBe(true);
-    },
-    5_000,
-  );
+    } finally {
+      spy.mockRestore();
+    }
+  });
 
   it("does NOT autostart on guest welcome note redirect target", async () => {
     pathnameRef.current = "/n/welcome-to-episteme";
