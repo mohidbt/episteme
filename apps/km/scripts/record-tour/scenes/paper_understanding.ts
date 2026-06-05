@@ -26,12 +26,13 @@ const PROMPT_3 =
   "Create a note titled 'Cross-paper insight on cooperativity' summarizing what you found. Wiki-link the papers you cited.";
 
 async function send(page: Page, text: string, timeoutMs = 60_000): Promise<void> {
-  const panel = page.locator('[data-testid="agent-panel"]');
-  const ta = panel.locator('textarea[placeholder="Ask anything"]').first();
-  await ta.waitFor({ state: "visible", timeout: 8_000 });
+  // The textarea may live under the panel or in a portaled sibling — search
+  // globally and prefer the visible one.
+  const ta = page.locator('textarea[placeholder="Ask anything"]').first();
+  await ta.waitFor({ state: "visible", timeout: 15_000 });
   await ta.click();
   await ta.type(text, { delay: 18 });
-  await panel.getByRole("button", { name: /^send$/i }).first().click();
+  await page.getByRole("button", { name: /^send$/i }).first().click();
   // Wait until the streaming indicator stops or a reasonable settle window.
   const idle = page.locator('[data-testid="streaming-indicator"]');
   try {
@@ -48,10 +49,20 @@ export default async function paperUnderstanding(page: Page): Promise<void> {
   const baseUrl = process.env.TOUR_RECORD_BASE_URL ?? "https://tryepisteme.com";
   await page.goto(`${baseUrl}/papers`, { waitUntil: "domcontentloaded" });
 
-  // Open the agent panel via the floating AgentBall.
-  const ball = page.locator('[data-testid="agent-ball"]').first();
-  await ball.waitFor({ state: "visible", timeout: 10_000 });
-  await ball.click();
+  // Open the agent panel via the floating AgentBall. The ball is draggable
+  // so prefer dispatching a click via JS to avoid Playwright treating the
+  // hover as drag-start.
+  await page.locator('[data-testid="agent-ball"]').first().waitFor({
+    state: "visible",
+    timeout: 10_000,
+  });
+  await page.evaluate(() => {
+    const el = document.querySelector(
+      '[data-testid="agent-ball"]',
+    ) as HTMLElement | null;
+    el?.click();
+  });
+  await page.waitForTimeout(1_200);
 
   await send(page, PROMPT_1, 60_000);
   await send(page, PROMPT_2, 60_000);

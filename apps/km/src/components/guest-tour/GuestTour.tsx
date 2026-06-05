@@ -84,7 +84,8 @@ function buildSteps(onCtaClick: () => void): Step[] {
         <TourPreviewCard
           title="Cross-paper understanding"
           caption="Ask the agent across papers. It reads each one, threads the answers, then writes a note that wiki-links the sources."
-          mediaSrc="/tour/wow_paper_understanding.svg"
+          mediaSrc="/tour/wow_paper_understanding.webm"
+          mediaPoster="/tour/wow_paper_understanding.poster.jpg"
           mediaAlt="Agent answering a cross-paper question and writing a linked note"
         />
       ),
@@ -112,7 +113,8 @@ function buildSteps(onCtaClick: () => void): Step[] {
         <TourPreviewCard
           title="Fill missing reference fields"
           caption="Drop a half-filled BibTeX entry. The agent fills in DOI, authors, year, and abstract."
-          mediaSrc="/tour/wow_refs_fill.svg"
+          mediaSrc="/tour/wow_refs_fill.webm"
+          mediaPoster="/tour/wow_refs_fill.poster.jpg"
           mediaAlt="Reference row going from sparse to filled"
         />
       ),
@@ -126,7 +128,8 @@ function buildSteps(onCtaClick: () => void): Step[] {
         <TourPreviewCard
           title="Highlight numerical findings"
           caption="Ask the agent to highlight quantitative claims. It proposes spans, you approve, and they land in the sidebar — click to jump back to the page."
-          mediaSrc="/tour/wow_reader_highlight.svg"
+          mediaSrc="/tour/wow_reader_highlight.webm"
+          mediaPoster="/tour/wow_reader_highlight.poster.jpg"
           mediaAlt="Reader page with proposed highlights, approval, and sidebar click-through"
         />
       ),
@@ -140,7 +143,8 @@ function buildSteps(onCtaClick: () => void): Step[] {
         <TourPreviewCard
           title="One-click PDF discovery"
           caption="On any reference with no PDF attached, click Agentic PDF Search. The agent finds the PDF online and links it."
-          mediaSrc="/tour/wow_paper_search.svg"
+          mediaSrc="/tour/wow_paper_search.webm"
+          mediaPoster="/tour/wow_paper_search.poster.jpg"
           mediaAlt="Agentic PDF search finding a paper for a reference"
         />
       ),
@@ -154,7 +158,8 @@ function buildSteps(onCtaClick: () => void): Step[] {
         <TourPreviewCard
           title="Paperset enrich (concurrent)"
           caption="Define columns once. The agent enriches every row in parallel — watch the bottom row fill cell by cell."
-          mediaSrc="/tour/wow_extract.svg"
+          mediaSrc="/tour/wow_extract.webm"
+          mediaPoster="/tour/wow_extract.poster.jpg"
           mediaAlt="Paperset grid with cells filling concurrently"
         />
       ),
