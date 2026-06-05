@@ -35,4 +35,22 @@ Writes `apps/km/public/tour/wow_refs_fill.webm` + `.poster.jpg`.
 
 ## Scenes
 
-`refs_fill`, `reader_highlight`, `deepread`, `extract`.
+`refs_fill`, `paper_understanding`, `reader_highlight`, `paper_search`, `extract`.
+
+## Auth
+
+Login runs in a separate (non-recording) Playwright context and the
+resulting `storageState` is cached to `.tmp/tour-record/storage-state.json`.
+Subsequent recordings reuse the cache so the video never contains login
+frames. Force re-login with `TOUR_RECORD_REAUTH=1`.
+
+## Viewport / encode
+
+- Recording viewport: 1440x900 (matches reader chrome).
+- Encode: VP9 1000kbps, 24fps, 1440x900, no audio.
+
+## Fixture env
+
+- `TOUR_RECORD_READER_URL`     /papers/<id>/read URL  (reader_highlight)
+- `TOUR_RECORD_REFERENCE_URL`  /r/<id> URL            (paper_search)
+- `TOUR_RECORD_PAPERSET_URL`   paperset detail URL    (extract)

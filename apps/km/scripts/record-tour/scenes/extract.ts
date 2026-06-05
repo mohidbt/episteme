@@ -1,18 +1,18 @@
 /**
  * Scene: wow_extract
  *
- * Opens a paperset and triggers "Enrich all missing cells". Captures the
- * first few cells filling, then holds.
+ * Authed via storageState. On a paperset detail page (/d/<id> or
+ * /papersets/<id>), scrolls to the bottom row, then clicks "Run enrichment"
+ * to fill missing cells.
  *
- * NOTE: Paperset table currently has no data-testid hooks on the enrich
- * action (only CellGroundingChip is tagged). This scene relies on visible
- * text match for the enrich button. Flagged as Round 2 follow-up: add
- *   - data-testid="paperset-enrich-all"
- * to the paperset toolbar before R3 records this scene.
+ * Probe findings (2026-05-31):
+ *   - [data-testid="paperset-enrich-all"] exists (button label
+ *     "Run enrichment").
+ *   - Cells use [data-testid="cell-<rowIndex>-<columnName>"]. Em-dash "—"
+ *     marks an empty cell.
+ *   - Bottom row is row-2 on the seeded paperset fixture.
  *
- * Fixture: env TOUR_RECORD_PAPERSET_URL must be a /papersets/<uuid> the
- * test account can read, ideally psm-survey or another CSV with empty
- * cells.
+ * Fixture: env TOUR_RECORD_PAPERSET_URL must be a paperset detail URL.
  */
 import type { Page } from "playwright";
 
@@ -20,20 +20,23 @@ export default async function extract(page: Page): Promise<void> {
   const fixture = process.env.TOUR_RECORD_PAPERSET_URL;
   if (!fixture) {
     throw new Error(
-      "TOUR_RECORD_PAPERSET_URL must be set to a /papersets/<uuid> URL",
+      "TOUR_RECORD_PAPERSET_URL must be set to a paperset detail URL",
     );
   }
   await page.goto(fixture, { waitUntil: "domcontentloaded" });
 
-  // Best-available selector; replace with data-testid="paperset-enrich-all"
-  // once added to PapersetTable.
-  const enrich = page
-    .getByRole("button", { name: /enrich (all )?missing( cells)?/i })
-    .first();
+  // Bring the bottom row into view so the recording shows it filling.
+  const bottomRow = page.locator('[data-testid="row-header-2"]').first();
+  if (await bottomRow.count()) {
+    await bottomRow.scrollIntoViewIfNeeded().catch(() => {});
+    await page.waitForTimeout(1_500);
+  }
+
+  const enrich = page.locator('[data-testid="paperset-enrich-all"]').first();
   await enrich.waitFor({ state: "visible", timeout: 10_000 });
   await enrich.click();
 
-  // Watch first 2-3 cells fill (full enrich can take minutes; cap at ~9s).
-  await page.waitForTimeout(9_000);
-  await page.waitForTimeout(1_000); // hold
+  // Watch cells fill (full enrich varies; cap at ~18s).
+  await page.waitForTimeout(18_000);
+  await page.waitForTimeout(2_000); // hold
 }

@@ -1,30 +1,26 @@
 /**
  * Scene: wow_refs_fill
  *
- * Navigates to /references, finds the first reference row, opens its
- * detail page, and triggers the "Fill missing fields with AI" action.
+ * Already authed (storageState). Navigates to /references and triggers the
+ * batch AI-fill action.
  *
  * Stable hooks:
- *   - data-testid="refs-view-list" / "refs-view-grid"
- *   - data-testid="refs-row-<id>"     (per row, on /references)
- *   - data-testid="ai-fill-button"    (on /r/<id>, single-field fill)
- *   - data-testid="ai-fill-batch-button" (on /references, batch fill — preferred)
+ *   - data-testid="refs-row-<id>"
+ *   - data-testid="ai-fill-batch-button" (preferred)
+ *   - data-testid="ai-fill-button"      (per-row fallback)
  */
 import type { Page } from "playwright";
 
 export default async function refsFill(page: Page): Promise<void> {
-  await page.goto(new URL("/references", page.url()).toString(), {
-    waitUntil: "domcontentloaded",
-  });
+  const baseUrl = process.env.TOUR_RECORD_BASE_URL ?? "https://tryepisteme.com";
+  await page.goto(`${baseUrl}/references`, { waitUntil: "domcontentloaded" });
 
-  // Prefer batch fill on the references index (one click; no row probe needed).
   const batch = page.locator('[data-testid="ai-fill-batch-button"]').first();
   if (await batch.count()) {
     await batch.waitFor({ state: "visible", timeout: 10_000 });
     await batch.click();
-    // Let a few rows visibly resolve.
-    await page.waitForTimeout(6_000);
-    await page.waitForTimeout(1_500); // hold at end-state
+    await page.waitForTimeout(18_000);
+    await page.waitForTimeout(2_000);
     return;
   }
 
@@ -35,6 +31,6 @@ export default async function refsFill(page: Page): Promise<void> {
   const single = page.locator('[data-testid="ai-fill-button"]').first();
   await single.waitFor({ state: "visible", timeout: 10_000 });
   await single.click();
-  await page.waitForTimeout(6_000);
-  await page.waitForTimeout(1_500);
+  await page.waitForTimeout(18_000);
+  await page.waitForTimeout(2_000);
 }
