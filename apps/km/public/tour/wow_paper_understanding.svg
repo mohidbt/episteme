@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 270" role="img" aria-label="Cross-paper understanding placeholder">
+  <rect width="480" height="270" fill="#f8fafc"/>
+  <g font-family="ui-sans-serif,system-ui" font-size="11">
+    <rect x="30" y="25" width="420" height="32" rx="6" fill="white" stroke="#cbd5e1"/>
+    <text x="42" y="46" fill="#0f172a">What does paper A say about X?</text>
+
+    <rect x="30" y="65" width="420" height="32" rx="6" fill="white" stroke="#cbd5e1"/>
+    <text x="42" y="86" fill="#0f172a">How does this relate to X in paper C?</text>
+
+    <rect x="30" y="105" width="420" height="32" rx="6" fill="white" stroke="#cbd5e1"/>
+    <text x="42" y="126" fill="#0f172a">Create a note summarizing what you found.</text>
+
+    <rect x="30" y="155" width="420" height="85" rx="6" fill="white" stroke="#2563eb"/>
+    <text x="45" y="178" fill="#0f172a" font-size="12" font-weight="600">Cross-paper insight</text>
+    <text x="45" y="200" fill="#334155">Across [[paper A]], [[paper B]], and [[paper C]] the</text>
+    <text x="45" y="216" fill="#334155">authors converge on X. See discussion in paper A §3.</text>
+    <text x="45" y="232" fill="#64748b" font-size="10">Note created. 3 wiki-links inserted.</text>
+  </g>
+</svg>

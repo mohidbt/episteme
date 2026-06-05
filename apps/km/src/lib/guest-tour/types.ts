@@ -3,10 +3,11 @@ export type TourStepId =
   | "notes_collection"
   | "papers_refs_collection"
   | "agentball_hint"
+  | "wow_paper_understanding"
   | "graph_intro"
   | "wow_refs_fill"
   | "wow_reader_highlight"
-  | "wow_deepread"
+  | "wow_paper_search"
   | "wow_extract"
   | "signup_cta";
 

@@ -321,7 +321,7 @@ describe("GuestTour", () => {
     expect(getTourDone()).toBe(true);
   });
 
-  it("ships 10 steps (4 spotlights + 5 preview cards + signup_cta) with stable ids", async () => {
+  it("ships 11 steps (4 spotlights + 6 preview cards + signup_cta) with stable ids", async () => {
     const { GuestTour } = await import("../GuestTour");
     render(<GuestTour isAnonymous={true} />);
     await waitFor(() => {
@@ -329,16 +329,17 @@ describe("GuestTour", () => {
     });
     const lastCall = joyrideSpy.mock.calls.at(-1)?.[0];
     const steps = lastCall?.steps as Array<{ id: string }>;
-    expect(steps).toHaveLength(10);
+    expect(steps).toHaveLength(11);
     expect(steps.map((s) => s.id)).toEqual([
       "drive_intro",
       "notes_collection",
       "papers_refs_collection",
       "agentball_hint",
+      "wow_paper_understanding",
       "graph_intro",
       "wow_refs_fill",
       "wow_reader_highlight",
-      "wow_deepread",
+      "wow_paper_search",
       "wow_extract",
       "signup_cta",
     ]);
@@ -448,10 +449,11 @@ describe("GuestTour", () => {
       data?: { next?: string };
     }>;
     const previewIds = [
+      "wow_paper_understanding",
       "graph_intro",
       "wow_refs_fill",
       "wow_reader_highlight",
-      "wow_deepread",
+      "wow_paper_search",
       "wow_extract",
     ];
     for (const id of previewIds) {
@@ -474,10 +476,11 @@ describe("GuestTour", () => {
       content: React.ReactNode;
     }>;
     const expectations: Array<{ id: string; title: string; captionStart: string }> = [
+      { id: "wow_paper_understanding", title: "Cross-paper understanding", captionStart: "Ask the agent across papers" },
       { id: "graph_intro", title: "Graph view", captionStart: "Lines are set connections" },
       { id: "wow_refs_fill", title: "Fill missing reference fields", captionStart: "Drop a half-filled BibTeX" },
       { id: "wow_reader_highlight", title: "Highlight numerical findings", captionStart: "Ask the agent to highlight" },
-      { id: "wow_deepread", title: "Agentic PDF search", captionStart: "Ask one question" },
+      { id: "wow_paper_search", title: "One-click PDF discovery", captionStart: "On any reference with no PDF" },
       { id: "wow_extract", title: "Paperset enrich (concurrent)", captionStart: "Define columns once" },
     ];
     for (const { id, title, captionStart } of expectations) {
@@ -502,7 +505,7 @@ describe("GuestTour", () => {
       controls: unknown,
     ) => void;
 
-    // Step index 4 = graph_intro; advancing it should NOT push a route.
+    // Step index 4 = wow_paper_understanding (preview); advancing it should NOT push a route.
     onEvent(
       {
         type: "step:after",
