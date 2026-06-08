@@ -226,7 +226,11 @@ interface Props {
     id: string,
     ev: ReactMouseEvent<HTMLElement> | { shiftKey?: boolean; metaKey?: boolean; ctrlKey?: boolean },
   ) => void;
-  onOpen: (item: FileBrowserItemData) => void;
+  /**
+   * GSD-26: second arg is a modifier hint. `newTab=true` means the user
+   * gestured for "open in new tab" (Cmd/Ctrl+click or middle-click).
+   */
+  onOpen: (item: FileBrowserItemData, opts?: { newTab?: boolean }) => void;
   contextMenuHandlers: FileBrowserContextMenuHandlers;
 }
 
@@ -300,11 +304,12 @@ function FileBrowserItemImpl({
   };
 
   const handleClick = (ev: ReactMouseEvent<HTMLElement>) => {
-    // Cmd/Ctrl click on a leaf with an href: let the browser open the link in
-    // a new tab natively. Don't preventDefault, don't multi-select, don't
-    // navigate via the router.
+    // GSD-26: Cmd/Ctrl-click on a leaf with an href → open in a new APP tab
+    // (background, doesn't activate). Suppress browser-native "new window".
     if ((ev.metaKey || ev.ctrlKey) && item.href != null) {
+      ev.preventDefault();
       ev.stopPropagation();
+      onOpen(item, { newTab: true });
       return;
     }
     // Shift click (and meta click on rows without an href, e.g. folders):
@@ -320,6 +325,16 @@ function FileBrowserItemImpl({
     ev.stopPropagation();
     onSelect(item.id, ev);
     onOpen(item);
+  };
+
+  const handleAuxClick = (ev: ReactMouseEvent<HTMLElement>) => {
+    // GSD-26: middle-click (button=1) on a leaf with an href → open in new
+    // app tab (background).
+    if (ev.button !== 1) return;
+    if (item.href == null) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    onOpen(item, { newTab: true });
   };
 
   const handleDoubleClick = (ev: ReactMouseEvent<HTMLElement>) => {
@@ -350,6 +365,7 @@ function FileBrowserItemImpl({
               isDragging ? "opacity-50" : ""
             } data-[selected=true]:bg-accent/60 data-[over=true]:outline data-[over=true]:outline-2 data-[over=true]:outline-ring`}
             onClick={handleClick}
+            onAuxClick={handleAuxClick}
             onDoubleClick={handleDoubleClick}
           />
         }
@@ -372,10 +388,9 @@ function FileBrowserItemImpl({
               href={item.href}
               className="min-w-0 truncate hover:underline"
               onClick={(e) => {
-                // Allow native cmd/ctrl-click to open in a new tab. For plain
-                // clicks, suppress default — the row's onClick handles open
-                // (and selection).
-                if (e.metaKey || e.ctrlKey) return;
+                // GSD-26: the row's onClick handles both plain and cmd/ctrl
+                // clicks (the latter opening in a new app tab). Always
+                // suppress the link default so we don't double-fire.
                 e.preventDefault();
               }}
               tabIndex={-1}
@@ -433,6 +448,7 @@ function FileBrowserItemImpl({
             className={tileClass}
             style={{ animationDelay: `${delayMs}ms` }}
             onClick={handleClick}
+            onAuxClick={handleAuxClick}
             onDoubleClick={handleDoubleClick}
           />
         }
