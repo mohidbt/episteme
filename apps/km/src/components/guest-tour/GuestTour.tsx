@@ -344,24 +344,17 @@ export function GuestTour({ isAnonymous }: { isAnonymous: boolean }) {
     void waitForSelector(firstTarget, 10_000).then(async (el) => {
       // eslint-disable-next-line no-console
       console.log("[GuestTour] waitForSelector resolved", { pathname, cancelled, hasEl: !!el });
-      if (cancelled) return;
-      if (!el) return;
-      // Settle: yield to the scheduler so any in-flight router.push from
-      // TabBarProvider can land before we commit. 50ms is empirically enough
-      // for Next.js client navigation to fire its pathname update.
+      if (cancelled) { console.log("[GuestTour] BAIL pre cancelled"); return; }
+      if (!el) { console.log("[GuestTour] BAIL no el"); return; }
       await new Promise<void>((r) => setTimeout(r, 50));
-      if (cancelled) return;
-      // Re-check every gate — pathname/isAnonymous/done-flag may have changed
-      // while the promise + settle were pending.
-      if (advancingRef.current) return;
-      if (progressedRef.current) return;
-      if (!isAnonymous) return;
-      if (getTourDone()) return;
-      if (pathname !== targetPathname) return;
-      // Final DOM re-check: the target must STILL be in the DOM after the
-      // settle. If TabBar's push triggered an unmount, bail.
-      if (!document.body.contains(el)) return;
-      if (!document.querySelector(firstTarget)) return;
+      if (cancelled) { console.log("[GuestTour] BAIL post cancelled"); return; }
+      if (advancingRef.current) { console.log("[GuestTour] BAIL advancing"); return; }
+      if (progressedRef.current) { console.log("[GuestTour] BAIL progressed"); return; }
+      if (!isAnonymous) { console.log("[GuestTour] BAIL !anon"); return; }
+      if (getTourDone()) { console.log("[GuestTour] BAIL tourDone"); return; }
+      if (pathname !== targetPathname) { console.log("[GuestTour] BAIL pathname"); return; }
+      if (!document.body.contains(el)) { console.log("[GuestTour] BAIL !contains"); return; }
+      if (!document.querySelector(firstTarget)) { console.log("[GuestTour] BAIL qs null"); return; }
       // eslint-disable-next-line no-console
       console.log("[GuestTour] FIRING setRun(true)", { pathname });
       setStepIndex(0);
