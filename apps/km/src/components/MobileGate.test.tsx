@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 // GSD-11 — mobile-gate viewport detection + render.
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach, beforeEach } from "vitest";
 import { render, screen, cleanup, act } from "@testing-library/react";
 import { MobileGate, isMobileViewport } from "./MobileGate";
 
@@ -24,6 +24,34 @@ function setUserAgent(ua: string) {
   });
 }
 
+// Minimal MediaQueryList polyfill — useSyncExternalStore subscribes via
+// `matchMedia(...).addEventListener("change", cb)` so jsdom (which lacks
+// matchMedia) needs a stub. Listeners are stored on a module-level set so
+// tests can drive change events explicitly when needed.
+type Listener = (e: MediaQueryListEvent) => void;
+const listeners = new Set<Listener>();
+function installMatchMedia() {
+  Object.defineProperty(window, "matchMedia", {
+    configurable: true,
+    writable: true,
+    value: (query: string) => ({
+      matches: window.innerWidth < 768,
+      media: query,
+      addEventListener: (_t: string, cb: Listener) => listeners.add(cb),
+      removeEventListener: (_t: string, cb: Listener) => listeners.delete(cb),
+      addListener: (cb: Listener) => listeners.add(cb),
+      removeListener: (cb: Listener) => listeners.delete(cb),
+      dispatchEvent: () => true,
+      onchange: null,
+    }),
+  });
+}
+
+beforeEach(() => {
+  listeners.clear();
+  installMatchMedia();
+});
+
 afterEach(() => cleanup());
 
 describe("isMobileViewport", () => {
@@ -45,7 +73,7 @@ describe("isMobileViewport", () => {
 });
 
 describe("MobileGate", () => {
-  it("renders the gate overlay on a narrow viewport", () => {
+  it("renders the gate overlay on a narrow viewport (initial render)", () => {
     setViewport(400);
     setUserAgent(DESKTOP_UA);
     act(() => {
@@ -63,5 +91,23 @@ describe("MobileGate", () => {
       render(<MobileGate />);
     });
     expect(screen.queryByTestId("mobile-gate")).toBeNull();
+  });
+
+  it("flips the gate on when viewport shrinks AFTER mount (matchMedia change)", () => {
+    setViewport(1440);
+    setUserAgent(DESKTOP_UA);
+    act(() => {
+      render(<MobileGate />);
+    });
+    expect(screen.queryByTestId("mobile-gate")).toBeNull();
+
+    // Simulate CDP emulate: viewport shrinks + matchMedia change fires.
+    setViewport(390);
+    act(() => {
+      // useSyncExternalStore re-reads getSnapshot when any subscribed listener
+      // fires — invoke them all to mimic the matchMedia "change" event.
+      for (const cb of listeners) cb({} as MediaQueryListEvent);
+    });
+    expect(screen.getByTestId("mobile-gate")).toBeTruthy();
   });
 });

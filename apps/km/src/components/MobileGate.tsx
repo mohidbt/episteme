@@ -8,9 +8,15 @@
 // Detection is intentionally simple: viewport width + a UA mobile hint.
 // Either signal flips the gate on. Tablets in landscape (>= 768px) get
 // through.
-import { useEffect, useState } from "react";
+//
+// Wiring uses `useSyncExternalStore` over the `matchMedia` change event so the
+// gate flips reliably when devtools emulates a narrow viewport AFTER initial
+// hydration (the prior `resize`-listener version sometimes missed CDP-driven
+// viewport changes on preview deploys).
+import { useSyncExternalStore } from "react";
 
 const BREAKPOINT_PX = 768;
+const QUERY = `(max-width: ${BREAKPOINT_PX - 1}px)`;
 
 export function isMobileViewport(width: number, userAgent: string): boolean {
   if (width > 0 && width < BREAKPOINT_PX) return true;
@@ -19,17 +25,39 @@ export function isMobileViewport(width: number, userAgent: string): boolean {
   );
 }
 
-export function MobileGate() {
-  const [isMobile, setIsMobile] = useState(false);
+function subscribe(cb: () => void): () => void {
+  if (typeof window === "undefined") return () => {};
+  const mql = window.matchMedia(QUERY);
+  // Cover both modern + Safari <14 listener shapes.
+  if (typeof mql.addEventListener === "function") {
+    mql.addEventListener("change", cb);
+    window.addEventListener("resize", cb);
+    return () => {
+      mql.removeEventListener("change", cb);
+      window.removeEventListener("resize", cb);
+    };
+  }
+  mql.addListener(cb);
+  window.addEventListener("resize", cb);
+  return () => {
+    mql.removeListener(cb);
+    window.removeEventListener("resize", cb);
+  };
+}
 
-  useEffect(() => {
-    function check() {
-      setIsMobile(isMobileViewport(window.innerWidth, navigator.userAgent));
-    }
-    check();
-    window.addEventListener("resize", check);
-    return () => window.removeEventListener("resize", check);
-  }, []);
+function getSnapshot(): boolean {
+  return isMobileViewport(window.innerWidth, navigator.userAgent);
+}
+
+function getServerSnapshot(): boolean {
+  // Server-rendered HTML must NOT contain the gate (would flash + cause a
+  // hydration mismatch on desktop). The client snapshot takes over on the
+  // first post-hydration tick.
+  return false;
+}
+
+export function MobileGate() {
+  const isMobile = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 
   if (!isMobile) return null;
 
