@@ -147,18 +147,16 @@ describe("Reader", () => {
     });
   });
 
-  it("after closing FindBar, page nav action changes page", async () => {
+  it("cmd+f does not open a find overlay (GSD-28: search removed)", async () => {
     render(<Reader paperId={PAPER_ID} />);
-
     fireEvent.keyDown(window, { key: "f", metaKey: true });
-    const findInput = await screen.findByPlaceholderText("Find in document…");
-    fireEvent.change(findInput, { target: { value: "beta" } });
-    fireEvent.keyDown(findInput, { key: "Escape" });
+    fireEvent.keyDown(window, { key: "f", ctrlKey: true });
+    // No find input should ever appear.
+    expect(screen.queryByPlaceholderText("Find in document…")).toBeNull();
+  });
 
-    await waitFor(() => {
-      expect(screen.queryByPlaceholderText("Find in document…")).toBeNull();
-    });
-
+  it("page nav next/prev still works (smoke test post-find removal)", async () => {
+    render(<Reader paperId={PAPER_ID} />);
     expect(screen.getByText("1 / 3")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
     await waitFor(() => {

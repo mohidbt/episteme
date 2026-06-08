@@ -28,10 +28,8 @@ vi.mock("../components/DockableSidebar", () => ({
   DockMenu: () => null,
   useSidebarDock: () => ["right", () => {}],
 }));
-vi.mock("../components/FindBar", () => ({ FindBar: () => null }));
 vi.mock("../components/PdfViewer", () => ({ PdfViewer: () => null }));
 vi.mock("../hooks/use-pdf-document", () => ({ usePdfDocument: () => ({ url: null }) }));
-vi.mock("../hooks/use-pdf-find", () => ({ usePdfFind: () => ({ search: () => {}, next: () => {}, prev: () => {} }) }));
 vi.mock("../hooks/use-text-selection", () => ({ useTextSelection: () => ({ selection: null, clearSelection: () => {} }) }));
 vi.mock("../hooks/use-citation-click", () => ({
   useCitationClick: () => ({ activeCitation: null, clickPosition: null, dismiss: () => {} }),

@@ -12,11 +12,9 @@ import { OutlineSidebar, type PdfOutlineItem } from "./OutlineSidebar";
 import { CitationsSidebar } from "./CitationsSidebar";
 import { CitationCard, type CitationWithStatus, type FolderOption } from "./CitationCard";
 import { DockMenu, useSidebarDock, type Dock } from "./DockableSidebar";
-import { FindBar } from "./FindBar";
 import { PdfViewer } from "./PdfViewer";
 
 import { usePdfDocument } from "../hooks/use-pdf-document";
-import { usePdfFind } from "../hooks/use-pdf-find";
 import { useTextSelection } from "../hooks/use-text-selection";
 import { useReaderState } from "../hooks/use-reader-state";
 import { useCitationClick } from "../hooks/use-citation-click";
@@ -214,9 +212,6 @@ export function Reader({
 
   const [pdfOutline, setPdfOutline] = useState<PdfOutlineItem[] | null>(null);
   const [pdfDoc, setPdfDoc] = useState<unknown>(null);
-  const [findOpen, setFindOpen] = useState(false);
-  const [matchCase, setMatchCase] = useState(false);
-  const find = usePdfFind(pdfDoc);
 
   // Per-sidebar dock position. Persisted via localStorage.
   const [highlightsDock, setHighlightsDock] = useSidebarDock("highlights", "right");
@@ -591,10 +586,6 @@ export function Reader({
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "f") {
-        e.preventDefault();
-        setFindOpen(true);
-      }
       if (e.key === "Escape") {
         setActiveSelection(null);
         setEditingHighlight(null);
@@ -986,18 +977,6 @@ export function Reader({
           {saveError ?? metaError}
         </div>
       )}
-      <FindBar
-        open={findOpen}
-        matchCase={matchCase}
-        onSearch={(q, opts) => find.search(q, opts)}
-        onNext={find.next}
-        onPrev={find.prev}
-        onToggleCase={() => setMatchCase((v) => !v)}
-        onClose={() => {
-          find.search("", { matchCase });
-          setFindOpen(false);
-        }}
-      />
       <div className="relative flex min-h-0 flex-1 overflow-hidden">
         {bottomEntries.length === 0 ? (
           horizontalRow

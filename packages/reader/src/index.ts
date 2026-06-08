@@ -9,7 +9,6 @@ export { HighlightsSidebar } from "./components/HighlightsSidebar";
 export { CitationsSidebar } from "./components/CitationsSidebar";
 export { OutlineSidebar } from "./components/OutlineSidebar";
 export { CommentsSidebar } from "./components/CommentsSidebar";
-export { FindBar } from "./components/FindBar";
 export { SelectionToolbar } from "./components/SelectionToolbar";
 export { CitationCard } from "./components/CitationCard";
 export type { CitationWithStatus, FolderOption } from "./components/CitationCard";

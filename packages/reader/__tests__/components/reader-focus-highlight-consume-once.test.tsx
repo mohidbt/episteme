@@ -130,9 +130,10 @@ describe("Bug 4: focusHighlightId is consumed once", () => {
     expect(scrollIntoViewSpy).toHaveBeenCalledTimes(1);
 
     // Now trigger an UNRELATED re-render that does not change focusHighlightId.
-    // Cmd+F toggles findOpen state in Reader → re-render → mergedSidebarHighlights
-    // gets rebuilt as a fresh array ref → effect dep changes → effect re-fires.
-    fireEvent.keyDown(window, { key: "f", metaKey: true });
+    // An Escape keydown triggers Reader's keydown handler (clears selection
+    // state) → re-render → mergedSidebarHighlights gets rebuilt as a fresh
+    // array ref → effect dep changes → effect would re-fire if not guarded.
+    fireEvent.keyDown(window, { key: "Escape" });
     await flushRaf();
 
     // Should STILL be 1 — focusHighlightId must be consumed once.
