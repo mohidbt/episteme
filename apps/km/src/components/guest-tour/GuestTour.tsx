@@ -301,6 +301,8 @@ export function GuestTour({ isAnonymous }: { isAnonymous: boolean }) {
   runRef.current = run;
 
   useEffect(() => {
+    // eslint-disable-next-line no-console
+    console.log("[GuestTour] effect", { pathname, isAnonymous, advancing: advancingRef.current, progressed: progressedRef.current, runRef: runRef.current, tourDone: getTourDone() });
     // Don't toggle `run` back to true while an advanceTo() is in flight —
     // advanceTo intentionally pauses (setRun(false)) before router.push, and
     // the pathname change that push triggers would otherwise re-fire this
@@ -340,6 +342,8 @@ export function GuestTour({ isAnonymous }: { isAnonymous: boolean }) {
     // pathname (catches the in-flight push that lands between resolve and
     // setRun).
     void waitForSelector(firstTarget, 10_000).then(async (el) => {
+      // eslint-disable-next-line no-console
+      console.log("[GuestTour] waitForSelector resolved", { pathname, cancelled, hasEl: !!el });
       if (cancelled) return;
       if (!el) return;
       // Settle: yield to the scheduler so any in-flight router.push from
@@ -358,6 +362,8 @@ export function GuestTour({ isAnonymous }: { isAnonymous: boolean }) {
       // settle. If TabBar's push triggered an unmount, bail.
       if (!document.body.contains(el)) return;
       if (!document.querySelector(firstTarget)) return;
+      // eslint-disable-next-line no-console
+      console.log("[GuestTour] FIRING setRun(true)", { pathname });
       setStepIndex(0);
       setRun(true);
     });
