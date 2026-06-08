@@ -14,7 +14,17 @@ interface Paper {
   folderPath: string;
 }
 
-export function PaperActionsButtons({ paper, hasCitations = false }: { paper: Paper; hasCitations?: boolean }) {
+export function PaperActionsButtons({
+  paper,
+  hasCitations = false,
+  alreadyReferenced = false,
+}: {
+  paper: Paper;
+  hasCitations?: boolean;
+  /** GSD-8: paper is already linked as a reference in the library — disable
+   * the "Add as reference" button (avoids the duplicate flow + 409 noise). */
+  alreadyReferenced?: boolean;
+}) {
   const router = useRouter();
   const [extracting, setExtracting] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -111,16 +121,17 @@ export function PaperActionsButtons({ paper, hasCitations = false }: { paper: Pa
         <button
           type="button"
           onClick={onAddAsReference}
-          disabled={saving}
+          disabled={saving || alreadyReferenced}
           aria-label="Add as reference"
-          className="inline-flex h-7 items-center justify-center gap-1 rounded-md border border-border bg-background px-2.5 text-[0.8rem] font-medium text-foreground whitespace-nowrap transition-colors hover:bg-muted disabled:opacity-60"
+          title={alreadyReferenced ? "Already linked as a reference in your library" : undefined}
+          className="inline-flex h-7 items-center justify-center gap-1 rounded-md border border-border bg-background px-2.5 text-[0.8rem] font-medium text-foreground whitespace-nowrap transition-colors hover:bg-muted disabled:opacity-60 disabled:cursor-not-allowed"
         >
           {saving ? (
             <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
           ) : (
             <BookPlus className="h-3 w-3" aria-hidden />
           )}
-          {saving ? "Adding…" : "Add as reference"}
+          {saving ? "Adding…" : alreadyReferenced ? "Already a reference" : "Add as reference"}
         </button>
       )}
     </>

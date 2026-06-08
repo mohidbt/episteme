@@ -104,6 +104,7 @@ export default async function PaperPage({
                 folderPath: paper.folderPath,
               }}
               hasCitations={hasCitations}
+              alreadyReferenced={refs.length > 0}
             />
             <Link
               href={`/papers/${paper.id}/read`}
