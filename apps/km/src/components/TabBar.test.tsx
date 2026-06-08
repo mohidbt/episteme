@@ -89,7 +89,11 @@ describe("useTabs hook", () => {
     expect(push).toHaveBeenCalledWith("/n/foo");
   });
 
-  it("restores tabs from localStorage on remount", async () => {
+  it("restores tabs from localStorage on remount (matching-pathname tab stays put)", async () => {
+    // GSD-26: pathname sync now navigates the ACTIVE tab in place instead of
+    // appending. If the stored active tab already matches the pathname, the
+    // sibling tabs stay intact.
+    mockPathname = "/n/persisted";
     window.localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify({
@@ -111,12 +115,16 @@ describe("useTabs hook", () => {
         <Probe />
       </TabBarProvider>,
     );
-    // Stored tabs are restored; pathname-sync also adds a tab for "/"
     expect(api!.tabs.find((t) => t.href === "/n/persisted")).toBeTruthy();
     expect(api!.tabs.find((t) => t.href === "/papers")).toBeTruthy();
+    expect(api!.activeHref).toBe("/n/persisted");
   });
 
   it("first render returns SSR-safe defaults even when localStorage is populated, then hydrates from storage", async () => {
+    // GSD-26: stored active tab is /n/persisted but pathname is /. Under
+    // Chrome-tab semantics the active tab's href is overwritten in place
+    // (single tab, navigation replaces it). Result: tabs=[/], active=/.
+    mockPathname = "/";
     window.localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify({
@@ -129,7 +137,6 @@ describe("useTabs hook", () => {
       [];
     function Probe() {
       const api = useTabs();
-      // Capture every render's snapshot during render phase (before effects).
       renders.push({
         tabs: api.tabs.map((t) => ({ href: t.href })),
         activeHref: api.activeHref,
@@ -141,13 +148,10 @@ describe("useTabs hook", () => {
         <Probe />
       </TabBarProvider>,
     );
-    // First render must equal what SSR would produce: empty default state.
     expect(renders[0].tabs).toEqual([]);
     expect(renders[0].activeHref).toBeNull();
-    // After effects flush, stored tabs are restored AND pathname-sync
-    // adds a tab for the current path ("/"), making it active.
     const last = renders[renders.length - 1];
-    expect(last.tabs.some((t) => t.href === "/n/persisted")).toBe(true);
+    expect(last.tabs.map((t) => t.href)).toEqual(["/"]);
     expect(last.activeHref).toBe("/");
   });
 
@@ -258,6 +262,134 @@ describe("useTabs hook", () => {
     ]);
     expect(api!.activeHref).toBe("/");
     expect(push).not.toHaveBeenCalled();
+  });
+
+  // ── GSD-26: Chrome tab navigation model ────────────────────────────────
+  it("GSD-26: pathname change navigates active tab in place (does NOT add new tab)", async () => {
+    // Start with two tabs, active=/n/foo at pathname=/n/foo. Simulate the user
+    // clicking a link that pushes /n/bar — the active tab should update to
+    // /n/bar in place. Sibling /papers tab is untouched.
+    mockPathname = "/n/foo";
+    window.localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        tabs: [
+          { href: "/n/foo", title: "Foo" },
+          { href: "/papers", title: "Papers" },
+        ],
+        activeHref: "/n/foo",
+      }),
+    );
+    const { TabBarProvider, useTabs } = await import("./TabBar");
+    let api: ReturnType<typeof useTabs> | null = null;
+    function Probe() {
+      api = useTabs();
+      return null;
+    }
+    const { rerender } = render(
+      <TabBarProvider>
+        <Probe />
+      </TabBarProvider>,
+    );
+    expect(api!.tabs.map((t) => t.href)).toEqual(["/n/foo", "/papers"]);
+    // Simulate router.push("/n/bar") — pathname changes, TabBar reacts.
+    act(() => {
+      mockPathname = "/n/bar";
+      rerender(
+        <TabBarProvider>
+          <Probe />
+        </TabBarProvider>,
+      );
+    });
+    expect(api!.tabs.map((t) => t.href)).toEqual(["/n/bar", "/papers"]);
+    expect(api!.activeHref).toBe("/n/bar");
+  });
+
+  it("GSD-26: openInNewTab adds a tab without changing the current active tab", async () => {
+    mockPathname = "/n/foo";
+    window.localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        tabs: [{ href: "/n/foo", title: "Foo" }],
+        activeHref: "/n/foo",
+      }),
+    );
+    const { TabBarProvider, useTabs } = await import("./TabBar");
+    let api: ReturnType<typeof useTabs> | null = null;
+    function Probe() {
+      api = useTabs();
+      return null;
+    }
+    render(
+      <TabBarProvider>
+        <Probe />
+      </TabBarProvider>,
+    );
+    push.mockClear();
+    act(() => {
+      api!.openInNewTab("/n/bar", "Bar");
+    });
+    expect(api!.tabs.map((t) => t.href)).toEqual(["/n/foo", "/n/bar"]);
+    // Background open: active stays on /n/foo, no router push.
+    expect(api!.activeHref).toBe("/n/foo");
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it("GSD-26: pathname change with no active tab seeds it (initial mount)", async () => {
+    // No stored state, no isAnonymous seed — pathname useEffect must still
+    // create the first tab. Regression guard: don't accidentally require an
+    // active tab to exist.
+    mockPathname = "/notes";
+    const { TabBarProvider, useTabs } = await import("./TabBar");
+    let api: ReturnType<typeof useTabs> | null = null;
+    function Probe() {
+      api = useTabs();
+      return null;
+    }
+    render(
+      <TabBarProvider>
+        <Probe />
+      </TabBarProvider>,
+    );
+    expect(api!.tabs.map((t) => t.href)).toEqual(["/notes"]);
+    expect(api!.activeHref).toBe("/notes");
+  });
+
+  it("GSD-26: pathname change matching an existing non-active tab activates it (no replace)", async () => {
+    // User clicks an existing tab — pathname syncs to that tab's href. We
+    // must NOT overwrite the previously-active tab's href.
+    mockPathname = "/n/foo";
+    window.localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        tabs: [
+          { href: "/n/foo", title: "Foo" },
+          { href: "/papers", title: "Papers" },
+        ],
+        activeHref: "/n/foo",
+      }),
+    );
+    const { TabBarProvider, useTabs } = await import("./TabBar");
+    let api: ReturnType<typeof useTabs> | null = null;
+    function Probe() {
+      api = useTabs();
+      return null;
+    }
+    const { rerender } = render(
+      <TabBarProvider>
+        <Probe />
+      </TabBarProvider>,
+    );
+    act(() => {
+      mockPathname = "/papers";
+      rerender(
+        <TabBarProvider>
+          <Probe />
+        </TabBarProvider>,
+      );
+    });
+    expect(api!.tabs.map((t) => t.href)).toEqual(["/n/foo", "/papers"]);
+    expect(api!.activeHref).toBe("/papers");
   });
 
   it("reorderTabs moves tabs in local state", async () => {

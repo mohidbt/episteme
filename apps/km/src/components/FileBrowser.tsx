@@ -52,6 +52,7 @@ import { MoveToDialog } from "@/components/MoveToDialog";
 import type { FileBrowserContextMenuHandlers } from "@/components/FileBrowserContextMenu";
 import type { FolderContents } from "@/lib/folders-server";
 import { isDescendantOf, type FolderRow } from "@/lib/folders";
+import { useTabsOptional } from "@/components/TabBar";
 
 interface Props {
   libraryId: number;
@@ -292,6 +293,7 @@ export function FileBrowser({
   defaultView = "tile",
 }: Props) {
   const router = useRouter();
+  const tabsApi = useTabsOptional();
   const [view, setView] = useState<ViewMode>(defaultView);
   useEffect(() => {
     try {
@@ -384,13 +386,18 @@ export function FileBrowser({
   const orderedIds = useMemo(() => displayItems.map((i) => i.id), [displayItems]);
 
   const handleOpen = useCallback(
-    (item: FileBrowserItemData) => {
+    (item: FileBrowserItemData, opts?: { newTab?: boolean }) => {
       if (item.kind === "folder") {
         const segments = [
           ...folderChain.map((c) => c.name),
           item.title,
         ].map(encodeURIComponent);
-        router.push(`/drive/${segments.join("/")}`);
+        const href = `/drive/${segments.join("/")}`;
+        if (opts?.newTab) {
+          tabsApi?.openInNewTab(href, item.title);
+          return;
+        }
+        router.push(href);
         return;
       }
       if (item.kind === "asset") {
@@ -404,9 +411,15 @@ export function FileBrowser({
           .catch(() => toast.error("Failed to open asset"));
         return;
       }
-      if (item.href) router.push(item.href);
+      if (item.href) {
+        if (opts?.newTab) {
+          tabsApi?.openInNewTab(item.href, item.title);
+          return;
+        }
+        router.push(item.href);
+      }
     },
-    [router, folderChain],
+    [router, folderChain, tabsApi],
   );
 
   const onMutate = useCallback(() => router.refresh(), [router]);

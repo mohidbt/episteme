@@ -49,6 +49,12 @@ type TabsState = { tabs: Tab[]; activeHref: string | null };
 
 type TabsApi = TabsState & {
   openTab: (href: string, title: string) => void;
+  /**
+   * GSD-26: open href in a NEW tab without activating it (power-user
+   * Cmd+Click / middle-click semantics). Caller stays on the current tab —
+   * no router.push fires.
+   */
+  openInNewTab: (href: string, title: string) => void;
   closeTab: (href: string) => void;
   setActive: (href: string) => void;
   updateTabTitle: (href: string, title: string) => void;
@@ -131,8 +137,20 @@ export function TabBarProvider({
     }
   }, [state]);
 
-  // Sync tab state with the current pathname — always ensure a tab exists
-  // for wherever the user has navigated.
+  // Sync tab state with the current pathname (GSD-26: Chrome tab semantics).
+  //
+  // Three cases:
+  //   1. A tab already exists with this href → activate it (no replace,
+  //      no append). Covers clicking an existing tab and browser back/forward
+  //      landing on a previously-opened route.
+  //   2. The active tab points elsewhere → REPLACE its href in place. This
+  //      is the core Chrome behavior: clicking an in-app link moves the
+  //      current tab to the new route instead of spawning a new tab.
+  //   3. No active tab yet (initial mount with no stored state) → seed the
+  //      first tab. Same as the pre-GSD-26 behavior for that single case.
+  //
+  // New tabs only originate from `openTab` (+ button, Cmd+T) and
+  // `openInNewTab` (Cmd+Click / middle-click) — both explicit user gestures.
   useEffect(() => {
     if (!pathname) return;
     const href = normalizeHref(pathname);
@@ -141,6 +159,16 @@ export function TabBarProvider({
       if (exists) {
         if (prev.activeHref === href) return prev;
         return { ...prev, activeHref: href };
+      }
+      if (prev.activeHref !== null) {
+        // Replace active tab's href in place — title falls back to inferred
+        // (TabTitleUpdater will hydrate it once the new page mounts).
+        const tabs = prev.tabs.map((tab) =>
+          tab.href === prev.activeHref
+            ? { href, title: titleFromHref(href) }
+            : tab,
+        );
+        return { tabs, activeHref: href };
       }
       return {
         tabs: [...prev.tabs, { href, title: titleFromHref(href) }],
@@ -163,6 +191,17 @@ export function TabBarProvider({
     },
     [router],
   );
+
+  const openInNewTab = useCallback((href: string, title: string) => {
+    const normalized = normalizeHref(href);
+    setState((prev) => {
+      if (prev.tabs.some((t) => t.href === normalized)) return prev;
+      return {
+        ...prev,
+        tabs: [...prev.tabs, { href: normalized, title }],
+      };
+    });
+  }, []);
 
   const closeTab = useCallback(
     (href: string) => {
@@ -235,12 +274,13 @@ export function TabBarProvider({
     () => ({
       ...state,
       openTab,
+      openInNewTab,
       closeTab,
       setActive,
       updateTabTitle,
       reorderTabs,
     }),
-    [state, openTab, closeTab, setActive, updateTabTitle, reorderTabs],
+    [state, openTab, openInNewTab, closeTab, setActive, updateTabTitle, reorderTabs],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
@@ -250,6 +290,16 @@ export function useTabs(): TabsApi {
   const ctx = useContext(Ctx);
   if (!ctx) throw new Error("useTabs must be used within TabBarProvider");
   return ctx;
+}
+
+/**
+ * GSD-26: nullable accessor for components that may render in a test harness
+ * without a TabBarProvider (e.g. FileBrowser unit tests). In-app usage always
+ * sits beneath the (app) layout's provider, so this returns a real api in
+ * production. Tests omit the provider to keep their surface small.
+ */
+export function useTabsOptional(): TabsApi | null {
+  return useContext(Ctx);
 }
 
 export function TabTitleUpdater({
@@ -342,6 +392,25 @@ export function TabBar() {
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
+
+  // GSD-26: Cmd/Ctrl+T opens a new tab (Chrome shortcut). We swallow the
+  // browser default — without preventDefault Chrome would also open a real
+  // browser tab on top of ours.
+  useEffect(() => {
+    function onKeyDown(ev: KeyboardEvent) {
+      if ((ev.metaKey || ev.ctrlKey) && (ev.key === "t" || ev.key === "T")) {
+        // Skip when focus is in an editable surface so we don't hijack a
+        // user typing a literal "t" while holding a modifier (rare but
+        // possible in code-block editors).
+        const target = ev.target as HTMLElement | null;
+        if (target?.isContentEditable) return;
+        ev.preventDefault();
+        openTab(DEFAULT_HREF, DEFAULT_TITLE);
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [openTab]);
 
   function onDragEnd(event: DragEndEvent) {
     const { active, over } = event;

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // G4 — Drive polish tests (Tasks #16, #22, #25, #47)
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, cleanup, fireEvent } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent, act } from "@testing-library/react";
 
 const pushMock = vi.fn();
 const refreshMock = vi.fn();
@@ -76,7 +76,10 @@ describe("G4 #16 — Drive cmd+click opens in new tab", () => {
     expect((anchor as HTMLAnchorElement).getAttribute("href")).toBe("/p/p1");
   });
 
-  it("meta+click on a tile leaf does NOT preventDefault (lets browser open new tab)", () => {
+  it("meta+click on a tile leaf preventsDefault and routes through app tabs (GSD-26)", () => {
+    // GSD-26 changes the model: cmd-click no longer opens a NEW BROWSER tab.
+    // It opens a new IN-APP tab via TabBar's openInNewTab. The click handler
+    // now suppresses the link default to keep navigation in-window.
     render(
       <FileBrowser
         libraryId={1}
@@ -90,11 +93,12 @@ describe("G4 #16 — Drive cmd+click opens in new tab", () => {
     const tile = screen.getByTestId("fb-item-p1");
     const ev = new MouseEvent("click", { bubbles: true, cancelable: true, metaKey: true, button: 0 });
     tile.dispatchEvent(ev);
-    expect(ev.defaultPrevented).toBe(false);
+    expect(ev.defaultPrevented).toBe(true);
+    // Background open: no router push fires (stays on current tab).
     expect(pushMock).not.toHaveBeenCalled();
   });
 
-  it("list-view: meta+click on a leaf link does NOT preventDefault", () => {
+  it("list-view: meta+click on a leaf link preventsDefault (routes to app new tab — GSD-26)", () => {
     render(
       <FileBrowser
         libraryId={1}
@@ -112,8 +116,70 @@ describe("G4 #16 — Drive cmd+click opens in new tab", () => {
     expect(link!.getAttribute("href")).toBe("/p/p1");
     const ev = new MouseEvent("click", { bubbles: true, cancelable: true, metaKey: true, button: 0 });
     link!.dispatchEvent(ev);
-    expect(ev.defaultPrevented).toBe(false);
+    expect(ev.defaultPrevented).toBe(true);
     expect(pushMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("GSD-26 — cmd+click & middle-click open in new app tab", () => {
+  it("cmd+click on a tile leaf invokes openInNewTab on the TabBar API", async () => {
+    const { TabBarProvider, useTabs } = await import("./TabBar");
+    let api: ReturnType<typeof useTabs> | null = null;
+    function Probe() {
+      api = useTabs();
+      return null;
+    }
+    render(
+      <TabBarProvider>
+        <Probe />
+        <FileBrowser
+          libraryId={1}
+          libraryName="Default"
+          folderId={null}
+          folderChain={[]}
+          contents={allKindsContents}
+          folders={folders}
+        />
+      </TabBarProvider>,
+    );
+    const tile = screen.getByTestId("fb-item-p1");
+    act(() => {
+      fireEvent.click(tile, { metaKey: true, button: 0 });
+    });
+    expect(api!.tabs.some((t) => t.href === "/p/p1")).toBe(true);
+    expect(api!.activeHref).not.toBe("/p/p1");
+  });
+
+  it("middle-click on a tile leaf invokes openInNewTab", async () => {
+    const { TabBarProvider, useTabs } = await import("./TabBar");
+    let api: ReturnType<typeof useTabs> | null = null;
+    function Probe() {
+      api = useTabs();
+      return null;
+    }
+    render(
+      <TabBarProvider>
+        <Probe />
+        <FileBrowser
+          libraryId={1}
+          libraryName="Default"
+          folderId={null}
+          folderChain={[]}
+          contents={allKindsContents}
+          folders={folders}
+        />
+      </TabBarProvider>,
+    );
+    const tile = screen.getByTestId("fb-item-p1");
+    act(() => {
+      // No fireEvent.auxClick helper — use generic with the MouseEvent.
+      fireEvent(
+        tile,
+        new MouseEvent("auxclick", { bubbles: true, cancelable: true, button: 1 }),
+      );
+    });
+    expect(api!.tabs.some((t) => t.href === "/p/p1")).toBe(true);
+    expect(api!.activeHref).not.toBe("/p/p1");
   });
 });
 
