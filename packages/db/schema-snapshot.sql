@@ -610,6 +610,18 @@ CREATE SEQUENCE public.processing_jobs_id_seq
     NO MAXVALUE
     CACHE 1;
 ALTER SEQUENCE public.processing_jobs_id_seq OWNED BY public.processing_jobs.id;
+CREATE TABLE public.provider_key_alerts (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    provider text NOT NULL,
+    env_var text NOT NULL,
+    reason text NOT NULL,
+    hit_count integer DEFAULT 0 NOT NULL,
+    sample_error text,
+    first_seen_at timestamp with time zone DEFAULT now() NOT NULL,
+    last_seen_at timestamp with time zone DEFAULT now() NOT NULL,
+    last_alerted_at timestamp with time zone,
+    cleared_at timestamp with time zone
+);
 CREATE TABLE public.reference_embeddings (
     reference_id uuid NOT NULL,
     embedding public.vector(1536) NOT NULL,
@@ -872,6 +884,8 @@ ALTER TABLE ONLY public.pending_recompute
     ADD CONSTRAINT pending_recompute_user_id_kind_node_id_pk PRIMARY KEY (user_id, kind, node_id);
 ALTER TABLE ONLY public.processing_jobs
     ADD CONSTRAINT processing_jobs_pkey PRIMARY KEY (id);
+ALTER TABLE ONLY public.provider_key_alerts
+    ADD CONSTRAINT provider_key_alerts_pkey PRIMARY KEY (id);
 ALTER TABLE ONLY public.reference_embeddings
     ADD CONSTRAINT reference_embeddings_pkey PRIMARY KEY (reference_id);
 ALTER TABLE ONLY public."references"
@@ -933,6 +947,7 @@ CREATE INDEX idx_papers_doi_lower ON public.papers USING btree (lower(TRIM(BOTH 
 CREATE INDEX idx_papers_title_trgm ON public.papers USING gin (title public.gin_trgm_ops);
 CREATE INDEX idx_pc_cited ON public.paper_citations USING btree (cited_kind, cited_id);
 CREATE INDEX idx_pc_citer ON public.paper_citations USING btree (citer_kind, citer_id);
+CREATE INDEX idx_provider_key_alerts_last_seen ON public.provider_key_alerts USING btree (last_seen_at DESC);
 CREATE INDEX idx_references_doi_lower ON public."references" USING btree (lower(TRIM(BOTH FROM (csl_json ->> 'DOI'::text)))) WHERE ((csl_json ->> 'DOI'::text) IS NOT NULL);
 CREATE INDEX idx_references_title_trgm ON public."references" USING gin (((csl_json ->> 'title'::text)) public.gin_trgm_ops) WHERE ((csl_json ->> 'title'::text) IS NOT NULL);
 CREATE INDEX idx_store_expires_at ON public.store USING btree (expires_at) WHERE (expires_at IS NOT NULL);
@@ -963,6 +978,7 @@ CREATE INDEX papersets_row_refs_gin ON public.papersets USING gin (row_refs json
 CREATE INDEX papersets_user_folder_idx ON public.papersets USING btree (user_id, folder_id);
 CREATE INDEX pending_recompute_claimed ON public.pending_recompute USING btree (claimed_at);
 CREATE INDEX pending_recompute_enqueued ON public.pending_recompute USING btree (enqueued_at);
+CREATE UNIQUE INDEX provider_key_alerts_active_unique ON public.provider_key_alerts USING btree (provider, env_var, reason) WHERE (cleared_at IS NULL);
 CREATE INDEX reference_embeddings_emb_idx ON public.reference_embeddings USING ivfflat (embedding public.vector_cosine_ops) WITH (lists='100');
 CREATE INDEX references_library_folder_idx ON public."references" USING btree (library_id, folder_path);
 CREATE UNIQUE INDEX references_library_key_unique ON public."references" USING btree (library_id, citation_key);
