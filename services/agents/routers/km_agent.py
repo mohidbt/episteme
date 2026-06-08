@@ -30,6 +30,17 @@ from skills import load_skills
 from skills.drive_loader import DriveSkillsLoader
 from checkpointer import get_saver
 from store import get_store
+from tools import ALL_TOOLS
+from tools.data import TOOLS as _DATA_TOOLS
+from tools.library import TOOLS as _LIBRARY_TOOLS
+from tools.notes import TOOLS as _NOTES_TOOLS
+from tools.paper_search import TOOLS as _PAPER_SEARCH_TOOLS
+from tools.papers import TOOLS as _PAPERS_TOOLS
+from tools.pdfs import TOOLS as _PDF_TOOLS
+from tools.publish import TOOLS as _PUBLISH_TOOLS
+from tools.revisions import TOOLS as _REVISION_TOOLS
+from tools.search import TOOLS as _SEARCH_TOOLS
+from tools.web_search import TOOLS as _WEB_SEARCH_TOOLS
 from lib.config_cache import GUEST_USER_ID, load_user_config, save_user_config
 from lib.km_http import km_get
 from lib.openrouter_client import _notify_if_fallback as _notify_llm_exhaustion
@@ -1429,4 +1440,56 @@ async def diag_personal_skills(auth: InternalAuthDep):
         "slugs": slugs,
         "error_status": None,
         "error_kind": None,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Tool inventory (GSD-33)
+# ---------------------------------------------------------------------------
+
+def _build_category_map() -> dict[str, str]:
+    """Map every tool name to its module-derived category label.
+
+    Categories drive the grouped UI in PermissionToggles.tsx. We derive them
+    from the per-module tool lists in ``services/agents/tools/`` so adding a
+    new tool to e.g. ``tools/notes.py`` auto-picks up the ``notes`` category
+    without any UI plumbing change.
+    """
+    return {
+        **{t.name: "notes" for t in _NOTES_TOOLS},
+        **{t.name: "pdfs" for t in _PDF_TOOLS},
+        **{t.name: "library" for t in _LIBRARY_TOOLS},
+        **{t.name: "revisions" for t in _REVISION_TOOLS},
+        **{t.name: "publish" for t in _PUBLISH_TOOLS},
+        **{t.name: "paper_search" for t in _PAPER_SEARCH_TOOLS},
+        **{t.name: "papers" for t in _PAPERS_TOOLS},
+        **{t.name: "data" for t in _DATA_TOOLS},
+        **{t.name: "search" for t in _SEARCH_TOOLS},
+        **{t.name: "web" for t in _WEB_SEARCH_TOOLS},
+    }
+
+
+_CATEGORY_MAP: dict[str, str] = _build_category_map()
+
+
+@router.get("/tools")
+async def list_tools(auth: InternalAuthDep):
+    """Return the live tool inventory the agent factory sees.
+
+    The KM frontend's PermissionToggles fetches this through a Next.js proxy
+    and renders one switch per tool, grouped by category. Permission state
+    persists separately under ``agentConfigs.settingsJson.permissions``.
+    """
+    _reject_guest(auth["user_id"])
+    return {
+        "tools": [
+            {
+                "name": t.name,
+                "description": t.description or "",
+                "category": _CATEGORY_MAP.get(t.name, "other"),
+                "gateable": True,
+                "default_allowed": True,
+            }
+            for t in ALL_TOOLS
+        ]
     }

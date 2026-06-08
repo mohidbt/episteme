@@ -61,7 +61,11 @@ def test_tools_endpoint_categories_map_known_modules():
     by_name = {t["name"]: t["category"] for t in r.json()["tools"]}
     assert by_name.get("web_search") == "web"
     assert by_name.get("create_note") == "notes"
-    assert by_name.get("read_paper") == "pdfs"
+    # read_paper lives in tools/papers.py → "papers" category (find_papers,
+    # highlight, pdf_explain_passage are in tools/pdfs.py → "pdfs"). Both
+    # categories surface in the UI; mapping reflects actual module ownership.
+    assert by_name.get("read_paper") == "papers"
+    assert by_name.get("find_papers") == "pdfs"
     assert by_name.get("agentic_search_papers") == "paper_search"
 
 
