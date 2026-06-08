@@ -53,9 +53,10 @@ describe("PermissionToggles (GSD-33)", () => {
     await waitFor(() => {
       expect(screen.getByRole("switch", { name: /web search/i })).toBeTruthy();
     });
-    // Categories rendered as headings (web, notes, paper_search)
-    expect(screen.getByText(/notes/i)).toBeTruthy();
-    expect(screen.getByText(/paper search/i)).toBeTruthy();
+    // Categories rendered as collapsible triggers (web, notes, paper_search)
+    expect(screen.getAllByText(/^Notes$/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/^Paper Search$/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/^Web$/i).length).toBeGreaterThan(0);
   });
 
   it("defaults toggle to ON when permission key is missing", async () => {

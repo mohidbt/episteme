@@ -9,23 +9,25 @@ import {
   FieldDescription,
   FieldContent,
 } from "@/components/ui/field";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import {
+  TOOL_DESCRIPTION_OVERRIDES,
+  groupByCategory,
+  humanizeCategory,
+  humanizeToolName,
+  type ToolInventoryEntry,
+} from "@/lib/agents/tool-categories";
 
 export type PermissionsMap = Record<string, boolean>;
 
-const PERMISSIONS: Array<{
-  name: keyof PermissionsMap;
-  title: string;
-  description: string;
-  defaultOn: boolean;
-}> = [
-  {
-    name: "web_search",
-    title: "Web search",
-    description:
-      "Allow the agent to fall back to web search when internal library and specialized paper-search tools fail. Backup only — enabled by default; toggle off to opt out.",
-    defaultOn: true,
-  },
-];
+type LoadState =
+  | { kind: "loading" }
+  | { kind: "ready"; tools: ToolInventoryEntry[] }
+  | { kind: "error"; message: string };
 
 export function PermissionToggles({
   permissions,
@@ -34,32 +36,87 @@ export function PermissionToggles({
   permissions: PermissionsMap;
   onChange: (next: PermissionsMap) => void;
 }) {
+  const [state, setState] = React.useState<LoadState>({ kind: "loading" });
+
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/agents/km/tools");
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const body = (await res.json()) as { tools: ToolInventoryEntry[] };
+        if (!cancelled) setState({ kind: "ready", tools: body.tools ?? [] });
+      } catch (err) {
+        if (!cancelled) {
+          const message = err instanceof Error ? err.message : "fetch failed";
+          setState({ kind: "error", message });
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   function toggle(name: string, on: boolean) {
     onChange({ ...permissions, [name]: on });
   }
 
+  if (state.kind === "loading") {
+    return (
+      <div data-testid="permission-toggles-loading" className="text-sm text-muted-foreground">
+        Loading tools…
+      </div>
+    );
+  }
+  if (state.kind === "error") {
+    return (
+      <div data-testid="permission-toggles-error" className="text-sm text-destructive">
+        Failed to load tools: {state.message}
+      </div>
+    );
+  }
+
+  const groups = groupByCategory(state.tools);
+
   return (
-    <FieldGroup>
-      {PERMISSIONS.map((perm) => {
-        // K12: default-ON semantics — missing/undefined treated as enabled.
-        // Only an explicit `false` renders the switch off.
-        const raw = permissions[perm.name];
-        const checked = raw === undefined || raw === null ? perm.defaultOn : Boolean(raw);
-        return (
-          <Field key={perm.name}>
-            <FieldContent>
-              <FieldLabel htmlFor={`perm-${perm.name}`}>{perm.title}</FieldLabel>
-              <FieldDescription>{perm.description}</FieldDescription>
-            </FieldContent>
-            <Switch
-              id={`perm-${perm.name}`}
-              checked={checked}
-              onCheckedChange={(on) => toggle(perm.name, on)}
-              aria-label={perm.title}
-            />
-          </Field>
-        );
-      })}
-    </FieldGroup>
+    <div className="flex flex-col gap-3">
+      {groups.map(({ category, tools }) => (
+        <Collapsible key={category} defaultOpen>
+          <CollapsibleTrigger className="text-sm font-medium text-left w-full py-1">
+            {humanizeCategory(category)}
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <FieldGroup>
+              {tools.map((tool) => {
+                const raw = permissions[tool.name];
+                const checked =
+                  raw === undefined || raw === null ? true : Boolean(raw);
+                const description =
+                  TOOL_DESCRIPTION_OVERRIDES[tool.name] ?? tool.description;
+                return (
+                  <Field key={tool.name}>
+                    <FieldContent>
+                      <FieldLabel htmlFor={`perm-${tool.name}`}>
+                        {humanizeToolName(tool.name)}
+                      </FieldLabel>
+                      {description && (
+                        <FieldDescription>{description}</FieldDescription>
+                      )}
+                    </FieldContent>
+                    <Switch
+                      id={`perm-${tool.name}`}
+                      checked={checked}
+                      onCheckedChange={(on) => toggle(tool.name, on)}
+                      aria-label={humanizeToolName(tool.name)}
+                    />
+                  </Field>
+                );
+              })}
+            </FieldGroup>
+          </CollapsibleContent>
+        </Collapsible>
+      ))}
+    </div>
   );
 }

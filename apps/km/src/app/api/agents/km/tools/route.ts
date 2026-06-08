@@ -39,7 +39,7 @@ export async function GET(req: Request) {
   try {
     upstream = await fetch(`${downstreamUrl}/agents/km/tools`, {
       method: "GET",
-      headers,
+      headers: { ...headers },
     });
   } catch (err) {
     console.error("agents/km/tools: upstream fetch failed", err);

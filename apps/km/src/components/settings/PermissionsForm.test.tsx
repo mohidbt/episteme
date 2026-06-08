@@ -47,6 +47,22 @@ beforeEach(() => {
     if (url.includes("/api/agents/km/config")) {
       return new Response(JSON.stringify({ ok: true }), { status: 200 });
     }
+    if (url.includes("/api/agents/km/tools")) {
+      return new Response(
+        JSON.stringify({
+          tools: [
+            {
+              name: "web_search",
+              description: "Search the web.",
+              category: "web",
+              gateable: true,
+              default_allowed: true,
+            },
+          ],
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    }
     return new Response("not found", { status: 404 });
   }) as unknown as typeof fetch;
 });
