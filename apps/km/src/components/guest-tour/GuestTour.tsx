@@ -12,14 +12,15 @@ import {
 } from "react-joyride";
 import { getTourDone, setTourDone } from "@/lib/guest-tour/tour-state";
 import { waitForSelector } from "@/lib/guest-tour/wait-for-selector";
+import type { GuestTourTargets } from "@/lib/guest-tour/seed-targets";
 import { TourPreviewCard } from "./TourPreviewCard";
 
 /**
- * Routes where guest tour autostart is allowed. Anything else (sign-in/up,
- * the guest welcome note redirect target) suppresses autostart so the tour
- * never fires mid-navigation.
+ * Routes where step 0's `[data-testid="tour-drive-header"]` can mount. Used
+ * by the autostart preflight + the step-0 pause guard: outside these routes,
+ * step 0 has no target and Joyride would emit SKIPPED → setTourDone.
  */
-function isTourAllowedRoute(pathname: string | null): boolean {
+function isAutostartAllowedRoute(pathname: string | null): boolean {
   if (!pathname) return false;
   if (pathname === "/") return true;
   if (pathname.startsWith("/drive/")) return true;
@@ -46,7 +47,15 @@ const PREVIEW_TOOLTIP_STYLES = {
 
 type StepData = { next?: string; prev?: string };
 
-function buildSteps(): Step[] {
+function buildSteps(targets: GuestTourTargets | null): Step[] {
+  // Fall back to a neutral route if a seed target is missing — keeps the
+  // tour walkable end-to-end even when seeding hasn't finished.
+  const welcome = targets?.welcomeNoteHref ?? "/n/welcome-to-episteme";
+  const refHref = targets?.referenceHref ?? "/references";
+  const paperHref = targets?.paperHref ?? "/papers";
+  const readerHref = targets?.paperReaderHref ?? "/papers";
+  const papersetHref = targets?.papersetHref ?? "/papersets";
+
   return [
     {
       id: "drive_intro",
@@ -56,8 +65,6 @@ function buildSteps(): Step[] {
       content:
         "Your drive holds 4 things: Notes, Papers, References, and Assets (images). Everything is searchable and connected.",
       data: { next: "/notes" } as StepData,
-      // First step: no "Back" — there is nowhere to go back to. Joyride v3
-      // has no `hideBackButton` prop; hide via per-step styles override.
       styles: { buttonBack: { display: "none" } },
     },
     {
@@ -67,56 +74,25 @@ function buildSteps(): Step[] {
       skipBeacon: true,
       content:
         "Notes are your living write-ups. Type [[ inside a note to wiki-link any paper, reference, or note. Use Import (top-right) to bring in markdown, PDFs, or BibTeX/RIS.",
-      data: { next: "/references", prev: "/" } as StepData,
+      data: { next: welcome, prev: "/" } as StepData,
     },
     {
-      id: "papers_refs_collection",
+      id: "open_welcome_note",
+      target: "body",
+      placement: "center",
+      skipBeacon: true,
+      content:
+        "This is your welcome note — the starting point we seeded for you. It links out to every paper, reference, and note in the demo library.",
+      data: { next: "/references", prev: "/notes" } as StepData,
+    },
+    {
+      id: "references_collection",
       target: '[data-testid="tour-nav-references"]',
       placement: "right",
       skipBeacon: true,
       content:
-        "References are lightweight citation metadata — no PDF attached. Papers (right above) store the full PDF. Either way, the same Import button handles PDFs, BibTeX, RIS, and EndNote.",
-      data: { next: "/", prev: "/notes" } as StepData,
-    },
-    {
-      id: "agentball_hint",
-      target: '[data-testid="agent-ball"]',
-      placement: "left",
-      skipBeacon: true,
-      content:
-        "Press space twice anywhere to summon the agent. Ask anything about your library.",
-      data: { prev: "/references" } as StepData,
-    },
-    {
-      id: "wow_paper_understanding",
-      target: "body",
-      placement: "center",
-      skipBeacon: true,
-      styles: PREVIEW_TOOLTIP_STYLES,
-      content: (
-        <TourPreviewCard
-          title="Cross-paper understanding"
-          caption="Ask the agent across papers. It reads each one, threads the answers, then writes a note that wiki-links the sources."
-          mediaSrc="/tour/wow_paper_understanding.webm"
-          mediaPoster="/tour/wow_paper_understanding.poster.jpg"
-          mediaAlt="Agent answering a cross-paper question and writing a linked note"
-        />
-      ),
-    },
-    {
-      id: "graph_intro",
-      target: "body",
-      placement: "center",
-      skipBeacon: true,
-      styles: PREVIEW_TOOLTIP_STYLES,
-      content: (
-        <TourPreviewCard
-          title="Graph view"
-          caption="Lines are set connections. Proximity is semantic similarity — papers that read alike sit closer."
-          mediaSrc="/tour/graph_intro.svg"
-          mediaAlt="Graph view illustration with nodes and edges"
-        />
-      ),
+        "References are lightweight citation metadata — no PDF attached. The same Import button handles BibTeX, RIS, and EndNote.",
+      data: { next: "/references", prev: welcome } as StepData,
     },
     {
       id: "wow_refs_fill",
@@ -133,22 +109,16 @@ function buildSteps(): Step[] {
           mediaAlt="Reference row going from sparse to filled"
         />
       ),
+      data: { next: refHref, prev: "/references" } as StepData,
     },
     {
-      id: "wow_reader_highlight",
+      id: "open_reference",
       target: "body",
       placement: "center",
       skipBeacon: true,
-      styles: PREVIEW_TOOLTIP_STYLES,
-      content: (
-        <TourPreviewCard
-          title="Highlight numerical findings"
-          caption="Ask the agent to highlight quantitative claims. It proposes spans, you approve, and they land in the sidebar — click to jump back to the page."
-          mediaSrc="/tour/wow_reader_highlight.webm"
-          mediaPoster="/tour/wow_reader_highlight.poster.jpg"
-          mediaAlt="Reader page with proposed highlights, approval, and sidebar click-through"
-        />
-      ),
+      content:
+        "Open a reference and you see all the metadata — DOI, authors, abstract, related papers — plus a button to find the PDF.",
+      data: { next: refHref, prev: "/references" } as StepData,
     },
     {
       id: "wow_paper_search",
@@ -165,6 +135,60 @@ function buildSteps(): Step[] {
           mediaAlt="Agentic PDF search finding a paper for a reference"
         />
       ),
+      data: { next: "/papers", prev: refHref } as StepData,
+    },
+    {
+      id: "papers_collection",
+      target: '[data-testid="tour-nav-papers"]',
+      placement: "right",
+      skipBeacon: true,
+      content:
+        "Papers are the full PDFs in your library. Same Import button — drag a PDF in and it's parsed, indexed, and ready to read.",
+      data: { next: paperHref, prev: refHref } as StepData,
+    },
+    {
+      id: "open_seed_paper",
+      target: "body",
+      placement: "center",
+      skipBeacon: true,
+      content:
+        "Here's the Spontaneous Switching paper — title, abstract, authors, every parsed reference clickable.",
+      data: { next: readerHref, prev: "/papers" } as StepData,
+    },
+    {
+      id: "open_seed_paper_reader",
+      target: "body",
+      placement: "center",
+      skipBeacon: true,
+      content:
+        "Same paper, inline reader. Select any passage to ask the agent to explain it — or ask it to highlight findings for you (next step).",
+      data: { next: readerHref, prev: paperHref } as StepData,
+    },
+    {
+      id: "wow_reader_highlight",
+      target: "body",
+      placement: "center",
+      skipBeacon: true,
+      styles: PREVIEW_TOOLTIP_STYLES,
+      content: (
+        <TourPreviewCard
+          title="Highlight numerical findings"
+          caption="Ask the agent to highlight quantitative claims. It proposes spans, you approve, and they land in the sidebar — click to jump back to the page."
+          mediaSrc="/tour/wow_reader_highlight.webm"
+          mediaPoster="/tour/wow_reader_highlight.poster.jpg"
+          mediaAlt="Reader page with proposed highlights, approval, and sidebar click-through"
+        />
+      ),
+      data: { next: papersetHref, prev: readerHref } as StepData,
+    },
+    {
+      id: "open_seed_paperset",
+      target: "body",
+      placement: "center",
+      skipBeacon: true,
+      content:
+        "A paperset is a spreadsheet over papers. Each row is a paper, each column is whatever you want extracted — sample size, method, effect size, anything.",
+      data: { next: papersetHref, prev: readerHref } as StepData,
     },
     {
       id: "wow_extract",
@@ -181,15 +205,53 @@ function buildSteps(): Step[] {
           mediaAlt="Paperset grid with cells filling concurrently"
         />
       ),
+      data: { prev: papersetHref } as StepData,
+    },
+    {
+      id: "agentball_hint",
+      target: '[data-testid="agent-ball"]',
+      placement: "left",
+      skipBeacon: true,
+      content:
+        "Press space twice anywhere to summon the agent. Ask anything about your library.",
+      data: { prev: papersetHref } as StepData,
+    },
+    {
+      id: "wow_paper_understanding",
+      target: "body",
+      placement: "center",
+      skipBeacon: true,
+      styles: PREVIEW_TOOLTIP_STYLES,
+      content: (
+        <TourPreviewCard
+          title="Understanding across papers and notes"
+          caption="Ask the agent across papers and notes. It reads each one, threads the answers, then writes a note that wiki-links the sources."
+          mediaSrc="/tour/wow_paper_understanding.webm"
+          mediaPoster="/tour/wow_paper_understanding.poster.jpg"
+          mediaAlt="Agent answering a cross-paper question and writing a linked note"
+        />
+      ),
+    },
+    {
+      id: "graph_intro",
+      target: "body",
+      placement: "center",
+      skipBeacon: true,
+      styles: PREVIEW_TOOLTIP_STYLES,
+      content: (
+        <TourPreviewCard
+          title="Graph (WIP)"
+          caption="Lines are set connections. Proximity is semantic similarity — papers that read alike sit closer."
+          mediaSrc="/tour/graph_intro.svg"
+          mediaAlt="Graph view illustration with nodes and edges"
+        />
+      ),
     },
     {
       id: "signup_cta",
       target: "body",
       placement: "center",
       skipBeacon: true,
-      // Single primary action: Joyride's footer "Sign up free" button
-      // (relabeled via locale.last on the final step). The in-card CTA
-      // would visually disconnect from the footer — drop it.
       content: (
         <TourPreviewCard
           title="Ready to make this yours?"
@@ -272,13 +334,19 @@ const TOUR_STYLES = {
   buttonClose: { color: "var(--muted-foreground)" },
 };
 
-export function GuestTour({ isAnonymous }: { isAnonymous: boolean }) {
+export function GuestTour({
+  isAnonymous,
+  seedTargets = null,
+}: {
+  isAnonymous: boolean;
+  seedTargets?: GuestTourTargets | null;
+}) {
   const [run, setRun] = useState(false);
   const [stepIndex, setStepIndex] = useState(0);
   const pathname = usePathname();
   const router = useRouter();
   const reduceMotion = useMemo(prefersReducedMotion, []);
-  const steps = useMemo(() => buildSteps(), []);
+  const steps = useMemo(() => buildSteps(seedTargets), [seedTargets]);
   // Guard against double-advance from overlapping STEP_AFTER events.
   const advancingRef = useRef(false);
   // True once the user has progressed past step 0 (i.e. tour is "live" and
@@ -317,7 +385,7 @@ export function GuestTour({ isAnonymous }: { isAnonymous: boolean }) {
     if (runRef.current) return;
     if (!isAnonymous) return;
     if (getTourDone()) return;
-    if (!isTourAllowedRoute(pathname)) return;
+    if (!isAutostartAllowedRoute(pathname)) return;
 
     // Preflight: route gating alone is insufficient. `/` can render an
     // empty-library state (no FileBrowser → no `[data-testid="tour-drive-header"]`),
@@ -377,7 +445,7 @@ export function GuestTour({ isAnonymous }: { isAnonymous: boolean }) {
   useEffect(() => {
     if (!run) return;
     if (progressedRef.current) return;
-    if (isTourAllowedRoute(pathname)) return;
+    if (isAutostartAllowedRoute(pathname)) return;
     setRun(false);
   }, [pathname, run]);
 
