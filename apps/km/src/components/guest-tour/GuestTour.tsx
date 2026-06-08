@@ -301,8 +301,6 @@ export function GuestTour({ isAnonymous }: { isAnonymous: boolean }) {
   runRef.current = run;
 
   useEffect(() => {
-    // eslint-disable-next-line no-console
-    console.log("[GuestTour] effect", { pathname, isAnonymous, advancing: advancingRef.current, progressed: progressedRef.current, runRef: runRef.current, tourDone: getTourDone() });
     // Don't toggle `run` back to true while an advanceTo() is in flight —
     // advanceTo intentionally pauses (setRun(false)) before router.push, and
     // the pathname change that push triggers would otherwise re-fire this
@@ -342,21 +340,25 @@ export function GuestTour({ isAnonymous }: { isAnonymous: boolean }) {
     // pathname (catches the in-flight push that lands between resolve and
     // setRun).
     void waitForSelector(firstTarget, 10_000).then(async (el) => {
-      // eslint-disable-next-line no-console
-      console.log("[GuestTour] waitForSelector resolved", { pathname, cancelled, hasEl: !!el });
-      if (cancelled) { console.log("[GuestTour] BAIL pre cancelled"); return; }
-      if (!el) { console.log("[GuestTour] BAIL no el"); return; }
+      if (cancelled) return;
+      if (!el) return;
+      // Settle: yield to the scheduler so any in-flight router.push from
+      // TabBarProvider can land before we commit. 50ms is empirically enough
+      // for Next.js client navigation to fire its pathname update.
       await new Promise<void>((r) => setTimeout(r, 50));
-      if (cancelled) { console.log("[GuestTour] BAIL post cancelled"); return; }
-      if (advancingRef.current) { console.log("[GuestTour] BAIL advancing"); return; }
-      if (progressedRef.current) { console.log("[GuestTour] BAIL progressed"); return; }
-      if (!isAnonymous) { console.log("[GuestTour] BAIL !anon"); return; }
-      if (getTourDone()) { console.log("[GuestTour] BAIL tourDone"); return; }
-      if (pathname !== targetPathname) { console.log("[GuestTour] BAIL pathname"); return; }
-      if (!document.body.contains(el)) { console.log("[GuestTour] BAIL !contains"); return; }
-      if (!document.querySelector(firstTarget)) { console.log("[GuestTour] BAIL qs null"); return; }
-      // eslint-disable-next-line no-console
-      console.log("[GuestTour] FIRING setRun(true)", { pathname });
+      if (cancelled) return;
+      // Re-check every gate — pathname/isAnonymous/done-flag may have changed
+      // while the promise + settle were pending.
+      if (advancingRef.current) return;
+      if (progressedRef.current) return;
+      if (!isAnonymous) return;
+      if (getTourDone()) return;
+      if (pathname !== targetPathname) return;
+      // Re-query against the live DOM (NOT the resolved `el` from
+      // waitForSelector — React may have reconciled the original node away
+      // during the 50ms settle, leaving a fresh node in its place with the
+      // same selector. `document.body.contains(el)` would falsely bail.)
+      if (!document.querySelector(firstTarget)) return;
       setStepIndex(0);
       setRun(true);
     });
