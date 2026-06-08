@@ -8,7 +8,7 @@ import { db } from "@/lib/db";
 import { papers, documentReferences } from "@episteme/db/schema";
 import { sql } from "drizzle-orm";
 import { getDefaultLibrary } from "@/lib/default-library";
-import { getReferencesForPaper } from "@/lib/references-server";
+import { getReferencesForPaper, paperAlreadyReferenced } from "@/lib/references-server";
 import { papersetCountForPaper, papersetsForPaper } from "@/lib/papersets-server";
 import { listAllFolders } from "@/lib/folders-server";
 import { denormaliseForList, validateCslJson } from "@/lib/csl";
@@ -50,7 +50,7 @@ export default async function PaperPage({
   const paper = await loadPaper(paperId, userId);
   if (!paper) notFound();
 
-  const [library, refs, papersetCount, papersetList, citationCountRows] = await Promise.all([
+  const [library, refs, papersetCount, papersetList, citationCountRows, alreadyReferenced] = await Promise.all([
     getDefaultLibrary(userId),
     getReferencesForPaper(paper.id, userId),
     papersetCountForPaper(paper.id, userId),
@@ -59,6 +59,7 @@ export default async function PaperPage({
       .select({ n: sql<number>`count(*)::int` })
       .from(documentReferences)
       .where(eq(documentReferences.paperId, paper.id)),
+    paperAlreadyReferenced(paper.id, paper.libraryId, paper.doi, userId),
   ]);
   const hasCitations = (citationCountRows[0]?.n ?? 0) > 0;
   const allFolders = library
@@ -104,7 +105,7 @@ export default async function PaperPage({
                 folderPath: paper.folderPath,
               }}
               hasCitations={hasCitations}
-              alreadyReferenced={refs.length > 0}
+              alreadyReferenced={alreadyReferenced}
             />
             <Link
               href={`/papers/${paper.id}/read`}
