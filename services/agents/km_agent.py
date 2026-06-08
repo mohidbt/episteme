@@ -279,30 +279,54 @@ _CORE_TOOL_NAMES: frozenset[str] = frozenset({
 })
 
 
-# Tools whose presence is gated by an explicit user permission flag.
-# Mapping: permission key (in agent_configs.settings_json.permissions) → tool name.
-_PERMISSION_GATED_TOOLS: dict[str, str] = {
-    "web_search": "web_search",
-}
-
-
 def _filter_tools_for_permissions(
     tools: list[BaseTool],
     permissions: dict | None,
 ) -> list[BaseTool]:
-    """Drop permission-gated tools whose flag is explicitly False (K12).
+    """Drop any tool whose permission flag is explicitly False (GSD-33).
 
-    Default-ON semantics: missing key, None → tool included. Only an
-    explicit ``False`` value in ``permissions`` filters the tool out, so
-    users must take an explicit opt-out action via the settings UI.
+    Default-ON semantics: missing key, None → tool included. Only an explicit
+    ``False`` filters the tool out, so users must take an explicit opt-out
+    action via the settings UI. Keyed by tool name directly — there is no
+    longer a perm_key → tool_name indirection (every tool's name IS its
+    permission key).
     """
     permissions = permissions or {}
-    blocked: set[str] = {
-        tool_name
-        for perm_key, tool_name in _PERMISSION_GATED_TOOLS.items()
-        if permissions.get(perm_key) is False
-    }
-    return [t for t in tools if t.name not in blocked]
+    return [t for t in tools if permissions.get(t.name) is not False]
+
+
+def _build_disabled_tools_addendum(
+    permissions: dict | None,
+    *,
+    all_tool_names: set[str],
+    skill_filtered_names: set[str],
+) -> str:
+    """Return a system-prompt addendum listing permission-disabled tools.
+
+    Only includes tools that:
+    1. The user has explicitly disabled (``permissions[name] is False``), AND
+    2. Survived the skill filter (i.e. would have been bound otherwise).
+
+    Returning "" means the caller should not append an addendum at all
+    (no permission-disabled tool remains after skill filtering).
+    """
+    permissions = permissions or {}
+    disabled = sorted(
+        name
+        for name in all_tool_names
+        if permissions.get(name) is False and name in skill_filtered_names
+    )
+    if not disabled:
+        return ""
+    bullets = "\n".join(f"- `{name}`" for name in disabled)
+    return (
+        "## Tool restrictions\n\n"
+        "The user has disabled the following tools in their settings. "
+        "Do not attempt to call them. If the user asks for a capability that "
+        "requires one of these tools, tell them the tool is disabled in their "
+        "settings and they can re-enable it under Settings → Agent → Tools.\n\n"
+        f"{bullets}"
+    )
 
 
 def _filter_tools_for_skills(
@@ -409,11 +433,18 @@ async def build_km_agent(
         await DriveSkillsLoader().load(enabled_skills, user_id=user_id, tolerant=True)
         if enabled_skills else []
     )
-    tools = _filter_tools_for_skills(list(ALL_TOOLS), loaded_skills=loaded)
-    tools = _filter_tools_for_permissions(tools, permissions=permissions)
+    tools_after_skill_filter = _filter_tools_for_skills(list(ALL_TOOLS), loaded_skills=loaded)
+    tools = _filter_tools_for_permissions(tools_after_skill_filter, permissions=permissions)
     subagents = _select_subagents(loaded, available_tools=tools)
 
     system_prompt = _MEMORY_SYSTEM_PROMPT
+    _disabled_addendum = _build_disabled_tools_addendum(
+        permissions,
+        all_tool_names={t.name for t in ALL_TOOLS},
+        skill_filtered_names={t.name for t in tools_after_skill_filter},
+    )
+    if _disabled_addendum:
+        system_prompt = system_prompt + "\n\n" + _disabled_addendum
 
     # Personal (user-authored) skills are first-class SkillSpecs surfaced
     # through SkillsMiddleware — name + description in the prompt, body

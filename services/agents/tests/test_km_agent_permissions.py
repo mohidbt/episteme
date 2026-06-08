@@ -192,10 +192,10 @@ async def test_addendum_excludes_skill_pruned_tools():
     survived the skill filter."""
     from skills import SkillSpec  # noqa: PLC0415
 
-    # Skill that does NOT include create_note in its tools allowlist →
-    # create_note gets pruned by _filter_tools_for_skills before permissions
-    # are applied. Note: web_search is always in _CORE_TOOL_NAMES so it does
-    # survive the skill filter.
+    # `make_public` is NOT in _CORE_TOOL_NAMES, so a skill that doesn't list
+    # it in `tools=` will get it pruned by the skill filter.
+    # web_search IS in _CORE_TOOL_NAMES, so it survives the skill filter
+    # and is then dropped by the permission filter — addendum must mention it.
     skill = SkillSpec(
         name="lit-triage",
         description="fixture",
@@ -206,31 +206,28 @@ async def test_addendum_excludes_skill_pruned_tools():
     )
 
     text = await _capture_system_prompt(
-        permissions={"create_note": False, "web_search": False},
+        permissions={"make_public": False, "web_search": False},
         enabled_skills=["lit-triage"],
         loaded_specs=[skill],
     )
-    # web_search is core, survives skill filter, then dropped by permission
-    # filter → addendum should mention it.
+    # web_search is core → survives skill filter → permission-dropped → addendum
     assert "web_search" in text
-    # create_note was skill-pruned (lit-triage's tools list doesn't include
-    # it) → addendum should NOT mention it (telling user it's "disabled in
-    # settings" would be misleading; the skill already pruned it).
-    # Look at the addendum section specifically — create_note may appear
-    # elsewhere in the prompt (e.g. the memory section); search for the
-    # disabled-tools heading + create_note pairing.
+    # make_public was skill-pruned (non-core, not in skill.tools). Addendum
+    # must NOT mention it — telling the user "X is disabled in settings"
+    # would be misleading when the skill is what's actually hiding it.
     lines = text.lower().split("\n")
     in_addendum = False
     addendum_text = []
     for line in lines:
-        if "tool restrictions" in line or "disabled in your settings" in line:
+        if line.startswith("## tool restrictions"):
             in_addendum = True
-        elif in_addendum and line.startswith("## "):
+            continue
+        if in_addendum and line.startswith("## "):
             in_addendum = False
         if in_addendum:
             addendum_text.append(line)
     addendum_blob = "\n".join(addendum_text)
-    assert "create_note" not in addendum_blob
+    assert "make_public" not in addendum_blob
 
 
 @pytest.mark.asyncio
