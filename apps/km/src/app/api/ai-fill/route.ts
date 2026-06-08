@@ -10,6 +10,7 @@ import {
 } from "@/lib/openrouter-errors";
 import { getOrApiKey, OpenRouterKeyMissing } from "@/lib/openrouter-key";
 import { recordUsage } from "@/lib/openrouter-usage";
+import { checkOpenRouterFallbackResponse } from "@/lib/key-health";
 
 const MODEL = "openai/gpt-5.4-nano";
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
@@ -86,6 +87,11 @@ export async function POST(req: Request): Promise<Response> {
   }
 
   if (!upstream.ok) {
+    checkOpenRouterFallbackResponse({
+      envVar: "OPENROUTER_API_KEY",
+      apiKey: llmKey,
+      response: upstream,
+    });
     const keyErr = mapOpenRouterStatus(upstream.status);
     if (keyErr) {
       return Response.json({ error: keyErr }, { status: 401 });

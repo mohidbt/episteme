@@ -21,6 +21,55 @@ from langchain_core.tools import tool
 
 logger = logging.getLogger(__name__)
 
+
+def _maybe_notify_tavily_exhaustion(exc: Exception) -> None:
+    """Best-effort fire-and-forget alert for TAVILY_API_KEY exhaustion.
+
+    Tavily's SDK raises `tavily.errors.InvalidAPIKeyError` (401) and
+    `UsageLimitExceededError` (429). We schedule the async notifier as a
+    background task so this tool stays sync-safe for LangChain @tool callers.
+    """
+    msg = str(exc)
+    low = msg.lower()
+    if "invalid" in low and "api" in low and "key" in low:
+        status = 401
+    elif "usage" in low and "limit" in low:
+        status = 429
+    elif "rate" in low and "limit" in low:
+        status = 429
+    elif "402" in low or "payment" in low or "insufficient" in low:
+        status = 402
+    else:
+        return
+    try:
+        import asyncio  # noqa: PLC0415
+        from lib.key_health import (  # noqa: PLC0415
+            classify_provider_error,
+            record_and_maybe_alert,
+        )
+        from deps import db as db_module  # noqa: PLC0415
+
+        reason = classify_provider_error(status, msg)
+        if reason is None:
+            return
+
+        async def _go() -> None:
+            await record_and_maybe_alert(
+                db_module._pool,
+                provider="tavily",
+                env_var="TAVILY_API_KEY",
+                reason=reason,
+                sample_error=msg[:1000],
+            )
+
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        loop.create_task(_go())
+    except Exception:  # noqa: BLE001
+        logger.exception("tavily key-health notify failed")
+
 _MAX_RESULTS = 5
 
 
@@ -61,6 +110,7 @@ def web_search(query: str) -> str:
         response = client.search(query, max_results=_MAX_RESULTS)
     except Exception as exc:  # noqa: BLE001 — surface upstream failures verbatim
         logger.exception("Tavily search failed")
+        _maybe_notify_tavily_exhaustion(exc)
         return f"web_search failed: {exc}"
 
     results = response.get("results", []) if isinstance(response, dict) else []

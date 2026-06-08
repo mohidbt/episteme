@@ -63,6 +63,32 @@ async def _in_cooldown() -> bool:
     return now < _s2_cooldown_until
 
 
+async def _maybe_notify_s2_exhaustion(status_code: int, body: str) -> None:
+    """Fire key-health alert only when SEMANTIC_SCHOLAR_API_KEY is set —
+    unauthenticated 429s are shared-IP throttling, not key exhaustion."""
+    if not _api_key:
+        return
+    try:
+        from lib.key_health import (  # noqa: PLC0415
+            classify_provider_error,
+            record_and_maybe_alert,
+        )
+        from deps import db as db_module  # noqa: PLC0415
+
+        reason = classify_provider_error(status_code, body)
+        if reason is None:
+            return
+        await record_and_maybe_alert(
+            db_module._pool,
+            provider="semantic_scholar",
+            env_var="SEMANTIC_SCHOLAR_API_KEY",
+            reason=reason,
+            sample_error=(body or "")[:1000],
+        )
+    except Exception:  # noqa: BLE001
+        logger.exception("S2 key-health notify failed")
+
+
 async def _trip_cooldown(retry_after: float | None) -> None:
     """Trip cooldown locally and in the shared store (best-effort)."""
     global _s2_cooldown_until
@@ -192,6 +218,7 @@ async def _search_request(url: str, params: dict) -> httpx.Response:
     response = await _throttled_get(url, params=params)
     if response.status_code == 429 and not _api_key:
         await _trip_cooldown(_retry_after_seconds(response))
+        await _maybe_notify_s2_exhaustion(response.status_code, response.text)
         return response
     for attempt in range(3):
         if response.status_code != 429:
@@ -203,6 +230,7 @@ async def _search_request(url: str, params: dict) -> httpx.Response:
         response = await _throttled_get(url, params=params)
     if response.status_code == 429:
         await _trip_cooldown(_retry_after_seconds(response))
+        await _maybe_notify_s2_exhaustion(response.status_code, response.text)
     return response
 
 
@@ -224,6 +252,7 @@ class SemanticScholarSearch(PaperSearchService):
             return None
         if response.status_code != 200:
             logger.error("S2 DOI lookup failed: %s %s", response.status_code, response.text[:200])
+            await _maybe_notify_s2_exhaustion(response.status_code, response.text)
             raise S2Error(response.status_code, response.text)
         result = _parse_paper(response.json())
         result.match_confidence = "exact"
@@ -249,6 +278,7 @@ class SemanticScholarSearch(PaperSearchService):
         response = await _search_request(f"{_BASE_URL}/paper/search", params)
         if response.status_code != 200:
             logger.error("S2 query search failed: %s %s", response.status_code, response.text[:200])
+            await _maybe_notify_s2_exhaustion(response.status_code, response.text)
             raise S2Error(response.status_code, response.text)
         data = response.json().get("data", [])
         results = []
@@ -289,11 +319,13 @@ class SemanticScholarSearch(PaperSearchService):
         # S2 batch returns 429 too — honour the breaker, fall back per-paper.
         if response.status_code == 429:
             await _trip_cooldown(_retry_after_seconds(response))
+            await _maybe_notify_s2_exhaustion(response.status_code, response.text)
             return results
         if response.status_code != 200:
             logger.error(
                 "S2 batch lookup failed: %s %s", response.status_code, response.text[:200]
             )
+            await _maybe_notify_s2_exhaustion(response.status_code, response.text)
             return results
 
         body = response.json()

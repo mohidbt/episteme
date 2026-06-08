@@ -138,6 +138,44 @@ def parse_blocks(json_output: dict[str, Any]) -> list[tuple[int, str, dict, dict
     return rows
 
 
+async def _maybe_notify_datalab_exhaustion(exc: Exception) -> None:
+    """Best-effort notify when the global DATALAB_API_KEY is exhausted/invalid.
+
+    Datalab SDK surfaces HTTP errors as plain exceptions whose `str()` carries
+    the status. We parse loosely (no SDK error-class import) so this stays
+    resilient to datalab_sdk version drift.
+    """
+    msg = str(exc)
+    low = msg.lower()
+    if "401" in low or "unauthorized" in low or "invalid api key" in low:
+        status = 401
+    elif "402" in low or "payment" in low or "insufficient" in low or "credit" in low:
+        status = 402
+    elif "429" in low or "rate limit" in low:
+        status = 429
+    else:
+        return
+    try:
+        from lib.key_health import (  # noqa: PLC0415
+            classify_provider_error,
+            record_and_maybe_alert,
+        )
+        from deps import db as db_module  # noqa: PLC0415
+
+        reason = classify_provider_error(status, msg)
+        if reason is None:
+            return
+        await record_and_maybe_alert(
+            db_module._pool,
+            provider="chandra",
+            env_var="DATALAB_API_KEY",
+            reason=reason,
+            sample_error=msg[:1000],
+        )
+    except Exception:  # noqa: BLE001
+        logger.exception("chandra key-health notify failed")
+
+
 async def run_chandra(file_path: str, api_key: str):
     """Call Chandra OCR asynchronously via AsyncDatalabClient."""
     from datalab_sdk import AsyncDatalabClient, ConvertOptions
@@ -148,12 +186,17 @@ async def run_chandra(file_path: str, api_key: str):
         len(api_key),
         api_key[:4] if api_key else "",
     )
-    async with AsyncDatalabClient(api_key=api_key) as chandra:
-        return await chandra.convert(
-            file_path=file_path,
-            options=ConvertOptions(output_format="json", mode="balanced"),
-            max_polls=120,
-        )
+    try:
+        async with AsyncDatalabClient(api_key=api_key) as chandra:
+            return await chandra.convert(
+                file_path=file_path,
+                options=ConvertOptions(output_format="json", mode="balanced"),
+                max_polls=120,
+            )
+    except Exception as exc:
+        # Datalab key is always the global env DATALAB_API_KEY — no BYOK.
+        await _maybe_notify_datalab_exhaustion(exc)
+        raise
 
 
 async def insert_segments(

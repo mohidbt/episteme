@@ -10,6 +10,7 @@
 // with the rest of `src/lib/*`; the file is only ever imported from route
 // handlers.
 import { recordUsage } from "@/lib/openrouter-usage";
+import { checkOpenRouterFallbackResponse } from "@/lib/key-health";
 
 const MODEL = "openai/gpt-5-nano";
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
@@ -65,6 +66,11 @@ export async function extractDoiFromFirstPage(
   }
 
   if (!resp.ok) {
+    checkOpenRouterFallbackResponse({
+      envVar: "OPENROUTER_API_KEY",
+      apiKey: opts.openrouterKey,
+      response: resp,
+    });
     console.warn("[extract-doi] non-OK", resp.status);
     return null;
   }

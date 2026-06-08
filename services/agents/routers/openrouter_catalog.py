@@ -36,6 +36,26 @@ async def _fetch_openrouter(api_key: str | None) -> list[dict[str, Any]]:
             params={"supported_parameters": "tools"},
             headers=headers,
         )
+        if r.status_code >= 400 and api_key:
+            # Catalog fetch always uses the global OPENROUTER_API_KEY (no BYOK).
+            try:
+                from lib.key_health import (  # noqa: PLC0415
+                    classify_provider_error,
+                    record_and_maybe_alert,
+                )
+                from deps import db as db_module  # noqa: PLC0415
+
+                reason = classify_provider_error(r.status_code, r.text)
+                if reason is not None:
+                    await record_and_maybe_alert(
+                        db_module._pool,
+                        provider="openrouter",
+                        env_var="OPENROUTER_API_KEY",
+                        reason=reason,
+                        sample_error=r.text[:1000],
+                    )
+            except Exception:  # noqa: BLE001
+                logger.exception("openrouter catalog key-health notify failed")
         r.raise_for_status()
         body = r.json()
     data = body.get("data") or []

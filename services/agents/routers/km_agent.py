@@ -32,6 +32,7 @@ from checkpointer import get_saver
 from store import get_store
 from lib.config_cache import GUEST_USER_ID, load_user_config, save_user_config
 from lib.km_http import km_get
+from lib.openrouter_client import _notify_if_fallback as _notify_llm_exhaustion
 from lib.openrouter_model import model_for
 from lib.sse_events import _jsonable, format_sse, format_typed
 from lib.message_metadata import (
@@ -703,6 +704,7 @@ async def invoke(req: Request, auth: InternalAuthDep):
                 raise
             except openai.RateLimitError as e:
                 logger.warning("agent stream rate-limited: %s", e)
+                await _notify_llm_exhaustion(auth["llm_key"], 429, str(e))
                 is_free = isinstance(model_pref, str) and model_pref.endswith(":free")
                 if is_free:
                     message = (
@@ -716,6 +718,22 @@ async def invoke(req: Request, auth: InternalAuthDep):
                     "code": "rate_limited",
                     "message": message,
                     "retriable": True,
+                })
+            except openai.AuthenticationError as e:
+                logger.warning("agent stream auth-failed: %s", e)
+                await _notify_llm_exhaustion(auth["llm_key"], 401, str(e))
+                yield format_typed("error", {
+                    "code": "auth_failed",
+                    "message": _extract_error_message(e),
+                    "retriable": False,
+                })
+            except openai.PermissionDeniedError as e:
+                logger.warning("agent stream permission-denied: %s", e)
+                await _notify_llm_exhaustion(auth["llm_key"], 403, str(e))
+                yield format_typed("error", {
+                    "code": "permission_denied",
+                    "message": _extract_error_message(e),
+                    "retriable": False,
                 })
             except Exception as e:  # noqa: BLE001
                 logger.exception("agent stream failed")
@@ -901,6 +919,7 @@ async def resume(req: Request, auth: InternalAuthDep):
                 yield format_typed(ev_type, payload)
         except openai.RateLimitError as e:
             logger.warning("agent stream rate-limited: %s", e)
+            await _notify_llm_exhaustion(auth["llm_key"], 429, str(e))
             is_free = isinstance(model_pref, str) and model_pref.endswith(":free")
             if is_free:
                 message = (
@@ -914,6 +933,22 @@ async def resume(req: Request, auth: InternalAuthDep):
                 "code": "rate_limited",
                 "message": message,
                 "retriable": True,
+            })
+        except openai.AuthenticationError as e:
+            logger.warning("agent stream auth-failed: %s", e)
+            await _notify_llm_exhaustion(auth["llm_key"], 401, str(e))
+            yield format_typed("error", {
+                "code": "auth_failed",
+                "message": _extract_error_message(e),
+                "retriable": False,
+            })
+        except openai.PermissionDeniedError as e:
+            logger.warning("agent stream permission-denied: %s", e)
+            await _notify_llm_exhaustion(auth["llm_key"], 403, str(e))
+            yield format_typed("error", {
+                "code": "permission_denied",
+                "message": _extract_error_message(e),
+                "retriable": False,
             })
         except Exception as e:  # noqa: BLE001
             logger.exception("agent stream failed")

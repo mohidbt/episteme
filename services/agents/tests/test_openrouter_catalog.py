@@ -41,8 +41,10 @@ SAMPLE_RESPONSE = {
 
 
 class _FakeHttpxResponse:
-    def __init__(self, payload: dict):
+    def __init__(self, payload: dict, status_code: int = 200):
         self._payload = payload
+        self.status_code = status_code
+        self.text = json.dumps(payload)
 
     def raise_for_status(self):
         return None
