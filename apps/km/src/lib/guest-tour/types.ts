@@ -1,14 +1,20 @@
 export type TourStepId =
   | "drive_intro"
   | "notes_collection"
-  | "papers_refs_collection"
+  | "open_welcome_note"
+  | "references_collection"
+  | "wow_refs_fill"
+  | "open_reference"
+  | "wow_paper_search"
+  | "papers_collection"
+  | "open_seed_paper"
+  | "open_seed_paper_reader"
+  | "wow_reader_highlight"
+  | "open_seed_paperset"
+  | "wow_extract"
   | "agentball_hint"
   | "wow_paper_understanding"
   | "graph_intro"
-  | "wow_refs_fill"
-  | "wow_reader_highlight"
-  | "wow_paper_search"
-  | "wow_extract"
   | "signup_cta";
 
 export type TourRunState =

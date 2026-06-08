@@ -9,11 +9,20 @@ import { AgentBallProvider } from "@/components/agent/agent-ball-context";
 import { AutoRefreshOnFocus } from "@/components/AutoRefreshOnFocus";
 import { TabBar, TabBarProvider } from "@/components/TabBar";
 import { GuestTour } from "@/components/guest-tour/GuestTour";
+import { getGuestTourTargets, type GuestTourTargets } from "@/lib/guest-tour/seed-targets";
 
 export default async function AppLayout({ children }: { children: ReactNode }) {
   const session = await getCurrentSession();
   if (!session) return <AnonAutoSignIn />;
   const prefs = await getUserPreferences(session.userId);
+  let guestTourTargets: GuestTourTargets | null = null;
+  if (session.isAnonymous) {
+    try {
+      guestTourTargets = await getGuestTourTargets(session.userId);
+    } catch {
+      guestTourTargets = null;
+    }
+  }
   return (
     <AgentBallProvider>
       <TabBarProvider isAnonymous={session.isAnonymous}>
@@ -31,7 +40,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
           </div>
           <AgentBall userId={session.userId} />
           <AutoRefreshOnFocus />
-          <GuestTour isAnonymous={session.isAnonymous} />
+          <GuestTour isAnonymous={session.isAnonymous} seedTargets={guestTourTargets} />
         </SidebarProvider>
       </TabBarProvider>
     </AgentBallProvider>
