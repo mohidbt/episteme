@@ -281,18 +281,24 @@ export function GuestTour({ isAnonymous }: { isAnonymous: boolean }) {
   const steps = useMemo(() => buildSteps(), []);
   // Guard against double-advance from overlapping STEP_AFTER events.
   const advancingRef = useRef(false);
-  // Once we've autostarted, don't re-fire autostart on subsequent allowed
-  // pathnames — the tour is now driving its own pathname changes. Re-firing
-  // setRun(true) here was the smoking gun for Bug 3 (drive_intro → notes
-  // glitch): after advanceTo(1,'/notes') finished, the pathname effect
-  // observed pathname change but advancingRef had already been cleared in
-  // `finally`, so a late waitForSelector resolution could have flipped run
-  // back on at the wrong stepIndex.
-  const startedRef = useRef(false);
+  // True once the user has progressed past step 0 (i.e. tour is "live" and
+  // driving its own pathname changes). Distinct from a one-shot "autostart
+  // ever fired" latch — that semantics broke 3.1a.1: after TabBar pushed
+  // /n/welcome-to-episteme post-autostart, the latch locked out re-autostart
+  // when the user returned to /, so the tour never fired again.
+  //
+  // Set when advanceTo/goBackTo lands the user on a step > 0. Cleared on
+  // tour-done / dismiss. As long as the user is still at step 0, autostart
+  // is eligible to re-fire on subsequent allowed-route pathname transitions.
+  const progressedRef = useRef(false);
   // Mirror controlled stepIndex so the event handler always sees the latest
   // value (avoids stale-closure when STEP_AFTER fires across a render).
   const stepIndexRef = useRef(0);
   stepIndexRef.current = stepIndex;
+  // Mirror controlled `run` so the autostart effect can short-circuit when
+  // Joyride is already running at step 0 (avoids redundant re-starts).
+  const runRef = useRef(false);
+  runRef.current = run;
 
   useEffect(() => {
     // Don't toggle `run` back to true while an advanceTo() is in flight —
@@ -301,9 +307,14 @@ export function GuestTour({ isAnonymous }: { isAnonymous: boolean }) {
     // effect and resume Joyride BEFORE waitForSelector resolves, regenerating
     // the auto-nav race we fixed in Round 2.5.
     if (advancingRef.current) return;
-    // Bug 3 fix: once started, this effect is no longer the source of truth
-    // for `run` — advanceTo/goBackTo are. Autostart is one-shot.
-    if (startedRef.current) return;
+    // Bug 3 fix: once the user has progressed past step 0, the tour drives
+    // its own pathname changes — autostart must not re-fire and reset to
+    // step 0. (Was a one-shot `startedRef` before 3.1a.1; that latched even
+    // when autostart fired briefly then got torn down by a late TabBar push,
+    // blocking re-autostart on return to /.)
+    if (progressedRef.current) return;
+    // Already running at step 0 on an allowed route — nothing to do.
+    if (runRef.current) return;
     if (!isAnonymous) return;
     if (getTourDone()) return;
     if (!isTourAllowedRoute(pathname)) return;
@@ -339,7 +350,7 @@ export function GuestTour({ isAnonymous }: { isAnonymous: boolean }) {
       // Re-check every gate — pathname/isAnonymous/done-flag may have changed
       // while the promise + settle were pending.
       if (advancingRef.current) return;
-      if (startedRef.current) return;
+      if (progressedRef.current) return;
       if (!isAnonymous) return;
       if (getTourDone()) return;
       if (pathname !== targetPathname) return;
@@ -347,7 +358,6 @@ export function GuestTour({ isAnonymous }: { isAnonymous: boolean }) {
       // settle. If TabBar's push triggered an unmount, bail.
       if (!document.body.contains(el)) return;
       if (!document.querySelector(firstTarget)) return;
-      startedRef.current = true;
       setStepIndex(0);
       setRun(true);
     });
@@ -356,6 +366,19 @@ export function GuestTour({ isAnonymous }: { isAnonymous: boolean }) {
       cancelled = true;
     };
   }, [isAnonymous, pathname, steps]);
+
+  // If Joyride is running but the pathname slipped to a disallowed route
+  // (e.g. TabBar's first-visit push to /n/welcome-to-episteme landed after
+  // autostart fired), pause it. Otherwise Joyride may emit STATUS.SKIPPED
+  // on TARGET_NOT_FOUND — which the handler maps to setTourDone() and
+  // permanently kills the tour. Pausing keeps the autostart contract alive
+  // so it can re-fire when the user returns to an allowed route.
+  useEffect(() => {
+    if (!run) return;
+    if (progressedRef.current) return;
+    if (isTourAllowedRoute(pathname)) return;
+    setRun(false);
+  }, [pathname, run]);
 
   /**
    * Drive the controlled Joyride step pointer ourselves.
@@ -384,6 +407,7 @@ export function GuestTour({ isAnonymous }: { isAnonymous: boolean }) {
         await waitForSelector(nextTarget, NEXT_TARGET_TIMEOUT_MS);
       }
       setStepIndex(nextIndex);
+      if (nextIndex > 0) progressedRef.current = true;
       setRun(true);
     } finally {
       advancingRef.current = false;
@@ -404,6 +428,10 @@ export function GuestTour({ isAnonymous }: { isAnonymous: boolean }) {
         await waitForSelector(prevTarget, NEXT_TARGET_TIMEOUT_MS);
       }
       setStepIndex(prevIndex);
+      // Going back to step 0 reopens the autostart contract; clear the
+      // progressed latch so a route change that drops us off the allowed
+      // list (e.g. user closes welcome tab) can re-autostart cleanly.
+      progressedRef.current = prevIndex > 0;
       setRun(true);
     } finally {
       advancingRef.current = false;

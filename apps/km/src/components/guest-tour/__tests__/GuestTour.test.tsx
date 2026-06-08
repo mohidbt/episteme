@@ -985,6 +985,139 @@ describe("GuestTour", () => {
     );
   }, 10_000);
 
+  it("3.1a.1 regression: TabBar pushes welcome AFTER autostart fires — startedRef locks out re-fire on return to /", async () => {
+    // Real bug from preview: TabBar's push lands ~400ms after mount, AFTER the
+    // 50ms settle window. So the autostart fires (run=true, startedRef=true).
+    // Then welcome route mounts, header is ripped out, Joyride flashes. User
+    // clicks Drive → pathname returns to / and header re-mounts, but the
+    // autostart effect short-circuits on `startedRef.current === true` and
+    // never sets run=true again.
+    pathnameRef.current = "/";
+    mountDriveHeaderStub();
+    const { GuestTour } = await import("../GuestTour");
+    const { rerender } = render(<GuestTour isAnonymous={true} />);
+
+    // Autostart should fire within the settle window (header is present,
+    // pathname unchanged).
+    await waitFor(() => {
+      const c = joyrideSpy.mock.calls.at(-1)?.[0];
+      expect(c?.run).toBe(true);
+    });
+
+    // TabBar push lands LATE — header is torn out by route swap, pathname
+    // becomes welcome. Joyride is now run=true with no target.
+    pathnameRef.current = "/n/welcome-to-episteme";
+    document.body
+      .querySelectorAll("[data-testid='tour-drive-header']")
+      .forEach((el) => el.remove());
+    rerender(<GuestTour isAnonymous={true} />);
+    await new Promise((r) => setTimeout(r, 30));
+
+    // User clicks Drive — pathname back to /, header re-mounts.
+    pathnameRef.current = "/";
+    mountDriveHeaderStub();
+    rerender(<GuestTour isAnonymous={true} />);
+
+    // Tour MUST be running again on this allowed route. Currently fails:
+    // startedRef.current === true blocks the autostart effect forever.
+    await waitFor(
+      () => {
+        const c = joyrideSpy.mock.calls.at(-1)?.[0];
+        expect(c?.run).toBe(true);
+        expect(c?.stepIndex).toBe(0);
+      },
+      { timeout: 2_000 },
+    );
+  }, 10_000);
+
+  it("3.1a.1 regression: after welcome-tab bail, navigating back to / FIRES the tour", async () => {
+    // Repro of the user-reported regression on c9f37eb:
+    // Scenario B — anon → / → TabBar pushes /n/welcome-to-episteme mid-preflight.
+    // Settle + contains-check correctly bail (no glitch). Then user clicks the
+    // Drive tab → pathname returns to / → drive-header re-mounts.
+    // The tour MUST fire — currently it never does (autostart effect short-
+    // circuits or the latch is stuck).
+    pathnameRef.current = "/";
+    mountDriveHeaderStub();
+    const { GuestTour } = await import("../GuestTour");
+    const { rerender } = render(<GuestTour isAnonymous={true} />);
+
+    // Within the settle window: simulate TabBar push landing — pathname flips
+    // to welcome, header is ripped from DOM (route content swap).
+    pathnameRef.current = "/n/welcome-to-episteme";
+    document.body
+      .querySelectorAll("[data-testid='tour-drive-header']")
+      .forEach((el) => el.remove());
+    rerender(<GuestTour isAnonymous={true} />);
+
+    // Wait past the settle to confirm the bail succeeded.
+    await new Promise((r) => setTimeout(r, 120));
+    let calls = joyrideSpy.mock.calls.map((c) => c[0] as { run: boolean });
+    expect(calls.every((c) => c.run === false)).toBe(true);
+
+    // User clicks Drive tab — pathname returns to /, header re-mounts.
+    pathnameRef.current = "/";
+    mountDriveHeaderStub();
+    rerender(<GuestTour isAnonymous={true} />);
+
+    // Tour MUST fire.
+    await waitFor(
+      () => {
+        const c = joyrideSpy.mock.calls.at(-1)?.[0];
+        expect(c?.run).toBe(true);
+      },
+      { timeout: 2_000 },
+    );
+  }, 10_000);
+
+  it("3.1a.1 regression: autostart re-fires after a tear-down → recover cycle on step 0", async () => {
+    // Worst-case timing: autostart fires (header present at /), then TabBar's
+    // push lands LATE and rips the route out. Tour pauses on disallowed route
+    // (so Joyride doesn't emit SKIPPED → setTourDone). User returns to /.
+    // Tour MUST autostart again because the user never engaged past step 0.
+    pathnameRef.current = "/";
+    mountDriveHeaderStub();
+    const { GuestTour } = await import("../GuestTour");
+    const { rerender } = render(<GuestTour isAnonymous={true} />);
+
+    // Initial autostart.
+    await waitFor(() => {
+      const c = joyrideSpy.mock.calls.at(-1)?.[0];
+      expect(c?.run).toBe(true);
+      expect(c?.stepIndex).toBe(0);
+    });
+
+    // TabBar push lands late: pathname flips, header torn out.
+    pathnameRef.current = "/n/welcome-to-episteme";
+    document.body
+      .querySelectorAll("[data-testid='tour-drive-header']")
+      .forEach((el) => el.remove());
+    rerender(<GuestTour isAnonymous={true} />);
+
+    // Tour must be paused on disallowed route (so Joyride doesn't fire
+    // SKIPPED → setTourDone).
+    await waitFor(() => {
+      const c = joyrideSpy.mock.calls.at(-1)?.[0];
+      expect(c?.run).toBe(false);
+    });
+    expect(getTourDone()).toBe(false);
+
+    // User returns to / via Drive tab — header re-mounts.
+    pathnameRef.current = "/";
+    mountDriveHeaderStub();
+    rerender(<GuestTour isAnonymous={true} />);
+
+    // Tour MUST re-fire at step 0.
+    await waitFor(
+      () => {
+        const c = joyrideSpy.mock.calls.at(-1)?.[0];
+        expect(c?.run).toBe(true);
+        expect(c?.stepIndex).toBe(0);
+      },
+      { timeout: 2_000 },
+    );
+  }, 10_000);
+
   it("Bug 3: autostart is one-shot — pathname change after start does NOT re-fire setRun(true)", async () => {
     // The pathname effect used to re-run on every allowed pathname; after
     // advanceTo cleared advancingRef in `finally`, a late waitForSelector
