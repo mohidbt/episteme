@@ -42,6 +42,7 @@ interface DisplayRow {
   year: number | null;
   doi: string | null;
   venue: string;
+  abstract: string;
   folderPath: string;
   folderId: string | null;
   missing: string[];
@@ -53,6 +54,7 @@ function toDisplay(row: ReferenceRow): DisplayRow {
   const csl = (row.cslJson ?? { id: row.id, type: "article" }) as CslItem;
   const { title, authorsText, year, doi } = denormaliseForList(csl);
   const venue = (csl["container-title"] as string | undefined) ?? "";
+  const abstract = (csl.abstract as string | undefined) ?? "";
 
   const missing: string[] = [];
   if (!title) missing.push("title");
@@ -76,6 +78,7 @@ function toDisplay(row: ReferenceRow): DisplayRow {
     year,
     doi,
     venue,
+    abstract,
     folderPath: row.folderPath,
     folderId: row.folderId ?? null,
     missing,
@@ -191,6 +194,7 @@ function ReferencesListTable({
             <TableHead className="text-right">Year</TableHead>
             <TableHead>DOI</TableHead>
             <TableHead>Venue</TableHead>
+            <TableHead>Abstract</TableHead>
             <TableHead>Folder</TableHead>
             <TableHead className="w-10" aria-label="Actions" />
           </TableRow>
@@ -217,6 +221,17 @@ function ReferencesListTable({
                 {r.doi ?? ""}
               </TableCell>
               <TableCell className={`text-muted-foreground${r.missing.includes("venue") ? " bg-red-50 dark:bg-red-950/30" : ""}`}>{r.venue}</TableCell>
+              <TableCell
+                className="max-w-xs text-muted-foreground"
+                data-testid={`refs-abstract-${r.id}`}
+                title={r.abstract || undefined}
+              >
+                {r.abstract ? (
+                  <span className="line-clamp-2 cursor-help text-xs">{r.abstract}</span>
+                ) : (
+                  <span className="text-xs italic opacity-50">—</span>
+                )}
+              </TableCell>
               <TableCell>
                 <FolderPill folders={folders} folderId={r.folderId} folderPath={r.folderPath} />
               </TableCell>

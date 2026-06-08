@@ -1126,6 +1126,35 @@ describe("GuestTour", () => {
     );
   }, 10_000);
 
+  it("GSD-39: tooltip carries NO border; outline is drawn on floater via stacked drop-shadow filter so it traces the arrow-notch union", async () => {
+    // Bug: a `border` on the tooltip rectangle paints a line ACROSS the arrow
+    // notch where the arrow SVG meets the tooltip edge — the arrow has no
+    // matching border so the seam looks broken.
+    // Fix: drop the tooltip border, and apply a 4-direction stacked
+    // `drop-shadow()` filter chain to the `floater` wrapper. drop-shadow
+    // traces the alpha union of its descendants, so the outline wraps the
+    // tooltip + arrow as a single shape.
+    const { GuestTour } = await import("../GuestTour");
+    render(<GuestTour isAnonymous={true} />);
+    await waitFor(() => {
+      expect(joyrideSpy).toHaveBeenCalled();
+    });
+    const lastCall = joyrideSpy.mock.calls.at(-1)?.[0];
+    const styles = lastCall?.styles as {
+      tooltip?: Record<string, unknown>;
+      floater?: Record<string, unknown>;
+    };
+    // Tooltip MUST NOT carry a `border` — the arrow has no matching one, so
+    // a tooltip border paints a visible seam across the notch base.
+    expect(styles?.tooltip?.border).toBeUndefined();
+    // Floater MUST carry a `filter` with multiple drop-shadow() entries so
+    // the outline traces the union of tooltip + arrow.
+    const filter = styles?.floater?.filter;
+    expect(typeof filter).toBe("string");
+    const dropShadowCount = (filter as string).match(/drop-shadow\(/g)?.length ?? 0;
+    expect(dropShadowCount).toBeGreaterThanOrEqual(4);
+  });
+
   it("Bug 3: autostart is one-shot — pathname change after start does NOT re-fire setRun(true)", async () => {
     // The pathname effect used to re-run on every allowed pathname; after
     // advanceTo cleared advancingRef in `finally`, a late waitForSelector

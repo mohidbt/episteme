@@ -288,10 +288,27 @@ const TOUR_THEME = {
 // a single hairline + low-spread popover shadow. Titles/body use the app fonts;
 // the popover shadow is inlined because --shadow-pop lives only in the design
 // bundle, not globals.css.
+//
+// GSD-39: outline lives on the `floater` (wrapper containing tooltip + arrow)
+// via stacked drop-shadow() filters, NOT on `tooltip`. A border on the tooltip
+// rectangle paints a visible seam across the arrow-notch base — the arrow SVG
+// has no matching border. drop-shadow traces the alpha union of descendants,
+// so 4 stacked 1px shadows (N/E/S/W) produce a continuous hairline outline
+// that wraps tooltip + arrow as a single shape. Box-shadow stays on tooltip
+// for elevation (drop-shadow can't render the soft blur as cleanly).
+const TOOLTIP_OUTLINE_FILTER = [
+  "drop-shadow(0 1px 0 var(--border))",
+  "drop-shadow(0 -1px 0 var(--border))",
+  "drop-shadow(1px 0 0 var(--border))",
+  "drop-shadow(-1px 0 0 var(--border))",
+].join(" ");
+
 const TOUR_STYLES = {
+  floater: {
+    filter: TOOLTIP_OUTLINE_FILTER,
+  },
   tooltip: {
     borderRadius: "var(--radius)",
-    border: "1px solid var(--border)",
     boxShadow:
       "0 4px 16px -8px oklch(0 0 0 / 0.18), 0 2px 4px -2px oklch(0 0 0 / 0.06)",
     fontFamily: "var(--font-sans)",

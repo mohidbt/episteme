@@ -4,6 +4,7 @@ import type { Metadata } from "next";
 import { Geist_Mono, Outfit, Philosopher } from "next/font/google";
 import { fraunces, jetbrainsMono } from "./fonts";
 import { Toaster } from "@/components/ui/sonner";
+import { MobileGate } from "@/components/MobileGate";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { Analytics } from "@vercel/analytics/next";
 
@@ -42,6 +43,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     >
       <body className="min-h-full">
         {children}
+        <MobileGate />
         <Toaster position="bottom-right" />
         <SpeedInsights />
         <Analytics />

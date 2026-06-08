@@ -55,6 +55,7 @@ describe("ReferencesView", () => {
       "Year",
       "DOI",
       "Venue",
+      "Abstract",
       "Folder",
     ]) {
       expect(screen.getByRole("columnheader", { name: header })).toBeTruthy();
@@ -213,9 +214,9 @@ describe("ReferencesView", () => {
     const row1 = screen.getByTestId("refs-row-r-with-id");
     const row2 = screen.getByTestId("refs-row-r-legacy");
 
-    // Folder cell is the 7th column (index 6) — same as the "Folder" header.
-    const cell1 = row1.querySelectorAll("td")[6]!;
-    const cell2 = row2.querySelectorAll("td")[6]!;
+    // Folder cell is the 8th column (index 7) — after Abstract column added (GSD-7).
+    const cell1 = row1.querySelectorAll("td")[7]!;
+    const cell2 = row2.querySelectorAll("td")[7]!;
 
     // Both cells must contain a Badge (a span with the secondary badge class),
     // not a plain text span. We assert by checking the rendered element is a
@@ -256,5 +257,47 @@ describe("ReferencesView", () => {
     expect("venue" in patchBody).toBe(false);
     expect(patchBody.cslJson.title).toBe("Batch Paper");
     expect(patchBody.cslJson["container-title"]).toBe("NeurIPS");
+  });
+
+  // GSD-7 — Abstract column renders the CSL `abstract` field, line-clamped,
+  // with full text exposed via the cell's `title` attribute (hover tooltip).
+  it("GSD-7: renders abstract cell line-clamped with full text in title tooltip", () => {
+    const longAbstract =
+      "This paper presents a novel approach to retrieval-augmented generation that improves recall by 17%. The method combines dense and sparse retrievers in a learned ensemble. We evaluate on five benchmarks and discuss failure modes.";
+    const rowsWithAbstract: ReferenceRow[] = [
+      {
+        id: "r-abs",
+        libraryId: 1,
+        userId: "u1",
+        folderPath: "",
+        folderId: null,
+        prevFolderId: null,
+        citationKey: "rag2024",
+        cslJson: {
+          id: "r-abs",
+          type: "article-journal",
+          title: "Hybrid RAG",
+          abstract: longAbstract,
+        },
+        paperId: null,
+        createdAt: NOW,
+        updatedAt: NOW,
+      },
+    ] as unknown as ReferenceRow[];
+
+    render(<ReferencesView rows={rowsWithAbstract} />);
+    const cell = screen.getByTestId("refs-abstract-r-abs");
+    expect(cell.getAttribute("title")).toBe(longAbstract);
+    const inner = cell.querySelector("span");
+    expect(inner).toBeTruthy();
+    expect(inner!.className).toContain("line-clamp-2");
+    expect(inner!.textContent).toBe(longAbstract);
+  });
+
+  it("GSD-7: renders em-dash placeholder when abstract missing", () => {
+    render(<ReferencesView rows={rows} />);
+    const cell = screen.getByTestId("refs-abstract-r1");
+    expect(cell.getAttribute("title")).toBeNull();
+    expect(cell.textContent).toBe("—");
   });
 });

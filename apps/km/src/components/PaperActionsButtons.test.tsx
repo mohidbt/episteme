@@ -92,6 +92,29 @@ describe("PaperActionsButtons", () => {
     });
   });
 
+  it("GSD-8: Add as reference is disabled with a tooltip when alreadyReferenced is true", () => {
+    render(
+      <PaperActionsButtons
+        paper={{ ...paperBase, doi: "10.1/abc" }}
+        alreadyReferenced
+      />,
+    );
+    const btn = screen.getByRole("button", { name: /add as reference/i }) as HTMLButtonElement;
+    expect(btn.disabled).toBe(true);
+    expect(btn.getAttribute("title")).toMatch(/already/i);
+  });
+
+  it("GSD-8: Add as reference is enabled when alreadyReferenced is false", () => {
+    render(
+      <PaperActionsButtons
+        paper={{ ...paperBase, doi: "10.1/abc" }}
+        alreadyReferenced={false}
+      />,
+    );
+    const btn = screen.getByRole("button", { name: /add as reference/i }) as HTMLButtonElement;
+    expect(btn.disabled).toBe(false);
+  });
+
   it("BG7: includes folderPath when paper has a non-root folderPath", async () => {
     mockFetch.mockResolvedValueOnce(
       new Response(JSON.stringify({ id: "ref-2" }), { status: 201 }),
