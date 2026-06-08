@@ -572,7 +572,8 @@ describe("GuestTour", () => {
       const { GuestTour } = await import("../GuestTour");
       render(<GuestTour isAnonymous={true} />);
       await waitFor(() => {
-        expect(joyrideSpy).toHaveBeenCalled();
+        const c = joyrideSpy.mock.calls.at(-1)?.[0];
+        expect(c?.run).toBe(true);
       });
       const firstCall = joyrideSpy.mock.calls.at(-1)?.[0];
       const steps = firstCall?.steps as Array<{ target: string; data?: { next?: string } }>;
@@ -679,7 +680,8 @@ describe("GuestTour", () => {
       const { GuestTour } = await import("../GuestTour");
       const { rerender } = render(<GuestTour isAnonymous={true} />);
       await waitFor(() => {
-        expect(joyrideSpy).toHaveBeenCalled();
+        const c = joyrideSpy.mock.calls.at(-1)?.[0];
+        expect(c?.run).toBe(true);
       });
       const firstCall = joyrideSpy.mock.calls.at(-1)?.[0];
       const steps = firstCall?.steps as Array<{ target: string; data?: { next?: string } }>;
@@ -778,7 +780,8 @@ describe("GuestTour", () => {
     const { GuestTour } = await import("../GuestTour");
     render(<GuestTour isAnonymous={true} />);
     await waitFor(() => {
-      expect(joyrideSpy).toHaveBeenCalled();
+      const c = joyrideSpy.mock.calls.at(-1)?.[0];
+      expect(c?.run).toBe(true);
     });
     const firstCall = joyrideSpy.mock.calls.at(-1)?.[0];
     const onEvent = firstCall?.onEvent as (
@@ -856,7 +859,8 @@ describe("GuestTour", () => {
     const { GuestTour } = await import("../GuestTour");
     render(<GuestTour isAnonymous={true} />);
     await waitFor(() => {
-      expect(joyrideSpy).toHaveBeenCalled();
+      const c = joyrideSpy.mock.calls.at(-1)?.[0];
+      expect(c?.run).toBe(true);
     });
     const firstCall = joyrideSpy.mock.calls.at(-1)?.[0];
     const onEvent = firstCall?.onEvent as (
@@ -938,6 +942,48 @@ describe("GuestTour", () => {
     const c = joyrideSpy.mock.calls.at(-1)?.[0];
     expect(c?.stepIndex).toBe(0);
   });
+
+  it("3.1a.1: autostart bails when TabBar redirects to welcome note mid-preflight (settle gate)", async () => {
+    // Real-world bug: anon lands on /, GuestTour starts waitForSelector. The
+    // tour-drive-header IS in DOM (FileBrowser rendered briefly). Selector
+    // resolves immediately, but TabBarProvider's hydration effect on the same
+    // tick calls router.push("/n/welcome-to-episteme") → pathname flips. The
+    // 50ms settle + post-resolve pathname re-check + DOM contains() guard must
+    // prevent autostart.
+    pathnameRef.current = "/";
+    mountDriveHeaderStub();
+    const { GuestTour } = await import("../GuestTour");
+    const { rerender } = render(<GuestTour isAnonymous={true} />);
+    // Within the settle window, flip pathname (simulates TabBar's push landing).
+    pathnameRef.current = "/n/welcome-to-episteme";
+    // Also rip the header out of DOM (simulates route DOM change).
+    document.body
+      .querySelectorAll("[data-testid='tour-drive-header']")
+      .forEach((el) => el.remove());
+    rerender(<GuestTour isAnonymous={true} />);
+    // Wait past the settle (>50ms).
+    await new Promise((r) => setTimeout(r, 120));
+    const calls = joyrideSpy.mock.calls.map((c) => c[0] as { run: boolean });
+    expect(calls.every((c) => c.run === false)).toBe(true);
+  });
+
+  it("3.1a.1: autostart fires when header mounts AFTER initial probe (delayed mount within timeout)", async () => {
+    // Anon on / with NO header in DOM at mount time. Header mounts ~100ms
+    // later (FileBrowser hydration). The extended 10s timeout should catch
+    // it; tour autostarts cleanly.
+    pathnameRef.current = "/";
+    const { GuestTour } = await import("../GuestTour");
+    render(<GuestTour isAnonymous={true} />);
+    // Mount header after a short delay — still within the 10s timeout.
+    setTimeout(() => mountDriveHeaderStub(), 100);
+    await waitFor(
+      () => {
+        const lastCall = joyrideSpy.mock.calls.at(-1)?.[0];
+        expect(lastCall?.run).toBe(true);
+      },
+      { timeout: 3_000 },
+    );
+  }, 10_000);
 
   it("Bug 3: autostart is one-shot — pathname change after start does NOT re-fire setRun(true)", async () => {
     // The pathname effect used to re-run on every allowed pathname; after

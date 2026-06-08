@@ -317,16 +317,36 @@ export function GuestTour({ isAnonymous }: { isAnonymous: boolean }) {
 
     let cancelled = false;
     const targetPathname = pathname;
-    void waitForSelector(firstTarget, 1500).then((el) => {
+    // Bug: TabBarProvider hydrates on the SAME tick we mount and may call
+    // `router.push("/n/welcome-to-episteme")` for first-visit guests. Initial
+    // pathname is "/" (allowed) → selector resolves → we start the tour →
+    // pathname then flips to the welcome note (disallowed) → drive_intro
+    // target is ripped out of the DOM, Joyride flashes / glitches.
+    //
+    // Fix: bumped timeout (10s) so the autostart effect re-runs after TabBar's
+    // push and the new pathname fails the allowlist; AND a short post-resolve
+    // settle delay so we can confirm the target is still mounted at the same
+    // pathname (catches the in-flight push that lands between resolve and
+    // setRun).
+    void waitForSelector(firstTarget, 10_000).then(async (el) => {
+      if (cancelled) return;
+      if (!el) return;
+      // Settle: yield to the scheduler so any in-flight router.push from
+      // TabBarProvider can land before we commit. 50ms is empirically enough
+      // for Next.js client navigation to fire its pathname update.
+      await new Promise<void>((r) => setTimeout(r, 50));
       if (cancelled) return;
       // Re-check every gate — pathname/isAnonymous/done-flag may have changed
-      // while the promise was pending.
+      // while the promise + settle were pending.
       if (advancingRef.current) return;
       if (startedRef.current) return;
       if (!isAnonymous) return;
       if (getTourDone()) return;
       if (pathname !== targetPathname) return;
-      if (!el) return;
+      // Final DOM re-check: the target must STILL be in the DOM after the
+      // settle. If TabBar's push triggered an unmount, bail.
+      if (!document.body.contains(el)) return;
+      if (!document.querySelector(firstTarget)) return;
       startedRef.current = true;
       setStepIndex(0);
       setRun(true);
