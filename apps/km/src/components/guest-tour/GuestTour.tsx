@@ -38,7 +38,15 @@ function prefersReducedMotion(): boolean {
   }
 }
 
-function buildSteps(onCtaClick: () => void): Step[] {
+// Wider tooltip for preview-card steps so the embedded .webm renders at a
+// usable size (default Joyride width ~290px squeezes the video).
+const PREVIEW_TOOLTIP_STYLES = {
+  tooltip: { width: 720, maxWidth: "90vw" as const },
+} as const;
+
+type StepData = { next?: string; prev?: string };
+
+function buildSteps(): Step[] {
   return [
     {
       id: "drive_intro",
@@ -47,7 +55,10 @@ function buildSteps(onCtaClick: () => void): Step[] {
       skipBeacon: true,
       content:
         "Your drive holds 4 things: Notes, Papers, References, and Assets (images). Everything is searchable and connected.",
-      data: { next: "/notes" },
+      data: { next: "/notes" } as StepData,
+      // First step: no "Back" — there is nowhere to go back to. Joyride v3
+      // has no `hideBackButton` prop; hide via per-step styles override.
+      styles: { buttonBack: { display: "none" } },
     },
     {
       id: "notes_collection",
@@ -56,7 +67,7 @@ function buildSteps(onCtaClick: () => void): Step[] {
       skipBeacon: true,
       content:
         "Notes are your living write-ups. Type [[ inside a note to wiki-link any paper, reference, or note. Use Import (top-right) to bring in markdown, PDFs, or BibTeX/RIS.",
-      data: { next: "/references" },
+      data: { next: "/references", prev: "/" } as StepData,
     },
     {
       id: "papers_refs_collection",
@@ -65,7 +76,7 @@ function buildSteps(onCtaClick: () => void): Step[] {
       skipBeacon: true,
       content:
         "References are lightweight citation metadata — no PDF attached. Papers (right above) store the full PDF. Either way, the same Import button handles PDFs, BibTeX, RIS, and EndNote.",
-      data: { next: "/" },
+      data: { next: "/", prev: "/notes" } as StepData,
     },
     {
       id: "agentball_hint",
@@ -74,12 +85,14 @@ function buildSteps(onCtaClick: () => void): Step[] {
       skipBeacon: true,
       content:
         "Press space twice anywhere to summon the agent. Ask anything about your library.",
+      data: { prev: "/references" } as StepData,
     },
     {
       id: "wow_paper_understanding",
       target: "body",
       placement: "center",
       skipBeacon: true,
+      styles: PREVIEW_TOOLTIP_STYLES,
       content: (
         <TourPreviewCard
           title="Cross-paper understanding"
@@ -95,6 +108,7 @@ function buildSteps(onCtaClick: () => void): Step[] {
       target: "body",
       placement: "center",
       skipBeacon: true,
+      styles: PREVIEW_TOOLTIP_STYLES,
       content: (
         <TourPreviewCard
           title="Graph view"
@@ -109,6 +123,7 @@ function buildSteps(onCtaClick: () => void): Step[] {
       target: "body",
       placement: "center",
       skipBeacon: true,
+      styles: PREVIEW_TOOLTIP_STYLES,
       content: (
         <TourPreviewCard
           title="Fill missing reference fields"
@@ -124,6 +139,7 @@ function buildSteps(onCtaClick: () => void): Step[] {
       target: "body",
       placement: "center",
       skipBeacon: true,
+      styles: PREVIEW_TOOLTIP_STYLES,
       content: (
         <TourPreviewCard
           title="Highlight numerical findings"
@@ -139,6 +155,7 @@ function buildSteps(onCtaClick: () => void): Step[] {
       target: "body",
       placement: "center",
       skipBeacon: true,
+      styles: PREVIEW_TOOLTIP_STYLES,
       content: (
         <TourPreviewCard
           title="One-click PDF discovery"
@@ -154,6 +171,7 @@ function buildSteps(onCtaClick: () => void): Step[] {
       target: "body",
       placement: "center",
       skipBeacon: true,
+      styles: PREVIEW_TOOLTIP_STYLES,
       content: (
         <TourPreviewCard
           title="Paperset enrich (concurrent)"
@@ -169,13 +187,15 @@ function buildSteps(onCtaClick: () => void): Step[] {
       target: "body",
       placement: "center",
       skipBeacon: true,
+      // Single primary action: Joyride's footer "Sign up free" button
+      // (relabeled via locale.last on the final step). The in-card CTA
+      // would visually disconnect from the footer — drop it.
       content: (
         <TourPreviewCard
           title="Ready to make this yours?"
           caption="Sign up to keep your work, run real agents, and connect your library."
           mediaAlt=""
           previewBadge={false}
-          cta={{ label: "Sign up free", href: "/sign-up", onClick: onCtaClick }}
         />
       ),
     },
@@ -238,6 +258,12 @@ const TOUR_STYLES = {
     fontWeight: 500,
     padding: "8px 14px",
   },
+  buttonBack: {
+    color: "var(--muted-foreground)",
+    fontFamily: "var(--font-sans)",
+    fontSize: 14,
+    marginRight: 8,
+  },
   buttonSkip: {
     color: "var(--muted-foreground)",
     fontFamily: "var(--font-sans)",
@@ -252,18 +278,21 @@ export function GuestTour({ isAnonymous }: { isAnonymous: boolean }) {
   const pathname = usePathname();
   const router = useRouter();
   const reduceMotion = useMemo(prefersReducedMotion, []);
-  // CTA click handler: flag tour done BEFORE navigation so a sign-up cancel +
-  // reload doesn't retrigger the tour.
-  const handleCtaClick = useMemo(
-    () => () => {
-      setTourDone();
-      setRun(false);
-    },
-    [],
-  );
-  const steps = useMemo(() => buildSteps(handleCtaClick), [handleCtaClick]);
+  const steps = useMemo(() => buildSteps(), []);
   // Guard against double-advance from overlapping STEP_AFTER events.
   const advancingRef = useRef(false);
+  // Once we've autostarted, don't re-fire autostart on subsequent allowed
+  // pathnames — the tour is now driving its own pathname changes. Re-firing
+  // setRun(true) here was the smoking gun for Bug 3 (drive_intro → notes
+  // glitch): after advanceTo(1,'/notes') finished, the pathname effect
+  // observed pathname change but advancingRef had already been cleared in
+  // `finally`, so a late waitForSelector resolution could have flipped run
+  // back on at the wrong stepIndex.
+  const startedRef = useRef(false);
+  // Mirror controlled stepIndex so the event handler always sees the latest
+  // value (avoids stale-closure when STEP_AFTER fires across a render).
+  const stepIndexRef = useRef(0);
+  stepIndexRef.current = stepIndex;
 
   useEffect(() => {
     // Don't toggle `run` back to true while an advanceTo() is in flight —
@@ -272,6 +301,9 @@ export function GuestTour({ isAnonymous }: { isAnonymous: boolean }) {
     // effect and resume Joyride BEFORE waitForSelector resolves, regenerating
     // the auto-nav race we fixed in Round 2.5.
     if (advancingRef.current) return;
+    // Bug 3 fix: once started, this effect is no longer the source of truth
+    // for `run` — advanceTo/goBackTo are. Autostart is one-shot.
+    if (startedRef.current) return;
     if (!isAnonymous) return;
     if (getTourDone()) return;
     if (!isTourAllowedRoute(pathname)) return;
@@ -290,10 +322,13 @@ export function GuestTour({ isAnonymous }: { isAnonymous: boolean }) {
       // Re-check every gate — pathname/isAnonymous/done-flag may have changed
       // while the promise was pending.
       if (advancingRef.current) return;
+      if (startedRef.current) return;
       if (!isAnonymous) return;
       if (getTourDone()) return;
       if (pathname !== targetPathname) return;
       if (!el) return;
+      startedRef.current = true;
+      setStepIndex(0);
       setRun(true);
     });
 
@@ -322,13 +357,33 @@ export function GuestTour({ isAnonymous }: { isAnonymous: boolean }) {
       if (nextRoute) router.push(nextRoute);
       const nextStep = steps[nextIndex];
       const nextTarget = typeof nextStep?.target === "string" ? nextStep.target : null;
-      if (nextTarget) {
+      if (nextTarget && nextTarget !== "body") {
         // Best-effort wait. Timeout returns null; we resume anyway so the
         // tour never dead-ends — Joyride's own targetWaitTimeout will then
         // surface a TARGET_NOT_FOUND we can observe in logs.
         await waitForSelector(nextTarget, NEXT_TARGET_TIMEOUT_MS);
       }
       setStepIndex(nextIndex);
+      setRun(true);
+    } finally {
+      advancingRef.current = false;
+    }
+  }
+
+  /** Symmetric helper for back navigation across routes. */
+  async function goBackTo(prevIndex: number, prevRoute: string | null) {
+    if (advancingRef.current) return;
+    if (prevIndex < 0) return;
+    advancingRef.current = true;
+    try {
+      setRun(false);
+      if (prevRoute) router.push(prevRoute);
+      const prevStep = steps[prevIndex];
+      const prevTarget = typeof prevStep?.target === "string" ? prevStep.target : null;
+      if (prevTarget && prevTarget !== "body") {
+        await waitForSelector(prevTarget, NEXT_TARGET_TIMEOUT_MS);
+      }
+      setStepIndex(prevIndex);
       setRun(true);
     } finally {
       advancingRef.current = false;
@@ -347,16 +402,45 @@ export function GuestTour({ isAnonymous }: { isAnonymous: boolean }) {
     const type = (data as { type?: string }).type;
     const lifecycle = (data as { lifecycle?: string }).lifecycle;
     const index = (data as { index?: number }).index;
-    const step = (data as { step?: { data?: { next?: string } } }).step;
+    const step = (data as { step?: { id?: string; data?: StepData } }).step;
 
+    // Bug 1: signup_cta — Joyride's primary "Sign up free" button (relabeled
+    // via locale.last) IS the CTA. Intercept the final-step `next` to flag
+    // tour-done + route to /sign-up instead of merely closing the tour.
     if (
       type === EVENTS.STEP_AFTER &&
       action === "next" &&
       lifecycle === "complete" &&
+      step?.id === "signup_cta"
+    ) {
+      setTourDone();
+      setRun(false);
+      router.push("/sign-up");
+      return;
+    }
+
+    if (
+      type === EVENTS.STEP_AFTER &&
+      lifecycle === "complete" &&
       typeof index === "number"
     ) {
-      const nextRoute = step?.data?.next ?? null;
-      void advanceTo(index + 1, nextRoute);
+      // Bug 3 defense: only act on user-initiated next/prev. Joyride emits
+      // STEP_AFTER with action=update on internal transitions (e.g. step
+      // unmount during pause) — those must NOT advance/retreat the index.
+      if (action === "next") {
+        // Stale-event guard: if Joyride emits STEP_AFTER for an index we've
+        // already moved past (controlled-mode lag), ignore it. The user-
+        // reported "drive flashes then jumps to notes, progress stuck at
+        // 1/11" pattern matches a STEP_AFTER for index=0 firing after we
+        // already advanced — without this guard we'd advance again to 2.
+        if (index !== stepIndexRef.current) return;
+        const nextRoute = step?.data?.next ?? null;
+        void advanceTo(index + 1, nextRoute);
+      } else if (action === "prev") {
+        if (index !== stepIndexRef.current) return;
+        const prevRoute = step?.data?.prev ?? null;
+        void goBackTo(index - 1, prevRoute);
+      }
     }
   }
 
@@ -366,15 +450,22 @@ export function GuestTour({ isAnonymous }: { isAnonymous: boolean }) {
       stepIndex={stepIndex}
       steps={steps}
       continuous
-      // Sentence-case button labels (design system). "Done" replaces the
-      // library default "Last" on the final step.
-      locale={{ skip: "Skip", next: "Next", last: "Done", back: "Back", close: "Close" }}
+      // Sentence-case button labels (design system). On the final step
+      // (signup_cta), Joyride uses `locale.last` as the primary button
+      // label — relabeled to "Sign up free" so the CTA lives in the
+      // tooltip footer (Bug 1 fix: no second misaligned in-card CTA).
+      locale={{
+        skip: "Skip",
+        next: "Next",
+        last: "Sign up free",
+        back: "Back",
+        close: "Close",
+      }}
       styles={TOUR_STYLES}
-      // Forward-only tour: omit "back" from buttons. Joyride v3 has no
-      // `hideBackButton` option; the buttons array IS the back/skip/primary
-      // toggle. Back would desync controlled `stepIndex` mode anyway.
       options={{
-        buttons: ["skip", "primary"],
+        // Bug 4: re-enable back navigation. Per-step `hideBackButton: true`
+        // on drive_intro suppresses it where there's nowhere to go back.
+        buttons: ["back", "skip", "primary"],
         showProgress: true,
         // Design tokens (colors, radius, width) — see TOUR_THEME.
         ...TOUR_THEME,

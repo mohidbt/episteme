@@ -80,25 +80,26 @@ export function TourPreviewCard({
       </CardHeader>
       {mediaSrc ? (
         <CardContent className="px-0">
-          <div className="overflow-hidden rounded-md border border-border/60 bg-muted">
+          <div
+            className="overflow-hidden rounded-md border border-border/60 bg-muted"
+            // Native recordings are 1440x900 (16:10). Keep aspect so the
+            // video fills the (wider) preview tooltip without letterboxing.
+            style={{ aspectRatio: "1440 / 900" }}
+          >
             {isVideo ? (
               showPosterFallback ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={mediaPoster}
                   alt={mediaAlt}
-                  width={480}
-                  height={270}
-                  className="h-auto w-full"
+                  className="h-full w-full object-cover"
                 />
               ) : (
                 <video
                   src={mediaSrc}
                   poster={mediaPoster}
                   aria-label={mediaAlt}
-                  width={480}
-                  height={270}
-                  className="h-auto w-full"
+                  className="h-full w-full object-cover"
                   autoPlay
                   muted
                   loop
@@ -109,9 +110,9 @@ export function TourPreviewCard({
               <Image
                 src={mediaSrc}
                 alt={mediaAlt}
-                width={480}
-                height={270}
-                className="h-auto w-full"
+                width={1440}
+                height={900}
+                className="h-full w-full object-cover"
                 unoptimized
               />
             )}
