@@ -97,11 +97,6 @@ export function TabBarProvider({
   const stateRef = useRef<TabsState>(DEFAULT_STATE);
   stateRef.current = state;
   const persistedRef = useRef(false);
-  // When guest-bootstrap navigates to the welcome note, the pathname-sync
-  // effect would briefly observe the still-current pathname (e.g. "/") and
-  // overwrite the bootstrapped activeHref. Gate the next pathname sync until
-  // the router finishes the bootstrap navigation.
-  const skipPathSyncUntilRef = useRef<string | null>(null);
 
   // Hydrate from localStorage after mount (client-only).
   useEffect(() => {
@@ -109,22 +104,20 @@ export function TabBarProvider({
     if (stored && (stored.tabs.length > 0 || stored.activeHref)) {
       setState(stored);
     } else if (isAnonymous) {
-      // Guest first-paint: Drive + Welcome note, Welcome active.
-      const guestState: TabsState = {
+      // Guest first-paint: seed Drive + Welcome tabs but keep Drive active
+      // and DO NOT push the route. The joyride autostart needs the user to
+      // land at "/" so step 0 (drive_intro) fires; an auto-push to the
+      // welcome note interrupted the tour. (GSD-38)
+      setState({
         tabs: [
           { href: DEFAULT_HREF, title: DEFAULT_TITLE },
           { href: GUEST_WELCOME_HREF, title: GUEST_WELCOME_TITLE },
         ],
-        activeHref: GUEST_WELCOME_HREF,
-      };
-      setState(guestState);
-      if (pathname !== GUEST_WELCOME_HREF) {
-        skipPathSyncUntilRef.current = GUEST_WELCOME_HREF;
-        router.push(GUEST_WELCOME_HREF);
-      }
+        activeHref: DEFAULT_HREF,
+      });
     }
     persistedRef.current = true;
-  }, [isAnonymous, pathname, router]);
+  }, [isAnonymous]);
 
   // Persist on change — but only after the initial hydration pass, so we
   // don't overwrite stored state with the default on first commit.
@@ -143,15 +136,6 @@ export function TabBarProvider({
   useEffect(() => {
     if (!pathname) return;
     const href = normalizeHref(pathname);
-    // Suppress the sync until the guest-bootstrap navigation lands on the
-    // welcome note; otherwise the bootstrap activeHref gets clobbered.
-    if (skipPathSyncUntilRef.current) {
-      if (href === skipPathSyncUntilRef.current) {
-        skipPathSyncUntilRef.current = null;
-      } else {
-        return;
-      }
-    }
     setState((prev) => {
       const exists = prev.tabs.some((t) => t.href === href);
       if (exists) {

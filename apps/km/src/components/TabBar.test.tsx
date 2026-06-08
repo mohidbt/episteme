@@ -5,8 +5,9 @@ import { render, cleanup, act } from "@testing-library/react";
 const push = vi.fn();
 let mockPathname = "/";
 
+const stableRouter = { push, refresh: () => {}, replace: () => {} };
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push, refresh: () => {}, replace: () => {} }),
+  useRouter: () => stableRouter,
   usePathname: () => mockPathname,
 }));
 
@@ -233,6 +234,30 @@ describe("useTabs hook", () => {
       </TabBarProvider>,
     );
     expect(api!.tabs.find((t) => t.href === "/papers/p-123/read")?.title).toBe("Reader");
+  });
+
+  it("isAnonymous first-paint seeds Drive+Welcome tabs but does NOT auto-push to welcome note (GSD-38)", async () => {
+    // Bug: guest landing at "/" was being force-redirected to /n/welcome-to-episteme,
+    // interrupting the joyride autostart. Seed the tabs so user can click Welcome,
+    // but keep them on Drive so the tour fires at step 0.
+    mockPathname = "/";
+    const { TabBarProvider, useTabs } = await import("./TabBar");
+    let api: ReturnType<typeof useTabs> | null = null;
+    function Probe() {
+      api = useTabs();
+      return null;
+    }
+    render(
+      <TabBarProvider isAnonymous>
+        <Probe />
+      </TabBarProvider>,
+    );
+    expect(api!.tabs.map((t) => t.href)).toEqual([
+      "/",
+      "/n/welcome-to-episteme",
+    ]);
+    expect(api!.activeHref).toBe("/");
+    expect(push).not.toHaveBeenCalled();
   });
 
   it("reorderTabs moves tabs in local state", async () => {
