@@ -55,6 +55,7 @@ export function PdfViewer({ url, containerRef: externalRef, markers = [], userHi
   const setScrollTargetPage = useReaderState((s) => s.setScrollTargetPage);
   const setCurrentPage = useReaderState((s) => s.setCurrentPage);
   const zoom = useReaderState((s) => s.zoom);
+  const renderZoom = useReaderState((s) => s.renderZoom);
   const internalRef = useRef<HTMLDivElement>(null);
   const containerRef = externalRef ?? internalRef;
   const isAnimatingRef = useRef(false);
@@ -85,19 +86,34 @@ export function PdfViewer({ url, containerRef: externalRef, markers = [], userHi
     return () => ro.disconnect();
   }, [containerRef]);
 
-  // Trackpad pinch / ctrl+wheel zoom
+  // Trackpad pinch / ctrl+wheel zoom.
+  //
+  // GSD-25 perf fix: each wheel tick updates the live `zoom` (cheap, drives a
+  // CSS transform on the page) but defers the `renderZoom` commit (expensive,
+  // re-rasterizes every page canvas) until the gesture settles. A trailing
+  // 180ms idle window collapses a 200-event wheel burst into a single
+  // re-render at the final scale.
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
+    let commitTimer: number | null = null;
     const onWheel = (e: WheelEvent) => {
       if (!e.ctrlKey) return;
       e.preventDefault();
       const { setZoom, zoom: cur } = useReaderState.getState();
       const factor = Math.exp(-e.deltaY * 0.005);
       setZoom(cur * factor);
+      if (commitTimer !== null) window.clearTimeout(commitTimer);
+      commitTimer = window.setTimeout(() => {
+        useReaderState.getState().commitRenderZoom();
+        commitTimer = null;
+      }, 180);
     };
     el.addEventListener("wheel", onWheel, { passive: false });
-    return () => el.removeEventListener("wheel", onWheel);
+    return () => {
+      el.removeEventListener("wheel", onWheel);
+      if (commitTimer !== null) window.clearTimeout(commitTimer);
+    };
   }, [containerRef]);
 
   // Track scroll position for virtualization
@@ -256,8 +272,11 @@ export function PdfViewer({ url, containerRef: externalRef, markers = [], userHi
     };
   }, [totalPages, containerRef, setCurrentPage]);
 
-  // Compute which pages to render based on scroll position
-  const estimatedHeight = containerWidth * zoom * A4_RATIO + PAGE_MARGIN;
+  // Compute which pages to render based on scroll position. Layout uses
+  // `renderZoom` (the committed scale that drives canvas/placeholder pixels)
+  // rather than the live `zoom`, so virtualization windows stay stable while
+  // the user's wheel gesture is mid-flight.
+  const estimatedHeight = containerWidth * renderZoom * A4_RATIO + PAGE_MARGIN;
   const firstVisible = estimatedHeight > 0
     ? Math.max(1, Math.floor(scrollTop / estimatedHeight) + 1)
     : 1;
@@ -308,6 +327,7 @@ export function PdfViewer({ url, containerRef: externalRef, markers = [], userHi
                     pageNumber={pageNumber}
                     width={containerWidth}
                     zoom={zoom}
+                    renderZoom={renderZoom}
                     markers={markers.filter((m) => m.pageNumber === pageNumber)}
                     userHighlights={userHighlights.filter((h) => (h.rects ?? []).some((r) => r.page === pageNumber))}
                     hiddenLayerIds={hiddenLayerIds}
@@ -321,7 +341,7 @@ export function PdfViewer({ url, containerRef: externalRef, markers = [], userHi
                   key={pageNumber}
                   data-page-number={pageNumber}
                   className="mb-4"
-                  style={{ height: estimatedHeight, width: containerWidth * zoom }}
+                  style={{ height: estimatedHeight, width: containerWidth * renderZoom }}
                 />
               );
             })}
