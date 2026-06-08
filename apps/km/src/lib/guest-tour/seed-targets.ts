@@ -1,6 +1,6 @@
 import { and, asc, eq, ilike } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { papers, papersets, libraryReferences } from "@episteme/db/schema";
+import { papers, papersets, references_ } from "@episteme/db/schema";
 
 export type GuestTourTargets = {
   welcomeNoteHref: string;
@@ -23,10 +23,10 @@ export type GuestTourTargets = {
 export async function getGuestTourTargets(userId: string): Promise<GuestTourTargets> {
   const [ref, paper, set] = await Promise.all([
     db
-      .select({ id: libraryReferences.id })
-      .from(libraryReferences)
-      .where(eq(libraryReferences.userId, userId))
-      .orderBy(asc(libraryReferences.id))
+      .select({ id: references_.id })
+      .from(references_)
+      .where(eq(references_.userId, userId))
+      .orderBy(asc(references_.createdAt))
       .limit(1),
     db
       .select({ id: papers.id })
