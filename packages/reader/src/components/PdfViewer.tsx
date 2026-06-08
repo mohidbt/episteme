@@ -269,7 +269,17 @@ export function PdfViewer({ url, containerRef: externalRef, markers = [], userHi
 
   return (
     <div ref={containerRef} data-pdf-container className="h-full min-h-0 flex-1 overflow-auto bg-muted/30 p-6">
-      <div className="mx-auto flex flex-col items-center">
+      {/* GSD-24: w-max + min-w-full. Previously the inner box used
+          `mx-auto flex flex-col items-center` without an explicit width, so
+          when a zoomed page was wider than the scroll container the flex
+          `align-items: center` overflowed symmetrically on both sides and
+          the scroll container could not reach the negative-x portion — the
+          left edge was unreachable. With `w-max`, the inner box grows to
+          the widest child; `mx-auto` centers it inside the scroll content
+          box and the overflow becomes plain scrollable extent in both
+          directions. `min-w-full` keeps the unzoomed (page < container)
+          case centered visually. */}
+      <div className="mx-auto flex w-max min-w-full flex-col items-center">
         {loading && !loadError && (
           <div className="flex flex-col items-center justify-center gap-3 py-20">
             <div className="h-8 w-8 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
