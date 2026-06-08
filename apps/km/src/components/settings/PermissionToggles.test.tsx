@@ -99,15 +99,14 @@ describe("PermissionToggles (GSD-33)", () => {
     await screen.findByText(/agentic search papers/i);
   });
 
-  it("renders TOOL_DESCRIPTION_OVERRIDES text instead of raw BaseTool description for overridden tools", async () => {
+  it("does not render raw BaseTool descriptions in the UI", async () => {
     mockToolsFetch();
     render(<PermissionToggles permissions={{}} onChange={vi.fn()} />);
     await screen.findByRole("switch", { name: /web search/i });
-    // web_search is in the override map — the upstream description
-    // "Search the web via Tavily." should NOT appear; the override should.
-    // The override copy avoids the Tavily brand name (RG1 #66).
-    const html = document.body.textContent ?? "";
-    expect(html).not.toMatch(/tavily/i);
+    const text = document.body.textContent ?? "";
+    expect(text).not.toMatch(/tavily/i);
+    expect(text).not.toMatch(/search the web via/i);
+    expect(text).not.toMatch(/create a new note\./i);
   });
 
   it("renders a fallback error state when the fetch rejects", async () => {

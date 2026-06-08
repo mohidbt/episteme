@@ -6,7 +6,6 @@ import {
   FieldGroup,
   Field,
   FieldLabel,
-  FieldDescription,
   FieldContent,
 } from "@/components/ui/field";
 import {
@@ -15,7 +14,6 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import {
-  TOOL_DESCRIPTION_OVERRIDES,
   groupByCategory,
   humanizeCategory,
   humanizeToolName,
@@ -92,17 +90,12 @@ export function PermissionToggles({
                 const raw = permissions[tool.name];
                 const checked =
                   raw === undefined || raw === null ? true : Boolean(raw);
-                const description =
-                  TOOL_DESCRIPTION_OVERRIDES[tool.name] ?? tool.description;
                 return (
                   <Field key={tool.name}>
                     <FieldContent>
                       <FieldLabel htmlFor={`perm-${tool.name}`}>
                         {humanizeToolName(tool.name)}
                       </FieldLabel>
-                      {description && (
-                        <FieldDescription>{description}</FieldDescription>
-                      )}
                     </FieldContent>
                     <Switch
                       id={`perm-${tool.name}`}
