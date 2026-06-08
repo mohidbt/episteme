@@ -156,6 +156,20 @@ export function useDragX({
     [axis, bottomInsetPx, elementHeight, snapY, storageKey],
   );
 
+  // GSD-34 — when the browser cancels the gesture (touch interrupt, OS alert,
+  // devtools open, scroll-takeover) or steals pointer capture (e.g. element
+  // remounts mid-drag), `pointerup` may never fire. Reset draggingRef so
+  // subsequent `pointermove` doesn't keep following the cursor.
+  const endDrag = useCallback((e: React.PointerEvent<HTMLElement>) => {
+    if (!draggingRef.current) return;
+    draggingRef.current = false;
+    try {
+      e.currentTarget.releasePointerCapture?.(e.pointerId);
+    } catch {
+      /* capture may already be lost */
+    }
+  }, []);
+
   // Re-clamp on viewport resize so the element doesn't sit off-screen.
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -182,6 +196,12 @@ export function useDragX({
     y,
     /** Ref that is `true` when the current pointer gesture moved beyond the drag threshold. */
     didMoveRef,
-    pointerHandlers: { onPointerDown, onPointerMove, onPointerUp },
+    pointerHandlers: {
+      onPointerDown,
+      onPointerMove,
+      onPointerUp,
+      onPointerCancel: endDrag,
+      onLostPointerCapture: endDrag,
+    },
   };
 }
