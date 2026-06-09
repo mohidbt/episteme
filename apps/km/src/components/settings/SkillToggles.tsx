@@ -43,10 +43,10 @@ export function SkillToggles({
   async function handleExport() {
     setExporting(true);
     try {
-      // K1: route through the server-side bundler. Building the zip
-      // client-side from the SKILLS constant ships the entire system-skill
-      // catalog (paper-search, lit-triage, deep-read, synthesis, ...).
-      const res = await fetch("/api/agent/export", { method: "GET" });
+      // GSD-9: scoped endpoint emitting only skill folders (system-allowlist
+      // + personal). The full agent-config bundle lives behind the data tab's
+      // ConfigExportImport widget at /api/agent/export.
+      const res = await fetch("/api/agent/export-skills", { method: "GET" });
       if (!res.ok) {
         throw new Error(`HTTP ${res.status}`);
       }

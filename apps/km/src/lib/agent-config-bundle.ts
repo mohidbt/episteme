@@ -201,6 +201,32 @@ export async function buildBundleFromSnapshot(
   return zip.generateAsync({ type: "uint8array" });
 }
 
+/**
+ * GSD-9 — Skills-only export. Used by the "Export skills" button on the
+ * agent settings Skills tab. Emits only skill `.md` files (after the
+ * system-slug allowlist filter) and personal `SKILL.json` entries. Excludes
+ * `agent_config.json`, `memory.md`, `settings.json` — those still ship in
+ * the full-config bundle from the settings/data tab (`buildBundle`).
+ */
+export async function buildSkillsOnlyBundle(
+  s: AgentConfigSnapshot,
+): Promise<Uint8Array> {
+  const zip = new JSZip();
+  const exportableSkills = filterExportableSkills(s.skills);
+  for (const sk of exportableSkills) {
+    zip.file(sk.path, sk.body);
+  }
+  for (const ps of s.personalSkills) {
+    zip.file(`${PERSONAL_SKILLS_PREFIX}${ps.slug}/SKILL.json`, ps.json);
+  }
+  return zip.generateAsync({ type: "uint8array" });
+}
+
+export async function buildSkillsOnly(userId: string): Promise<Uint8Array> {
+  const s = await readSnapshot(userId);
+  return buildSkillsOnlyBundle(s);
+}
+
 export async function parseBundle(zipBytes: Uint8Array): Promise<AgentConfigBundle> {
   const zip = await JSZip.loadAsync(zipBytes);
   const cfgFile = zip.file("agent_config.json");

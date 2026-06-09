@@ -35,7 +35,7 @@ describe("SkillToggles export (K1 — server-side bundle)", () => {
     expect(screen.getByTestId("export-skills-button")).toBeTruthy();
   });
 
-  it("clicking Export fetches /api/agent/export and triggers a download", async () => {
+  it("clicking Export fetches /api/agent/export-skills and triggers a download", async () => {
     const createUrl = vi.fn(() => "blob:mock");
     const revokeUrl = vi.fn();
     Object.defineProperty(URL, "createObjectURL", {
@@ -54,7 +54,7 @@ describe("SkillToggles export (K1 — server-side bundle)", () => {
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
-        "/api/agent/export",
+        "/api/agent/export-skills",
         expect.objectContaining({ method: "GET" }),
       );
     });
