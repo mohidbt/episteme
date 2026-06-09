@@ -22,6 +22,7 @@ import { WikiLinkTypeahead, type WikiLinkTypeaheadRef } from "@/components/WikiL
 import { SlashCommandTypeahead, type SlashCommandTypeaheadRef } from "@/components/SlashCommandTypeahead";
 import { computeSlashMenuPlacement } from "@/lib/popover-placement";
 import { AiBubbleMenu } from "@/components/AiBubbleMenu";
+import { LinkBubbleMenu } from "@/components/LinkBubbleMenu";
 import { TableBubbleMenu } from "@/components/TableBubbleMenu";
 
 export function NoteEditor({
@@ -640,6 +641,7 @@ export function NoteEditor({
           {editorInstance && (
             <>
               <AiBubbleMenu editor={editorInstance} aiTriggerCount={aiTriggerCount} />
+              <LinkBubbleMenu editor={editorInstance} />
               <TableBubbleMenu editor={editorInstance} />
             </>
           )}
