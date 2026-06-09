@@ -1254,4 +1254,59 @@ describe("AgentTranscript", () => {
       expect(onStreamDone).toHaveBeenCalledTimes(1);
     });
   });
+
+  // GSD-30 — Beautify Agent UI.
+  // (a) snake_case tool names render as Title Case in the tool-card header.
+  // (b) skill_load cards render with the same Collapsible shape as tool cards
+  //     (Tool > ToolHeader/ToolContent) so the user sees "skill used" the
+  //     same way they see "tool used".
+  it("GSD-30: prettifies snake_case tool names in tool card header", async () => {
+    const events: AgentEvent[] = [
+      {
+        type: "tool_call",
+        id: "tc-pretty",
+        name: "create_note",
+        args: { title: "x" },
+        state: "input-available",
+      },
+      { type: "done", thread_id: "t-pretty" },
+    ];
+    (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+      streamResponse(events),
+    );
+
+    render(<AgentTranscript threadId="t-pretty" />);
+    const ta = screen.getByLabelText("Message agent") as HTMLTextAreaElement;
+    fireEvent.change(ta, { target: { value: "go" } });
+    fireEvent.click(screen.getByRole("button", { name: /send/i }));
+
+    await waitFor(() => {
+      const card = screen.getByTestId("card-tool");
+      // RED: header currently renders the raw snake_case name. Should render
+      // the human form so the user reads "Create Note" not "create_note".
+      expect(card.textContent).toContain("Create Note");
+      expect(card.textContent).not.toContain("create_note");
+    });
+  });
+
+  it("GSD-30: skill_load card renders skill name and shape like a tool card", async () => {
+    const events: AgentEvent[] = [
+      { type: "skill_load", name: "deep_read" },
+      { type: "done", thread_id: "t-skill" },
+    ];
+    (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+      streamResponse(events),
+    );
+
+    render(<AgentTranscript threadId="t-skill" />);
+    const ta = screen.getByLabelText("Message agent") as HTMLTextAreaElement;
+    fireEvent.change(ta, { target: { value: "go" } });
+    fireEvent.click(screen.getByRole("button", { name: /send/i }));
+
+    await waitFor(() => {
+      const card = screen.getByTestId("card-skill_load");
+      // RED: snake_case skill names should be prettified for display.
+      expect(card.textContent).toContain("Deep Read");
+    });
+  });
 });

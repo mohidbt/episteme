@@ -2,6 +2,7 @@
 
 import { Card, CardContent } from "@/components/ui/card";
 import { BookOpenIcon } from "lucide-react";
+import { humanizeToolName } from "@/lib/agents/tool-categories";
 
 export interface SkillLoadCardProps {
   name: string;
@@ -9,9 +10,11 @@ export interface SkillLoadCardProps {
 
 /**
  * Episteme-specific transcript card emitted by `skill_load` SSE event.
- * MVP: notice + click target (no-op). Modal preview deferred.
+ * GSD-30: prettify snake_case skill slugs for display (raw `name` is
+ * preserved on `data-skill` so test selectors keep working).
  */
 export function SkillLoadCard({ name }: SkillLoadCardProps) {
+  const pretty = humanizeToolName(name);
   return (
     <Card data-testid="card-skill_load" className="py-2">
       <CardContent className="px-3 py-1 text-xs">
@@ -25,7 +28,7 @@ export function SkillLoadCard({ name }: SkillLoadCardProps) {
         >
           <BookOpenIcon className="size-3.5" />
           <span>
-            Loaded skill: <span className="font-medium">{name}</span>
+            Loaded skill: <span className="font-medium">{pretty}</span>
           </span>
         </button>
       </CardContent>

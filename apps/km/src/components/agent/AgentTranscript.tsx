@@ -82,6 +82,7 @@ import {
 } from "lucide-react";
 import { FileDiffCard } from "./FileDiffCard";
 import { SkillLoadCard } from "./SkillLoadCard";
+import { humanizeToolName } from "@/lib/agents/tool-categories";
 import { ChatCodePre } from "./ChatCodePre";
 import { ChatTable } from "./ChatTable";
 
@@ -969,9 +970,18 @@ function ToolCardView({ card }: { card: ToolCardData }) {
   return (
     <div data-testid="card-tool">
       <Tool defaultOpen={false}>
+        {/* GSD-30: prettify snake_case tool ids for display only. The
+            underlying `card.name` is unchanged so SSE wiring + tests that
+            inspect tool ids still work. ToolHeader keeps its own Task→Subagent
+            display alias, so we skip the prettify override there. */}
         <ToolHeader
           type={`tool-${card.name}` as `tool-${string}`}
           state={card.state}
+          title={
+            card.name === "Task" || card.name === "task"
+              ? undefined
+              : humanizeToolName(card.name)
+          }
         />
         <ToolContent>
           <ToolInput input={card.args} />
