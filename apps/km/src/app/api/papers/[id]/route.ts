@@ -6,6 +6,7 @@ import { paperUpdateSchema } from "@/lib/validators";
 import { jsonError, requireOwned } from "@/lib/crud";
 import { getTrashFolderId, moveItemToFolder } from "@/lib/folders-server";
 import { storage, paperSourceKey, paperCoverKey } from "@/lib/storage";
+import { getPaperWithMergedRef } from "@/lib/papers/get-paper-with-merged-ref";
 
 export const runtime = "nodejs";
 
@@ -16,9 +17,12 @@ export async function GET(req: Request, { params }: Ctx) {
   const userId = await getUserIdFromRequest(req);
   if (!userId) return jsonError(401, "unauthorized");
   const { id } = await params;
-  const res = await requireOwned<PaperRow>(papers, id, userId);
-  if (!res.ok) return jsonError(res.status, res.status === 404 ? "not_found" : "forbidden");
-  return Response.json(res.row);
+  // GSD-32 Phase 3: merge in CSL fields from the matched ref-twin so any
+  // user-edited ref metadata (abstract, container-title, etc.) surfaces on
+  // the paper read path without mutating the paper row.
+  const merged = await getPaperWithMergedRef(id, userId);
+  if (!merged) return jsonError(404, "not_found");
+  return Response.json(merged);
 }
 
 export async function PATCH(req: Request, { params }: Ctx) {
