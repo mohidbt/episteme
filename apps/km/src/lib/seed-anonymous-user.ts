@@ -18,6 +18,7 @@ import { deriveCitationKey, validateCslJson, type CslItem } from "@/lib/csl";
 import { extractCover } from "@/lib/pdf-extract";
 import { rebuildLinks } from "@episteme/notes-core";
 import { seedPaperCitations } from "@/lib/citations/seed-paper-citations";
+import { ensurePaperRef } from "@/lib/citations/ensure-paper-ref";
 
 const SEED_DIR = "public/seed";
 const WELCOME_NOTE_FILE = "welcome-note.md";
@@ -427,6 +428,17 @@ export async function seedAnonymousUser(userId: string): Promise<void> {
     );
   }
 
+  // GSD-32 Phase 4: hidden ref-twin so paper metadata can be edited via ref CSL.
+  await ensurePaperRef({
+    id: paper.id,
+    libraryId: lib.id,
+    userId,
+    title: SEED_PAPER_TITLE,
+    authors: [...SEED_PAPER_AUTHORS],
+    year: SEED_PAPER_YEAR,
+    doi: SEED_PAPER_DOI,
+  });
+
   for (let i = 0; i < SEED_REFERENCES.length; i++) {
     const cslPath = path.join(process.cwd(), SEED_DIR, SEED_REFERENCES[i]);
     const cslRaw = JSON.parse(await fs.readFile(cslPath, "utf8")) as CslItem;
@@ -519,6 +531,16 @@ export async function seedAnonymousUser(userId: string): Promise<void> {
       );
     }
     psmInsertedPapers.push({ id: inserted.id, title: meta.title });
+    // GSD-32 Phase 4: hidden ref-twin for the PSM paper.
+    await ensurePaperRef({
+      id: inserted.id,
+      libraryId: lib.id,
+      userId,
+      title: meta.title,
+      authors: [...meta.authors],
+      year: meta.year,
+      doi: meta.doi,
+    });
     // D7.1: pre-extract synthetic doc-refs from the PSM CSL list + auto-link
     // inline so /references is non-empty on minute-zero guest workspaces.
     // Failures must not break seed — auto-link is best-effort.
@@ -606,6 +628,18 @@ export async function seedAnonymousUser(userId: string): Promise<void> {
       console.warn(`seed: cover extraction failed for bio paper ${inserted.id}`, err);
     }
     bioPapers[key] = { id: inserted.id };
+    // GSD-32 Phase 4: hidden ref-twin for the bio paper. The manually-seeded
+    // fungi ref below also targets this paper via paperId, so this insert is
+    // skipped via the paperId-hit dedup branch on fungi (idempotent).
+    await ensurePaperRef({
+      id: inserted.id,
+      libraryId: lib.id,
+      userId,
+      title: meta.title,
+      authors: [...meta.authors],
+      year: meta.year,
+      doi: meta.doi,
+    });
   }
 
   // Reference: same publication as fungi.pdf — paperId links the two.
