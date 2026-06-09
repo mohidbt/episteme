@@ -2,6 +2,7 @@
 
 import { BubbleMenu, type TiptapEditor } from "@episteme/editor";
 import { useRef, useState, useCallback, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { runSlashAi } from "@/app/(app)/n/[slug]/run-slash-ai";
 import type { SkillCategory } from "@/lib/skills";
 import {
@@ -580,7 +581,7 @@ export function AiBubbleMenu({
         )}
       </BubbleMenu>
 
-      {linkOpen && (
+      {linkOpen && typeof document !== "undefined" && createPortal(
         <div className="fixed inset-0 z-50 flex items-start justify-center pt-32" onMouseDown={(e) => { if (e.target === e.currentTarget) cancelLink(); }}>
           <LinkPopover
             initialText={linkInitial.text}
@@ -588,7 +589,8 @@ export function AiBubbleMenu({
             onSave={insertLink}
             onCancel={cancelLink}
           />
-        </div>
+        </div>,
+        document.body,
       )}
 
       {inPortalRephrase && (

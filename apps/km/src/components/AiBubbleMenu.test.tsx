@@ -200,6 +200,18 @@ describe("AiBubbleMenu rephrase prompt bar", () => {
     expect(call.marks[0]!.attrs.href).toBe("https://foo.com");
   });
 
+  it("GSD-29: link overlay is rendered via portal to document.body (not as BubbleMenu sibling)", () => {
+    const editor = makeEditor();
+    const { container } = render(<AiBubbleMenu editor={editor} />);
+    fireEvent.click(screen.getByRole("button", { name: /insert link/i }));
+    // The URL input must exist in the document but NOT inside the BubbleMenu
+    // sibling subtree — Tippy yanks that DOM during state transitions and
+    // crashes React's insertBefore. Portal to document.body avoids the race.
+    const urlInput = screen.getByLabelText(/url/i);
+    expect(urlInput).toBeTruthy();
+    expect(container.contains(urlInput)).toBe(false);
+  });
+
   it("submitWithPrompt guards against undefined promptText (#112)", () => {
     // If a skill has an undefined instruction, submitWithPrompt should not crash.
     // We verify indirectly: clicking a preset that passes a string always works.
