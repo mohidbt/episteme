@@ -17,18 +17,20 @@ function isPgTrgmMissingError(err: unknown): boolean {
   );
 }
 
-// paper_is_ref now means IDENTITY (paper IS the same entity as a reference),
-// not "paper has reference in bibliography". Source: DOI exact match between
-// papers.doi and references.csl_json->>'DOI', OR pg_trgm fuzzy title match
-// between papers.title and references.csl_json->>'title' ≥ 0.6.
+// GSD-32 Phase 1: paper_is_ref edges removed from the graph. Collapsed refs
+// (paperId IS NOT NULL) are filtered out of nodesForUser entirely, so the
+// edge has no destination anyway. Function retained as a no-op stub so
+// existing call sites (/api/graph, graph pages, tests) keep compiling
+// without a coordinated cross-file rip-out. Removed entirely in a later pass.
 //
-// Note: the legacy references.paper_id column is intentionally ignored —
-// it is reserved for the future "PDF attached to reference" workflow and no
-// longer drives graph edges. See plan H-batch.
-//
-// pg_trgm-missing errors degrade silently to "no fuzzy hits" so the DOI path
-// still emits edges (matches auto-link.ts behaviour).
-export async function edgesPaperIsRef(userId: string): Promise<GraphEdge[]> {
+// Historical: paper_is_ref was identity (DOI / fuzzy title); identity is now
+// implicit in the collapse — the ref hides, only the paper renders.
+export async function edgesPaperIsRef(_userId: string): Promise<GraphEdge[]> {
+  return [];
+}
+
+// Unused — retained to avoid larger churn until callers are deleted.
+async function _legacyEdgesPaperIsRef(userId: string): Promise<GraphEdge[]> {
   const query = sql`
     SELECT DISTINCT ON (r.id)
            p.id AS paper_id, r.id AS ref_id
@@ -181,7 +183,7 @@ export async function edgesPaperCitations(userId: string): Promise<GraphEdge[]> 
         SELECT dr.id::text AS dr_id, r.id AS ref_uuid
         FROM document_references dr
         JOIN papers p ON p.id = dr.paper_id AND p.user_id = ${userId}
-        JOIN "references" r ON r.user_id = ${userId} AND (
+        JOIN "references" r ON r.user_id = ${userId} AND r.paper_id IS NULL AND (
           (dr.doi IS NOT NULL AND r.csl_json->>'DOI' IS NOT NULL
            AND lower(trim(dr.doi)) = lower(trim(r.csl_json->>'DOI')))
           OR
@@ -232,7 +234,7 @@ export async function edgesPaperCitations(userId: string): Promise<GraphEdge[]> 
           SELECT dr.id::text AS dr_id, r.id AS ref_uuid
           FROM document_references dr
           JOIN papers p ON p.id = dr.paper_id AND p.user_id = ${userId}
-          JOIN "references" r ON r.user_id = ${userId}
+          JOIN "references" r ON r.user_id = ${userId} AND r.paper_id IS NULL
             AND dr.doi IS NOT NULL AND r.csl_json->>'DOI' IS NOT NULL
             AND lower(trim(dr.doi)) = lower(trim(r.csl_json->>'DOI'))
         )
@@ -287,7 +289,12 @@ export async function edgesPaperCitations(userId: string): Promise<GraphEdge[]> 
 export async function nodesForUser(userId: string): Promise<GraphNode[]> {
   const ps = await db.execute(sql`SELECT id, title FROM papers WHERE user_id = ${userId}`);
   const ns = await db.execute(sql`SELECT id, title FROM notes  WHERE user_id = ${userId}`);
-  const rs = await db.execute(sql`SELECT id, csl_json->>'title' AS title FROM "references" WHERE user_id = ${userId}`);
+  // GSD-32 Phase 1: hide collapsed refs (paperId IS NOT NULL) from graph.
+  const rs = await db.execute(sql`
+    SELECT id, csl_json->>'title' AS title
+    FROM "references"
+    WHERE user_id = ${userId} AND paper_id IS NULL
+  `);
   return [
     ...rowsOf<{ id: string; title: string | null }>(ps).map((x) => ({ id: x.id, kind: "paper" as const, label: x.title ?? "(untitled paper)" })),
     ...rowsOf<{ id: string; title: string | null }>(ns).map((x) => ({ id: x.id, kind: "note" as const, label: x.title ?? "(untitled note)" })),
