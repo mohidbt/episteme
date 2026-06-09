@@ -62,6 +62,10 @@ function toDisplay(row: ReferenceRow): DisplayRow {
   if (year == null) missing.push("year");
   if (!doi) missing.push("doi");
   if (!venue) missing.push("venue");
+  // GSD-42 — Abstract column is now visible on /references; the missing-fields
+  // detector must include it so "Fill all missing" picks up rows whose only
+  // gap is the abstract.
+  if (!abstract) missing.push("abstract");
 
   const known: Record<string, unknown> = { citationKey: row.citationKey };
   if (title) known.title = title;
@@ -69,6 +73,7 @@ function toDisplay(row: ReferenceRow): DisplayRow {
   if (year != null) known.year = year;
   if (doi) known.doi = doi;
   if (venue) known.venue = venue;
+  if (abstract) known.abstract = abstract;
 
   return {
     id: row.id,

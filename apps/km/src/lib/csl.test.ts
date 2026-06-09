@@ -282,4 +282,16 @@ describe("suggestionsToCslPatch", () => {
     const result = suggestionsToCslPatch({ year: "not-a-number" });
     expect(result.issued).toBeUndefined();
   });
+
+  // GSD-42 — abstract field must also be mapped so the references "Fill all
+  // missing" path can backfill rows whose only gap is the abstract column.
+  it("maps abstract to cslJson.abstract", () => {
+    const result = suggestionsToCslPatch({ abstract: "We propose…" });
+    expect(result.abstract).toBe("We propose…");
+  });
+
+  it("skips null abstract", () => {
+    const result = suggestionsToCslPatch({ abstract: null });
+    expect(result.abstract).toBeUndefined();
+  });
 });

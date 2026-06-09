@@ -92,10 +92,69 @@ describe("ReferencesView", () => {
     const sent = JSON.parse((aiInit as RequestInit).body as string);
     expect(sent.kind).toBe("reference");
     expect(sent.known).toEqual({ citationKey: "smith2020" });
-    expect(sent.missing).toEqual(["title", "authors", "year", "doi", "venue"]);
+    expect(sent.missing).toEqual([
+      "title",
+      "authors",
+      "year",
+      "doi",
+      "venue",
+      "abstract",
+    ]);
 
     const [patchUrl, patchInit] = fetchMock.mock.calls[1]!;
     expect(String(patchUrl)).toBe("/api/references/r1");
+  });
+
+  // GSD-42 — A row whose only missing field is `abstract` must still be
+  // picked up by "Fill all missing". The detector previously ignored the
+  // abstract column so such rows were silently skipped.
+  it("GSD-42: row missing only abstract is picked up by Fill all missing batch", async () => {
+    fetchMock
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ suggestions: { abstract: "We propose…" } }),
+          { status: 200 },
+        ),
+      )
+      .mockResolvedValueOnce(new Response("{}", { status: 200 }));
+
+    const rowsAbstractOnly = [
+      {
+        ...rows[0],
+        id: "r-abs-only",
+        citationKey: "vaswani2017",
+        cslJson: {
+          id: "r-abs-only",
+          type: "article-journal",
+          title: "Attention Is All You Need",
+          author: [{ literal: "Vaswani" }],
+          issued: { "date-parts": [[2017]] },
+          DOI: "10.1/x",
+          "container-title": "NeurIPS",
+          // abstract intentionally omitted
+        },
+      },
+    ] as unknown as ReferenceRow[];
+
+    render(<ReferencesView rows={rowsAbstractOnly} />);
+    const batchBtn = screen.getByRole("button", {
+      name: /Fill all missing/i,
+    });
+    // RED: button currently reads "Fill all missing (0)" and is disabled
+    // because the detector ignores abstract.
+    expect(batchBtn.textContent).toMatch(/Fill all missing \(1\)/);
+
+    await act(async () => {
+      fireEvent.click(batchBtn);
+    });
+
+    const [aiUrl, aiInit] = fetchMock.mock.calls[0]!;
+    expect(String(aiUrl)).toBe("/api/ai-fill");
+    const sent = JSON.parse((aiInit as RequestInit).body as string);
+    expect(sent.missing).toEqual(["abstract"]);
+    // Known should include all the fields that ARE present so the LLM has
+    // context to generate the abstract.
+    expect(sent.known.title).toBe("Attention Is All You Need");
   });
 
   // #101 — The PATCH body must contain { cslJson: ... }, NOT raw { title, authors, ... }

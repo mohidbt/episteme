@@ -131,6 +131,12 @@ export function suggestionsToCslPatch(
   if ("venue" in suggestions && suggestions.venue != null) {
     merged["container-title"] = String(suggestions.venue);
   }
+  // GSD-42 — Abstract was previously dropped from suggestions, so the
+  // references "Fill all missing" path couldn't backfill missing abstracts
+  // even when the LLM returned one.
+  if ("abstract" in suggestions && suggestions.abstract != null) {
+    merged.abstract = String(suggestions.abstract);
+  }
 
   return merged;
 }
