@@ -1,5 +1,5 @@
 import { cache } from "react";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, isNull } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { folders, libraries, notes, papers, papersets, references_ } from "@episteme/db/schema";
 import { isHiddenFolder } from "@/lib/folders";
@@ -86,6 +86,7 @@ export const getTreeForUser = cache(
         .from(papers)
         .where(and(eq(papers.libraryId, libraryId), eq(papers.userId, userId)))
         .orderBy(asc(papers.addedAt)),
+      // GSD-32 Phase 1: hide collapsed refs (paperId set) from drive tree.
       db
         .select({
           id: references_.id,
@@ -94,7 +95,13 @@ export const getTreeForUser = cache(
           folderId: references_.folderId,
         })
         .from(references_)
-        .where(and(eq(references_.libraryId, libraryId), eq(references_.userId, userId)))
+        .where(
+          and(
+            eq(references_.libraryId, libraryId),
+            eq(references_.userId, userId),
+            isNull(references_.paperId),
+          ),
+        )
         .orderBy(asc(references_.createdAt)),
       db
         .select({

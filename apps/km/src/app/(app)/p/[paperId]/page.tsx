@@ -1,5 +1,5 @@
 import { cache } from "react";
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { BookMarked, BookOpen, Download } from "lucide-react";
@@ -7,6 +7,7 @@ import { getRequiredUserId } from "@/lib/session";
 import { db } from "@/lib/db";
 import { papers, documentReferences } from "@episteme/db/schema";
 import { sql } from "drizzle-orm";
+import { getPaperWithMergedRef } from "@/lib/papers/get-paper-with-merged-ref";
 import { getDefaultLibrary } from "@/lib/default-library";
 import { getReferencesForPaper, paperAlreadyReferenced } from "@/lib/references-server";
 import { papersetCountForPaper, papersetsForPaper } from "@/lib/papersets-server";
@@ -22,14 +23,13 @@ import { PaperPdfPreview } from "./PaperPdfPreview";
 
 type PaperRow = typeof papers.$inferSelect;
 
-const loadPaper = cache(async (paperId: string, userId: string): Promise<PaperRow | null> => {
-  const rows = await db
-    .select()
-    .from(papers)
-    .where(and(eq(papers.id, paperId), eq(papers.userId, userId)))
-    .limit(1);
-  return rows[0] ?? null;
-});
+// GSD-32 Phase 3: load paper merged with matched ref CSL (paper wins on
+// non-blank fields; ref fills blanks). Identical signature to the prior
+// direct query, callers unchanged.
+const loadPaper = cache(
+  async (paperId: string, userId: string): Promise<PaperRow | null> =>
+    getPaperWithMergedRef(paperId, userId),
+);
 
 function refYear(cslJson: unknown): number | null {
   try {

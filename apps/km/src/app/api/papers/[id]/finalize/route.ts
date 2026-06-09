@@ -10,6 +10,7 @@ import {
   filenameToTitle,
   type PaperMetadata,
 } from "@/lib/pdf-extract";
+import { ensurePaperRef } from "@/lib/citations/ensure-paper-ref";
 
 // pdfjs-dist + @napi-rs/canvas require the Node.js runtime.
 export const runtime = "nodejs";
@@ -123,6 +124,23 @@ export async function POST(req: Request, { params }: Ctx) {
     })
     .where(eq(papers.id, id))
     .returning();
+
+  // GSD-32 Phase 4: ensure every paper has a hidden ref-twin so users can
+  // later edit ref CSL fields and the paper picks them up via Phase 3 merge.
+  // Best-effort — a ref-create failure must NOT fail finalize.
+  try {
+    await ensurePaperRef({
+      id: updated.id,
+      libraryId: updated.libraryId,
+      userId: updated.userId,
+      title: updated.title,
+      authors: updated.authors,
+      year: updated.year,
+      doi: updated.doi,
+    });
+  } catch (err) {
+    console.warn(`finalize: ensurePaperRef failed for paper ${id}`, err);
+  }
 
   return Response.json(updated);
 }

@@ -1,4 +1,4 @@
-import { and, asc, eq, ilike, or, sql } from "drizzle-orm";
+import { and, asc, eq, ilike, isNull, or, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { notes, references_, papers, libraries } from "@episteme/db/schema";
 import { getUserIdFromRequest } from "@/lib/auth";
@@ -31,6 +31,8 @@ export async function GET(req: Request) {
     .orderBy(asc(notes.title))
     .limit(LIMIT_PER_KIND);
 
+  // GSD-32 Phase 1: hide collapsed refs from wiki-link suggestions — only
+  // the paper appears.
   const refsRows = defaultLib
     ? await db
         .select({
@@ -43,6 +45,7 @@ export async function GET(req: Request) {
           and(
             eq(references_.userId, userId),
             eq(references_.libraryId, defaultLib.id),
+            isNull(references_.paperId),
             or(
               ilike(references_.citationKey, pattern),
               sql`${references_.cslJson}->>'title' ILIKE ${pattern}`,

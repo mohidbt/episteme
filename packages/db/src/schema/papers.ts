@@ -20,6 +20,7 @@ export const papers = pgTable(
     year: integer("year"),
     doi: text("doi"),
     venue: text("venue"),
+    abstractShort: text("abstract_short"),
     addedAt: timestamp("added_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull().$onUpdate(() => new Date()),
     chandraStatus: text("chandra_status")

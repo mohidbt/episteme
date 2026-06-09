@@ -1,7 +1,12 @@
 import { cache } from "react";
-import { and, desc, eq, or, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, or, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { papers, references_ } from "@episteme/db/schema";
+
+// GSD-32 Phase 1: hide collapsed refs from drive surfaces. A ref whose
+// paperId is non-null is the same entity as that paper (Phase 4 ensures
+// every paper has a hidden twin); only standalone (paperId IS NULL) refs
+// appear in the references tab and tree.
 
 /** Returns all references for the library regardless of folder. Used by /references page. */
 export const listAllReferences = cache(
@@ -13,6 +18,7 @@ export const listAllReferences = cache(
         and(
           eq(references_.libraryId, libraryId),
           eq(references_.userId, userId),
+          isNull(references_.paperId),
         ),
       )
       .orderBy(desc(references_.createdAt)),
@@ -28,6 +34,7 @@ export const listReferences = cache(
           eq(references_.libraryId, libraryId),
           eq(references_.userId, userId),
           eq(references_.folderPath, folderPath),
+          isNull(references_.paperId),
         ),
       )
       .orderBy(desc(references_.createdAt)),
