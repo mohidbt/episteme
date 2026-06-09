@@ -35,7 +35,7 @@ Writes `apps/km/public/tour/wow_refs_fill.webm` + `.poster.jpg`.
 
 ## Scenes
 
-`refs_fill`, `paper_understanding`, `reader_highlight`, `paper_search`, `extract`.
+`refs_fill`, `paper_understanding`, `reader_highlight`, `paper_search`, `extract`, `citations`.
 
 ## Auth
 
@@ -54,3 +54,4 @@ frames. Force re-login with `TOUR_RECORD_REAUTH=1`.
 - `TOUR_RECORD_READER_URL`     /papers/<id>/read URL  (reader_highlight)
 - `TOUR_RECORD_REFERENCE_URL`  /r/<id> URL            (paper_search)
 - `TOUR_RECORD_PAPERSET_URL`   paperset detail URL    (extract)
+- `TOUR_RECORD_PAPER_URL`      /p/<id> URL            (citations — paper WITHOUT pre-extracted citations)

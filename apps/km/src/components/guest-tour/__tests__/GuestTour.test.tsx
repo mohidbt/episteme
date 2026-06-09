@@ -321,7 +321,7 @@ describe("GuestTour", () => {
     expect(getTourDone()).toBe(true);
   });
 
-  it("ships 17 steps (GSD-38 reordered tour) with stable ids", async () => {
+  it("ships 18 steps (GSD-50 wow_citations + GSD-38 reorder) with stable ids", async () => {
     const { GuestTour } = await import("../GuestTour");
     render(<GuestTour isAnonymous={true} />);
     await waitFor(() => {
@@ -329,7 +329,7 @@ describe("GuestTour", () => {
     });
     const lastCall = joyrideSpy.mock.calls.at(-1)?.[0];
     const steps = lastCall?.steps as Array<{ id: string }>;
-    expect(steps).toHaveLength(17);
+    expect(steps).toHaveLength(18);
     expect(steps.map((s) => s.id)).toEqual([
       "drive_intro",
       "notes_collection",
@@ -340,6 +340,7 @@ describe("GuestTour", () => {
       "wow_paper_search",
       "papers_collection",
       "open_seed_paper",
+      "wow_citations",
       "open_seed_paper_reader",
       "wow_reader_highlight",
       "open_seed_paperset",
@@ -349,6 +350,31 @@ describe("GuestTour", () => {
       "graph_intro",
       "signup_cta",
     ]);
+  });
+
+  it("open_seed_paper.next stays on the paper page (so wow_citations runs there, not the reader)", async () => {
+    const { GuestTour } = await import("../GuestTour");
+    const seedTargets = {
+      welcomeNoteHref: "/n/welcome-to-episteme",
+      referenceHref: "/r/abc",
+      paperHref: "/p/xyz",
+      paperReaderHref: "/papers/xyz/read",
+      papersetHref: "/d/p1",
+    };
+    render(<GuestTour isAnonymous={true} seedTargets={seedTargets} />);
+    await waitFor(() => {
+      expect(joyrideSpy).toHaveBeenCalled();
+    });
+    const lastCall = joyrideSpy.mock.calls.at(-1)?.[0];
+    const steps = lastCall?.steps as Array<{
+      id: string;
+      data?: { next?: string; prev?: string };
+    }>;
+    const openPaper = steps.find((s) => s.id === "open_seed_paper");
+    expect(openPaper?.data?.next).toBe("/p/xyz");
+    const citations = steps.find((s) => s.id === "wow_citations");
+    expect(citations?.data?.prev).toBe("/p/xyz");
+    expect(citations?.data?.next).toBe("/papers/xyz/read");
   });
 
   it("signup_cta step has NO in-card CTA — Joyride's primary button is the CTA", async () => {
@@ -399,7 +425,7 @@ describe("GuestTour", () => {
         type: "step:after",
         action: "next",
         status: "running",
-        index: 16,
+        index: 17,
         lifecycle: "complete",
         step: { id: "signup_cta", data: {} },
       },
@@ -487,6 +513,7 @@ describe("GuestTour", () => {
       "wow_reader_highlight",
       "wow_paper_search",
       "wow_extract",
+      "wow_citations",
     ];
     for (const id of previewIds) {
       const step = steps.find((s) => s.id === id);
@@ -513,6 +540,7 @@ describe("GuestTour", () => {
       { id: "wow_reader_highlight", title: "Highlight numerical findings", captionStart: "Ask the agent to highlight" },
       { id: "wow_paper_search", title: "One-click PDF discovery", captionStart: "On any reference with no PDF" },
       { id: "wow_extract", title: "Paperset enrich (concurrent)", captionStart: "Define columns once" },
+      { id: "wow_citations", title: "Extract citations from any PDF", captionStart: "Click Find Citations" },
     ];
     for (const { id, title, captionStart } of expectations) {
       const step = steps.find((s) => s.id === id);

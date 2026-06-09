@@ -153,7 +153,27 @@ function buildSteps(targets: GuestTourTargets | null): Step[] {
       skipBeacon: true,
       content:
         "Here's the Spontaneous Switching paper — title, abstract, authors, every parsed reference clickable.",
-      data: { next: readerHref, prev: "/papers" } as StepData,
+      // GSD-50: stay on the paper page so the next step (wow_citations) can
+      // run its preview against the paper detail view. The reader step takes
+      // over the readerHref push.
+      data: { next: paperHref, prev: "/papers" } as StepData,
+    },
+    {
+      id: "wow_citations",
+      target: "body",
+      placement: "center",
+      skipBeacon: true,
+      styles: PREVIEW_TOOLTIP_STYLES,
+      content: (
+        <TourPreviewCard
+          title="Extract citations from any PDF"
+          caption="Click Find Citations on a paper and the agent pulls every cited reference out of the PDF. Save any one to your library with a single click."
+          mediaSrc="/tour/wow_citations.webm"
+          mediaPoster="/tour/wow_citations.poster.jpg"
+          mediaAlt="Paper detail page running Find Citations then Save to Library"
+        />
+      ),
+      data: { next: readerHref, prev: paperHref } as StepData,
     },
     {
       id: "open_seed_paper_reader",
