@@ -135,6 +135,71 @@ describe("ModelPicker", () => {
     ).toBeNull();
   });
 
+  // GSD-31 — render a $ / $$ / $$$ price tier badge sourced from the
+  // OpenRouter completion price already in the catalog payload. The badge
+  // colour comes from the tier (low → green, mid → yellow, high → red);
+  // missing pricing renders no badge.
+  it("GSD-31: renders price-tier badge for each priced model and skips unpriced rows", async () => {
+    const priced = [
+      {
+        id: "vendor/cheap",
+        name: "Cheap Model",
+        created: 1_700_000_000,
+        pricing: { prompt: "0", completion: "0.0000004" }, // $0.40/M → low
+      },
+      {
+        id: "vendor/mid",
+        name: "Mid Model",
+        created: 1_650_000_000,
+        pricing: { prompt: "0", completion: "0.000005" }, // $5/M → mid
+      },
+      {
+        id: "vendor/premium",
+        name: "Premium Model",
+        created: 1_600_000_000,
+        pricing: { prompt: "0", completion: "0.000075" }, // $75/M → high
+      },
+      {
+        id: "vendor/unknown",
+        name: "Unknown Price",
+        created: 1_550_000_000,
+        /* no pricing key */
+      },
+    ];
+    globalThis.fetch = vi.fn(async () =>
+      new Response(JSON.stringify({ models: priced, fetched_at: null }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    ) as unknown as typeof fetch;
+
+    render(<ModelPicker value="vendor/cheap" onChange={vi.fn()} />);
+    await waitFor(() => expect(globalThis.fetch).toHaveBeenCalled());
+    await openPicker();
+
+    const items = await screen.findAllByTestId("model-picker-item");
+    const findBadge = (label: RegExp) => {
+      const item = items.find((el) => label.test(el.textContent ?? ""));
+      if (!item) throw new Error(`no item matching ${label}`);
+      return item.querySelector('[data-testid="model-price-tier"]');
+    };
+
+    const lowBadge = findBadge(/Cheap Model/);
+    expect(lowBadge?.textContent).toBe("$");
+    expect(lowBadge?.getAttribute("data-tier")).toBe("low");
+
+    const midBadge = findBadge(/Mid Model/);
+    expect(midBadge?.textContent).toBe("$$");
+    expect(midBadge?.getAttribute("data-tier")).toBe("mid");
+
+    const highBadge = findBadge(/Premium Model/);
+    expect(highBadge?.textContent).toBe("$$$");
+    expect(highBadge?.getAttribute("data-tier")).toBe("high");
+
+    // No badge for the un-priced row.
+    expect(findBadge(/Unknown Price/)).toBeNull();
+  });
+
   it("typeahead filters list as the user types", async () => {
     render(<ModelPicker value="vendor/old-model" onChange={vi.fn()} />);
     await waitFor(() => expect(globalThis.fetch).toHaveBeenCalled());

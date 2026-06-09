@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/command";
 import { Button } from "@/components/ui/button";
 import { fetchModelCatalog } from "@/lib/openrouter-catalog";
+import { priceTier, tierLabel, type PriceTier } from "@/lib/openrouter-tier";
 import { useSession } from "@episteme/auth/client";
 import { cn } from "@/lib/utils";
 
@@ -26,8 +27,38 @@ export type CatalogModel = {
   // OpenRouter exposes a `created` Unix timestamp (seconds) for each model;
   // we treat that as the release date.
   created?: number;
+  // OpenRouter `pricing` is reported as USD-per-token (string). We badge
+  // the picker row by completion price only — the dominant cost driver
+  // for agent workloads.
+  pricing?: { prompt?: string; completion?: string };
   [key: string]: unknown;
 };
+
+// GSD-31 — tier → tailwind classes for the badge. Green / yellow / red.
+const TIER_CLASSES: Record<PriceTier, string> = {
+  low: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300",
+  mid: "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300",
+  high: "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300",
+};
+
+function PriceTierBadge({ model }: { model: CatalogModel }) {
+  const completion = Number(model.pricing?.completion);
+  const tier = priceTier(Number.isFinite(completion) ? completion : null);
+  if (tier === null) return null;
+  return (
+    <span
+      data-testid="model-price-tier"
+      data-tier={tier}
+      aria-label={`Price tier ${tierLabel(tier)}`}
+      className={cn(
+        "ml-auto rounded-md px-1.5 py-0.5 font-mono text-[10px] leading-none",
+        TIER_CLASSES[tier],
+      )}
+    >
+      {tierLabel(tier)}
+    </span>
+  );
+}
 
 /**
  * Sort:
@@ -168,6 +199,7 @@ export function ModelPicker({
                     }}
                   >
                     <span className="truncate">{label}</span>
+                    <PriceTierBadge model={m} />
                   </CommandItem>
                 );
               })}
