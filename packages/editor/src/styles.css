@@ -102,13 +102,13 @@
 
 /* GSD-29: Plain markdown link mark — neutral grey + underline.
    Scoped with :not(.wiki-link) so the wiki-link pill chrome below wins. */
-.episteme-prose a:not(.wiki-link) {
+.episteme-prose a:not(.wiki-link):not(.pdf-embed-open) {
   color: var(--muted-foreground);
   text-decoration: underline;
   text-underline-offset: 2px;
   cursor: pointer;
 }
-.episteme-prose a:not(.wiki-link):hover {
+.episteme-prose a:not(.wiki-link):not(.pdf-embed-open):hover {
   color: var(--foreground);
 }
 
