@@ -566,7 +566,8 @@ CREATE TABLE public.papers (
     prev_folder_id uuid,
     chandra_status text DEFAULT 'pending'::text NOT NULL,
     chandra_completed_at timestamp with time zone,
-    size_bytes bigint DEFAULT 0 NOT NULL
+    size_bytes bigint DEFAULT 0 NOT NULL,
+    abstract_short text
 );
 CREATE TABLE public.papersets (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
