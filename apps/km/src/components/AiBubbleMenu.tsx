@@ -6,7 +6,7 @@ import { runSlashAi } from "@/app/(app)/n/[slug]/run-slash-ai";
 import type { SkillCategory } from "@/lib/skills";
 import {
   Bold, Italic, Code, Loader2,
-  ArrowDown, RefreshCw,
+  ArrowDown, RefreshCw, Link as LinkIcon,
 } from "lucide-react";
 import {
   Popover,
@@ -21,6 +21,7 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
+import { LinkPopover } from "@/components/LinkPopover";
 
 type Mode = "format" | "rephrase-prompt" | "rephrase-streaming" | "rephrase-done";
 type Source = "bubble" | "portal";
@@ -257,6 +258,9 @@ export function AiBubbleMenu({
   aiTriggerCount?: number;
 }) {
   const [mode, setMode] = useState<Mode>("format");
+  const [linkOpen, setLinkOpen] = useState(false);
+  const linkRangeRef = useRef<{ from: number; to: number } | null>(null);
+  const [linkInitial, setLinkInitial] = useState({ text: "", href: "" });
   const [prompt, setPrompt] = useState("");
   const [selectedText, setSelectedText] = useState("");
   const [aiOutput, setAiOutput] = useState("");
@@ -409,6 +413,40 @@ export function AiBubbleMenu({
     setTurns([]);
   }, [editor, aiOutput]);
 
+  const openLink = useCallback(() => {
+    const { from, to } = editor.state.selection;
+    linkRangeRef.current = { from, to };
+    const selectedText = editor.state.doc.textBetween(from, to, "");
+    setLinkInitial({ text: selectedText, href: "" });
+    setLinkOpen(true);
+  }, [editor]);
+
+  const insertLink = useCallback(
+    ({ text, href }: { text: string; href: string }) => {
+      const range = linkRangeRef.current;
+      if (!range) return;
+      editor
+        .chain()
+        .focus()
+        .setTextSelection(range)
+        .deleteSelection()
+        .insertContent({
+          type: "text",
+          text,
+          marks: [{ type: "link", attrs: { href } }],
+        })
+        .run();
+      setLinkOpen(false);
+      linkRangeRef.current = null;
+    },
+    [editor],
+  );
+
+  const cancelLink = useCallback(() => {
+    setLinkOpen(false);
+    linkRangeRef.current = null;
+  }, []);
+
   const handleRefine = useCallback(() => {
     setTurns((prev) => [...prev, { prompt, response: aiOutput }]);
     setAiOutput("");
@@ -525,6 +563,13 @@ export function AiBubbleMenu({
                 className={`px-2 py-1.5 text-sm hover:bg-accent ${editor.isActive("code") ? "bg-accent text-accent-foreground" : ""}`}>
                 <Code className="h-4 w-4" />
               </button>
+              <button
+                onClick={openLink}
+                aria-label="Insert link"
+                className={`px-2 py-1.5 text-sm hover:bg-accent ${editor.isActive("link") ? "bg-accent text-accent-foreground" : ""}`}
+              >
+                <LinkIcon className="h-4 w-4" />
+              </button>
             </div>
             <button onClick={enterRephrase}
               className="flex items-center gap-1 rounded-r-lg px-2 py-1.5 text-sm hover:bg-accent">
@@ -534,6 +579,17 @@ export function AiBubbleMenu({
           </>
         )}
       </BubbleMenu>
+
+      {linkOpen && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center pt-32" onMouseDown={(e) => { if (e.target === e.currentTarget) cancelLink(); }}>
+          <LinkPopover
+            initialText={linkInitial.text}
+            initialHref={linkInitial.href}
+            onSave={insertLink}
+            onCancel={cancelLink}
+          />
+        </div>
+      )}
 
       {inPortalRephrase && (
         <div

@@ -167,6 +167,39 @@ describe("AiBubbleMenu rephrase prompt bar", () => {
     expect(promptRow!.className).toMatch(/justify-center/);
   });
 
+  it("GSD-29: renders a Link button in the format toolbar", () => {
+    const editor = makeEditor();
+    render(<AiBubbleMenu editor={editor} />);
+    expect(screen.getByRole("button", { name: /insert link/i })).toBeTruthy();
+  });
+
+  it("GSD-29: clicking Link opens a popover with selected text pre-filled", () => {
+    const editor = makeEditor();
+    // makeEditor's doc.textBetween returns "selected" — assert that pre-fills the popover.
+    render(<AiBubbleMenu editor={editor} />);
+    fireEvent.click(screen.getByRole("button", { name: /insert link/i }));
+    expect((screen.getByLabelText(/display text/i) as HTMLInputElement).value).toBe("selected");
+    expect(screen.getByRole("button", { name: /^insert$/i })).toBeTruthy();
+  });
+
+  it("GSD-29: submitting the link popover runs an editor chain with a link mark", () => {
+    const editor = makeEditor();
+    const insertContent = vi.fn(() => editor);
+    (editor as unknown as { insertContent: typeof insertContent }).insertContent = insertContent;
+    // Add deleteSelection chain method (the new insertLink path calls it).
+    (editor as unknown as { deleteSelection: () => unknown }).deleteSelection = () => editor;
+    render(<AiBubbleMenu editor={editor} />);
+    fireEvent.click(screen.getByRole("button", { name: /insert link/i }));
+    fireEvent.change(screen.getByLabelText(/url/i), { target: { value: "https://foo.com" } });
+    fireEvent.click(screen.getByRole("button", { name: /^insert$/i }));
+    expect(insertContent).toHaveBeenCalledTimes(1);
+    const call = (insertContent.mock.calls as unknown as Array<Array<{
+      marks: Array<{ type: string; attrs: { href: string } }>;
+    }>>)[0]![0]!;
+    expect(call.marks[0]!.type).toBe("link");
+    expect(call.marks[0]!.attrs.href).toBe("https://foo.com");
+  });
+
   it("submitWithPrompt guards against undefined promptText (#112)", () => {
     // If a skill has an undefined instruction, submitWithPrompt should not crash.
     // We verify indirectly: clicking a preset that passes a string always works.
