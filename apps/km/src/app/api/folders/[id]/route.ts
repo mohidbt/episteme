@@ -5,7 +5,10 @@ import { renameFolder } from "@/lib/folders-server";
 import { validateFolderName, normalizeFolderName } from "@/lib/folders";
 import { db } from "@/lib/db";
 import { folders } from "@episteme/db/schema";
-import { getUserIdFromRequest } from "@/lib/auth";
+import {
+  getAuthedUserId,
+  MissingInternalSecretError,
+} from "@/lib/internal-auth";
 
 const Body = z.object({ name: z.string().min(1).max(200) });
 
@@ -13,11 +16,21 @@ export async function PATCH(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const userId = await getUserIdFromRequest(req);
-  if (!userId) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const rawBody = await req.text();
+  let authed;
+  try { authed = await getAuthedUserId(req, rawBody); }
+  catch (e) {
+    if (e instanceof MissingInternalSecretError)
+      return NextResponse.json({ error: "internal auth misconfigured" }, { status: 500 });
+    throw e;
+  }
+  if (!authed) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const userId = authed.userId;
 
   const { id } = await params;
-  const parsed = Body.safeParse(await req.json().catch(() => null));
+  let json: unknown = null;
+  try { json = JSON.parse(rawBody); } catch { /* leave null */ }
+  const parsed = Body.safeParse(json);
   if (!parsed.success) return NextResponse.json({ error: "bad request" }, { status: 400 });
 
   const normalized = normalizeFolderName(parsed.data.name);
