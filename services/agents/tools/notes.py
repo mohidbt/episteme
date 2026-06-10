@@ -69,9 +69,22 @@ async def create_note(
     require any disambiguation; the user's default library is used when
     library_id is omitted.
 
+    contentMd supports these inline markdown extensions (no separate args):
+
+    - Wiki-links to other notes: ``[[slug]]`` or ``[[slug|display text]]``.
+      Use ``[[p:slug]]`` for a paper, ``[[r:slug]]`` for a reference.
+      Example: ``See [[transformers|the transformer note]] and [[p:attention-is-all-you-need]].``
+    - Image embeds: standard markdown ``![alt](https://url/to/image.png)``.
+      Example: ``![architecture diagram](https://example.com/diagram.png)``.
+    - Tags (populate the note_tags table): inline ``#tagname`` preceded by
+      start-of-line or whitespace. Tag must start with a letter; allowed
+      chars ``[a-z0-9_-]`` (case-insensitive, normalized lower). Tags are
+      extracted server-side from contentMd — do NOT pass a separate list.
+      Example: ``Draft notes on #transformers and #self-attention.``
+
     Args:
         title: Required. Note title.
-        contentMd: Required. Note body in Markdown.
+        contentMd: Required. Note body in Markdown (see inline extensions above).
         library_id: Optional. Numeric library ID (from list_libraries).
             If omitted, the user's default library is used.
         folder_path: Optional. Slash-delimited folder path inside the
@@ -111,9 +124,21 @@ async def list_folders(
 async def update_note(id: str, contentMd: str, *, config: RunnableConfig) -> object:
     """Update an existing note's content.
 
+    contentMd supports these inline markdown extensions (same as create_note):
+
+    - Wiki-links: ``[[slug]]``, ``[[slug|display]]``, ``[[p:paper-slug]]``,
+      ``[[r:reference-slug]]``.
+    - Image embeds: ``![alt](https://url/to/image.png)``.
+    - Tags (populate note_tags): inline ``#tagname`` after start-of-line
+      or whitespace; must start with a letter, allowed ``[a-z0-9_-]``.
+
+    Example contentMd:
+    ``Updated summary linking [[transformers]] with #self-attention notes
+    and ![arch](https://example.com/diagram.png).``
+
     Args:
         id: Note UUID.
-        contentMd: New note body in Markdown.
+        contentMd: New note body in Markdown (see inline extensions above).
     """
     user_id = user_id_from_config(config)
     return await km_patch(f"/api/notes/{id}", {"contentMd": contentMd}, user_id=user_id)
