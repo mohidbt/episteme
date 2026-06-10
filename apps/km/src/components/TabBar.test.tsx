@@ -120,10 +120,12 @@ describe("useTabs hook", () => {
     expect(api!.activeHref).toBe("/n/persisted");
   });
 
-  it("first render returns SSR-safe defaults even when localStorage is populated, then hydrates from storage", async () => {
-    // GSD-26: stored active tab is /n/persisted but pathname is /. Under
-    // Chrome-tab semantics the active tab's href is overwritten in place
-    // (single tab, navigation replaces it). Result: tabs=[/], active=/.
+  it("first render returns SSR-safe defaults even when localStorage is populated, then hydrates from storage (GSD-79 URL trust)", async () => {
+    // First commit = DEFAULT_STATE (SSR-safe). After mount the hydrate
+    // effect reconciles activeHref to the actual URL: pathname=/ does NOT
+    // match the stored /n/persisted tab, so we APPEND a fresh "/" tab and
+    // activate it — the stored tab is preserved (GSD-79: URL trust without
+    // clobbering sibling tabs).
     mockPathname = "/";
     window.localStorage.setItem(
       STORAGE_KEY,
@@ -151,7 +153,9 @@ describe("useTabs hook", () => {
     expect(renders[0].tabs).toEqual([]);
     expect(renders[0].activeHref).toBeNull();
     const last = renders[renders.length - 1];
-    expect(last.tabs.map((t) => t.href)).toEqual(["/"]);
+    const hrefs = last.tabs.map((t) => t.href);
+    expect(hrefs).toContain("/n/persisted");
+    expect(hrefs).toContain("/");
     expect(last.activeHref).toBe("/");
   });
 
@@ -390,6 +394,44 @@ describe("useTabs hook", () => {
     });
     expect(api!.tabs.map((t) => t.href)).toEqual(["/n/foo", "/papers"]);
     expect(api!.activeHref).toBe("/papers");
+  });
+
+  it("GSD-79: hard-reload on a URL not in stored tabs appends a tab — never clobbers stored sibling", async () => {
+    // E2E-B prod finding: user reloads /p/<paperId>, app-tabs-v1 has
+    // activeHref=/n/x with /n/x in tabs. The mount-time pathname-sync was
+    // replacing /n/x with /p/<paperId> in place, which destroyed the user's
+    // open note tab. The fix: on hydrate, reconcile activeHref to the actual
+    // URL by APPENDING a fresh tab for the URL if none of the stored tabs
+    // match, instead of replacing the (unrelated) active tab.
+    //
+    // Acceptance:
+    //   - /n/x stays in tabs (not clobbered).
+    //   - /p/abc is appended and becomes active.
+    //   - router.push is NEVER called (tab restore must not write the URL).
+    mockPathname = "/p/abc";
+    window.localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        tabs: [{ href: "/n/x", title: "X" }],
+        activeHref: "/n/x",
+      }),
+    );
+    const { TabBarProvider, useTabs } = await import("./TabBar");
+    let api: ReturnType<typeof useTabs> | null = null;
+    function Probe() {
+      api = useTabs();
+      return null;
+    }
+    render(
+      <TabBarProvider>
+        <Probe />
+      </TabBarProvider>,
+    );
+    const hrefs = api!.tabs.map((t) => t.href);
+    expect(hrefs).toContain("/n/x");
+    expect(hrefs).toContain("/p/abc");
+    expect(api!.activeHref).toBe("/p/abc");
+    expect(push).not.toHaveBeenCalled();
   });
 
   it("reorderTabs moves tabs in local state", async () => {

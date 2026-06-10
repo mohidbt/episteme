@@ -108,7 +108,31 @@ export function TabBarProvider({
   useEffect(() => {
     const stored = loadFromStorage();
     if (stored && (stored.tabs.length > 0 || stored.activeHref)) {
-      setState(stored);
+      // GSD-79: trust the URL on mount. If the user hard-reloaded a URL that
+      // is NOT in the stored tab set, the pathname-sync effect's branch-2
+      // would clobber an unrelated stored tab in place — destroying the open
+      // note tab and (worse) producing a flipped active-href that surfaces
+      // elsewhere as a navigation race. Reconcile here: if the stored tabs
+      // contain a tab for the current pathname, just re-activate it; if not,
+      // APPEND a fresh tab for the current pathname so the user keeps their
+      // session AND lands on the URL they actually requested.
+      const currentPath = pathname ? normalizeHref(pathname) : null;
+      if (currentPath) {
+        const match = stored.tabs.find((t) => t.href === currentPath);
+        if (match) {
+          setState({ tabs: stored.tabs, activeHref: currentPath });
+        } else {
+          setState({
+            tabs: [
+              ...stored.tabs,
+              { href: currentPath, title: titleFromHref(currentPath) },
+            ],
+            activeHref: currentPath,
+          });
+        }
+      } else {
+        setState(stored);
+      }
     } else if (isAnonymous) {
       // Guest first-paint: seed Drive + Welcome tabs but keep Drive active
       // and DO NOT push the route. The joyride autostart needs the user to
@@ -123,6 +147,9 @@ export function TabBarProvider({
       });
     }
     persistedRef.current = true;
+    // pathname is intentionally captured at mount (initial URL); re-running
+    // on pathname changes would re-hydrate over runtime navigation state.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAnonymous]);
 
   // Persist on change — but only after the initial hydration pass, so we
