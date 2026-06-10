@@ -8,6 +8,7 @@ import { XIcon, RotateCcwIcon, CheckIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { showSignInToUpload } from "@/lib/upload-gate";
 import { useSession } from "@episteme/auth/client";
+import { invalidateDriveTree } from "@/lib/drive-sync";
 
 const DONE_AUTO_DISMISS_MS = 1500;
 
@@ -393,6 +394,7 @@ export function UnifiedDropzone({
       }
 
       router.refresh();
+      invalidateDriveTree();
 
       const parts: string[] = [];
       if (summary.papers > 0) parts.push(`${summary.papers} paper${summary.papers > 1 ? "s" : ""}`);

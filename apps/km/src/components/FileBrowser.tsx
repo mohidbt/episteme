@@ -53,6 +53,7 @@ import type { FileBrowserContextMenuHandlers } from "@/components/FileBrowserCon
 import type { FolderContents } from "@/lib/folders-server";
 import { isDescendantOf, type FolderRow } from "@/lib/folders";
 import { useTabsOptional } from "@/components/TabBar";
+import { invalidateDriveTree } from "@/lib/drive-sync";
 
 interface Props {
   libraryId: number;
@@ -422,7 +423,10 @@ export function FileBrowser({
     [router, folderChain, tabsApi],
   );
 
-  const onMutate = useCallback(() => router.refresh(), [router]);
+  const onMutate = useCallback(() => {
+    router.refresh();
+    invalidateDriveTree();
+  }, [router]);
 
   // ── Context-menu handler implementations ─────────────────────────────────
 
@@ -468,6 +472,7 @@ export function FileBrowser({
       setTitleOverrides((prev) => ({ ...prev, [`${kind}:${id}`]: name }));
       setRenameTarget(null);
       router.refresh();
+      invalidateDriveTree();
     } catch {
       toast.error("Failed to rename");
     }
@@ -511,6 +516,7 @@ export function FileBrowser({
         }
         setMoveTarget(null);
         router.refresh();
+        invalidateDriveTree();
       } catch {
         toast.error("Failed to move item");
       }
@@ -528,6 +534,7 @@ export function FileBrowser({
           const res = await fetch(`/api/assets/${item.id}`, { method: "DELETE" });
           if (!res.ok) throw new Error(`status ${res.status}`);
           router.refresh();
+          invalidateDriveTree();
           return;
         }
         const res = await fetch("/api/folders/trash", {
@@ -537,6 +544,7 @@ export function FileBrowser({
         });
         if (!res.ok) throw new Error(`status ${res.status}`);
         router.refresh();
+        invalidateDriveTree();
       } catch {
         toast.error("Failed to move to trash");
       }
@@ -554,6 +562,7 @@ export function FileBrowser({
         });
         if (!res.ok) throw new Error(`status ${res.status}`);
         router.refresh();
+        invalidateDriveTree();
       } catch {
         toast.error("Failed to restore item");
       }
@@ -578,6 +587,7 @@ export function FileBrowser({
         const res = await fetch(`/api/${plural}/${item.id}`, { method: "DELETE" });
         if (!res.ok) throw new Error(`status ${res.status}`);
         router.refresh();
+        invalidateDriveTree();
       } catch {
         toast.error("Failed to delete item permanently");
       }
@@ -595,6 +605,7 @@ export function FileBrowser({
       });
       if (!res.ok) throw new Error(`status ${res.status}`);
       router.refresh();
+      invalidateDriveTree();
     } catch {
       toast.error("Failed to empty trash");
     }
@@ -734,6 +745,7 @@ export function FileBrowser({
             setSelected(new Set());
             anchorRef.current = null;
             router.refresh();
+            invalidateDriveTree();
           })
           .catch((err) => {
             toast.error("Failed to trash selection");
@@ -823,12 +835,18 @@ export function FileBrowser({
         );
         // Avoid unused targetFolderId lint (used implicitly through resolveDrop).
         void targetFolderId;
-        if (results.some(Boolean)) router.refresh();
+        if (results.some(Boolean)) {
+          router.refresh();
+          invalidateDriveTree();
+        }
         return;
       }
 
       const ok = await resolveDrop(activeData, overData, folders);
-      if (ok) router.refresh();
+      if (ok) {
+        router.refresh();
+        invalidateDriveTree();
+      }
     },
     [activeDrag, folders, folderId, itemsById, router],
   );

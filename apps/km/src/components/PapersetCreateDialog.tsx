@@ -15,6 +15,7 @@ import { FieldDescription, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
+import { invalidateDriveTree } from "@/lib/drive-sync";
 
 interface ColumnDraft {
   name: string;
@@ -84,6 +85,7 @@ export function PapersetCreateDialog({
       reset();
       router.push(`/d/${row.id}`);
       router.refresh();
+      invalidateDriveTree();
     } catch {
       setError("Failed to create paperset.");
     } finally {
