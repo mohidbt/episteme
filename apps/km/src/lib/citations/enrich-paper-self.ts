@@ -18,6 +18,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { papers } from "@episteme/db/schema";
 import { getUserS2Key } from "@episteme/auth/byok";
+import { sanitizeAbstract } from "@/lib/strip-jats";
 import {
   resolvePaperId,
   fetchPaperBatch,
@@ -42,11 +43,13 @@ export interface SelfEnrichResult {
 
 function trimAbstract(s: string | null): string | null {
   if (!s) return null;
-  const trimmed = s.trim();
-  if (trimmed.length === 0) return null;
-  return trimmed.length > ABSTRACT_MAX_CHARS
-    ? trimmed.slice(0, ABSTRACT_MAX_CHARS)
-    : trimmed;
+  // GSD-80: S2 sometimes returns JATS-tagged abstracts (`<jats:p>`, `<jats:italic>`).
+  // Strip tags + decode entities before length-capping so we never persist markup.
+  const cleaned = sanitizeAbstract(s);
+  if (cleaned.length === 0) return null;
+  return cleaned.length > ABSTRACT_MAX_CHARS
+    ? cleaned.slice(0, ABSTRACT_MAX_CHARS)
+    : cleaned;
 }
 
 function buildOverwrite(meta: PaperMetadata): Record<string, unknown> {

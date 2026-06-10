@@ -147,6 +147,39 @@ describe("enrichPaperSelfFromS2", () => {
     expect(captured.values).toBeNull();
   });
 
+  it("strips JATS XML tags from S2 abstract before persisting (GSD-80)", async () => {
+    vi.mocked(resolvePaperId).mockResolvedValue("s2-pid");
+    vi.mocked(fetchPaperBatch).mockResolvedValue([
+      {
+        paperId: "s2-pid",
+        title: "T",
+        authors: [],
+        year: 2017,
+        externalIds: null,
+        abstract:
+          "<jats:title>Abstract</jats:title> <jats:p>Cooperative interactions in <jats:italic>Escherichia coli</jats:italic> &amp; friends.</jats:p>",
+        venue: null,
+        citationCount: null,
+        influentialCitationCount: null,
+        openAccessPdfUrl: null,
+        isOpenAccess: null,
+        tldr: null,
+        bibtex: null,
+      },
+    ]);
+    const captured = captureUpdate();
+
+    await enrichPaperSelfFromS2(PAPER);
+
+    const abs = captured.values?.abstractShort as string;
+    expect(abs).toBeDefined();
+    expect(abs).not.toMatch(/<jats:/);
+    expect(abs).not.toMatch(/<\/jats:/);
+    expect(abs).toContain("Escherichia coli");
+    expect(abs).toContain("&"); // entity decoded
+    expect(abs).not.toContain("&amp;");
+  });
+
   it("does not overwrite paper fields with null S2 values", async () => {
     vi.mocked(resolvePaperId).mockResolvedValue("s2-pid");
     vi.mocked(fetchPaperBatch).mockResolvedValue([
