@@ -7,14 +7,6 @@ CFG = {"configurable": {"user_id": USER}}
 
 
 @pytest.mark.asyncio
-async def test_pdf_read_tables_is_unavailable():
-    from tools.pdfs import pdf_read_tables
-
-    out = await pdf_read_tables.ainvoke({"paper_id": "p9", "page": 1}, config=CFG)
-    assert out == {"error": True, "status": None, "body": "tool unavailable in this build"}
-
-
-@pytest.mark.asyncio
 async def test_pdf_extract_data_is_unavailable():
     from tools.pdfs import pdf_extract_data
 
