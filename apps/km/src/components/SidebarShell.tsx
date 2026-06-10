@@ -63,13 +63,7 @@ function CollapseHandle({ collapsed, toggle }: { collapsed: boolean; toggle: () 
 
 export function SidebarShell({ library, tree, isAnonymous }: SidebarShellProps) {
   const router = useRouter();
-  // Bump on every drive mutation signal so DriveTree remounts with fresh
-  // server props even if `router.refresh()` returns a referentially-equal tree.
-  const [treeVersion, setTreeVersion] = React.useState(0);
-  const onMutate = React.useCallback(() => {
-    router.refresh();
-    setTreeVersion((v) => v + 1);
-  }, [router]);
+  const onMutate = React.useCallback(() => router.refresh(), [router]);
   // Subscribe to the global drive-sync bus; every drive-mutating site fires
   // `invalidateDriveTree()` on success.
   useDriveSync(onMutate);
@@ -163,7 +157,6 @@ export function SidebarShell({ library, tree, isAnonymous }: SidebarShellProps) 
           <SidebarContent className="gap-2 px-2">
             {!collapsed && (
               <DriveTree
-                key={treeVersion}
                 libraryId={library.id}
                 folders={tree.folders}
                 papers={tree.papers}
