@@ -82,6 +82,12 @@ import {
 } from "lucide-react";
 import { FileDiffCard } from "./FileDiffCard";
 import { SkillLoadCard } from "./SkillLoadCard";
+import {
+  useChatAttachments,
+  AttachmentChips,
+  PaperclipButton,
+  formatMessageWithAttachments,
+} from "./ChatFileAttachments";
 import { humanizeToolName } from "@/lib/agents/tool-categories";
 import { ChatCodePre } from "./ChatCodePre";
 import { ChatTable } from "./ChatTable";
@@ -313,7 +319,10 @@ export function AgentTranscript({
   );
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
+  const [isDragOver, setIsDragOver] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  const { attachments, addFiles, removeAttachment, clear, uploadAll } =
+    useChatAttachments();
   const agentBall = useAgentBallOptional();
   useEffect(() => {
     agentBall?.setWorking(streaming);
@@ -491,13 +500,29 @@ export function AgentTranscript({
 
   const handleSend = useCallback(
     (textArg?: string) => {
-      const text = (textArg ?? input).trim();
-      if (!text) return;
+      const rawText = (textArg ?? input).trim();
+      const hasAttachments = attachments.length > 0;
+      if (!rawText && !hasAttachments) return;
       if (textArg === undefined) setInput("");
-      if (onSendMessage) onSendMessage(text);
-      else void defaultSend(text);
+
+      // Fast path — no attachments to upload.
+      if (!hasAttachments) {
+        if (onSendMessage) onSendMessage(rawText);
+        else void defaultSend(rawText);
+        return;
+      }
+
+      // Slow path — upload attachments first, then send the formatted text.
+      void (async () => {
+        const uploaded = await uploadAll();
+        if (uploaded === null) return; // toast.error already fired
+        const finalText = formatMessageWithAttachments(rawText, uploaded);
+        clear();
+        if (onSendMessage) onSendMessage(finalText);
+        else void defaultSend(finalText);
+      })();
     },
-    [input, onSendMessage, defaultSend],
+    [input, onSendMessage, defaultSend, attachments, uploadAll, clear],
   );
 
   // Task #45: fork conversation at a prior user message. Truncates the
@@ -718,31 +743,63 @@ export function AgentTranscript({
         </ConversationContent>
         <ConversationScrollButton />
       </Conversation>
-      <div className="border-t p-2 flex items-center gap-2">
-        <Textarea
-          ref={inputRef}
-          autoFocus
-          className="min-h-9 max-h-48 resize-none py-1.5 text-sm"
-          placeholder="Ask anything"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              handleSend();
-            }
-          }}
-          rows={1}
-          aria-label="Message agent"
-        />
-        <button
-          type="button"
-          onClick={() => handleSend()}
-          disabled={!input.trim() || streaming}
-          className="rounded-md bg-primary px-3 py-1.5 text-sm text-primary-foreground disabled:opacity-50"
-        >
-          Send
-        </button>
+      <div
+        data-testid="chat-input-dropzone"
+        className={`relative border-t ${isDragOver ? "bg-primary/5 ring-1 ring-primary/30 ring-inset" : ""}`}
+        onDragOver={(e) => {
+          if (e.dataTransfer?.types?.includes("Files")) {
+            e.preventDefault();
+            setIsDragOver(true);
+          }
+        }}
+        onDragLeave={(e) => {
+          // Only clear when leaving the dropzone itself, not a child.
+          if (e.currentTarget === e.target) setIsDragOver(false);
+        }}
+        onDrop={(e) => {
+          if (e.dataTransfer?.files?.length) {
+            e.preventDefault();
+            addFiles(e.dataTransfer.files);
+          }
+          setIsDragOver(false);
+        }}
+      >
+        {isDragOver ? (
+          <div
+            data-testid="chat-drop-overlay"
+            className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center text-xs font-medium text-primary"
+          >
+            Drop to attach
+          </div>
+        ) : null}
+        <AttachmentChips attachments={attachments} onRemove={removeAttachment} />
+        <div className="p-2 flex items-center gap-2">
+          <PaperclipButton onFiles={addFiles} />
+          <Textarea
+            ref={inputRef}
+            autoFocus
+            className="min-h-9 max-h-48 resize-none py-1.5 text-sm"
+            placeholder="Ask anything"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                handleSend();
+              }
+            }}
+            rows={1}
+            aria-label="Message agent"
+          />
+          <button
+            type="button"
+            onClick={() => handleSend()}
+            disabled={(!input.trim() && attachments.length === 0) || streaming}
+            className="rounded-md bg-primary px-3 py-1.5 text-sm text-primary-foreground disabled:opacity-50"
+          >
+            Send
+          </button>
+        </div>
       </div>
     </div>
   );
