@@ -12,7 +12,21 @@ type CanvasNode = {
   id: string
   kind: NodeKind
   label: string
+  slug?: string
   fgId: string
+}
+
+// GSD-64: resolve the detail-page route for a node. Returns null when no
+// stable route exists (e.g. note without slug — legacy data); callers should
+// no-op in that case rather than navigate to "/n/undefined".
+function detailHrefFor(node: CanvasNode): string | null {
+  if (node.kind === 'paper') return `/p/${node.id}`
+  if (node.kind === 'reference') return `/r/${node.id}`
+  if (node.kind === 'note') {
+    if (!node.slug) return null
+    return `/n/${node.slug}`
+  }
+  return null
 }
 
 type CanvasLink = {
@@ -104,6 +118,7 @@ export default function GraphCanvas({ payload }: { payload: GraphPayload }) {
   const graphData = useMemo(() => {
     const nodes: CanvasNode[] = payload.nodes.map((n) => ({
       ...n,
+      slug: n.slug,
       fgId: `${n.kind}:${n.id}`,
     }))
     const links: CanvasLink[] = payload.edges.map((e) => ({
@@ -232,27 +247,32 @@ export default function GraphCanvas({ payload }: { payload: GraphPayload }) {
           const isDblClick =
             lastClickedNodeIdRef.current === n.fgId &&
             now - lastClickTimeRef.current < DBLCLICK_WINDOW_MS
+          // GSD-64: a single click on ANY node opens its detail page directly
+          // (papers → /p, references → /r, notes → /n/<slug>). The earlier
+          // `/graph/<id>` paper-scoped subview branch was removed because it
+          // surfaced a different H1 ("paper title" instead of "Knowledge Graph")
+          // with no legend, which users perceived as the graph page losing
+          // state. Two-click and single-click now resolve to the same detail
+          // page; the dblclick path stays in so a fast second tap pre-empts the
+          // debounce timer for users who expect Notion-style dblclick-to-open.
+          const href = detailHrefFor(n)
           if (isDblClick) {
-            // Cancel pending single-click and route to detail page.
             if (clickTimerRef.current) {
               clearTimeout(clickTimerRef.current)
               clickTimerRef.current = null
             }
             lastClickTimeRef.current = 0
             lastClickedNodeIdRef.current = null
-            if (n.kind === 'paper') router.push(`/p/${n.id}`)
-            else if (n.kind === 'reference') router.push(`/r/${n.id}`)
+            if (href) router.push(href)
             return
           }
           lastClickTimeRef.current = now
           lastClickedNodeIdRef.current = n.fgId
-          // Only papers have a graph subview today; notes/references on a
-          // single click do nothing until the dblclick window closes.
-          if (n.kind !== 'paper') return
+          if (!href) return
           if (clickTimerRef.current) clearTimeout(clickTimerRef.current)
           clickTimerRef.current = setTimeout(() => {
             clickTimerRef.current = null
-            router.push(`/graph/${n.id}`)
+            router.push(href)
           }, CLICK_DEBOUNCE_MS)
         }}
         onLinkClick={(l: unknown) => void handleLinkClick(l as CanvasLink)}
