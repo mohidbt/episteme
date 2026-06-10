@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { type FolderRow } from "@/lib/folders";
 import { FolderDestinationPicker } from "./FolderDestinationPicker";
+import { invalidateDriveTree } from "@/lib/drive-sync";
 
 export function ImportControls({
   libraryId,
@@ -49,6 +50,7 @@ export function ImportControls({
       setFile(null);
       if (inputRef.current) inputRef.current.value = "";
       router.refresh();
+      invalidateDriveTree();
     } catch {
       toast.error("Import failed");
     } finally {

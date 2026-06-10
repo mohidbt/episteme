@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { showSignInToUpload } from "@/lib/upload-gate";
 import { useSession } from "@episteme/auth/client";
+import { invalidateDriveTree } from "@/lib/drive-sync";
 
 const PDF_CONTENT_TYPE = "application/pdf";
 const MAX_PDF_BYTES = 50 * 1024 * 1024;
@@ -173,6 +174,7 @@ export function PaperUploadDropzone({
 
       await runChunks(next, PARALLEL, processFile);
       router.refresh();
+      invalidateDriveTree();
     },
     [processFile, router, isAnonymous],
   );
