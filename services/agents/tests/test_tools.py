@@ -26,7 +26,8 @@ def test_all_tools_count():
     # delete_user_highlight, fill_reference, resolve_doi, paperset_enrich,
     # and the 6 drive_ops (move/rename/delete × paper/folder).
     # 37 -> 45 in GSD-55: paper_citations pipeline (8 tools).
-    assert len(ALL_TOOLS) == 45, f"Expected 45, got {len(ALL_TOOLS)}"
+    # 45 -> 46 in GSD-70: list_revisions (companion to diff_revision).
+    assert len(ALL_TOOLS) == 46, f"Expected 46, got {len(ALL_TOOLS)}"
 
 
 def test_all_tools_are_base_tool():
@@ -74,6 +75,7 @@ def test_all_tools_contains_expected_names():
         "search_library",
         # GSD-48 batch — agent-tool round-trip + Drive CRUD.
         "diff_revision",                # GSD-53
+        "list_revisions",               # GSD-70 (GSD-69)
         "list_user_highlights",         # GSD-58
         "delete_user_highlight",        # GSD-58
         "fill_reference",               # GSD-56

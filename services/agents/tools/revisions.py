@@ -26,6 +26,26 @@ _UNAVAILABLE = {
 
 
 @tool
+async def list_revisions(note_id: str, *, config: RunnableConfig) -> object:
+    """List the revision history of a note (newest first).
+
+    Use this BEFORE ``diff_revision`` to discover the revision ids the
+    user is asking about — without it the LLM has no way to obtain
+    ``rev_a``/``rev_b`` to pass to ``diff_revision``.
+
+    Args:
+        note_id: Note UUID.
+
+    Returns a list of ``{id, createdAt, reason, charCount, authorKind,
+    agentSkill}`` rows.
+    """
+    user_id = user_id_from_config(config)
+    return await km_get(
+        f"/api/notes/{quote_plus(note_id)}/revisions", user_id=user_id
+    )
+
+
+@tool
 async def diff_revision(
     note_id: str, rev_a: str, rev_b: str, *, config: RunnableConfig
 ) -> object:
@@ -33,7 +53,8 @@ async def diff_revision(
 
     There is no server-side diff route; the agent's LLM diffs the two
     contents itself. Use this when the user asks what changed between
-    two revisions of a note.
+    two revisions of a note. Call ``list_revisions(note_id)`` first to
+    discover the revision ids.
 
     Args:
         note_id: Note UUID.
@@ -63,4 +84,4 @@ async def activity(days: int = 1, *, config: RunnableConfig) -> object:
     return _UNAVAILABLE
 
 
-TOOLS = [diff_revision]
+TOOLS = [list_revisions, diff_revision]

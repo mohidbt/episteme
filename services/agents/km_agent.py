@@ -261,6 +261,35 @@ _CORE_TOOL_NAMES: frozenset[str] = frozenset({
     # Without this, "list my papersets" silently routed to list_pdfs whenever
     # any skill was active (G-R6-15 / #107 round 6).
     "browse_papersets", "csv_read", "csv_write_cell",
+    # GSD-70 — orphans previously pruned by _filter_tools_for_skills for any
+    # logged-in user with at least one skill enabled. All foundational
+    # operations on user content (drive CRUD, highlights, references,
+    # citations, revisions, paperset enrichment, table extraction) — not
+    # skill-scoped features. UI was advertising these via /agents/km/tools;
+    # without CORE membership the runtime silently dropped them.
+    #
+    # highlights
+    "list_user_highlights", "delete_user_highlight",
+    # references (DOI + bib autofill)
+    "fill_reference", "resolve_doi",
+    # papersets (bulk enrichment is sibling to csv_read/csv_write_cell)
+    "paperset_enrich",
+    # reader (table extraction is sibling to read_paper)
+    "pdf_read_tables",
+    # note revisions (sibling to list_notes / read_note)
+    "diff_revision", "list_revisions",
+    # drive CRUD — foundational ops on papers/folders
+    "move_paper", "rename_paper", "delete_paper",
+    "move_folder", "rename_folder", "delete_folder",
+    # paper citations pipeline — first-class user content, like references
+    "list_paper_citations", "list_paper_citation_edges",
+    "list_paper_citation_markers", "extract_paper_citations",
+    "enrich_paper_citations", "rematch_paper_citations",
+    "keep_paper_citation", "save_paper_citation_to_library",
+    # publish — make_public was previously guarded only by interrupt_on
+    # metadata; without CORE membership the tool itself was pruned before
+    # the HITL gate ever saw it.
+    "make_public",
     # web_search (Tavily) — core, default-ON, permission-opt-out.
     # Conceptually web_search is "always available unless the user explicitly
     # opts out". It belongs in CORE because:

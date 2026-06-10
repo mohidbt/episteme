@@ -32,14 +32,19 @@ from checkpointer import get_saver
 from store import get_store
 from tools import ALL_TOOLS
 from tools.data import TOOLS as _DATA_TOOLS
+from tools.drive_ops import TOOLS as _DRIVE_OPS_TOOLS
 from tools.library import TOOLS as _LIBRARY_TOOLS
 from tools.notes import TOOLS as _NOTES_TOOLS
+from tools.paper_citations import TOOLS as _PAPER_CITATIONS_TOOLS
 from tools.paper_search import TOOLS as _PAPER_SEARCH_TOOLS
 from tools.papers import TOOLS as _PAPERS_TOOLS
+from tools.paperset_enrich import TOOLS as _PAPERSET_ENRICH_TOOLS
 from tools.pdfs import TOOLS as _PDF_TOOLS
 from tools.publish import TOOLS as _PUBLISH_TOOLS
+from tools.references_ai import TOOLS as _REFERENCES_AI_TOOLS
 from tools.revisions import TOOLS as _REVISION_TOOLS
 from tools.search import TOOLS as _SEARCH_TOOLS
+from tools.user_highlights import TOOLS as _USER_HIGHLIGHTS_TOOLS
 from tools.web_search import TOOLS as _WEB_SEARCH_TOOLS
 from lib.config_cache import GUEST_USER_ID, load_user_config, save_user_config
 from lib.km_http import km_get
@@ -1466,6 +1471,12 @@ def _build_category_map() -> dict[str, str]:
         **{t.name: "data" for t in _DATA_TOOLS},
         **{t.name: "search" for t in _SEARCH_TOOLS},
         **{t.name: "web" for t in _WEB_SEARCH_TOOLS},
+        # GSD-70: previously orphan modules — fell to `other` bucket in UI.
+        **{t.name: "drive_ops" for t in _DRIVE_OPS_TOOLS},
+        **{t.name: "paper_citations" for t in _PAPER_CITATIONS_TOOLS},
+        **{t.name: "paperset_enrich" for t in _PAPERSET_ENRICH_TOOLS},
+        **{t.name: "references_ai" for t in _REFERENCES_AI_TOOLS},
+        **{t.name: "user_highlights" for t in _USER_HIGHLIGHTS_TOOLS},
     }
 
 
