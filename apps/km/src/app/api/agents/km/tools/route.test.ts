@@ -91,6 +91,20 @@ describe("GET /api/agents/km/tools", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it("GSD-88 — query string bypasses the 60s cache (e.g. ?cb=…)", async () => {
+    const fetchMock = vi.fn(async () =>
+      new Response(JSON.stringify(upstreamPayload), { status: 200 }),
+    );
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    await GET(req("/api/agents/km/tools", { method: "GET", cookie: "session=x" }));
+    await GET(req("/api/agents/km/tools?cb=1", { method: "GET", cookie: "session=x" }));
+    await GET(req("/api/agents/km/tools?cb=2", { method: "GET", cookie: "session=x" }));
+    // First call populates cache. Both cache-bust calls MUST hit upstream
+    // again so users debugging stale inventory can force a refresh.
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
   it("returns 502 when upstream returns 5xx", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response("upstream broke", { status: 503 }),

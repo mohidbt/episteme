@@ -94,6 +94,7 @@ async def test_tools_route_returns_every_tool():
         "move_paper",
         "rename_paper",
         "delete_paper",
+        "create_folder",
         "move_folder",
         "rename_folder",
         "delete_folder",
@@ -114,3 +115,23 @@ def test_gsd70_orphan_is_in_core(orphan_name: str):
     assert orphan_name in _CORE_TOOL_NAMES, (
         f"{orphan_name!r} must be in _CORE_TOOL_NAMES (GSD-70)"
     )
+
+
+@pytest.mark.asyncio
+async def test_drive_ops_tools_in_served_inventory():
+    """GSD-88 — every drive_ops tool (move/rename/delete papers+folders, create_folder)
+    appears in the /agents/km/tools response. Catches regressions where a new
+    drive_ops tool is added to drive_ops.py but the module isn't wired into
+    ALL_TOOLS or the _CATEGORY_MAP, leaving the UI permission toggle invisible.
+    """
+    from routers.km_agent import list_tools  # noqa: PLC0415
+
+    fake_auth = {"user_id": "u1", "llm_key": "test"}
+    resp = await list_tools(fake_auth)
+    served = {t["name"] for t in resp["tools"]}
+    drive_ops_expected = {
+        "move_paper", "rename_paper", "delete_paper",
+        "create_folder", "move_folder", "rename_folder", "delete_folder",
+    }
+    missing = drive_ops_expected - served
+    assert not missing, f"drive_ops tools missing from /tools response: {sorted(missing)}"
