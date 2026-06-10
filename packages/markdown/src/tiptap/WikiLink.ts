@@ -30,6 +30,10 @@ export interface WikiLinkAttrs {
   alias: string | null;
   targetKind: WikiLinkTargetKind;
   targetId: string | null;
+  // GSD-62: resolved display label (e.g. paper.title from the DB). Populated
+  // by `hydrateWikiLinkResolutions` after the note loads; render-time only,
+  // NOT serialized to markdown. Falls back to `title` when null.
+  displayTitle: string | null;
 }
 
 // Pill class — static; resolved/unresolved styling is driven by the
@@ -169,6 +173,18 @@ export const WikiLink = Node.create({
         renderHTML: (attrs) =>
           attrs.targetId ? { "data-target-id": attrs.targetId } : {},
       },
+      // GSD-62: resolved display label, not part of markdown round-trip.
+      // Persisted on the ProseMirror node so YJS broadcasts it to collaborators
+      // (avoids each peer re-resolving). Render-time fallback chain is
+      // `alias ?? displayTitle ?? title`.
+      displayTitle: {
+        default: null as string | null,
+        parseHTML: (el) => el.getAttribute("data-display-title"),
+        renderHTML: (attrs) =>
+          attrs.displayTitle
+            ? { "data-display-title": attrs.displayTitle }
+            : {},
+      },
     };
   },
 
@@ -179,7 +195,8 @@ export const WikiLink = Node.create({
   renderHTML({ node, HTMLAttributes }) {
     const attrs = node.attrs as WikiLinkAttrs;
     const resolved = attrs.targetId != null;
-    const label = attrs.alias ?? attrs.title;
+    // GSD-62: alias (user override) > displayTitle (resolved DB title) > title (raw token).
+    const label = attrs.alias ?? attrs.displayTitle ?? attrs.title;
     const kindClass =
       attrs.targetKind === "paper"
         ? " wiki-link--paper"
@@ -260,7 +277,7 @@ export const WikiLink = Node.create({
             : attrs.targetKind === "reference"
               ? " wiki-link--reference"
               : "";
-        const label = attrs.alias ?? attrs.title;
+        const label = attrs.alias ?? attrs.displayTitle ?? attrs.title;
         const merged = mergeAttributes(HTMLAttributes, {
           "data-type": "wiki-link",
           "data-resolved": resolved ? "true" : "false",
@@ -268,6 +285,9 @@ export const WikiLink = Node.create({
           ...(attrs.alias ? { "data-alias": attrs.alias } : {}),
           ...(attrs.targetKind ? { "data-target-kind": attrs.targetKind } : {}),
           ...(attrs.targetId ? { "data-target-id": attrs.targetId } : {}),
+          ...(attrs.displayTitle
+            ? { "data-display-title": attrs.displayTitle }
+            : {}),
           class: PILL_CLASS + kindClass,
         });
         const span = document.createElement("span");

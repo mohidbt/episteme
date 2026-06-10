@@ -3,11 +3,11 @@
 // expired token to the client and break collab connections.
 export const dynamic = "force-dynamic";
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import { getRequiredUserId } from "@/lib/session";
 import { db } from "@/lib/db";
-import { noteLinks, notes, user } from "@episteme/db/schema";
+import { noteLinks, notes, papers, references_, user } from "@episteme/db/schema";
 import { getDefaultLibrary } from "@/lib/default-library";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { BacklinksPanel } from "@/components/BacklinksPanel";
@@ -48,9 +48,22 @@ export default async function NotePage({
       targetKind: noteLinks.targetKind,
       targetId: noteLinks.targetId,
       targetSlug: notes.slug,
+      // GSD-62: resolved display label per kind.
+      // - notes: notes.title
+      // - papers: papers.title (nullable; fall back to filename)
+      // - references: cslJson->>'title' (Postgres JSON arrow extraction)
+      noteTitle: notes.title,
+      paperTitle: papers.title,
+      paperFilename: papers.filename,
+      referenceTitle: sql<
+        string | null
+      >`${references_.cslJson}->>'title'`.as("reference_title"),
+      referenceCitationKey: references_.citationKey,
     })
     .from(noteLinks)
     .leftJoin(notes, eq(notes.id, noteLinks.targetId))
+    .leftJoin(papers, eq(papers.id, noteLinks.targetId))
+    .leftJoin(references_, eq(references_.id, noteLinks.targetId))
     .where(eq(noteLinks.sourceNoteId, note.id));
   // K6: WikiLink node `title` attr stores the STRIPPED label (no `p:` / `r:`
   // / `@` / `pdf:` prefix). `note_links.target_title_raw` is also stored
@@ -65,16 +78,27 @@ export default async function NotePage({
       targetKind: "note" | "reference" | "paper";
       targetId: string | null;
       targetSlug: string | null;
+      displayTitle: string | null;
     }
   > = Object.fromEntries(
-    linkRows.map((r) => [
-      `${r.targetKind}::${r.title.toLowerCase()}`,
-      {
-        targetKind: r.targetKind,
-        targetId: r.targetId,
-        targetSlug: r.targetKind === "note" ? r.targetSlug ?? null : null,
-      },
-    ]),
+    linkRows.map((r) => {
+      // GSD-62: pick the human-friendly title per kind.
+      const displayTitle =
+        r.targetKind === "note"
+          ? r.noteTitle ?? null
+          : r.targetKind === "paper"
+            ? r.paperTitle ?? r.paperFilename ?? null
+            : r.referenceTitle ?? r.referenceCitationKey ?? null;
+      return [
+        `${r.targetKind}::${r.title.toLowerCase()}`,
+        {
+          targetKind: r.targetKind,
+          targetId: r.targetId,
+          targetSlug: r.targetKind === "note" ? r.targetSlug ?? null : null,
+          displayTitle,
+        },
+      ];
+    }),
   );
 
   const library = await getDefaultLibrary(userId);

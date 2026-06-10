@@ -6,6 +6,11 @@ export type WikiLinkResolution = {
   // Slug is carried only for note targets so the UI can route to `/n/<slug>`
   // without a separate id→slug fetch.
   targetSlug?: string | null;
+  // GSD-62: resolved display label (paper.title, reference cslJson.title,
+  // note.title). When present, the chip renders this in place of the raw
+  // user-typed `title` (e.g. "Spontaneous Symmetry Breaking" instead of
+  // "spontaneous.pdf").
+  displayTitle?: string | null;
 };
 
 export type ResolvedLinksMap = Record<string, WikiLinkResolution>;
@@ -49,6 +54,7 @@ export function hydrateWikiLinkResolutions(
       ...node.attrs,
       targetKind: hit.targetKind,
       targetId: hit.targetId,
+      displayTitle: hit.displayTitle ?? null,
     });
     touched = true;
   });
