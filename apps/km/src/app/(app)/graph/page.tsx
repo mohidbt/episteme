@@ -3,10 +3,8 @@ import GraphView from './GraphView.client'
 import { getRequiredUserId } from '@/lib/session'
 import {
   nodesForUser,
-  edgesPaperIsRef,
   edgesWikiLink,
   edgesSharedTag,
-  edgesSemanticSim,
   edgesPaperCitations,
 } from '@/lib/graph/live-edges'
 import { db } from '@episteme/db/client'
@@ -14,6 +12,7 @@ import { sql } from 'drizzle-orm'
 import { rowsOf } from '@/lib/db/rows'
 import type { GraphPayload } from '@/lib/graph/types'
 import { formatGraphKindLabel } from '@/lib/graph/labels'
+import { LEGEND_ITEMS } from '@/lib/graph/legend'
 
 const CAP = Number.parseInt(process.env.GRAPH_PAPER_CAP_V1 ?? '2000', 10)
 
@@ -28,12 +27,10 @@ function extractCount(result: unknown): number {
 }
 
 async function load(userId: string): Promise<{ payload: GraphPayload; status: { over: boolean; count: number } }> {
-  const [nodes, paperIsRef, wikiLink, sharedTag, semanticSim, paperCitations, countResult] = await Promise.all([
+  const [nodes, wikiLink, sharedTag, paperCitations, countResult] = await Promise.all([
     nodesForUser(userId),
-    edgesPaperIsRef(userId),
     edgesWikiLink(userId),
     edgesSharedTag(userId),
-    edgesSemanticSim(userId),
     edgesPaperCitations(userId),
     db.execute(sql`SELECT count(*)::int AS n FROM papers WHERE user_id = ${userId}`),
   ])
@@ -41,7 +38,7 @@ async function load(userId: string): Promise<{ payload: GraphPayload; status: { 
   const count = extractCount(rowsOf<{ n: number }>(countResult))
   const payload: GraphPayload = {
     nodes,
-    edges: [...paperIsRef, ...wikiLink, ...sharedTag, ...semanticSim, ...paperCitations],
+    edges: [...wikiLink, ...sharedTag, ...paperCitations],
   }
 
   return {
@@ -80,14 +77,16 @@ export default async function GraphPage() {
           </div>
           <div className="flex flex-col items-end gap-1">
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-mono text-muted-foreground">
-              <span className="inline-flex items-center gap-1"><Dot color="#3b82f6" />{formatGraphKindLabel("paper")}</span>
-              <span className="inline-flex items-center gap-1"><Dot color="#22c55e" />{formatGraphKindLabel("note")}</span>
-              <span className="inline-flex items-center gap-1"><Dot color="#f59e0b" />{formatGraphKindLabel("reference")}</span>
-              <span className="inline-flex items-center gap-1"><LineSample color="#3b82f6" />{formatGraphKindLabel("paper_is_ref")}</span>
-              <span className="inline-flex items-center gap-1"><LineSample color="#22c55e" />{formatGraphKindLabel("wiki_link")}</span>
-              <span className="inline-flex items-center gap-1"><LineSample color="#a1a1aa" dashed />{formatGraphKindLabel("shared_tag")}</span>
-              <span className="inline-flex items-center gap-1"><LineSample color="#a78bfa" />{formatGraphKindLabel("semantic_sim")}</span>
-              <span className="inline-flex items-center gap-1"><LineSample color="#ec4899" />Citation</span>
+              {LEGEND_ITEMS.map((item) => (
+                <span key={`${item.variant}:${item.kind}`} className="inline-flex items-center gap-1">
+                  {item.variant === 'node' ? (
+                    <Dot color={item.color} />
+                  ) : (
+                    <LineSample color={item.color} dashed={item.dashed} />
+                  )}
+                  {item.kind === 'citing' ? 'Citation' : formatGraphKindLabel(item.kind)}
+                </span>
+              ))}
             </div>
             <p className="text-[10px] text-muted-foreground/70">arrow direction = who cites whom</p>
           </div>
