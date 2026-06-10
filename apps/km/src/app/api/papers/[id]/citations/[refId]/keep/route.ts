@@ -1,8 +1,11 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { papers, documentReferences, keptCitations } from "@episteme/db/schema";
 import { eq, and } from "drizzle-orm";
-import { getUserIdFromRequest } from "@/lib/auth";
+import {
+  getAuthedUserId,
+  MissingInternalSecretError,
+} from "@/lib/internal-auth";
 import { jsonError, requireOwned } from "@/lib/crud";
 
 export const runtime = "nodejs";
@@ -10,9 +13,15 @@ export const runtime = "nodejs";
 type Ctx = { params: Promise<{ id: string; refId: string }> };
 type PaperRow = typeof papers.$inferSelect;
 
-export async function POST(request: NextRequest, { params }: Ctx) {
-  const userId = await getUserIdFromRequest(request);
-  if (!userId) return jsonError(401, "unauthorized");
+export async function POST(request: Request, { params }: Ctx) {
+  let authed;
+  try { authed = await getAuthedUserId(request); }
+  catch (e) {
+    if (e instanceof MissingInternalSecretError) return jsonError(500, "internal auth misconfigured");
+    throw e;
+  }
+  if (!authed) return jsonError(401, "unauthorized");
+  const userId = authed.userId;
 
   const { id: paperId, refId } = await params;
   const documentReferenceId = parseInt(refId, 10);
