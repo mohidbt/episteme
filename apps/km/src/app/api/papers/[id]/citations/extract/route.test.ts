@@ -1,8 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-vi.mock("@episteme/auth", () => ({
-  auth: { api: { getSession: vi.fn() } },
-}));
+vi.mock("@/lib/internal-auth", async () => {
+  const actual =
+    await vi.importActual<typeof import("@/lib/internal-auth")>(
+      "@/lib/internal-auth",
+    );
+  return { ...actual, getAuthedUserId: vi.fn() };
+});
 vi.mock("@episteme/auth/byok", () => ({
   getDecryptedApiKey: vi.fn(),
 }));
@@ -14,7 +18,7 @@ vi.mock("@/lib/citations/annotation-extractor", () => ({
   extractAnnotationMarkers: vi.fn(),
 }));
 
-import { auth } from "@episteme/auth";
+import { getAuthedUserId } from "@/lib/internal-auth";
 import { getDecryptedApiKey } from "@episteme/auth/byok";
 import { db } from "@/lib/db";
 import { extractPdfPages } from "@/lib/ai/pdf-text";
@@ -39,13 +43,13 @@ beforeEach(() => {
 
 describe("POST /api/papers/[id]/citations/extract", () => {
   it("401 when unauthenticated", async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue(null);
+    vi.mocked(getAuthedUserId).mockResolvedValue(null);
     const res = await POST(buildReq(), routeParams);
     expect(res.status).toBe(401);
   });
 
   it("404 when paper missing", async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue({ user: { id: "u1" } } as never);
+    vi.mocked(getAuthedUserId).mockResolvedValue({ userId: "u1", viaHmac: false } as never);
     vi.mocked(db.select).mockReturnValueOnce({
       from: () => ({ where: () => ({ limit: async () => [] }) }),
     } as never);
@@ -54,7 +58,7 @@ describe("POST /api/papers/[id]/citations/extract", () => {
   });
 
   it("falls back to derived source key when paper storageUrl is missing", async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue({ user: { id: "u1" } } as never);
+    vi.mocked(getAuthedUserId).mockResolvedValue({ userId: "u1", viaHmac: false } as never);
     vi.mocked(db.select).mockReturnValueOnce({
       from: () => ({
         where: () => ({
@@ -78,7 +82,7 @@ describe("POST /api/papers/[id]/citations/extract", () => {
   });
 
   it("returns empty successful payload when upstream extraction dependency is unavailable", async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue({ user: { id: "u1" } } as never);
+    vi.mocked(getAuthedUserId).mockResolvedValue({ userId: "u1", viaHmac: false } as never);
     vi.mocked(db.select).mockReturnValueOnce({
       from: () => ({
         where: () => ({
@@ -103,7 +107,7 @@ describe("POST /api/papers/[id]/citations/extract", () => {
   });
 
   it("continues when decrypted key lookup fails", async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue({ user: { id: "u1" } } as never);
+    vi.mocked(getAuthedUserId).mockResolvedValue({ userId: "u1", viaHmac: false } as never);
     vi.mocked(getDecryptedApiKey).mockRejectedValue(new Error("no key"));
     vi.mocked(db.select).mockReturnValueOnce({
       from: () => ({
