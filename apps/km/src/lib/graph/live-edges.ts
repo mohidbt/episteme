@@ -288,7 +288,10 @@ export async function edgesPaperCitations(userId: string): Promise<GraphEdge[]> 
 
 export async function nodesForUser(userId: string): Promise<GraphNode[]> {
   const ps = await db.execute(sql`SELECT id, title FROM papers WHERE user_id = ${userId}`);
-  const ns = await db.execute(sql`SELECT id, title FROM notes  WHERE user_id = ${userId}`);
+  // GSD-64: include slug so the graph canvas can route note clicks to /n/<slug>
+  // (notes are addressed by slug, not uuid). Legacy notes without a slug are
+  // tolerated by the client — clicks on those no-op.
+  const ns = await db.execute(sql`SELECT id, title, slug FROM notes WHERE user_id = ${userId}`);
   // GSD-32 Phase 1: hide collapsed refs (paperId IS NOT NULL) from graph.
   const rs = await db.execute(sql`
     SELECT id, csl_json->>'title' AS title
@@ -297,7 +300,12 @@ export async function nodesForUser(userId: string): Promise<GraphNode[]> {
   `);
   return [
     ...rowsOf<{ id: string; title: string | null }>(ps).map((x) => ({ id: x.id, kind: "paper" as const, label: x.title ?? "(untitled paper)" })),
-    ...rowsOf<{ id: string; title: string | null }>(ns).map((x) => ({ id: x.id, kind: "note" as const, label: x.title ?? "(untitled note)" })),
+    ...rowsOf<{ id: string; title: string | null; slug: string | null }>(ns).map((x) => ({
+      id: x.id,
+      kind: "note" as const,
+      label: x.title ?? "(untitled note)",
+      slug: x.slug ?? undefined,
+    })),
     ...rowsOf<{ id: string; title: string | null }>(rs).map((x) => ({ id: x.id, kind: "reference" as const, label: x.title ?? "(untitled reference)" })),
   ];
 }

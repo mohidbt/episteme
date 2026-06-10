@@ -1,6 +1,13 @@
 export type NodeKind = "paper" | "note" | "reference";
 export type EdgeKind = "paper_is_ref" | "wiki_link" | "shared_tag" | "semantic_sim" | "citing";
-export type GraphNode = { id: string; kind: NodeKind; label: string };
+export type GraphNode = {
+  id: string;
+  kind: NodeKind;
+  label: string;
+  // GSD-64: notes route by slug, not id. Only populated for note nodes; absent
+  // (or undefined) for papers/references which route by id.
+  slug?: string;
+};
 export type GraphEdge = {
   src: { kind: NodeKind; id: string };
   dst: { kind: NodeKind; id: string };

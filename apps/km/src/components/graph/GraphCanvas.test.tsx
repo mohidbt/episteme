@@ -40,7 +40,7 @@ function payload(): GraphPayload {
     nodes: [
       { id: "abc", kind: "paper", label: "Paper A" },
       { id: "def", kind: "reference", label: "Ref D" },
-      { id: "ghi", kind: "note", label: "Note G" },
+      { id: "ghi", kind: "note", label: "Note G", slug: "note-g" },
     ],
     edges: [],
   };
@@ -97,7 +97,7 @@ describe("GraphCanvas dblclick via timestamp (K11)", () => {
     }
   });
 
-  it("two clicks past the dblclick window on paper: second click navigates to /graph/<id> (treated as fresh single-click)", () => {
+  it("two clicks past the dblclick window on paper: second click navigates to /p/<id> (treated as fresh single-click)", () => {
     vi.useFakeTimers();
     try {
       vi.setSystemTime(new Date(0));
@@ -109,13 +109,13 @@ describe("GraphCanvas dblclick via timestamp (K11)", () => {
       click!(node);
       // Let first click's debounce fire and exceed the dblclick window.
       vi.advanceTimersByTime(CLICK_DEBOUNCE_MS + 10);
-      expect(pushMock).toHaveBeenLastCalledWith("/graph/abc");
+      expect(pushMock).toHaveBeenLastCalledWith("/p/abc");
       // Second click past the dblclick window relative to the first.
       click!(node);
       vi.advanceTimersByTime(CLICK_DEBOUNCE_MS + 10);
-      // Both clicks resolve to /graph/abc (single-click routing)
+      // Both clicks resolve to /p/abc (single-click routing)
       expect(pushMock).toHaveBeenCalledTimes(2);
-      expect(pushMock).toHaveBeenNthCalledWith(2, "/graph/abc");
+      expect(pushMock).toHaveBeenNthCalledWith(2, "/p/abc");
     } finally {
       vi.useRealTimers();
     }
@@ -138,13 +138,13 @@ describe("GraphCanvas dblclick via timestamp (K11)", () => {
       // Second click starts a fresh debounce; advance past it.
       vi.advanceTimersByTime(CLICK_DEBOUNCE_MS + 10);
       expect(pushMock).toHaveBeenCalledTimes(1);
-      expect(pushMock).toHaveBeenCalledWith("/graph/xyz");
+      expect(pushMock).toHaveBeenCalledWith("/p/xyz");
     } finally {
       vi.useRealTimers();
     }
   });
 
-  it("single-click without dblclick still routes paper to /graph/<id> after debounce", () => {
+  it("single-click without dblclick routes paper to /p/<id> after debounce (no more /graph subview)", () => {
     vi.useFakeTimers();
     try {
       vi.setSystemTime(new Date(0));
@@ -154,13 +154,14 @@ describe("GraphCanvas dblclick via timestamp (K11)", () => {
         | undefined;
       click!({ id: "abc", kind: "paper", label: "Paper A", fgId: "paper:abc" });
       vi.advanceTimersByTime(CLICK_DEBOUNCE_MS + 10);
-      expect(pushMock).toHaveBeenCalledWith("/graph/abc");
+      expect(pushMock).toHaveBeenCalledWith("/p/abc");
+      expect(pushMock).not.toHaveBeenCalledWith("/graph/abc");
     } finally {
       vi.useRealTimers();
     }
   });
 
-  it("two clicks within the dblclick window on note node does nothing (no route)", () => {
+  it("single-click on reference node routes to /r/<id> after debounce", () => {
     vi.useFakeTimers();
     try {
       vi.setSystemTime(new Date(0));
@@ -168,12 +169,66 @@ describe("GraphCanvas dblclick via timestamp (K11)", () => {
       const click = capturedProps.current?.onNodeClick as
         | ((n: unknown) => void)
         | undefined;
-      const node = { id: "ghi", kind: "note", label: "Note G", fgId: "note:ghi" };
+      click!({ id: "def", kind: "reference", label: "Ref D", fgId: "reference:def" });
+      vi.advanceTimersByTime(CLICK_DEBOUNCE_MS + 10);
+      expect(pushMock).toHaveBeenCalledWith("/r/def");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("single-click on note node with slug routes to /n/<slug> after debounce", () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date(0));
+      render(<GraphCanvas payload={payload()} />);
+      const click = capturedProps.current?.onNodeClick as
+        | ((n: unknown) => void)
+        | undefined;
+      click!({ id: "ghi", kind: "note", label: "Note G", slug: "note-g", fgId: "note:ghi" });
+      vi.advanceTimersByTime(CLICK_DEBOUNCE_MS + 10);
+      expect(pushMock).toHaveBeenCalledWith("/n/note-g");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("single-click on note node WITHOUT slug does nothing (legacy data guard)", () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date(0));
+      const noSlugPayload: GraphPayload = {
+        nodes: [{ id: "ghi", kind: "note", label: "Note G" }],
+        edges: [],
+      };
+      render(<GraphCanvas payload={noSlugPayload} />);
+      const click = capturedProps.current?.onNodeClick as
+        | ((n: unknown) => void)
+        | undefined;
+      click!({ id: "ghi", kind: "note", label: "Note G", fgId: "note:ghi" });
+      vi.advanceTimersByTime(CLICK_DEBOUNCE_MS + 100);
+      expect(pushMock).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("two clicks within the dblclick window on note: cancelled debounce + dblclick routes to /n/<slug>", () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date(0));
+      render(<GraphCanvas payload={payload()} />);
+      const click = capturedProps.current?.onNodeClick as
+        | ((n: unknown) => void)
+        | undefined;
+      const node = { id: "ghi", kind: "note", label: "Note G", slug: "note-g", fgId: "note:ghi" };
       click!(node);
       vi.advanceTimersByTime(DBLCLICK_WINDOW_MS - 100);
       click!(node);
       vi.advanceTimersByTime(CLICK_DEBOUNCE_MS + 100);
-      expect(pushMock).not.toHaveBeenCalled();
+      // Single push: dblclick cancels the pending debounce and routes immediately.
+      expect(pushMock).toHaveBeenCalledTimes(1);
+      expect(pushMock).toHaveBeenCalledWith("/n/note-g");
     } finally {
       vi.useRealTimers();
     }
