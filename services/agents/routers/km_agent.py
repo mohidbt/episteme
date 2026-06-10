@@ -32,14 +32,19 @@ from checkpointer import get_saver
 from store import get_store
 from tools import ALL_TOOLS
 from tools.data import TOOLS as _DATA_TOOLS
+from tools.drive_ops import TOOLS as _DRIVE_OPS_TOOLS
 from tools.library import TOOLS as _LIBRARY_TOOLS
 from tools.notes import TOOLS as _NOTES_TOOLS
+from tools.paper_citations import TOOLS as _PAPER_CITATIONS_TOOLS
 from tools.paper_search import TOOLS as _PAPER_SEARCH_TOOLS
 from tools.papers import TOOLS as _PAPERS_TOOLS
+from tools.paperset_enrich import TOOLS as _PAPERSET_ENRICH_TOOLS
 from tools.pdfs import TOOLS as _PDF_TOOLS
 from tools.publish import TOOLS as _PUBLISH_TOOLS
+from tools.references_ai import TOOLS as _REFERENCES_AI_TOOLS
 from tools.revisions import TOOLS as _REVISION_TOOLS
 from tools.search import TOOLS as _SEARCH_TOOLS
+from tools.user_highlights import TOOLS as _USER_HIGHLIGHTS_TOOLS
 from tools.web_search import TOOLS as _WEB_SEARCH_TOOLS
 from lib.config_cache import GUEST_USER_ID, load_user_config, save_user_config
 from lib.km_http import km_get
@@ -578,12 +583,17 @@ async def invoke(req: Request, auth: InternalAuthDep):
     permissions = body.get("permissions")
     if not isinstance(permissions, dict):
         permissions = cfg.get("permissions", {})
+    # GSD-68 — KM now forwards agentConfigs.approvalRules in the wire body
+    # so a cold Python cache cannot silently drop user-saved gates.
+    approval_rules = body.get("approval_rules")
+    if not isinstance(approval_rules, dict):
+        approval_rules = cfg.get("approvalRules", {})
     agent = await build_km_agent(
         user_id=user_id,
         thread_id=body["thread_id"],
         model=model_for(model_pref, auth["llm_key"]),
         enabled_skills=enabled,
-        approval_rules=cfg.get("approvalRules", {}),
+        approval_rules=approval_rules,
         store=get_store(),
         saver=get_saver(),
         permissions=permissions,
@@ -801,12 +811,15 @@ async def resume(req: Request, auth: InternalAuthDep):
     permissions = body.get("permissions")
     if not isinstance(permissions, dict):
         permissions = cfg.get("permissions", {})
+    approval_rules = body.get("approval_rules")
+    if not isinstance(approval_rules, dict):
+        approval_rules = cfg.get("approvalRules", {})
     agent = await build_km_agent(
         user_id=user_id,
         thread_id=body["thread_id"],
         model=model_for(model_pref, auth["llm_key"]),
         enabled_skills=enabled,
-        approval_rules=cfg.get("approvalRules", {}),
+        approval_rules=approval_rules,
         store=get_store(),
         saver=get_saver(),
         permissions=permissions,
@@ -1466,6 +1479,12 @@ def _build_category_map() -> dict[str, str]:
         **{t.name: "data" for t in _DATA_TOOLS},
         **{t.name: "search" for t in _SEARCH_TOOLS},
         **{t.name: "web" for t in _WEB_SEARCH_TOOLS},
+        # GSD-70: previously orphan modules — fell to `other` bucket in UI.
+        **{t.name: "drive_ops" for t in _DRIVE_OPS_TOOLS},
+        **{t.name: "paper_citations" for t in _PAPER_CITATIONS_TOOLS},
+        **{t.name: "paperset_enrich" for t in _PAPERSET_ENRICH_TOOLS},
+        **{t.name: "references_ai" for t in _REFERENCES_AI_TOOLS},
+        **{t.name: "user_highlights" for t in _USER_HIGHLIGHTS_TOOLS},
     }
 
 
@@ -1481,6 +1500,7 @@ async def list_tools(auth: InternalAuthDep):
     persists separately under ``agentConfigs.settingsJson.permissions``.
     """
     _reject_guest(auth["user_id"])
+    from km_agent import _DEFAULT_APPROVAL_RULES  # noqa: PLC0415
     return {
         "tools": [
             {
@@ -1489,6 +1509,10 @@ async def list_tools(auth: InternalAuthDep):
                 "category": _CATEGORY_MAP.get(t.name, "other"),
                 "gateable": True,
                 "default_allowed": True,
+                # GSD-68 — UI source of truth for the default require/auto mode
+                # per tool. ApprovalRules.tsx renders this as the column default
+                # so users see what state a tool ships in.
+                "default_approval": _DEFAULT_APPROVAL_RULES.get(t.name, "auto"),
             }
             for t in ALL_TOOLS
         ]

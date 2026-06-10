@@ -76,11 +76,16 @@ export async function POST(req: Request) {
   let modelPreference: string | null = null;
   let enabledSkills: string[] | null = null;
   let permissions: Record<string, boolean> | null = null;
+  // GSD-68: approvalRules was never forwarded to the agent service. The
+  // Python side defaulted to its in-process cache (empty after restart),
+  // so user-saved "require approval on X" had no effect on /invoke.
+  let approvalRules: Record<string, unknown> | null = null;
   try {
     const rows = await db
       .select({
         modelPreference: agentConfigs.modelPreference,
         enabledSkills: agentConfigs.enabledSkills,
+        approvalRules: agentConfigs.approvalRules,
         settingsJson: agentConfigs.settingsJson,
       })
       .from(agentConfigs)
@@ -88,6 +93,7 @@ export async function POST(req: Request) {
       .limit(1);
     modelPreference = rows[0]?.modelPreference ?? null;
     enabledSkills = rows[0]?.enabledSkills ?? null;
+    approvalRules = (rows[0]?.approvalRules as Record<string, unknown>) ?? null;
     const settings = (rows[0]?.settingsJson ?? {}) as {
       permissions?: Record<string, boolean>;
     };
@@ -113,6 +119,7 @@ export async function POST(req: Request) {
     ...(modelPreference ? { model_preference: modelPreference } : {}),
     ...(Array.isArray(mergedSkills) ? { enabled_skills: mergedSkills } : {}),
     ...(permissions ? { permissions } : {}),
+    ...(approvalRules ? { approval_rules: approvalRules } : {}),
   });
 
   const path = "/agents/km/invoke";

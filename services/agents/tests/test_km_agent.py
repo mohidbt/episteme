@@ -90,9 +90,12 @@ def test_filter_tools_with_lit_triage_skill_filters_to_allowed_set():
     assert "search_notes" in names
     assert "list_references" in names
     assert "create_note" in names
-    # Tools not in lit-triage's allow-list must be excluded
-    assert "make_public" not in names
+    # search_library is non-core and not in lit-triage's allow-list — pruned.
+    assert "search_library" not in names
     assert "highlight" in names
+    # make_public is CORE (GSD-70) so HITL has something to gate; presence
+    # here is the invariant, the HITL interrupt_on map handles approval.
+    assert "make_public" in names
 
 
 def test_paperset_tools_are_core_when_any_skill_active():

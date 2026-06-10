@@ -192,8 +192,9 @@ async def test_addendum_excludes_skill_pruned_tools():
     survived the skill filter."""
     from skills import SkillSpec  # noqa: PLC0415
 
-    # `make_public` is NOT in _CORE_TOOL_NAMES, so a skill that doesn't list
-    # it in `tools=` will get it pruned by the skill filter.
+    # `search_library` is NOT in _CORE_TOOL_NAMES (post-GSD-70: it remains
+    # cross-library RAG, opt-in per skill), so a skill that doesn't list it in
+    # `tools=` will get it pruned by the skill filter.
     # web_search IS in _CORE_TOOL_NAMES, so it survives the skill filter
     # and is then dropped by the permission filter — addendum must mention it.
     skill = SkillSpec(
@@ -206,13 +207,13 @@ async def test_addendum_excludes_skill_pruned_tools():
     )
 
     text = await _capture_system_prompt(
-        permissions={"make_public": False, "web_search": False},
+        permissions={"search_library": False, "web_search": False},
         enabled_skills=["lit-triage"],
         loaded_specs=[skill],
     )
     # web_search is core → survives skill filter → permission-dropped → addendum
     assert "web_search" in text
-    # make_public was skill-pruned (non-core, not in skill.tools). Addendum
+    # search_library was skill-pruned (non-core, not in skill.tools). Addendum
     # must NOT mention it — telling the user "X is disabled in settings"
     # would be misleading when the skill is what's actually hiding it.
     lines = text.lower().split("\n")
@@ -227,7 +228,7 @@ async def test_addendum_excludes_skill_pruned_tools():
         if in_addendum:
             addendum_text.append(line)
     addendum_blob = "\n".join(addendum_text)
-    assert "make_public" not in addendum_blob
+    assert "search_library" not in addendum_blob
 
 
 @pytest.mark.asyncio
