@@ -1,7 +1,8 @@
 "use client";
 
-import { type ReactNode, useEffect } from "react";
+import { type ReactNode, useEffect, useRef } from "react";
 import { useEditor, EditorContent, type Editor as TiptapEditor } from "@tiptap/react";
+import { attachEditorKeyIsolation } from "./key-isolation";
 import {
   editorExtensions,
   type WikiLinkSuggestion,
@@ -106,10 +107,19 @@ export function Editor({
     onReady(editor);
   }, [editor, onReady]);
 
+  // GSD-84 — keep plain-letter keystrokes (e.g. "g") from bubbling out of the
+  // editor to window-level hotkey listeners that would otherwise hijack typing.
+  const isolationHostRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const host = isolationHostRef.current;
+    if (!host) return;
+    return attachEditorKeyIsolation(host);
+  }, []);
+
   return (
-    <>
+    <div ref={isolationHostRef} style={{ display: "contents" }}>
       <EditorContent editor={editor} />
       {children}
-    </>
+    </div>
   );
 }

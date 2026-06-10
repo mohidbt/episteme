@@ -74,10 +74,18 @@ export function NewItemTrigger({
 }: Props) {
   const [dialog, setDialog] = useState<DialogKind>(null);
 
-  const stop = (e: MouseEvent<HTMLButtonElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
-  };
+  // GSD-83 — `e.preventDefault()` on a focused trigger button interferes with
+  // base-ui Menu's focus pipeline (the menu mounts an empty portal on prod).
+  // For "menu-item" and "sub-menu-item" variants the trigger sits inside an
+  // outer menu row that would otherwise activate on click, so we still need
+  // `e.stopPropagation()` there. The "toolbar" variant has no outer parent
+  // menu — let base-ui handle the event natively.
+  const stopForNestedMenu =
+    variant === "toolbar"
+      ? undefined
+      : (e: MouseEvent<HTMLButtonElement>) => {
+          e.stopPropagation();
+        };
 
   const triggerClass =
     variant === "toolbar"
@@ -92,7 +100,7 @@ export function NewItemTrigger({
             <button
               type="button"
               aria-label="New"
-              onClick={stop}
+              onClick={stopForNestedMenu}
               className={triggerClass}
             >
               {variant === "toolbar" ? (

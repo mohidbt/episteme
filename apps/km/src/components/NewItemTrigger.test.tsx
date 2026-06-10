@@ -122,6 +122,24 @@ describe("NewItemTrigger", () => {
     expect(screen.getByText(/^paperset$/i)).toBeTruthy();
   });
 
+  it("toolbar variant opens menu on click (GSD-83 regression)", async () => {
+    render(
+      <NewItemTrigger
+        libraryId={1}
+        folderId={null}
+        variant="toolbar"
+        onMutate={() => {}}
+      />,
+    );
+    const trigger = screen.getByRole("button", { name: /new/i });
+    fireEvent.click(trigger);
+    await waitFor(() => {
+      expect(screen.getByText(/^note$/i)).toBeTruthy();
+    });
+    expect(screen.getByText(/^folder$/i)).toBeTruthy();
+    expect(screen.getByText(/^paperset$/i)).toBeTruthy();
+  });
+
   it("clicking Folder opens name dialog; submit POSTs /api/folders with parentId=folderId", async () => {
     const fetchMock = mockFetch((url, init) => {
       if (url === "/api/folders" && init?.method === "POST") {
