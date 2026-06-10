@@ -1,9 +1,12 @@
-import { NextRequest, NextResponse, after } from "next/server";
+import { NextResponse, after } from "next/server";
 import { getOrApiKey, OpenRouterKeyMissing } from "@/lib/openrouter-key";
 import { db } from "@/lib/db";
 import { papers, documentReferences, documentReferenceMarkers } from "@episteme/db/schema";
 import { and, eq, isNull } from "drizzle-orm";
-import { getUserIdFromRequest } from "@/lib/auth";
+import {
+  getAuthedUserId,
+  MissingInternalSecretError,
+} from "@/lib/internal-auth";
 import { jsonError, requireOwned } from "@/lib/crud";
 import { extractPdfPages } from "@/lib/ai/pdf-text";
 import { extractCitations } from "@/lib/citations/parser";
@@ -30,9 +33,15 @@ function isUpstreamDependencyError(err: unknown): boolean {
   );
 }
 
-export async function POST(request: NextRequest, { params }: Ctx) {
-  const userId = await getUserIdFromRequest(request);
-  if (!userId) return jsonError(401, "unauthorized");
+export async function POST(request: Request, { params }: Ctx) {
+  let authed;
+  try { authed = await getAuthedUserId(request); }
+  catch (e) {
+    if (e instanceof MissingInternalSecretError) return jsonError(500, "internal auth misconfigured");
+    throw e;
+  }
+  if (!authed) return jsonError(401, "unauthorized");
+  const userId = authed.userId;
 
   const { id: paperId } = await params;
   // URL parse (not nextUrl) — tests pass a plain `Request` without nextUrl.

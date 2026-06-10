@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { and, asc, eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
@@ -6,7 +6,10 @@ import {
   paperCitations,
   papers,
 } from "@episteme/db/schema";
-import { getUserIdFromRequest } from "@/lib/auth";
+import {
+  getAuthedUserId,
+  MissingInternalSecretError,
+} from "@/lib/internal-auth";
 import { jsonError, requireOwned } from "@/lib/crud";
 
 export const runtime = "nodejs";
@@ -22,9 +25,15 @@ function parseDirection(raw: string | null): Direction | null {
   return null;
 }
 
-export async function GET(request: NextRequest, { params }: Ctx) {
-  const userId = await getUserIdFromRequest(request);
-  if (!userId) return jsonError(401, "unauthorized");
+export async function GET(request: Request, { params }: Ctx) {
+  let authed;
+  try { authed = await getAuthedUserId(request); }
+  catch (e) {
+    if (e instanceof MissingInternalSecretError) return jsonError(500, "internal auth misconfigured");
+    throw e;
+  }
+  if (!authed) return jsonError(401, "unauthorized");
+  const userId = authed.userId;
 
   const { id: paperId } = await params;
 

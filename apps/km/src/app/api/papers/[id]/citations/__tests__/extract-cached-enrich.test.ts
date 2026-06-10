@@ -17,9 +17,13 @@ vi.mock("next/server", async () => {
   };
 });
 
-vi.mock("@episteme/auth", () => ({
-  auth: { api: { getSession: vi.fn() } },
-}));
+vi.mock("@/lib/internal-auth", async () => {
+  const actual =
+    await vi.importActual<typeof import("@/lib/internal-auth")>(
+      "@/lib/internal-auth",
+    );
+  return { ...actual, getAuthedUserId: vi.fn() };
+});
 vi.mock("@episteme/auth/byok", () => ({
   getDecryptedApiKey: vi.fn(),
 }));
@@ -38,7 +42,7 @@ vi.mock("@/lib/citations/auto-link", () => ({
   autoLinkPaperCitations: vi.fn().mockResolvedValue(undefined),
 }));
 
-import { auth } from "@episteme/auth";
+import { getAuthedUserId } from "@/lib/internal-auth";
 import { db } from "@/lib/db";
 import { enqueueCitationEnrichmentJob } from "@/lib/citations/enrichment-jobs";
 import { enrichPaperReferencesInDb } from "@/lib/citations/enrich-paper";
@@ -57,7 +61,7 @@ beforeEach(() => {
 
 describe("POST /api/papers/[id]/citations/extract — cached branch re-enqueue", () => {
   it("enqueues S2 enrichment job when cached refs include rows with null semanticScholarId", async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue({ user: { id: "u1" } } as never);
+    vi.mocked(getAuthedUserId).mockResolvedValue({ userId: "u1", viaHmac: false } as never);
 
     // 1st db.select: ownership lookup → returns the paper owned by u1.
     vi.mocked(db.select).mockReturnValueOnce({
@@ -94,7 +98,7 @@ describe("POST /api/papers/[id]/citations/extract — cached branch re-enqueue",
     // enrichPaperReferencesInDb in after() bills ~30s billed Active CPU
     // per cached read (sleep(1100) * refs). Any re-wiring of the inline
     // path from the extract route must fail this test.
-    vi.mocked(auth.api.getSession).mockResolvedValue({ user: { id: "u1" } } as never);
+    vi.mocked(getAuthedUserId).mockResolvedValue({ userId: "u1", viaHmac: false } as never);
     vi.mocked(db.select).mockReturnValueOnce({
       from: () => ({
         where: () => ({
@@ -120,7 +124,7 @@ describe("POST /api/papers/[id]/citations/extract — cached branch re-enqueue",
     // Wall-clock guard. With mocks the route is structurally I/O-free;
     // anything over 100ms means someone added a sleep, an unmocked
     // network call, or a synchronous CPU loop on the hot path.
-    vi.mocked(auth.api.getSession).mockResolvedValue({ user: { id: "u1" } } as never);
+    vi.mocked(getAuthedUserId).mockResolvedValue({ userId: "u1", viaHmac: false } as never);
     vi.mocked(db.select).mockReturnValueOnce({
       from: () => ({
         where: () => ({

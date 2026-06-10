@@ -1,13 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-vi.mock("@episteme/auth", () => ({
-  auth: { api: { getSession: vi.fn() } },
-}));
+vi.mock("@/lib/internal-auth", async () => {
+  const actual =
+    await vi.importActual<typeof import("@/lib/internal-auth")>(
+      "@/lib/internal-auth",
+    );
+  return { ...actual, getAuthedUserId: vi.fn() };
+});
 vi.mock("@/lib/db", () => ({
   db: { select: vi.fn() },
 }));
 
-import { auth } from "@episteme/auth";
+import { getAuthedUserId } from "@/lib/internal-auth";
 import { db } from "@/lib/db";
 import { GET } from "./route";
 
@@ -20,13 +24,13 @@ beforeEach(() => vi.resetAllMocks());
 
 describe("GET /api/papers/[id]/citations", () => {
   it("401 when unauthenticated", async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue(null);
+    vi.mocked(getAuthedUserId).mockResolvedValue(null);
     const res = await GET(buildReq(), routeParams);
     expect(res.status).toBe(401);
   });
 
   it("404 when paper missing", async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue({ user: { id: "u1" } } as never);
+    vi.mocked(getAuthedUserId).mockResolvedValue({ userId: "u1", viaHmac: false } as never);
     vi.mocked(db.select).mockReturnValueOnce({
       from: () => ({ where: () => ({ limit: async () => [] }) }),
     } as never);
@@ -35,7 +39,7 @@ describe("GET /api/papers/[id]/citations", () => {
   });
 
   it("403 when paper belongs to other user", async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue({ user: { id: "u1" } } as never);
+    vi.mocked(getAuthedUserId).mockResolvedValue({ userId: "u1", viaHmac: false } as never);
     vi.mocked(db.select).mockReturnValueOnce({
       from: () => ({ where: () => ({ limit: async () => [{ id: PAPER_ID, userId: "u2" }] }) }),
     } as never);
@@ -44,7 +48,7 @@ describe("GET /api/papers/[id]/citations", () => {
   });
 
   it("returns citations sorted by numeric markerIndex ascending", async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue({ user: { id: "u1" } } as never);
+    vi.mocked(getAuthedUserId).mockResolvedValue({ userId: "u1", viaHmac: false } as never);
     // Ownership check
     vi.mocked(db.select).mockReturnValueOnce({
       from: () => ({ where: () => ({ limit: async () => [{ id: PAPER_ID, userId: "u1" }] }) }),
