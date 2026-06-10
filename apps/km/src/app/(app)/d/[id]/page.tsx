@@ -6,7 +6,7 @@ import { db } from "@/lib/db";
 import { papersets, papers } from "@episteme/db/schema";
 import { getRequiredUserId } from "@/lib/session";
 import { getDefaultLibrary } from "@/lib/default-library";
-import { PapersetBreadcrumbs } from "./PapersetBreadcrumbs";
+import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { PapersetView } from "./PapersetView";
 import { getFolderChain } from "./lib/folder-chain";
 import { parseCsvCells } from "@/lib/papersets/cell-write";
@@ -61,11 +61,14 @@ export default async function PapersetPage({
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="px-6 pt-6">
-        <PapersetBreadcrumbs
-          libraryName={library?.name ?? null}
-          folderChain={folderChain}
-          filename={ps.filename}
-        />
+        {library && (
+          <Breadcrumbs
+            libraryName={library.name}
+            section="papersets"
+            folderPath={folderChain.map((f) => f.name).join("/")}
+            title={ps.filename}
+          />
+        )}
         <div className="flex items-start justify-between gap-4">
           <h1 className="min-w-0 font-display text-2xl leading-tight">{ps.filename}</h1>
           <div className="flex shrink-0 items-center gap-2">

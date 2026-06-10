@@ -2,7 +2,7 @@ import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import { splitFolderPath } from "@/lib/tree";
 
-type Section = "papers" | "references" | "notes";
+type Section = "papers" | "references" | "notes" | "papersets";
 
 interface BreadcrumbsProps {
   libraryName: string;
@@ -15,12 +15,14 @@ const SECTION_LABEL: Record<Section, string> = {
   papers: "Papers",
   references: "References",
   notes: "Notes",
+  papersets: "Papersets",
 };
 
 const SECTION_HREF: Record<Section, string> = {
   papers: "/papers",
   references: "/references",
   notes: "/",
+  papersets: "/papersets",
 };
 
 export function Breadcrumbs({ libraryName, section, folderPath, title }: BreadcrumbsProps) {
