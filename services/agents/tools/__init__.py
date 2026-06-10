@@ -2,6 +2,7 @@
 from langchain_core.tools import BaseTool
 
 from tools.data import TOOLS as _DATA_TOOLS
+from tools.drive_ops import TOOLS as _DRIVE_OPS_TOOLS
 from tools.library import TOOLS as _LIBRARY_TOOLS
 from tools.notes import TOOLS as _NOTES_TOOLS
 from tools.paper_search import TOOLS as _PAPER_SEARCH_TOOLS
@@ -24,6 +25,7 @@ ALL_TOOLS: list[BaseTool] = (
     + _PAPER_SEARCH_TOOLS
     + _PAPERS_TOOLS
     + _DATA_TOOLS
+    + _DRIVE_OPS_TOOLS
     + _PAPERSET_ENRICH_TOOLS
     + _REFERENCES_AI_TOOLS
     + _SEARCH_TOOLS

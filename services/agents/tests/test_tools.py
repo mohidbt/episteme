@@ -21,7 +21,11 @@ CFG = {"configurable": {"user_id": USER}}
 def test_all_tools_count():
     from tools import ALL_TOOLS  # noqa: PLC0415
 
-    assert len(ALL_TOOLS) == 24, f"Expected 24, got {len(ALL_TOOLS)}"
+    # Bumped from 24 in GSD-48 batch (GSD-53/54/56/57/58): added
+    # pdf_read_tables, diff_revision, list_user_highlights,
+    # delete_user_highlight, fill_reference, resolve_doi, paperset_enrich,
+    # and the 6 drive_ops (move/rename/delete × paper/folder).
+    assert len(ALL_TOOLS) == 37, f"Expected 37, got {len(ALL_TOOLS)}"
 
 
 def test_all_tools_are_base_tool():
@@ -52,6 +56,7 @@ def test_all_tools_contains_expected_names():
         "list_backlinks",
         "find_papers",
         "pdf_explain_passage",
+        "pdf_read_tables",  # GSD-53
         "highlight",
         "list_libraries",
         "list_references",
@@ -66,20 +71,37 @@ def test_all_tools_contains_expected_names():
         "csv_read",
         "csv_write_cell",
         "search_library",
-    } - {"make_public"}  # publish handled separately below
-    expected.add("make_public")
+        # GSD-48 batch — agent-tool round-trip + Drive CRUD.
+        "diff_revision",                # GSD-53
+        "list_user_highlights",         # GSD-58
+        "delete_user_highlight",        # GSD-58
+        "fill_reference",               # GSD-56
+        "resolve_doi",                  # GSD-56
+        "paperset_enrich",              # GSD-54
+        "move_paper",                   # GSD-57
+        "rename_paper",                 # GSD-57
+        "delete_paper",                 # GSD-57
+        "move_folder",                  # GSD-57
+        "rename_folder",                # GSD-57
+        "delete_folder",                # GSD-57
+    }
     actual = {t.name for t in ALL_TOOLS}
     assert actual == expected, f"Missing: {expected - actual}, Extra: {actual - expected}"
 
 
 def test_stubbed_tools_not_in_all_tools():
-    """extract_passages, get_page_text, diff_revision, week_summary, activity
-    are stubbed (no KM equivalent) and must NOT be exposed to the LLM."""
+    """extract_passages, get_page_text, pdf_extract_data, week_summary,
+    activity are stubbed (no KM equivalent) and must NOT be exposed to
+    the LLM.
+
+    pdf_read_tables and diff_revision were stubbed pre-GSD-53; they are
+    now real wrappers and intentionally exposed.
+    """
     from tools import ALL_TOOLS  # noqa: PLC0415
 
     names = {t.name for t in ALL_TOOLS}
-    for stub in ("extract_passages", "get_page_text", "pdf_read_tables",
-                 "pdf_extract_data", "diff_revision", "week_summary",
+    for stub in ("extract_passages", "get_page_text",
+                 "pdf_extract_data", "week_summary",
                  "activity"):
         assert stub not in names, f"stub tool {stub!r} should not be exposed"
 
@@ -524,14 +546,22 @@ async def test_get_reference_calls_km_get():
 
 
 @pytest.mark.asyncio
-async def test_diff_revision_stubbed():
+async def test_diff_revision_fetches_both_revisions():
+    """GSD-53: diff_revision is no longer a stub; it fetches both
+    revision payloads. (Server-side diff route does not exist; the LLM
+    diffs them client-side.)"""
     from tools.revisions import diff_revision  # noqa: PLC0415
 
-    result = await diff_revision.ainvoke(
-        {"note_id": "n1", "rev_a": "1", "rev_b": "2"}, config=CFG
-    )
-    assert isinstance(result, dict)
-    assert result.get("error") is True
+    async def fake_get(path, *, user_id):
+        return {"path": path, "user_id": user_id}
+
+    with patch("tools.revisions.km_get", new=fake_get):
+        result = await diff_revision.ainvoke(
+            {"note_id": "n1", "rev_a": "1", "rev_b": "2"}, config=CFG
+        )
+    assert result["note_id"] == "n1"
+    assert result["rev_a"]["path"] == "/api/notes/n1/revisions/1"
+    assert result["rev_b"]["path"] == "/api/notes/n1/revisions/2"
 
 
 @pytest.mark.asyncio
