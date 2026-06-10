@@ -2,7 +2,10 @@ import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { userHighlights } from "@episteme/db/schema";
-import { getUserIdFromRequest } from "@/lib/auth";
+import {
+  getAuthedUserId,
+  MissingInternalSecretError,
+} from "@/lib/internal-auth";
 import { jsonError } from "@/lib/crud";
 import { schemaMismatchResponseIfNeeded } from "../schema-mismatch";
 
@@ -21,13 +24,21 @@ function parseHighlightId(raw: string): number | null {
 }
 
 export async function PATCH(req: Request, { params }: Ctx) {
-  const userId = await getUserIdFromRequest(req);
-  if (!userId) return jsonError(401, "unauthorized");
+  const rawBody = await req.text();
+  let authed;
+  try { authed = await getAuthedUserId(req, rawBody); }
+  catch (e) {
+    if (e instanceof MissingInternalSecretError) return jsonError(500, "internal auth misconfigured");
+    throw e;
+  }
+  if (!authed) return jsonError(401, "unauthorized");
+  const userId = authed.userId;
   const { highlightId } = await params;
   const hId = parseHighlightId(highlightId);
   if (hId === null) return jsonError(400, "validation", { message: "invalid highlightId" });
 
-  const body = await req.json().catch(() => null);
+  let body: unknown = null;
+  try { body = JSON.parse(rawBody); } catch { /* leave null */ }
   const parsed = patchSchema.safeParse(body);
   if (!parsed.success) return jsonError(400, "validation", { issues: parsed.error.issues });
 
@@ -60,8 +71,14 @@ export async function PATCH(req: Request, { params }: Ctx) {
 }
 
 export async function DELETE(req: Request, { params }: Ctx) {
-  const userId = await getUserIdFromRequest(req);
-  if (!userId) return jsonError(401, "unauthorized");
+  let authed;
+  try { authed = await getAuthedUserId(req); }
+  catch (e) {
+    if (e instanceof MissingInternalSecretError) return jsonError(500, "internal auth misconfigured");
+    throw e;
+  }
+  if (!authed) return jsonError(401, "unauthorized");
+  const userId = authed.userId;
   const { highlightId } = await params;
   const hId = parseHighlightId(highlightId);
   if (hId === null) return jsonError(400, "validation", { message: "invalid highlightId" });
