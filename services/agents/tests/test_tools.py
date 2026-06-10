@@ -25,7 +25,8 @@ def test_all_tools_count():
     # pdf_read_tables, diff_revision, list_user_highlights,
     # delete_user_highlight, fill_reference, resolve_doi, paperset_enrich,
     # and the 6 drive_ops (move/rename/delete × paper/folder).
-    assert len(ALL_TOOLS) == 37, f"Expected 37, got {len(ALL_TOOLS)}"
+    # 37 -> 45 in GSD-55: paper_citations pipeline (8 tools).
+    assert len(ALL_TOOLS) == 45, f"Expected 45, got {len(ALL_TOOLS)}"
 
 
 def test_all_tools_are_base_tool():
@@ -84,6 +85,15 @@ def test_all_tools_contains_expected_names():
         "move_folder",                  # GSD-57
         "rename_folder",                # GSD-57
         "delete_folder",                # GSD-57
+        # GSD-55 — citation pipeline.
+        "list_paper_citations",
+        "list_paper_citation_edges",
+        "list_paper_citation_markers",
+        "extract_paper_citations",
+        "enrich_paper_citations",
+        "rematch_paper_citations",
+        "keep_paper_citation",
+        "save_paper_citation_to_library",
     }
     actual = {t.name for t in ALL_TOOLS}
     assert actual == expected, f"Missing: {expected - actual}, Extra: {actual - expected}"
