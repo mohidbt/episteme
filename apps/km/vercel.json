@@ -1,9 +1,21 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "functions": {
+    "src/app/api/papers/[id]/citations/extract/route.ts": {
+      "maxDuration": 15
+    },
+    "src/app/api/internal/citation-enrichment/run/route.ts": {
+      "maxDuration": 60
+    }
+  },
   "crons": [
     {
       "path": "/api/internal/cleanup-anon-orphans",
       "schedule": "0 4 * * *"
+    },
+    {
+      "path": "/api/internal/citation-enrichment/run",
+      "schedule": "0 3 * * *"
     }
   ]
 }

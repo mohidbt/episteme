@@ -1,10 +1,8 @@
 // Regression: when /citations/extract hits the cached-return branch (paper
-// already has documentReferences rows), the route MUST still fire S2
-// enrichment for any rows where semanticScholarId IS NULL. Without this, a
-// paper extracted before the enrichment pipeline existed (or one whose first
-// enrichment run was killed by deadline) never gets abstract/venue/
-// citationCount/openAccessPdfUrl filled — citation cards on /p/[id] stay
-// blank forever.
+// already has documentReferences rows), the route MUST still enqueue an S2
+// enrichment job for any rows where semanticScholarId IS NULL. Enqueue is
+// cheap (single DB upsert); the cron drains the queue. Running the S2 loop
+// inline in after() previously billed ~30s Active CPU per cached read.
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("next/server", async () => {
@@ -28,8 +26,8 @@ vi.mock("@episteme/auth/byok", () => ({
 vi.mock("@/lib/db", () => ({
   db: { select: vi.fn() },
 }));
-vi.mock("@/lib/citations/enrich-paper", () => ({
-  enrichPaperReferencesInDb: vi.fn().mockResolvedValue({ enriched: 0, total: 0 }),
+vi.mock("@/lib/citations/enrichment-jobs", () => ({
+  enqueueCitationEnrichmentJob: vi.fn().mockResolvedValue({}),
 }));
 vi.mock("@/lib/citations/auto-link", () => ({
   autoLinkPaperCitations: vi.fn().mockResolvedValue(undefined),
@@ -37,7 +35,7 @@ vi.mock("@/lib/citations/auto-link", () => ({
 
 import { auth } from "@episteme/auth";
 import { db } from "@/lib/db";
-import { enrichPaperReferencesInDb } from "@/lib/citations/enrich-paper";
+import { enqueueCitationEnrichmentJob } from "@/lib/citations/enrichment-jobs";
 import { POST } from "../extract/route";
 
 const PAPER_ID = "00000000-0000-0000-0000-000000000001";
@@ -51,8 +49,8 @@ beforeEach(() => {
   vi.resetAllMocks();
 });
 
-describe("POST /api/papers/[id]/citations/extract — cached branch re-enrich", () => {
-  it("re-fires S2 enrichment when cached refs include rows with null semanticScholarId", async () => {
+describe("POST /api/papers/[id]/citations/extract — cached branch re-enqueue", () => {
+  it("enqueues S2 enrichment job when cached refs include rows with null semanticScholarId", async () => {
     vi.mocked(auth.api.getSession).mockResolvedValue({ user: { id: "u1" } } as never);
 
     // 1st db.select: ownership lookup → returns the paper owned by u1.
@@ -82,6 +80,6 @@ describe("POST /api/papers/[id]/citations/extract — cached branch re-enrich", 
     // Allow the queued after() microtask to flush.
     await new Promise((r) => setTimeout(r, 0));
 
-    expect(enrichPaperReferencesInDb).toHaveBeenCalledWith(PAPER_ID, "u1");
+    expect(enqueueCitationEnrichmentJob).toHaveBeenCalledWith(PAPER_ID);
   });
 });

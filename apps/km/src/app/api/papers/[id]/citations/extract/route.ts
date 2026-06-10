@@ -12,7 +12,7 @@ import { extractAnnotationMarkers } from "@/lib/citations/annotation-extractor";
 import { authorStringToJson } from "@/lib/citations/author-utils";
 import { paperSourceKey } from "@/lib/storage";
 import { extractDoiFromFirstPage } from "@/lib/papers/extract-doi-from-first-page";
-import { enrichPaperReferencesInDb } from "@/lib/citations/enrich-paper";
+import { enqueueCitationEnrichmentJob } from "@/lib/citations/enrichment-jobs";
 
 export const runtime = "nodejs";
 
@@ -59,9 +59,9 @@ export async function POST(request: NextRequest, { params }: Ctx) {
       if (existing.some((r) => r.semanticScholarId == null)) {
         after(async () => {
           try {
-            await enrichPaperReferencesInDb(paperId, userId);
+            await enqueueCitationEnrichmentJob(paperId);
           } catch (err) {
-            console.warn("[citations/extract] cached re-enrich failed", err);
+            console.warn("[citations/extract] cached re-enqueue failed", err);
           }
         });
       }
@@ -252,9 +252,9 @@ export async function POST(request: NextRequest, { params }: Ctx) {
           console.warn("[citations/extract] auto-link failed", err);
         }
         try {
-          await enrichPaperReferencesInDb(paperId, userId);
+          await enqueueCitationEnrichmentJob(paperId);
         } catch (err) {
-          console.warn("[citations/extract] enrich failed", err);
+          console.warn("[citations/extract] enqueue failed", err);
         }
       });
     }
