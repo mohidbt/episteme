@@ -172,7 +172,7 @@ function buildSteps(targets: GuestTourTargets | null): Step[] {
       styles: PREVIEW_TOOLTIP_STYLES,
       content: (
         <TourPreviewCard
-          title="Highlight numerical findings"
+          title="Dynamic Reading: Let the agent highlight anything for you"
           caption="Ask the agent to highlight quantitative claims. It proposes spans, you approve, and they land in the sidebar — click to jump back to the page."
           mediaSrc="/tour/wow_reader_highlight.webm"
           mediaPoster="/tour/wow_reader_highlight.poster.jpg"
