@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { moveToTrash } from "@/lib/folders-server";
-import { getUserIdFromRequest } from "@/lib/auth";
+import {
+  getAuthedUserId,
+  MissingInternalSecretError,
+} from "@/lib/internal-auth";
 
 const Body = z.object({
   libraryId: z.number().int().positive(),
@@ -12,10 +15,20 @@ const Body = z.object({
 });
 
 export async function POST(req: Request) {
-  const userId = await getUserIdFromRequest(req);
-  if (!userId) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const rawBody = await req.text();
+  let authed;
+  try { authed = await getAuthedUserId(req, rawBody); }
+  catch (e) {
+    if (e instanceof MissingInternalSecretError)
+      return NextResponse.json({ error: "internal auth misconfigured" }, { status: 500 });
+    throw e;
+  }
+  if (!authed) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const userId = authed.userId;
 
-  const parsed = Body.safeParse(await req.json().catch(() => null));
+  let json: unknown = null;
+  try { json = JSON.parse(rawBody); } catch { /* leave null */ }
+  const parsed = Body.safeParse(json);
   if (!parsed.success) return NextResponse.json({ error: "bad request" }, { status: 400 });
 
   try {

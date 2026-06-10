@@ -1,0 +1,84 @@
+// @vitest-environment node
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("@/lib/internal-auth", async () => {
+  const actual =
+    await vi.importActual<typeof import("@/lib/internal-auth")>(
+      "@/lib/internal-auth",
+    );
+  return { ...actual, getAuthedUserId: vi.fn() };
+});
+
+vi.mock("@/lib/db", () => ({
+  db: {
+    select: () => ({
+      from: () => ({
+        where: () => ({ limit: () => Promise.resolve([]) }),
+      }),
+    }),
+  },
+}));
+
+vi.mock("@/lib/folders-server", () => ({
+  renameFolder: vi.fn(async () => undefined),
+}));
+
+vi.mock("@/lib/folders", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/folders")>("@/lib/folders");
+  return {
+    ...actual,
+    validateFolderName: () => null,
+    normalizeFolderName: (s: string) => s,
+  };
+});
+
+import { getAuthedUserId } from "@/lib/internal-auth";
+
+beforeEach(() => {
+  vi.mocked(getAuthedUserId).mockReset();
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+const ctx = { params: Promise.resolve({ id: "00000000-0000-0000-0000-000000000001" }) };
+
+describe("PATCH /api/folders/[id] HMAC dual-auth", () => {
+  it("401 when unauthenticated", async () => {
+    vi.mocked(getAuthedUserId).mockResolvedValue(null);
+    const { PATCH } = await import("./route");
+    const res = await PATCH(
+      new Request("http://localhost/api/folders/abc", {
+        method: "PATCH",
+        body: JSON.stringify({ name: "new" }),
+        headers: { "content-type": "application/json" },
+      }),
+      ctx,
+    );
+    expect(res.status).toBe(401);
+  });
+
+  it("accepts HMAC-signed request", async () => {
+    vi.mocked(getAuthedUserId).mockImplementation(async (req) => {
+      if (req.headers.get("x-inhale-sig"))
+        return { userId: "u1", viaHmac: true };
+      return null;
+    });
+    const { PATCH } = await import("./route");
+    const res = await PATCH(
+      new Request("http://localhost/api/folders/abc", {
+        method: "PATCH",
+        body: JSON.stringify({ name: "new" }),
+        headers: {
+          "content-type": "application/json",
+          "X-Inhale-User-Id": "u1",
+          "X-Inhale-Ts": String(Math.floor(Date.now() / 1000)),
+          "X-Inhale-Sig": "deadbeef",
+        },
+      }),
+      ctx,
+    );
+    expect(res.status).not.toBe(401);
+  });
+});

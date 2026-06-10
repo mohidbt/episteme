@@ -1,7 +1,10 @@
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { papers } from "@episteme/db/schema";
-import { getUserIdFromRequest } from "@/lib/auth";
+import {
+  getAuthedUserId,
+  MissingInternalSecretError,
+} from "@/lib/internal-auth";
 import { paperUpdateSchema } from "@/lib/validators";
 import { jsonError, requireOwned } from "@/lib/crud";
 import { getTrashFolderId, moveItemToFolder } from "@/lib/folders-server";
@@ -14,8 +17,14 @@ type Ctx = { params: Promise<{ id: string }> };
 type PaperRow = typeof papers.$inferSelect;
 
 export async function GET(req: Request, { params }: Ctx) {
-  const userId = await getUserIdFromRequest(req);
-  if (!userId) return jsonError(401, "unauthorized");
+  let authed;
+  try { authed = await getAuthedUserId(req); }
+  catch (e) {
+    if (e instanceof MissingInternalSecretError) return jsonError(500, "internal auth misconfigured");
+    throw e;
+  }
+  if (!authed) return jsonError(401, "unauthorized");
+  const userId = authed.userId;
   const { id } = await params;
   // GSD-32 Phase 3: merge in CSL fields from the matched ref-twin so any
   // user-edited ref metadata (abstract, container-title, etc.) surfaces on
@@ -26,10 +35,18 @@ export async function GET(req: Request, { params }: Ctx) {
 }
 
 export async function PATCH(req: Request, { params }: Ctx) {
-  const userId = await getUserIdFromRequest(req);
-  if (!userId) return jsonError(401, "unauthorized");
+  const rawBody = await req.text();
+  let authed;
+  try { authed = await getAuthedUserId(req, rawBody); }
+  catch (e) {
+    if (e instanceof MissingInternalSecretError) return jsonError(500, "internal auth misconfigured");
+    throw e;
+  }
+  if (!authed) return jsonError(401, "unauthorized");
+  const userId = authed.userId;
   const { id } = await params;
-  const body = await req.json().catch(() => null);
+  let body: unknown = null;
+  try { body = JSON.parse(rawBody); } catch { /* leave null */ }
   const parsed = paperUpdateSchema.safeParse(body);
   if (!parsed.success) return jsonError(400, "validation", { issues: parsed.error.issues });
   const res = await requireOwned<PaperRow>(papers, id, userId);
@@ -57,8 +74,14 @@ export async function PATCH(req: Request, { params }: Ctx) {
 }
 
 export async function DELETE(req: Request, { params }: Ctx) {
-  const userId = await getUserIdFromRequest(req);
-  if (!userId) return jsonError(401, "unauthorized");
+  let authed;
+  try { authed = await getAuthedUserId(req); }
+  catch (e) {
+    if (e instanceof MissingInternalSecretError) return jsonError(500, "internal auth misconfigured");
+    throw e;
+  }
+  if (!authed) return jsonError(401, "unauthorized");
+  const userId = authed.userId;
   const { id } = await params;
   const res = await requireOwned<PaperRow>(papers, id, userId);
   if (!res.ok) return jsonError(res.status, res.status === 404 ? "not_found" : "forbidden");
