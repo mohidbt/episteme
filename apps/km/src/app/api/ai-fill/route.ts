@@ -5,6 +5,10 @@
 import { z } from "zod";
 import { getSessionInfo } from "@/lib/auth";
 import {
+  getAuthedUserId,
+  MissingInternalSecretError,
+} from "@/lib/internal-auth";
+import {
   OPENROUTER_KEY_MISSING,
   mapOpenRouterStatus,
 } from "@/lib/openrouter-errors";
@@ -38,12 +42,28 @@ function buildPrompt(
 }
 
 export async function POST(req: Request): Promise<Response> {
-  const session = await getSessionInfo(req);
+  // Dual-auth: cookie session OR HMAC (agent tools). HMAC callers are real
+  // authenticated users on the agent side; treat as non-anonymous.
+  const rawBody = await req.text();
+  let session: { userId: string; isAnonymous: boolean } | null = null;
+  if (req.headers.get("x-inhale-sig")) {
+    let authed;
+    try { authed = await getAuthedUserId(req, rawBody); }
+    catch (e) {
+      if (e instanceof MissingInternalSecretError)
+        return Response.json({ error: "internal auth misconfigured" }, { status: 500 });
+      throw e;
+    }
+    if (authed) session = { userId: authed.userId, isAnonymous: false };
+  } else {
+    session = await getSessionInfo(req);
+  }
   if (!session) {
     return Response.json({ error: "unauthorized" }, { status: 401 });
   }
 
-  const json = await req.json().catch(() => null);
+  let json: unknown = null;
+  try { json = JSON.parse(rawBody); } catch { /* leave null */ }
   const parsed = bodySchema.safeParse(json);
   if (!parsed.success) {
     return Response.json(
