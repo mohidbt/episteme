@@ -147,7 +147,13 @@ export function editorExtensions(opts?: {
   const wikiLink = opts?.wikiLinkSuggestion
     ? WikiLink.extend({
         addProseMirrorPlugins() {
+          // Preserve base WikiLink plugins (e.g. K6 self-heal) — Tiptap's
+          // addProseMirrorPlugins is a full override unless we re-include
+          // `this.parent?.()`. Dropping the self-heal plugin leaves legacy
+          // YJS-hydrated wikiLink nodes with raw prefixes + null targetKind
+          // permanently unhealed in the KM build.
           return [
+            ...(this.parent?.() ?? []),
             Suggestion({
               ...opts.wikiLinkSuggestion,
               editor: this.editor,
