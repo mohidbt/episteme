@@ -3,6 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { notes, noteRevisions } from "@episteme/db/schema";
 import { getUserIdFromRequest } from "@/lib/auth";
+import { getAuthedUserId, MissingInternalSecretError } from "@/lib/internal-auth";
 import { jsonError } from "@/lib/crud";
 import { createRevisionIfNeeded } from "@episteme/notes-core";
 
@@ -17,8 +18,16 @@ async function findOwnedNote(id: string, userId: string) {
 }
 
 export async function GET(req: Request, { params }: Ctx) {
-  const userId = await getUserIdFromRequest(req);
-  if (!userId) return jsonError(401, "unauthorized");
+  // GSD-70 / GSD-69 — dual-auth so the agent service can call this via
+  // HMAC for the `list_revisions` tool. Cookie path is unchanged for UI.
+  let authed;
+  try { authed = await getAuthedUserId(req); }
+  catch (e) {
+    if (e instanceof MissingInternalSecretError) return jsonError(500, "internal auth misconfigured");
+    throw e;
+  }
+  if (!authed) return jsonError(401, "unauthorized");
+  const userId = authed.userId;
   const { id } = await params;
   const owned = await findOwnedNote(id, userId);
   if (!owned) return jsonError(404, "not_found");
