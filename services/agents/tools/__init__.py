@@ -10,6 +10,7 @@ from tools.pdfs import TOOLS as _PDF_TOOLS
 from tools.publish import TOOLS as _PUBLISH_TOOLS
 from tools.revisions import TOOLS as _REVISION_TOOLS
 from tools.search import TOOLS as _SEARCH_TOOLS
+from tools.user_highlights import TOOLS as _USER_HIGHLIGHTS_TOOLS
 from tools.web_search import TOOLS as _WEB_SEARCH_TOOLS
 
 ALL_TOOLS: list[BaseTool] = (
@@ -22,5 +23,6 @@ ALL_TOOLS: list[BaseTool] = (
     + _PAPERS_TOOLS
     + _DATA_TOOLS
     + _SEARCH_TOOLS
+    + _USER_HIGHLIGHTS_TOOLS
     + _WEB_SEARCH_TOOLS
 )
