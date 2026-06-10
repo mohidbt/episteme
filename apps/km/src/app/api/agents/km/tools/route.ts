@@ -17,9 +17,15 @@ export async function GET(req: Request) {
   const session = await getSessionInfo(req);
   if (!session) return Response.json({ error: "unauthorized" }, { status: 401 });
 
-  const hit = cache.get(session.userId);
-  if (hit && hit.expiresAt > Date.now()) {
-    return Response.json(hit.data);
+  // GSD-88 — any query string (e.g. ?cb=…) bypasses the 60s cache so users
+  // debugging stale inventory after an agents deploy can force a refresh.
+  const bypassCache = new URL(req.url).search.length > 0;
+
+  if (!bypassCache) {
+    const hit = cache.get(session.userId);
+    if (hit && hit.expiresAt > Date.now()) {
+      return Response.json(hit.data);
+    }
   }
 
   const downstreamUrl = process.env.AGENTS_URL;
@@ -54,6 +60,8 @@ export async function GET(req: Request) {
   }
 
   const data = await upstream.json();
-  cache.set(session.userId, { data, expiresAt: Date.now() + TTL_MS });
+  if (!bypassCache) {
+    cache.set(session.userId, { data, expiresAt: Date.now() + TTL_MS });
+  }
   return Response.json(data);
 }
