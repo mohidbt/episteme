@@ -2,6 +2,7 @@ import Link from "next/link";
 import { UserPlus } from "lucide-react";
 import { getCurrentSession } from "@/lib/session";
 import { AccountForms } from "./AccountForms";
+import { SignOutButton } from "./SignOutButton";
 
 export default async function AccountSettingsPage() {
   const session = await getCurrentSession();
@@ -25,6 +26,9 @@ export default async function AccountSettingsPage() {
           <UserPlus className="size-4" aria-hidden />
           Sign up to save across devices
         </Link>
+        <div className="mt-8">
+          <SignOutButton />
+        </div>
       </div>
     );
   }
@@ -36,6 +40,9 @@ export default async function AccountSettingsPage() {
         Manage your sign-in credentials.
       </p>
       <AccountForms />
+      <div className="mt-8">
+        <SignOutButton />
+      </div>
     </div>
   );
 }
