@@ -9,13 +9,12 @@ import { and, asc, eq, ne } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { papers, userHighlights } from "@episteme/db/schema";
-import { getUserIdFromRequest } from "@/lib/auth";
 import { jsonError, requireOwned } from "@/lib/crud";
 import { schemaMismatchResponseIfNeeded } from "./schema-mismatch";
 import {
   getAuthedUserId,
   MissingInternalSecretError,
-} from "@episteme/auth/internal";
+} from "@/lib/internal-auth";
 import { requireNonGuestAuthed } from "@/lib/auth/require-non-guest";
 
 export const runtime = "nodejs";
@@ -46,8 +45,14 @@ const createSchema = z.object({
 });
 
 export async function GET(req: Request) {
-  const userId = await getUserIdFromRequest(req);
-  if (!userId) return jsonError(401, "unauthorized");
+  let authed;
+  try { authed = await getAuthedUserId(req); }
+  catch (e) {
+    if (e instanceof MissingInternalSecretError) return jsonError(500, "internal auth misconfigured");
+    throw e;
+  }
+  if (!authed) return jsonError(401, "unauthorized");
+  const userId = authed.userId;
   const url = new URL(req.url);
   const paperId = url.searchParams.get("paperId");
   if (!paperId) return jsonError(400, "validation", { message: "paperId required" });
@@ -128,8 +133,14 @@ export async function POST(req: Request) {
 }
 
 export async function DELETE(req: Request) {
-  const userId = await getUserIdFromRequest(req);
-  if (!userId) return jsonError(401, "unauthorized");
+  let authed;
+  try { authed = await getAuthedUserId(req); }
+  catch (e) {
+    if (e instanceof MissingInternalSecretError) return jsonError(500, "internal auth misconfigured");
+    throw e;
+  }
+  if (!authed) return jsonError(401, "unauthorized");
+  const userId = authed.userId;
   const url = new URL(req.url);
   const paperId = url.searchParams.get("paperId");
   if (!paperId) return jsonError(400, "validation", { message: "paperId required" });
