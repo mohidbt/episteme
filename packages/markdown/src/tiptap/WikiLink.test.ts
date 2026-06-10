@@ -571,6 +571,120 @@ describe("WikiLink prefix classification (K6)", () => {
     });
   });
 
+  describe("GSD-62: displayTitle attribute (resolved paper/reference title)", () => {
+    it("renders displayTitle as the visible label when set, falling back to title", () => {
+      const editor = makeEditor({
+        type: "doc",
+        content: [
+          {
+            type: "paragraph",
+            content: [
+              {
+                type: "wikiLink",
+                attrs: {
+                  title: "spontaneous.pdf",
+                  alias: null,
+                  targetKind: "paper",
+                  targetId: "p-1",
+                  displayTitle: "Spontaneous Symmetry Breaking",
+                },
+              },
+            ],
+          },
+        ],
+      });
+      const html = editor.getHTML();
+      expect(html).toContain("Spontaneous Symmetry Breaking");
+      expect(html).not.toMatch(/>spontaneous\.pdf</);
+      // data-title still carries the raw filename for round-trip integrity.
+      expect(html).toContain('data-title="spontaneous.pdf"');
+      editor.destroy();
+    });
+
+    it("alias still wins over displayTitle (user-provided label > resolved title)", () => {
+      const editor = makeEditor({
+        type: "doc",
+        content: [
+          {
+            type: "paragraph",
+            content: [
+              {
+                type: "wikiLink",
+                attrs: {
+                  title: "spontaneous.pdf",
+                  alias: "the paper",
+                  targetKind: "paper",
+                  targetId: "p-1",
+                  displayTitle: "Spontaneous Symmetry Breaking",
+                },
+              },
+            ],
+          },
+        ],
+      });
+      const html = editor.getHTML();
+      // Visible label (last text node inside the pill span) is the alias,
+      // not the displayTitle. displayTitle may still appear inside the
+      // `data-display-title` attribute for parseHTML round-trip integrity.
+      expect(html).toMatch(/<\/svg>the paper<\/span>/);
+      expect(html).not.toMatch(/>Spontaneous Symmetry Breaking</);
+      editor.destroy();
+    });
+
+    it("falls back to title when displayTitle is null", () => {
+      const editor = makeEditor({
+        type: "doc",
+        content: [
+          {
+            type: "paragraph",
+            content: [
+              {
+                type: "wikiLink",
+                attrs: {
+                  title: "My Note",
+                  alias: null,
+                  targetKind: "note",
+                  targetId: null,
+                  displayTitle: null,
+                },
+              },
+            ],
+          },
+        ],
+      });
+      expect(editor.getHTML()).toContain("My Note");
+      editor.destroy();
+    });
+
+    it("does not emit displayTitle into the serialized markdown", () => {
+      const editor = makeEditor({
+        type: "doc",
+        content: [
+          {
+            type: "paragraph",
+            content: [
+              {
+                type: "wikiLink",
+                attrs: {
+                  title: "foo.pdf",
+                  alias: null,
+                  targetKind: "paper",
+                  targetId: "p-1",
+                  displayTitle: "Foo: A Paper",
+                },
+              },
+            ],
+          },
+        ],
+      });
+      // Markdown round-trips off `title` (with the kind prefix), NOT
+      // `displayTitle`. The resolved label is render-time presentation only.
+      expect(toMd(editor)).toContain("[[p:foo.pdf]]");
+      expect(toMd(editor)).not.toContain("Foo: A Paper");
+      editor.destroy();
+    });
+  });
+
   describe("input rule classifier (used by InputRule handler)", () => {
     // The input rule shares the same prefix classifier as the markdown-it
     // parse path. Test the classifier directly — this is what the rule

@@ -85,6 +85,39 @@ describe("hydrateWikiLinkResolutions", () => {
     editor.destroy();
   });
 
+  it("GSD-62: writes displayTitle from resolution into node attrs", () => {
+    const editor = makeEditor();
+    editor.commands.setContent("see [[p:spontaneous.pdf]] x");
+
+    const result = hydrateWikiLinkResolutions(editor, {
+      "paper::spontaneous.pdf": {
+        targetKind: "paper",
+        targetId: "p-1",
+        displayTitle: "Spontaneous Symmetry Breaking",
+      },
+    });
+
+    expect(result).toBe(true);
+    const node = findWikiByTitle(editor, "spontaneous.pdf");
+    expect(node?.attrs?.targetId).toBe("p-1");
+    expect(node?.attrs?.displayTitle).toBe("Spontaneous Symmetry Breaking");
+    editor.destroy();
+  });
+
+  it("GSD-62: leaves displayTitle null when resolution carries none", () => {
+    const editor = makeEditor();
+    editor.commands.setContent("see [[Foo]] x");
+
+    hydrateWikiLinkResolutions(editor, {
+      foo: { targetKind: "note", targetId: "n-1" },
+    });
+
+    const node = findWikiByTitle(editor, "Foo");
+    expect(node?.attrs?.targetId).toBe("n-1");
+    expect(node?.attrs?.displayTitle ?? null).toBe(null);
+    editor.destroy();
+  });
+
   it("matches titles case-insensitively (title [[FOO]] matches key `foo`)", () => {
     const editor = makeEditor();
     editor.commands.setContent("hello [[FOO]] world");

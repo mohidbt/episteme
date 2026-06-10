@@ -30,3 +30,35 @@ describe("episteme-prose .wiki-link interactivity", () => {
     expect(css).toMatch(/\.wiki-link:hover\s*\{[\s\S]*?background:\s*color-mix\(/);
   });
 });
+
+/**
+ * GSD-62 — chip must look small, soft, inline. Icon must vertically center
+ * with the text label, and long titles must truncate cleanly.
+ */
+describe("GSD-62 .wiki-link chip restyle", () => {
+  const css = readFileSync(join(here, "styles.css"), "utf-8");
+  const baseRule = css.match(/\.episteme-prose\s+\.wiki-link\s*\{[\s\S]*?\}/)?.[0] ?? "";
+
+  it("uses inline-flex for icon+text vertical centering", () => {
+    expect(baseRule).toMatch(/display:\s*inline-flex/);
+    expect(baseRule).toMatch(/align-items:\s*center/);
+  });
+
+  it("rounds to a pill (large border-radius)", () => {
+    // 9999px or rounded-full equivalent; reject the old harsh 3px corners.
+    expect(baseRule).toMatch(/border-radius:\s*(9999px|999px|var\(--radius-full\))/);
+    expect(baseRule).not.toMatch(/border-radius:\s*3px/);
+  });
+
+  it("truncates long titles with ellipsis", () => {
+    expect(baseRule).toMatch(/max-width:/);
+    expect(baseRule).toMatch(/text-overflow:\s*ellipsis/);
+    expect(baseRule).toMatch(/white-space:\s*nowrap/);
+    expect(baseRule).toMatch(/overflow:\s*hidden/);
+  });
+
+  it("sets a small font size for inline density", () => {
+    // 0.875em (text-sm) or smaller; reject the old 0.95em which felt big.
+    expect(baseRule).toMatch(/font-size:\s*0\.8(7|75)em/);
+  });
+});

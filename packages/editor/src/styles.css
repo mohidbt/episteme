@@ -112,14 +112,25 @@
   color: var(--foreground);
 }
 
-/* Wiki-link pill — static chrome from the resolved attr. */
+/* GSD-62: Wiki-link pill — small, rounded, inline-flex centered.
+   inline-flex + align-items:center solves the icon vertical-misalignment
+   issue (paper icon used to sit below text baseline). max-width + ellipsis
+   truncates long resolved paper titles. */
 .episteme-prose .wiki-link {
-  display: inline-block;
-  padding: 0 4px;
-  border-radius: 3px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  vertical-align: baseline;
+  padding: 0 0.5rem;
+  border-radius: 9999px;
   background: var(--muted);
   border: 1px solid transparent;
-  font-size: 0.95em;
+  font-size: 0.875em;
+  line-height: 1.6;
+  max-width: 28ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   cursor: pointer;
   transition: background-color 120ms ease, border-color 120ms ease, transform 120ms ease;
 }
@@ -150,13 +161,13 @@
   color: oklch(0.52 0.18 27);
   transform: translateY(-1px);
 }
-/* Inline kind icon (FileText / BookMarked) injected by WikiLink renderHTML. */
+/* Inline kind icon (FileText / BookMarked) injected by WikiLink renderHTML.
+   GSD-62: flex parent handles centering + gap, so no margin/vertical-align
+   hacks needed. flex-shrink:0 keeps icon size stable when text truncates. */
 .episteme-prose .wiki-link svg {
-  width: 14px;
-  height: 14px;
-  display: inline-block;
-  margin-right: 0.25rem;
-  vertical-align: text-bottom;
+  width: 0.875em;
+  height: 0.875em;
+  flex-shrink: 0;
 }
 .episteme-prose .wiki-link--paper svg {
   color: var(--accent-paper, oklch(0.58 0.18 250));
