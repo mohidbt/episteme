@@ -72,6 +72,7 @@ export const paperUpdateSchema = z
     authors: z.array(z.string()).optional(),
     year: yearSchema.optional(),
     doi: z.string().nullable().optional(),
+    venue: z.string().nullable().optional(),
   })
   .strict();
 
