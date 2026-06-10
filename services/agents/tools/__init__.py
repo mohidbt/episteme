@@ -10,6 +10,7 @@ from tools.papers import TOOLS as _PAPERS_TOOLS
 from tools.pdfs import TOOLS as _PDF_TOOLS
 from tools.publish import TOOLS as _PUBLISH_TOOLS
 from tools.revisions import TOOLS as _REVISION_TOOLS
+from tools.paper_citations import TOOLS as _PAPER_CITATIONS_TOOLS
 from tools.paperset_enrich import TOOLS as _PAPERSET_ENRICH_TOOLS
 from tools.references_ai import TOOLS as _REFERENCES_AI_TOOLS
 from tools.search import TOOLS as _SEARCH_TOOLS
@@ -26,6 +27,7 @@ ALL_TOOLS: list[BaseTool] = (
     + _PAPERS_TOOLS
     + _DATA_TOOLS
     + _DRIVE_OPS_TOOLS
+    + _PAPER_CITATIONS_TOOLS
     + _PAPERSET_ENRICH_TOOLS
     + _REFERENCES_AI_TOOLS
     + _SEARCH_TOOLS

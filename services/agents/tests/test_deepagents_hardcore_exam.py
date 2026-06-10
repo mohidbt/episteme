@@ -148,7 +148,8 @@ def test_deepagents_tool_inventory_is_stable():
 
     tool_names = {t.name for t in ALL_TOOLS}
     # Bumped 24 -> 37 in GSD-48 batch (GSD-53/54/56/57/58).
-    assert len(tool_names) == 37
+    # 37 -> 45 in GSD-55 (paper_citations pipeline: 8 tools).
+    assert len(tool_names) == 45
     assert _CORE_TOOL_NAMES.issubset(tool_names)
     assert set(RESEARCHER_TOOL_NAMES).issubset(tool_names | {"arxiv_search", "biorxiv_search", "pubmed_search"})
     assert set(SYNTHESIZER_TOOL_NAMES).issubset(tool_names)
