@@ -8,6 +8,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { FolderDestinationPicker } from "@/components/FolderDestinationPicker";
 import { InPapersetsBadge } from "@/components/InPapersetsBadge";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import type { FolderRow } from "@/lib/folders";
 
 type PaperRow = typeof papers.$inferSelect;
@@ -33,6 +39,7 @@ interface FormState {
   authors: string;
   year: string;
   doi: string;
+  venue: string;
   folderId: string | null;
 }
 
@@ -42,6 +49,7 @@ function toForm(p: PaperRow): FormState {
     authors: (p.authors ?? []).join(", "),
     year: p.year != null ? String(p.year) : "",
     doi: p.doi ?? "",
+    venue: p.venue ?? "",
     folderId: p.folderId,
   };
 }
@@ -83,6 +91,10 @@ function diffPatch(
   const doiTrim = form.doi.trim();
   if (doiTrim === "" && paper.doi != null) patch.doi = null;
   else if (doiTrim !== "" && doiTrim !== (paper.doi ?? "")) patch.doi = doiTrim;
+
+  const venueTrim = form.venue.trim();
+  if (venueTrim === "" && paper.venue != null) patch.venue = null;
+  else if (venueTrim !== "" && venueTrim !== (paper.venue ?? "")) patch.venue = venueTrim;
 
   if (form.folderId !== paper.folderId) patch.folderId = form.folderId;
 
@@ -192,6 +204,36 @@ export function PaperMetadataPanel({
           />
         </div>
       </div>
+
+      <div className="grid gap-2">
+        <Label htmlFor="paper-venue">Venue</Label>
+        <Input
+          id="paper-venue"
+          value={form.venue}
+          onChange={(e) => set("venue", e.currentTarget.value)}
+          placeholder="Nature, JMLR, NeurIPS…"
+        />
+      </div>
+
+      {paper.abstractShort && (
+        <div className="grid gap-2">
+          <Label>Abstract</Label>
+          <TooltipProvider delay={150}>
+            <Tooltip>
+              <TooltipTrigger
+                type="button"
+                data-testid="paper-abstract-trigger"
+                className="block w-full truncate rounded-md border border-input bg-muted/30 px-2.5 py-1.5 text-left text-sm text-muted-foreground"
+              >
+                {paper.abstractShort}
+              </TooltipTrigger>
+              <TooltipContent className="max-w-md whitespace-pre-wrap text-left">
+                {paper.abstractShort}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        </div>
+      )}
 
       <div className="grid gap-2">
         <Label htmlFor="paper-url">URL</Label>
