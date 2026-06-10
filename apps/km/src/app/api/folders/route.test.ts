@@ -96,6 +96,42 @@ describe("POST /api/folders", () => {
     }));
     expect(res.status).toBe(404);
   });
+
+  // GSD-87: parent_folder_id pointing at a non-existent (or non-owned) folder
+  // must return a structured 404, not bubble through as 500. Regression
+  // surfaced when an agent passed a stale UUID and the server reply caused
+  // a downstream NoneType render error.
+  it("returns 404 when parentId references a non-existent folder", async () => {
+    const ghostUuid = "00000000-0000-0000-0000-000000000000";
+    const res = await POST(req("/api/folders", {
+      method: "POST",
+      cookie: u.cookie,
+      body: JSON.stringify({ libraryId, parentId: ghostUuid, name: "Inner" }),
+    }));
+    expect(res.status).toBe(404);
+    const body = await res.json();
+    expect(body.error).toBe("parent not found");
+  });
+
+  it("creates a subfolder when parentId exists and is owned", async () => {
+    // Seed the parent via the same route to keep this hermetic.
+    const parentRes = await POST(req("/api/folders", {
+      method: "POST",
+      cookie: u.cookie,
+      body: JSON.stringify({ libraryId, parentId: null, name: "Parent87" }),
+    }));
+    expect(parentRes.status).toBe(201);
+    const parentId = (await parentRes.json()).id as string;
+
+    const childRes = await POST(req("/api/folders", {
+      method: "POST",
+      cookie: u.cookie,
+      body: JSON.stringify({ libraryId, parentId, name: "Child87" }),
+    }));
+    expect(childRes.status).toBe(201);
+    const childBody = await childRes.json();
+    expect(childBody.id).toMatch(/^[0-9a-f-]{36}$/);
+  });
 });
 
 describe("GET /api/folders", () => {

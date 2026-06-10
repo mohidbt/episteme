@@ -98,6 +98,19 @@ export async function POST(req: Request) {
     .limit(1);
   if (!lib) return NextResponse.json({ error: "library not found" }, { status: 404 });
 
+  // GSD-87: pre-validate parent so a stale/foreign parentId returns a
+  // structured 404 instead of bubbling through the generic 500 catch.
+  if (parentId != null) {
+    const [parent] = await db.select({ id: folders.id }).from(folders)
+      .where(and(
+        eq(folders.id, parentId),
+        eq(folders.libraryId, libraryId),
+        eq(folders.userId, userId),
+      ))
+      .limit(1);
+    if (!parent) return NextResponse.json({ error: "parent not found" }, { status: 404 });
+  }
+
   // app-level duplicate check: postgres unique index treats NULLs as distinct,
   // so root-level siblings (parentId = NULL) aren't caught by the index alone.
   const parentCond = parentId == null ? isNull(folders.parentId) : eq(folders.parentId, parentId);
@@ -116,8 +129,13 @@ export async function POST(req: Request) {
     });
     return NextResponse.json(out, { status: 201 });
   } catch (e: unknown) {
-    const err = e as { code?: string; status?: number };
+    const err = e as { code?: string; status?: number; message?: string };
     if (err.code === "23505") return NextResponse.json({ error: "duplicate name" }, { status: 409 });
+    // GSD-87: surface explicit 4xx statuses (e.g. assertFolder 404) instead
+    // of collapsing them to 500. Keeps the agent error path structured.
+    if (typeof err.status === "number" && err.status >= 400 && err.status < 500) {
+      return NextResponse.json({ error: err.message ?? "bad request" }, { status: err.status });
+    }
     return NextResponse.json({ error: "server error" }, { status: 500 });
   }
 }

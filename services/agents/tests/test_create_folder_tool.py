@@ -95,3 +95,59 @@ async def test_create_folder_defaults_parent_to_null():
         )
 
     assert mock_post.await_args.args[1]["parentId"] is None
+
+
+# GSD-87 — subfolder scenarios.
+@pytest.mark.asyncio
+async def test_create_folder_subfolder_returns_id():
+    """Subfolder create (parent_folder_id=<uuid>) forwards parentId + returns id."""
+    from tools.drive_ops import create_folder
+
+    parent_uuid = "11111111-2222-3333-4444-555555555555"
+    with patch("tools.drive_ops.km_post", new_callable=AsyncMock) as mock_post:
+        mock_post.return_value = {"id": "child-uuid", "name": "inner"}
+        out = await create_folder.ainvoke(
+            {
+                "name": "inner",
+                "library_id": 93,
+                "parent_folder_id": parent_uuid,
+            },
+            config=CFG,
+        )
+
+    call = mock_post.await_args
+    assert call.args[0] == "/api/folders"
+    assert call.args[1] == {
+        "libraryId": 93,
+        "parentId": parent_uuid,
+        "name": "inner",
+    }
+    assert out["id"] == "child-uuid"
+
+
+@pytest.mark.asyncio
+async def test_create_folder_propagates_structured_404_for_missing_parent():
+    """Unknown parent_folder_id surfaces as the km_http structured error dict,
+    not an exception that would crash the agent loop (GSD-87 regression).
+    """
+    from tools.drive_ops import create_folder
+
+    err = {
+        "error": True,
+        "status": 404,
+        "path": "http://localhost:3001/api/folders",
+        "body": {"error": "parent not found"},
+    }
+    with patch("tools.drive_ops.km_post", new_callable=AsyncMock) as mock_post:
+        mock_post.return_value = err
+        out = await create_folder.ainvoke(
+            {
+                "name": "inner",
+                "library_id": 93,
+                "parent_folder_id": "00000000-0000-0000-0000-000000000000",
+            },
+            config=CFG,
+        )
+
+    assert isinstance(out, dict) and out.get("error") is True
+    assert out["status"] == 404
