@@ -58,6 +58,13 @@ beforeEach(() => {
               gateable: true,
               default_allowed: true,
             },
+            {
+              name: "create_note",
+              description: "Create a new note.",
+              category: "notes",
+              gateable: true,
+              default_allowed: true,
+            },
           ],
         }),
         { status: 200, headers: { "Content-Type": "application/json" } },
