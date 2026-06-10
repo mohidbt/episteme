@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { references_, noteLinks } from "@episteme/db/schema";
+import { references_, noteLinks, papers } from "@episteme/db/schema";
 import { getAuthedUserId, MissingInternalSecretError } from "@/lib/internal-auth";
 import { requireNonGuestAuthed } from "@/lib/auth/require-non-guest";
 import { referenceUpdateSchema } from "@/lib/validators";
@@ -8,6 +8,7 @@ import { jsonError, requireOwned } from "@/lib/crud";
 import { getTrashFolderId, moveItemToFolder } from "@/lib/folders-server";
 import { isUniqueViolation, suggestNextCitationKey } from "@/lib/references";
 import { autoConnectReference, extractRefSignals } from "@/lib/citations/match-ref-to-papers";
+import { mergeRefCslIntoPaper } from "@/lib/citations/merge-ref-csl-into-paper";
 
 function misconfiguredResponse(): Response {
   return jsonError(500, "internal auth misconfigured");
@@ -55,9 +56,23 @@ export async function PATCH(req: Request, { params }: Ctx) {
   const hasOtherUpdates = Object.keys(rest).length > 0;
   try {
     if (hasOtherUpdates) {
+      const prevCsl = res.row.cslJson;
       const [row] = await db.update(references_).set(rest).where(eq(references_.id, id)).returning();
       if ("cslJson" in rest) {
         await autoConnectReference(id, userId, extractRefSignals(rest.cslJson));
+        // GSD-72: when the ref is bound to a paper, propagate any CSL field
+        // that maps to a paper column (title/authors/year/doi/abstract/venue)
+        // onto the paper row. Best-effort: must not fail the ref PATCH.
+        if (row?.paperId) {
+          try {
+            const patch = mergeRefCslIntoPaper(prevCsl as never, row.cslJson as never);
+            if (Object.keys(patch).length > 0) {
+              await db.update(papers).set(patch).where(eq(papers.id, row.paperId));
+            }
+          } catch (err) {
+            console.warn(`refs PATCH: paper merge failed for ref ${id}`, err);
+          }
+        }
       }
       return Response.json(row);
     }
