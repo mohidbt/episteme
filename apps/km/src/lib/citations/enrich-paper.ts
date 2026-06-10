@@ -93,6 +93,27 @@ async function enrichChunk(
   return enriched;
 }
 
+// Thin wrapper used by the citation-enrichment-jobs queue worker. Given a
+// pre-fetched batch of references (id + title + doi), resolve+persist S2
+// enrichment for each. `throwOnRateLimit` is reserved for future wiring —
+// today the underlying fetchGet retries once internally on 429, then returns
+// null; the queue's backoff logic kicks in via empty results.
+export async function enrichReferenceBatchInDb(
+  refs: ReferenceForEnrichment[],
+  userId: string,
+  _opts: { throwOnRateLimit?: boolean } = {},
+): Promise<number> {
+  if (refs.length === 0) return 0;
+  const s2Key = await getUserS2Key(userId);
+  const apiKey = s2Key ?? undefined;
+  let enriched = 0;
+  for (let i = 0; i < refs.length; i += CHUNK_SIZE) {
+    const chunk = refs.slice(i, i + CHUNK_SIZE);
+    enriched += await enrichChunk(chunk, apiKey);
+  }
+  return enriched;
+}
+
 export async function enrichPaperReferencesInDb(
   paperId: string,
   userId: string,

@@ -1,5 +1,12 @@
 import type { Author } from "./author-utils";
 
+export class SemanticScholarRateLimitError extends Error {
+  constructor(message = "Semantic Scholar returned 429") {
+    super(message);
+    this.name = "SemanticScholarRateLimitError";
+  }
+}
+
 const BASE_URL = "https://api.semanticscholar.org/graph/v1/paper";
 const FIELDS =
   "paperId,title,authors.name,authors.authorId,year,externalIds,abstract,venue,citationCount,influentialCitationCount,openAccessPdf,isOpenAccess,tldr,citationStyles";
