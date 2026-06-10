@@ -11,6 +11,7 @@ import {
   type PaperMetadata,
 } from "@/lib/pdf-extract";
 import { ensurePaperRef } from "@/lib/citations/ensure-paper-ref";
+import { enrichPaperSelfFromS2 } from "@/lib/citations/enrich-paper-self";
 
 // pdfjs-dist + @napi-rs/canvas require the Node.js runtime.
 export const runtime = "nodejs";
@@ -142,5 +143,32 @@ export async function POST(req: Request, { params }: Ctx) {
     console.warn(`finalize: ensurePaperRef failed for paper ${id}`, err);
   }
 
-  return Response.json(updated);
+  // GSD-65 Part 1: Semantic Scholar-driven paper-self enrichment. If the
+  // paper has a DOI (either from the PDF extractor above or already on the
+  // row), resolve via S2 and OVERWRITE title/authors/year/doi/venue/abstract.
+  // S2 metadata is treated as the source of truth; PDF-extracted fields are
+  // a fallback. Silent best-effort — finalize must not fail on S2 errors.
+  let finalRow = updated;
+  try {
+    const result = await enrichPaperSelfFromS2({
+      id: updated.id,
+      userId: updated.userId,
+      title: updated.title,
+      authors: updated.authors,
+      year: updated.year,
+      doi: updated.doi,
+    });
+    if (result.enriched) {
+      const refreshed = await db
+        .select()
+        .from(papers)
+        .where(eq(papers.id, id))
+        .limit(1);
+      if (refreshed[0]) finalRow = refreshed[0];
+    }
+  } catch (err) {
+    console.warn(`finalize: enrichPaperSelfFromS2 failed for paper ${id}`, err);
+  }
+
+  return Response.json(finalRow);
 }
