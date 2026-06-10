@@ -583,12 +583,17 @@ async def invoke(req: Request, auth: InternalAuthDep):
     permissions = body.get("permissions")
     if not isinstance(permissions, dict):
         permissions = cfg.get("permissions", {})
+    # GSD-68 — KM now forwards agentConfigs.approvalRules in the wire body
+    # so a cold Python cache cannot silently drop user-saved gates.
+    approval_rules = body.get("approval_rules")
+    if not isinstance(approval_rules, dict):
+        approval_rules = cfg.get("approvalRules", {})
     agent = await build_km_agent(
         user_id=user_id,
         thread_id=body["thread_id"],
         model=model_for(model_pref, auth["llm_key"]),
         enabled_skills=enabled,
-        approval_rules=cfg.get("approvalRules", {}),
+        approval_rules=approval_rules,
         store=get_store(),
         saver=get_saver(),
         permissions=permissions,
@@ -806,12 +811,15 @@ async def resume(req: Request, auth: InternalAuthDep):
     permissions = body.get("permissions")
     if not isinstance(permissions, dict):
         permissions = cfg.get("permissions", {})
+    approval_rules = body.get("approval_rules")
+    if not isinstance(approval_rules, dict):
+        approval_rules = cfg.get("approvalRules", {})
     agent = await build_km_agent(
         user_id=user_id,
         thread_id=body["thread_id"],
         model=model_for(model_pref, auth["llm_key"]),
         enabled_skills=enabled,
-        approval_rules=cfg.get("approvalRules", {}),
+        approval_rules=approval_rules,
         store=get_store(),
         saver=get_saver(),
         permissions=permissions,
@@ -1492,6 +1500,7 @@ async def list_tools(auth: InternalAuthDep):
     persists separately under ``agentConfigs.settingsJson.permissions``.
     """
     _reject_guest(auth["user_id"])
+    from km_agent import _DEFAULT_APPROVAL_RULES  # noqa: PLC0415
     return {
         "tools": [
             {
@@ -1500,6 +1509,10 @@ async def list_tools(auth: InternalAuthDep):
                 "category": _CATEGORY_MAP.get(t.name, "other"),
                 "gateable": True,
                 "default_allowed": True,
+                # GSD-68 — UI source of truth for the default require/auto mode
+                # per tool. ApprovalRules.tsx renders this as the column default
+                # so users see what state a tool ships in.
+                "default_approval": _DEFAULT_APPROVAL_RULES.get(t.name, "auto"),
             }
             for t in ALL_TOOLS
         ]

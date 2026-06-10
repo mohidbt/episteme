@@ -218,6 +218,29 @@ def _build_interrupt_on(
     _apply_rule(interrupt_on, "create_note", approval_rules.get("write_note"), default="auto")
     _apply_rule(interrupt_on, "highlight", approval_rules.get("highlight"), default="require")
 
+    # GSD-68 — apply per-tool defaults. approval_rules is keyed by tool name
+    # for non-legacy entries (publish/external_send/write_note above use
+    # action aliases for back-compat). User override always wins.
+    for tool_name, default in _DEFAULT_APPROVAL_RULES.items():
+        _apply_rule(interrupt_on, tool_name, approval_rules.get(tool_name), default=default)
+
+    # GSD-68 — accept arbitrary user-keyed tool overrides. Previously
+    # _build_interrupt_on only consulted approval_rules for a hard-coded
+    # set of action names (publish/external_send/write_note/highlight),
+    # plus the defaults map above. Any other key in the user's saved
+    # approvalRules — e.g. {"browse_papersets": "require"} — was silently
+    # dropped because the loop never visited it. Fix: any explicit rule
+    # not already handled is applied as a tool-name → mode override.
+    _legacy_action_keys = {"publish", "external_send", "write_note", "highlight"}
+    for key, mode in approval_rules.items():
+        if (
+            key in _legacy_action_keys
+            or key in _DEFAULT_APPROVAL_RULES
+            or mode not in ("require", "auto")
+        ):
+            continue
+        interrupt_on[key] = mode == "require"
+
     # Per-skill require_approval — a skill being active forces HITL on its
     # listed tools regardless of approval_rules / tool metadata.
     for skill in loaded_skills or []:
@@ -225,6 +248,31 @@ def _build_interrupt_on(
             interrupt_on[tool_name] = True
 
     return interrupt_on
+
+
+# GSD-68 — single source of truth for per-tool default approval mode.
+# UI reads this via the /agents/km/tools response (each tool carries a
+# `default_approval` field). Destructive + LLM-spend ops default `require`;
+# everything else defaults `auto`. User toggles in agentConfigs.approvalRules
+# override these — see _build_interrupt_on + _apply_rule.
+_DEFAULT_APPROVAL_RULES: dict[str, str] = {
+    # destructive — irreversible drive CRUD
+    "delete_paper": "require",
+    "delete_folder": "require",
+    "delete_user_highlight": "require",
+    # reader annotation that creates persistent content
+    "highlight": "require",
+    # citation pipeline — LLM-spend + writes to library
+    "extract_paper_citations": "require",
+    "enrich_paper_citations": "require",
+    "save_paper_citation_to_library": "require",
+    # paperset bulk enrichment — LLM-spend per cell
+    "paperset_enrich": "require",
+    # external fetch — egress + writes to user library
+    "agentic_fetch_papers": "require",
+    # publish — exposes to public web
+    "make_public": "require",
+}
 
 
 # Tools the agent must always have access to, regardless of which skills are
