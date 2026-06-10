@@ -73,7 +73,8 @@ async function main() {
     console.error("OWNER_DATABASE_URL / MIGRATE_DATABASE_URL / DATABASE_URL required");
     process.exit(1);
   }
-  const dryRun = process.env.DRY_RUN === "1";
+  const dryRunRaw = (process.env.DRY_RUN ?? "").toLowerCase();
+  const dryRun = dryRunRaw === "1" || dryRunRaw === "true" || dryRunRaw === "yes";
   const sql = postgres(dsn, { max: 1, prepare: false });
 
   try {
