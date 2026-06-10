@@ -130,6 +130,26 @@ async def km_patch(path: str, body: dict, *, user_id: str) -> object:
     return _safe_response(resp)
 
 
+async def km_delete(path: str, *, user_id: str) -> object:
+    """DELETE against apps/km. Returns ``{"ok": True, "status": N}`` on 2xx
+    (including 204), or a structured error dict on failure.
+    """
+    url = _km_base_url() + path
+    headers = _auth_headers("DELETE", path, b"", user_id)
+    try:
+        resp = await _client.delete(url, headers=headers)
+    except httpx.RequestError as e:
+        return _safe_request_error(e, method="DELETE", url=url)
+    if resp.is_success:
+        if resp.status_code == 204 or not resp.content:
+            return {"ok": True, "status": resp.status_code}
+        try:
+            return resp.json()
+        except Exception:  # noqa: BLE001
+            return {"ok": True, "status": resp.status_code}
+    return _safe_response(resp)
+
+
 # ---------------------------------------------------------------------------
 # Reader (apps/reader) helpers
 # ---------------------------------------------------------------------------

@@ -15,6 +15,7 @@ from langchain_core.tools import tool
 from lib.km_http import km_get, km_post
 from tools._auth import user_id_from_config
 from tools._drive_filter import filter_hidden
+from tools.papers import read_paper
 
 
 # Cap on the zero-hit fallback list. Protects token budget when the user
@@ -294,9 +295,22 @@ async def highlight(
 async def pdf_read_tables(
     paper_id: str, page: int | None = None, *, config: RunnableConfig
 ) -> object:
-    """[UNAVAILABLE] Use ``read_paper`` with ``scope={"kind": "blocks", "types": ["table"]}`` instead."""
-    _ = (paper_id, page, config)
-    return _UNAVAILABLE
+    """Return only the table blocks parsed out of a paper.
+
+    Convenience wrapper around ``read_paper`` — same backing data, but the
+    LLM doesn't have to remember the scope dialect. If ``page`` is given,
+    the result is restricted to that single page (any block kind on that
+    page); otherwise all table-kind blocks across the document are returned.
+
+    Args:
+        paper_id: Paper UUID.
+        page: Optional 1-based page number to restrict to.
+    """
+    if page is not None:
+        scope: dict = {"kind": "pages", "range": [page, page]}
+    else:
+        scope = {"kind": "blocks", "types": ["table"]}
+    return await read_paper.ainvoke({"paper_id": paper_id, "scope": scope}, config=config)
 
 
 @tool
@@ -364,4 +378,5 @@ TOOLS = [
     find_papers,
     highlight,
     pdf_explain_passage,
+    pdf_read_tables,
 ]
