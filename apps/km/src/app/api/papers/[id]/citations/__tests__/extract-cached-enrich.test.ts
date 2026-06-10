@@ -19,9 +19,13 @@ vi.mock("next/server", async () => {
   };
 });
 
-vi.mock("@episteme/auth", () => ({
-  auth: { api: { getSession: vi.fn() } },
-}));
+vi.mock("@/lib/internal-auth", async () => {
+  const actual =
+    await vi.importActual<typeof import("@/lib/internal-auth")>(
+      "@/lib/internal-auth",
+    );
+  return { ...actual, getAuthedUserId: vi.fn() };
+});
 vi.mock("@episteme/auth/byok", () => ({
   getDecryptedApiKey: vi.fn(),
 }));
@@ -35,7 +39,7 @@ vi.mock("@/lib/citations/auto-link", () => ({
   autoLinkPaperCitations: vi.fn().mockResolvedValue(undefined),
 }));
 
-import { auth } from "@episteme/auth";
+import { getAuthedUserId } from "@/lib/internal-auth";
 import { db } from "@/lib/db";
 import { enrichPaperReferencesInDb } from "@/lib/citations/enrich-paper";
 import { POST } from "../extract/route";
@@ -53,7 +57,7 @@ beforeEach(() => {
 
 describe("POST /api/papers/[id]/citations/extract — cached branch re-enrich", () => {
   it("re-fires S2 enrichment when cached refs include rows with null semanticScholarId", async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue({ user: { id: "u1" } } as never);
+    vi.mocked(getAuthedUserId).mockResolvedValue({ userId: "u1", viaHmac: false } as never);
 
     // 1st db.select: ownership lookup → returns the paper owned by u1.
     vi.mocked(db.select).mockReturnValueOnce({
