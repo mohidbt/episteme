@@ -1,8 +1,11 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { papers, documentReferences, libraryReferences, keptCitations, references_, libraries, folders } from "@episteme/db/schema";
 import { eq, and, sql } from "drizzle-orm";
-import { getUserIdFromRequest } from "@/lib/auth";
+import {
+  getAuthedUserId,
+  MissingInternalSecretError,
+} from "@/lib/internal-auth";
 import { jsonError, requireOwned } from "@/lib/crud";
 import { buildLibraryReference } from "@/lib/citations/library-sync";
 import { deriveCitationKey, type CslItem } from "@/lib/csl";
@@ -28,9 +31,17 @@ function refToCsl(ref: typeof documentReferences.$inferSelect): CslItem {
   };
 }
 
-export async function POST(request: NextRequest, { params }: Ctx) {
-  const userId = await getUserIdFromRequest(request);
-  if (!userId) return jsonError(401, "unauthorized");
+export async function POST(request: Request, { params }: Ctx) {
+  // Consume raw body BEFORE auth so HMAC verifier hashes the exact signed bytes.
+  const rawBody = await request.text();
+  let authed;
+  try { authed = await getAuthedUserId(request, rawBody); }
+  catch (e) {
+    if (e instanceof MissingInternalSecretError) return jsonError(500, "internal auth misconfigured");
+    throw e;
+  }
+  if (!authed) return jsonError(401, "unauthorized");
+  const userId = authed.userId;
 
   const { id: paperId, refId } = await params;
   const documentReferenceId = parseInt(refId, 10);
@@ -38,16 +49,15 @@ export async function POST(request: NextRequest, { params }: Ctx) {
 
   // Optional folderId in body — places the new library_reference into a folder.
   let folderId: string | null = null;
-  try {
-    const text = await request.text();
-    if (text) {
-      const parsed = JSON.parse(text) as { folderId?: string | null };
+  if (rawBody) {
+    try {
+      const parsed = JSON.parse(rawBody) as { folderId?: string | null };
       if (typeof parsed.folderId === "string" && parsed.folderId.length > 0) {
         folderId = parsed.folderId;
       }
+    } catch {
+      // bad JSON → folder stays null
     }
-  } catch {
-    // empty body or bad JSON → folder stays null
   }
 
   const owned = await requireOwned<PaperRow>(papers, paperId, userId);
