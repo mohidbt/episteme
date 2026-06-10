@@ -1,13 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-vi.mock("@episteme/auth", () => ({
-  auth: { api: { getSession: vi.fn() } },
-}));
+vi.mock("@/lib/internal-auth", async () => {
+  const actual =
+    await vi.importActual<typeof import("@/lib/internal-auth")>(
+      "@/lib/internal-auth",
+    );
+  return { ...actual, getAuthedUserId: vi.fn() };
+});
 vi.mock("@/lib/db", () => ({
   db: { select: vi.fn() },
 }));
 
-import { auth } from "@episteme/auth";
+import { getAuthedUserId } from "@/lib/internal-auth";
 import { db } from "@/lib/db";
 import { GET } from "../route";
 
@@ -38,27 +42,27 @@ function mockOwnership(userId: string | null) {
 
 describe("GET /api/papers/[id]/citations/edges", () => {
   it("401 when unauthenticated", async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue(null);
+    vi.mocked(getAuthedUserId).mockResolvedValue(null);
     const res = await GET(buildReq(), routeParams);
     expect(res.status).toBe(401);
   });
 
   it("404 when paper missing", async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue({ user: { id: "u1" } } as never);
+    vi.mocked(getAuthedUserId).mockResolvedValue({ userId: "u1", viaHmac: false } as never);
     mockOwnership(null);
     const res = await GET(buildReq(), routeParams);
     expect(res.status).toBe(404);
   });
 
   it("403 when paper belongs to other user", async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue({ user: { id: "u1" } } as never);
+    vi.mocked(getAuthedUserId).mockResolvedValue({ userId: "u1", viaHmac: false } as never);
     mockOwnership("u2");
     const res = await GET(buildReq(), routeParams);
     expect(res.status).toBe(403);
   });
 
   it("400 when direction param is invalid", async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue({ user: { id: "u1" } } as never);
+    vi.mocked(getAuthedUserId).mockResolvedValue({ userId: "u1", viaHmac: false } as never);
     mockOwnership("u1");
     const res = await GET(
       new Request(
@@ -70,7 +74,7 @@ describe("GET /api/papers/[id]/citations/edges", () => {
   });
 
   it("citing direction: returns edges with paper title (cited_kind=paper) and ref title (cited_kind=reference)", async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue({ user: { id: "u1" } } as never);
+    vi.mocked(getAuthedUserId).mockResolvedValue({ userId: "u1", viaHmac: false } as never);
     mockOwnership("u1");
 
     // Result rows simulating LEFT JOIN to papers + document_references for title resolution.
@@ -130,7 +134,7 @@ describe("GET /api/papers/[id]/citations/edges", () => {
   });
 
   it("cited-in direction: returns edges with citer paper title", async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue({ user: { id: "u1" } } as never);
+    vi.mocked(getAuthedUserId).mockResolvedValue({ userId: "u1", viaHmac: false } as never);
     mockOwnership("u1");
 
     const rows = [
@@ -166,7 +170,7 @@ describe("GET /api/papers/[id]/citations/edges", () => {
   });
 
   it("defaults to citing direction when param omitted", async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue({ user: { id: "u1" } } as never);
+    vi.mocked(getAuthedUserId).mockResolvedValue({ userId: "u1", viaHmac: false } as never);
     mockOwnership("u1");
     vi.mocked(db.select).mockReturnValueOnce({
       from: () => ({
