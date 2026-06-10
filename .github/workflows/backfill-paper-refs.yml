@@ -1,0 +1,42 @@
+name: backfill-paper-refs
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type RUN to confirm prod backfill'
+        required: true
+        default: 'NO'
+      dry_run:
+        description: 'true (default, dry-run) | false (real backfill)'
+        required: false
+        default: 'true'
+
+jobs:
+  backfill:
+    name: backfill paper-ref twins (prod)
+    runs-on: ubuntu-latest
+    env:
+      CONFIRM: ${{ inputs.confirm }}
+      DRY_RUN: ${{ inputs.dry_run }}
+      OWNER_DATABASE_URL: ${{ secrets.OWNER_DATABASE_URL }}
+      DATABASE_URL: ${{ secrets.OWNER_DATABASE_URL }}
+    steps:
+      - name: Guard
+        run: |
+          if [ "$CONFIRM" != "RUN" ]; then
+            echo "::error::confirm must be RUN (got '$CONFIRM')"; exit 1
+          fi
+          if [ -z "$OWNER_DATABASE_URL" ]; then
+            echo "::error::OWNER_DATABASE_URL secret missing"; exit 1
+          fi
+          echo "dry_run=$DRY_RUN"
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 9.12.0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: pnpm }
+      - name: Install deps
+        run: pnpm install --frozen-lockfile
+      - name: Run backfill
+        run: pnpm --filter @episteme/db exec tsx scripts/backfill-paper-refs.ts
