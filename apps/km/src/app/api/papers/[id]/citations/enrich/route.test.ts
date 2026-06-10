@@ -1,8 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-vi.mock("@episteme/auth", () => ({
-  auth: { api: { getSession: vi.fn() } },
-}));
+vi.mock("@/lib/internal-auth", async () => {
+  const actual =
+    await vi.importActual<typeof import("@/lib/internal-auth")>(
+      "@/lib/internal-auth",
+    );
+  return { ...actual, getAuthedUserId: vi.fn() };
+});
 vi.mock("@episteme/auth/byok", () => ({
   getUserS2Key: vi.fn().mockResolvedValue(null),
 }));
@@ -13,7 +17,7 @@ vi.mock("@/lib/citations/semantic-scholar", () => ({
   enrichReferences: vi.fn(),
 }));
 
-import { auth } from "@episteme/auth";
+import { getAuthedUserId } from "@/lib/internal-auth";
 import { db } from "@/lib/db";
 import { POST } from "./route";
 
@@ -26,13 +30,13 @@ beforeEach(() => vi.resetAllMocks());
 
 describe("POST /api/papers/[id]/citations/enrich", () => {
   it("401 when unauthenticated", async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue(null);
+    vi.mocked(getAuthedUserId).mockResolvedValue(null);
     const res = await POST(buildReq(), routeParams);
     expect(res.status).toBe(401);
   });
 
   it("404 when paper missing", async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue({ user: { id: "u1" } } as never);
+    vi.mocked(getAuthedUserId).mockResolvedValue({ userId: "u1", viaHmac: false } as never);
     vi.mocked(db.select).mockReturnValueOnce({
       from: () => ({ where: () => ({ limit: async () => [] }) }),
     } as never);
