@@ -104,6 +104,37 @@ delete_paper.metadata = {"require_approval": True}  # type: ignore[attr-defined]
 
 
 @tool
+async def create_folder(
+    name: str,
+    library_id: int,
+    parent_folder_id: str | None = None,
+    *,
+    config: RunnableConfig,
+) -> object:
+    """Create a new folder in the user's library.
+
+    REQUIRES HUMAN APPROVAL — writes to library structure.
+
+    Args:
+        name: Folder name (1-200 chars). Reserved names like "Trash"
+            are rejected by the server.
+        library_id: Library id to create the folder in (from
+            ``list_libraries``).
+        parent_folder_id: Parent folder UUID, or ``None`` to create at
+            library root. Defaults to ``None``.
+    """
+    user_id = user_id_from_config(config)
+    return await km_post(
+        "/api/folders",
+        {"libraryId": library_id, "parentId": parent_folder_id, "name": name},
+        user_id=user_id,
+    )
+
+
+create_folder.metadata = {"require_approval": True}  # type: ignore[attr-defined]
+
+
+@tool
 async def move_folder(
     folder_id: str,
     target_parent_id: str | None,
@@ -176,6 +207,7 @@ TOOLS = [
     move_paper,
     rename_paper,
     delete_paper,
+    create_folder,
     move_folder,
     rename_folder,
     delete_folder,

@@ -260,6 +260,8 @@ _DEFAULT_APPROVAL_RULES: dict[str, str] = {
     "delete_paper": "require",
     "delete_folder": "require",
     "delete_user_highlight": "require",
+    # library structure writes — surface for user confirmation before mutating
+    "create_folder": "require",
     # reader annotation that creates persistent content
     "highlight": "require",
     # citation pipeline — LLM-spend + writes to library
@@ -328,7 +330,7 @@ _CORE_TOOL_NAMES: frozenset[str] = frozenset({
     "diff_revision", "list_revisions",
     # drive CRUD — foundational ops on papers/folders
     "move_paper", "rename_paper", "delete_paper",
-    "move_folder", "rename_folder", "delete_folder",
+    "create_folder", "move_folder", "rename_folder", "delete_folder",
     # paper citations pipeline — first-class user content, like references
     "list_paper_citations", "list_paper_citation_edges",
     "list_paper_citation_markers", "extract_paper_citations",
