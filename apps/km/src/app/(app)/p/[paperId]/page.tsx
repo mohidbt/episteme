@@ -126,6 +126,24 @@ export default async function PaperPage({
             </Link>
           </div>
         </div>
+        {(paper.year != null || paper.venue) && (
+          <div
+            data-testid="paper-meta-row"
+            className="mt-2 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground"
+          >
+            {paper.year != null && <span>{paper.year}</span>}
+            {paper.year != null && paper.venue && <span aria-hidden>·</span>}
+            {paper.venue && <span>{paper.venue}</span>}
+          </div>
+        )}
+        {paper.abstractShort && (
+          <p
+            data-testid="paper-abstract"
+            className="mt-3 max-w-prose text-sm leading-relaxed text-muted-foreground"
+          >
+            {paper.abstractShort}
+          </p>
+        )}
       </div>
       <div className="mt-4 flex min-h-0 flex-1 flex-col border-t border-border/60 lg:flex-row">
         <div className="flex h-full min-h-[60vh] shrink-0 items-center justify-center overflow-hidden p-6 lg:min-h-0">
