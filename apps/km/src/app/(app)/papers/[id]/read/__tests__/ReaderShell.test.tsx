@@ -130,7 +130,7 @@ describe("ReaderShell ?p= deep link (BG2a follow-up: prop-based)", () => {
 describe("ReaderShell explain-passage handler (K8 follow-up)", () => {
   it("POSTs /api/agents/km/invoke with page_context.paperId so threads get stamped", async () => {
     // Stub fetch for thread creation + invoke.
-    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+    const fetchMock = vi.fn(async (input: string | URL | Request, _init?: RequestInit) => {
       const url = typeof input === "string" ? input : input.toString();
       if (url.includes("/api/agent/threads")) {
         return new Response(
@@ -315,7 +315,7 @@ describe("ReaderShell PastThreadsDropdown refresh signal (codex NEEDS-FIX)", () 
       activeThreadId: weirdId,
     };
 
-    const fetchMock = vi.fn(async () => new Response("{}", { status: 200 }));
+    const fetchMock = vi.fn(async (_input: string | URL | Request, _init?: RequestInit) => new Response("{}", { status: 200 }));
     vi.stubGlobal("fetch", fetchMock);
 
     vi.resetModules();

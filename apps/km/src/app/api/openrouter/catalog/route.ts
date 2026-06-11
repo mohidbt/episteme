@@ -48,7 +48,7 @@ export async function GET() {
         // module-level in-flight flag.
         void fetch(`${agentsUrl}/openrouter/catalog/refresh`, {
           method: "POST",
-          headers,
+          headers: headers as unknown as Record<string, string>,
         }).catch(() => {});
       } catch {
         // Missing INHALE_INTERNAL_SECRET — skip refresh, log nothing.

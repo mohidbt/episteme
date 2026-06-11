@@ -33,6 +33,8 @@ export async function DELETE(request: NextRequest, { params }: Ctx) {
     // historical or partial runs may only have paper_highlights rows. Treat
     // the run as "found" if any of the three tables yielded a delete.
     const result = await db.transaction(async (tx) => {
+      // postgres-js driver returns a RowList without a `rowCount` property —
+      // use `.returning({ id })` so we can rely on `.length` for affected rows.
       const userDel = await tx
         .delete(userHighlights)
         .where(
@@ -41,7 +43,8 @@ export async function DELETE(request: NextRequest, { params }: Ctx) {
             eq(userHighlights.paperId, paperId),
             eq(userHighlights.layerId, runId),
           ),
-        );
+        )
+        .returning({ id: userHighlights.id });
       const paperDel = await tx
         .delete(paperHighlights)
         .where(
@@ -50,7 +53,8 @@ export async function DELETE(request: NextRequest, { params }: Ctx) {
             eq(paperHighlights.paperId, paperId),
             eq(paperHighlights.runId, runId),
           ),
-        );
+        )
+        .returning({ id: paperHighlights.id });
       const runDel = await tx
         .delete(aiHighlightRuns)
         .where(
@@ -59,11 +63,9 @@ export async function DELETE(request: NextRequest, { params }: Ctx) {
             eq(aiHighlightRuns.paperId, paperId),
             eq(aiHighlightRuns.userId, session.user.id),
           ),
-        );
-      const userCount = userDel.rowCount ?? 0;
-      const paperCount = paperDel.rowCount ?? 0;
-      const runCount = runDel.rowCount ?? 0;
-      return userCount + paperCount + runCount;
+        )
+        .returning({ id: aiHighlightRuns.id });
+      return userDel.length + paperDel.length + runDel.length;
     });
 
     if (result === 0) return jsonError(404, "not_found");
