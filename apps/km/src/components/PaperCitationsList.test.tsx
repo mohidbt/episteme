@@ -101,17 +101,15 @@ describe("PaperCitationsList", () => {
         id,
         title: `ref ${id}`,
         markerIndex: id,
-        semanticScholarId: null,
-        abstract: null,
-        venue: null,
+        doi: `10.x/${id}`,
+        enrichedAt: null,
       });
       const enriched = (id: number) => ({
         id,
         title: `ref ${id}`,
         markerIndex: id,
-        semanticScholarId: "s2-" + id,
-        abstract: "an abstract",
-        venue: "Nature",
+        doi: `10.x/${id}`,
+        enrichedAt: new Date().toISOString(),
       });
       citationsFetch([
         [unenriched(1), unenriched(2)],
@@ -166,9 +164,8 @@ describe("PaperCitationsList", () => {
         id,
         title: `ref ${id}`,
         markerIndex: id,
-        semanticScholarId: null,
-        abstract: null,
-        venue: null,
+        doi: `10.x/${id}`,
+        enrichedAt: null,
       });
       // Always return unenriched — never resolves
       mockFetch.mockImplementation(async (url: string) => {
@@ -205,9 +202,8 @@ describe("PaperCitationsList", () => {
         id,
         title: `ref ${id}`,
         markerIndex: id,
-        semanticScholarId: null,
-        abstract: null,
-        venue: null,
+        doi: `10.x/${id}`,
+        enrichedAt: null,
       });
       mockFetch.mockImplementation(async (url: string) => {
         if (typeof url === "string" && url.startsWith("/api/folders")) {

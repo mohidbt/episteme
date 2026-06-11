@@ -15,7 +15,6 @@ import { extractAnnotationMarkers } from "@/lib/citations/annotation-extractor";
 import { authorStringToJson } from "@/lib/citations/author-utils";
 import { paperSourceKey } from "@/lib/storage";
 import { extractDoiFromFirstPage } from "@/lib/papers/extract-doi-from-first-page";
-import { enqueueCitationEnrichmentJob } from "@/lib/citations/enrichment-jobs";
 
 export const runtime = "nodejs";
 
@@ -60,20 +59,10 @@ export async function POST(request: Request, { params }: Ctx) {
       .from(documentReferences)
       .where(eq(documentReferences.paperId, paperId));
     if (existing.length > 0) {
-      // Cached-extract re-enrichment: when any cached row is missing S2
-      // metadata (semanticScholarId IS NULL), re-fire enrichment in the
-      // background. Without this, papers extracted before the enrichment
-      // pipeline existed — or whose first enrichment run was killed by the
-      // serverless deadline — keep returning blank citation cards forever.
-      if (existing.some((r) => r.semanticScholarId == null)) {
-        after(async () => {
-          try {
-            await enqueueCitationEnrichmentJob(paperId);
-          } catch (err) {
-            console.warn("[citations/extract] cached re-enqueue failed", err);
-          }
-        });
-      }
+      // GSD-74: cached-branch re-enrichment is now driven by the GET
+      // /citations route's lazy-on-view `after()` hook (refs with
+      // enriched_at IS NULL get re-tried each panel open). No queue, no
+      // cron, no inline S2 burn on the cached read path.
       return NextResponse.json(
         {
           references: existing,
@@ -245,25 +234,17 @@ export async function POST(request: Request, { params }: Ctx) {
     }
 
     // Post-response background work via Next 16 `after()` — survives the
-    // response on Vercel (plain `void promise` gets killed at handler exit
-    // on serverless). Both jobs are best-effort; errors logged only.
+    // response on Vercel. Auto-link paper_citations edges (D2) only.
     //
-    // - auto-link paper_citations edges (D2).
-    // - per-row S2 enrichment: fills title/authors/year/doi/abstract/venue/
-    //   citationCount on every ref via DOI-then-title lookup. Pure per-row
-    //   resolution, no ordinal assumption — see plan pivot 2026-05-18
-    //   (Codex task-mpbm0thh-3f0tz8 risk #1).
+    // GSD-74: per-row S2 enrichment is NOT scheduled here. Newly-inserted
+    // refs land with enriched_at = NULL by default; the first GET
+    // /citations after this fires the lazy-on-view S2 batch.
     if (inserted.length > 0) {
       after(async () => {
         try {
           await autoLinkPaperCitations(paperId);
         } catch (err) {
           console.warn("[citations/extract] auto-link failed", err);
-        }
-        try {
-          await enqueueCitationEnrichmentJob(paperId);
-        } catch (err) {
-          console.warn("[citations/extract] enqueue failed", err);
         }
       });
     }

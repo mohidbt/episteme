@@ -27,6 +27,9 @@ export const documentReferences = pgTable("document_references", {
   tldrText: text("tldr_text"),
   externalIds: jsonb("external_ids").$type<Record<string, string>>(),
   bibtex: text("bibtex"),
+  // GSD-74: lazy-on-view enrichment timestamp. NULL = never enriched (next
+  // citations-panel GET fires S2 batch). Non-NULL = enriched (skip S2).
+  enrichedAt: timestamp("enriched_at", { withTimezone: true }),
 }, (table) => [
   index("document_references_paper_id_idx").on(table.paperId),
 ]);

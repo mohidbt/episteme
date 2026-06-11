@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { db } from "@/lib/db";
 import { papers, documentReferences, keptCitations } from "@episteme/db/schema";
 import { eq, and, asc } from "drizzle-orm";
@@ -8,6 +8,7 @@ import {
 } from "@/lib/internal-auth";
 import { jsonError, requireOwned } from "@/lib/crud";
 import { enrichRefsWithPaperMatchAndEdges } from "@/lib/citations/enrich-refs";
+import { enrichRefsForPaperLazily } from "@/lib/citations/lazy-enrich";
 
 export const runtime = "nodejs";
 
@@ -47,6 +48,7 @@ export async function GET(request: Request, { params }: Ctx) {
         venue: documentReferences.venue,
         citationCount: documentReferences.citationCount,
         pageNumber: documentReferences.pageNumber,
+        enrichedAt: documentReferences.enrichedAt,
         createdAt: documentReferences.createdAt,
         keptId: keptCitations.id,
         libraryReferenceId: keptCitations.libraryReferenceId,
@@ -61,6 +63,24 @@ export async function GET(request: Request, { params }: Ctx) {
       )
       .where(eq(documentReferences.paperId, paperId))
       .orderBy(asc(documentReferences.markerIndex), asc(documentReferences.rawText));
+
+    // GSD-74: lazy-on-view S2 enrichment. Fire-and-forget via `after()` so
+    // the un-enriched payload returns instantly. Persistence stamps
+    // `enriched_at` per row; client re-polls GET and the next response
+    // returns the patched fields. Rate-limit/network errors leave
+    // `enriched_at` NULL → retry on next view.
+    const needsEnrichment = citations.some(
+      (c) => c.enrichedAt == null && c.doi != null && c.doi.length > 0,
+    );
+    if (needsEnrichment) {
+      after(async () => {
+        try {
+          await enrichRefsForPaperLazily(paperId, userId);
+        } catch (err) {
+          console.warn("[citations] lazy enrichment failed for paper", paperId, err);
+        }
+      });
+    }
 
     // D7.4: per-ref enrichment — matchedPaperId + Cited-in/Citing counts.
     // Best-effort: enrichment failures fall back to raw refs (with null

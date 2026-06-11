@@ -4,7 +4,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
-import { X, Star, ExternalLink, Folder } from "lucide-react";
+import { X, Star, ExternalLink, Folder, Loader2 } from "lucide-react";
 import type { documentReferences } from "@episteme/db/schema";
 import type { InferSelectModel } from "drizzle-orm";
 import { toast } from "sonner";
@@ -246,6 +246,18 @@ export function CitationCard({
               className="inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-md bg-muted px-1.5 text-[11px] font-medium tabular-nums leading-none text-muted-foreground"
             >
               {citation.markerIndex}
+            </span>
+          )}
+          {/* GSD-74: per-ref "enriching" pill — shown while S2 fetch is in
+              flight for a DOI-bearing ref. Disappears the moment GET poll
+              returns a row with enrichedAt set. */}
+          {citation.enrichedAt == null && citation.doi != null && citation.doi.length > 0 && (
+            <span
+              data-testid="citation-enriching-chip"
+              className="inline-flex shrink-0 items-center gap-1 rounded-md bg-muted/60 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground transition-opacity duration-300"
+            >
+              <Loader2 className="h-2.5 w-2.5 animate-spin" aria-hidden />
+              enriching…
             </span>
           )}
           {titleHref ? (

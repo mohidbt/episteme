@@ -1,5 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
+vi.mock("next/server", async () => {
+  const actual = await vi.importActual<typeof import("next/server")>("next/server");
+  return {
+    ...actual,
+    // Invoke after() callbacks synchronously so we can assert on their
+    // effects within the same tick as the GET response.
+    after: (cb: () => Promise<void> | void) => {
+      void Promise.resolve().then(() => cb());
+    },
+  };
+});
+
 vi.mock("@/lib/internal-auth", async () => {
   const actual =
     await vi.importActual<typeof import("@/lib/internal-auth")>(
@@ -10,15 +22,45 @@ vi.mock("@/lib/internal-auth", async () => {
 vi.mock("@/lib/db", () => ({
   db: { select: vi.fn() },
 }));
+vi.mock("@/lib/citations/enrich-refs", () => ({
+  enrichRefsWithPaperMatchAndEdges: vi.fn(async (refs: unknown[]) =>
+    (refs as Array<Record<string, unknown>>).map((c) => ({
+      ...c,
+      matchedPaperId: null,
+      citedInCount: 0,
+      citingCount: 0,
+    })),
+  ),
+}));
+vi.mock("@/lib/citations/lazy-enrich", () => ({
+  enrichRefsForPaperLazily: vi.fn().mockResolvedValue({ enriched: 0, total: 0 }),
+}));
 
 import { getAuthedUserId } from "@/lib/internal-auth";
 import { db } from "@/lib/db";
+import { enrichRefsForPaperLazily } from "@/lib/citations/lazy-enrich";
 import { GET } from "./route";
 
 const PAPER_ID = "00000000-0000-0000-0000-000000000001";
 const buildReq = () =>
   new Request(`http://x/api/papers/${PAPER_ID}/citations`) as unknown as import("next/server").NextRequest;
 const routeParams = { params: Promise.resolve({ id: PAPER_ID }) };
+
+function mockOwnership(userId: string) {
+  vi.mocked(db.select).mockReturnValueOnce({
+    from: () => ({ where: () => ({ limit: async () => [{ id: PAPER_ID, userId }] }) }),
+  } as never);
+}
+
+function mockCitationsRows(rows: Array<Record<string, unknown>>) {
+  vi.mocked(db.select).mockReturnValueOnce({
+    from: () => ({
+      leftJoin: () => ({
+        where: () => ({ orderBy: vi.fn().mockResolvedValue(rows) }),
+      }),
+    }),
+  } as never);
+}
 
 beforeEach(() => vi.resetAllMocks());
 
@@ -49,20 +91,13 @@ describe("GET /api/papers/[id]/citations", () => {
 
   it("returns citations sorted by numeric markerIndex ascending", async () => {
     vi.mocked(getAuthedUserId).mockResolvedValue({ userId: "u1", viaHmac: false } as never);
-    // Ownership check
-    vi.mocked(db.select).mockReturnValueOnce({
-      from: () => ({ where: () => ({ limit: async () => [{ id: PAPER_ID, userId: "u1" }] }) }),
-    } as never);
-    // Citations query: unsorted rows in; expect orderBy clause to be invoked
-    // and the route to return them sorted by markerIndex ascending.
+    mockOwnership("u1");
     const unsortedRows = [
-      { id: 1, markerIndex: 3, markerText: "[3]", rawText: "C" },
-      { id: 2, markerIndex: 1, markerText: "[1]", rawText: "A" },
-      { id: 3, markerIndex: 10, markerText: "[10]", rawText: "D" },
-      { id: 4, markerIndex: 2, markerText: "[2]", rawText: "B" },
+      { id: 1, markerIndex: 3, markerText: "[3]", rawText: "C", enrichedAt: new Date(), doi: null },
+      { id: 2, markerIndex: 1, markerText: "[1]", rawText: "A", enrichedAt: new Date(), doi: null },
+      { id: 3, markerIndex: 10, markerText: "[10]", rawText: "D", enrichedAt: new Date(), doi: null },
+      { id: 4, markerIndex: 2, markerText: "[2]", rawText: "B", enrichedAt: new Date(), doi: null },
     ];
-    // Simulate DB ORDER BY: route delegates sort to DB, mock returns rows in
-    // the order the route asked for (numeric ascending by markerIndex).
     const sortedRows = [...unsortedRows].sort((a, b) => a.markerIndex - b.markerIndex);
     const orderByMock = vi.fn().mockResolvedValue(sortedRows);
     vi.mocked(db.select).mockReturnValueOnce({
@@ -78,5 +113,56 @@ describe("GET /api/papers/[id]/citations", () => {
     expect(orderByMock).toHaveBeenCalled();
     const body = (await res.json()) as { citations: Array<{ markerIndex: number }> };
     expect(body.citations.map((c) => c.markerIndex)).toEqual([1, 2, 3, 10]);
+  });
+
+  // GSD-74 — lazy-on-view enrichment
+
+  it("returns un-enriched payload immediately and schedules S2 batch when any ref has enrichedAt=null + doi", async () => {
+    vi.mocked(getAuthedUserId).mockResolvedValue({ userId: "u1", viaHmac: false } as never);
+    mockOwnership("u1");
+    const rows = [
+      { id: 1, markerIndex: 1, markerText: "[1]", doi: "10.1/abc", enrichedAt: null, title: null },
+      { id: 2, markerIndex: 2, markerText: "[2]", doi: "10.2/def", enrichedAt: null, title: null },
+    ];
+    mockCitationsRows(rows);
+
+    const res = await GET(buildReq(), routeParams);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { citations: Array<{ enrichedAt: string | null }> };
+    expect(body.citations).toHaveLength(2);
+    expect(body.citations[0].enrichedAt).toBeNull();
+
+    // Let after() microtask flush
+    await new Promise((r) => setTimeout(r, 0));
+    expect(enrichRefsForPaperLazily).toHaveBeenCalledWith(PAPER_ID, "u1");
+  });
+
+  it("does NOT schedule S2 batch when every ref already has enrichedAt set", async () => {
+    vi.mocked(getAuthedUserId).mockResolvedValue({ userId: "u1", viaHmac: false } as never);
+    mockOwnership("u1");
+    const now = new Date();
+    const rows = [
+      { id: 1, markerIndex: 1, markerText: "[1]", doi: "10.1/abc", enrichedAt: now, title: "T1" },
+      { id: 2, markerIndex: 2, markerText: "[2]", doi: "10.2/def", enrichedAt: now, title: "T2" },
+    ];
+    mockCitationsRows(rows);
+
+    await GET(buildReq(), routeParams);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(enrichRefsForPaperLazily).not.toHaveBeenCalled();
+  });
+
+  it("does NOT schedule S2 batch when un-enriched refs have no DOI (S2 needs a resolvable id)", async () => {
+    vi.mocked(getAuthedUserId).mockResolvedValue({ userId: "u1", viaHmac: false } as never);
+    mockOwnership("u1");
+    const rows = [
+      { id: 1, markerIndex: 1, markerText: "[1]", doi: null, enrichedAt: null, title: "T1" },
+      { id: 2, markerIndex: 2, markerText: "[2]", doi: "", enrichedAt: null, title: "T2" },
+    ];
+    mockCitationsRows(rows);
+
+    await GET(buildReq(), routeParams);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(enrichRefsForPaperLazily).not.toHaveBeenCalled();
   });
 });
