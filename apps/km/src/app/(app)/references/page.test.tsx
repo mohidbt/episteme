@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { db } from "@/lib/db";
-import { folders, libraries, references_ } from "@episteme/db/schema";
+import { folders, libraries, papers, references_ } from "@episteme/db/schema";
 import { createTestUser, deleteTestUser, type TestUser } from "@/app/api/_test-utils";
 import { listAllReferences } from "@/lib/references-server";
 import { resolveChain, breadcrumbFromChain } from "@/lib/folders";
@@ -63,6 +63,44 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await deleteTestUser(u.id);
+});
+
+// GSD-78 — Hidden refs (paperId != null) must be returned by listAllReferences
+// so the /references page can surface them with a "Hidden" badge + enrichment
+// CTA. Previously the listing filtered them out with `paperId IS NULL`.
+describe("GSD-78 listAllReferences includes hidden refs", () => {
+  it("returns refs whose paperId is non-null", async () => {
+    // Insert a paper + a ref wired to it (the "hidden twin" from GSD-32).
+    const [paper] = await db
+      .insert(papers)
+      .values({
+        userId: u.id,
+        libraryId,
+        filename: "hidden-paper.pdf",
+        title: "Hidden Paper",
+        sizeBytes: 1,
+      })
+      .returning({ id: papers.id });
+
+    await db.insert(references_).values({
+      libraryId,
+      userId: u.id,
+      folderId: null,
+      citationKey: `hidden-ref-${Date.now()}`,
+      cslJson: { title: "Hidden Twin Reference" },
+      folderPath: "",
+      paperId: paper.id,
+    });
+
+    const rows = await listAllReferences(libraryId, u.id);
+    const titles = rows.map((r) => (r.cslJson as { title?: string } | null)?.title);
+    expect(titles).toContain("Hidden Twin Reference");
+    // And the row must still expose paperId so the UI can flag it.
+    const hidden = rows.find(
+      (r) => (r.cslJson as { title?: string } | null)?.title === "Hidden Twin Reference",
+    );
+    expect(hidden?.paperId).toBe(paper.id);
+  });
 });
 
 describe("listAllReferences", () => {

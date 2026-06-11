@@ -48,6 +48,9 @@ interface DisplayRow {
   missing: string[];
   known: Record<string, unknown>;
   cslJson: Record<string, unknown>;
+  // GSD-78: paperId != null marks a "hidden" ref-twin (GSD-32 Phase 4) — shown
+  // with a Hidden badge + Enable enrichment CTA instead of the per-row AI fill.
+  paperId: string | null;
 }
 
 function toDisplay(row: ReferenceRow): DisplayRow {
@@ -89,6 +92,7 @@ function toDisplay(row: ReferenceRow): DisplayRow {
     missing,
     known,
     cslJson: csl as Record<string, unknown>,
+    paperId: row.paperId ?? null,
   };
 }
 
@@ -210,9 +214,24 @@ function ReferencesListTable({
               key={r.id}
               data-testid={`refs-row-${r.id}`}
               data-ai-filling={fillingIds.has(r.id) || undefined}
-              className={fillingIds.has(r.id) ? "ai-filling" : undefined}
+              data-hidden-ref={r.paperId ? "true" : undefined}
+              className={`${fillingIds.has(r.id) ? "ai-filling" : ""}${r.paperId ? " bg-muted/30" : ""}`.trim() || undefined}
             >
-              <TableCell className="font-mono text-xs">{r.citationKey}</TableCell>
+              <TableCell className="font-mono text-xs">
+                <div className="flex items-center gap-1.5">
+                  <span>{r.citationKey}</span>
+                  {r.paperId ? (
+                    <Badge
+                      variant="outline"
+                      data-testid="refs-hidden-badge"
+                      title="Linked to a paper — collapsed in drive surfaces"
+                      className="text-[10px]"
+                    >
+                      Hidden
+                    </Badge>
+                  ) : null}
+                </div>
+              </TableCell>
               <TableCell className={`max-w-md${r.missing.includes("title") ? " bg-red-50 dark:bg-red-950/30" : ""}`}>
                 <Link href={`/r/${r.id}`} className="line-clamp-2 hover:underline">
                   {r.title || <span className="text-muted-foreground">(untitled)</span>}
@@ -241,16 +260,27 @@ function ReferencesListTable({
                 <FolderPill folders={folders} folderId={r.folderId} folderPath={r.folderPath} />
               </TableCell>
               <TableCell>
-                <AiFillButton
-                  patchUrl={`/api/references/${r.id}`}
-                  kind="reference"
-                  known={r.known}
-                  missing={r.missing}
-                  cslJson={r.cslJson}
-                  ariaLabel={`Fill missing fields for ${r.citationKey}`}
-                  onFillStart={() => onFillStart(r.id)}
-                  onFillEnd={() => onFillEnd(r.id)}
-                />
+                {r.paperId ? (
+                  <Link
+                    href={`/p/${r.paperId}#enrich`}
+                    data-testid="refs-enable-enrichment"
+                    className="text-xs underline-offset-2 hover:underline text-muted-foreground"
+                    title="Open paper to enable reference enrichment"
+                  >
+                    Enable enrichment
+                  </Link>
+                ) : (
+                  <AiFillButton
+                    patchUrl={`/api/references/${r.id}`}
+                    kind="reference"
+                    known={r.known}
+                    missing={r.missing}
+                    cslJson={r.cslJson}
+                    ariaLabel={`Fill missing fields for ${r.citationKey}`}
+                    onFillStart={() => onFillStart(r.id)}
+                    onFillEnd={() => onFillEnd(r.id)}
+                  />
+                )}
               </TableCell>
             </TableRow>
           ))}
