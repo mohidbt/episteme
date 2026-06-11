@@ -46,6 +46,7 @@ from tools.revisions import TOOLS as _REVISION_TOOLS
 from tools.search import TOOLS as _SEARCH_TOOLS
 from tools.user_highlights import TOOLS as _USER_HIGHLIGHTS_TOOLS
 from tools.web_search import TOOLS as _WEB_SEARCH_TOOLS
+from lib.attachments import build_user_content
 from lib.config_cache import GUEST_USER_ID, load_user_config, save_user_config
 from lib.km_http import km_get
 from lib.openrouter_client import _notify_if_fallback as _notify_llm_exhaustion
@@ -616,13 +617,20 @@ async def invoke(req: Request, auth: InternalAuthDep):
         page_context = {}
     active_paper_id = page_context.get("paperId") if isinstance(page_context.get("paperId"), str) else None
     user_message = body["message"]
+    # GSD-41 — parse `[Attached file: <name> (assetId=<id>)]` tokens injected
+    # by the client (ChatFileAttachments.formatMessageWithAttachments) and
+    # rewrite the user content into multimodal content blocks (image_url for
+    # images, inline text for PDFs/text). When no tokens are present this is
+    # a no-op pass-through. Failures are surfaced as in-text placeholders so
+    # the agent loop stays alive.
+    user_content = await build_user_content(user_message, user_id=user_id)
     input_messages: list[dict] = []
     if active_paper_id:
         input_messages.append({
             "role": "system",
             "content": _build_reader_context_prefix(active_paper_id),
         })
-    input_messages.append({"role": "user", "content": user_message})
+    input_messages.append({"role": "user", "content": user_content})
 
     async def gen():
         step = 0
