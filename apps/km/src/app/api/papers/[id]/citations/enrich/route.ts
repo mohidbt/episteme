@@ -5,7 +5,11 @@ import {
   MissingInternalSecretError,
 } from "@/lib/internal-auth";
 import { jsonError, requireOwned } from "@/lib/crud";
-import { enrichPaperReferencesInDb } from "@/lib/citations/enrich-paper";
+// GSD-74: route through the lazy-on-view enrichment helper so the legacy POST
+// path uses the same `enrichedAt IS NULL AND doi IS NOT NULL` truth-source as
+// the GET `after()` hook + UI "enriching" chip. Stamps `enrichedAt` on success
+// AND on no-S2-match (so refs durably clear instead of re-firing every open).
+import { enrichRefsForPaperLazily } from "@/lib/citations/lazy-enrich";
 
 export const runtime = "nodejs";
 
@@ -28,7 +32,7 @@ export async function POST(request: Request, { params }: Ctx) {
   if (!owned.ok) return jsonError(owned.status, owned.status === 404 ? "not_found" : "forbidden");
 
   try {
-    const { enriched, total } = await enrichPaperReferencesInDb(paperId, userId);
+    const { enriched, total } = await enrichRefsForPaperLazily(paperId, userId);
     return NextResponse.json({ enriched, total });
   } catch (err) {
     console.error("[citations/enrich] failed for paper", paperId, err);

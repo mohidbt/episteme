@@ -148,10 +148,12 @@ describe("CitationsSidebar — compact CitationCard rendering", () => {
 });
 
 describe("CitationsSidebar — auto-enrich", () => {
-  it("POSTs to enrich when any ref lacks semanticScholarId", async () => {
+  // GSD-74: trigger uses enrichedAt + DOI, not semanticScholarId. Refs without
+  // DOI are unenrichable via S2 → must not trigger POST.
+  it("POSTs to enrich when any DOI-bearing ref lacks enrichedAt", async () => {
     const citations = [
-      makeCitation({ id: 1, semanticScholarId: "exists" }),
-      makeCitation({ id: 2, semanticScholarId: null }),
+      makeCitation({ id: 1, doi: "10.1/a", enrichedAt: new Date() }),
+      makeCitation({ id: 2, doi: "10.2/b", enrichedAt: null }),
     ];
     render(
       <CitationsSidebar
@@ -169,10 +171,10 @@ describe("CitationsSidebar — auto-enrich", () => {
     });
   });
 
-  it("does NOT POST when all refs have semanticScholarId", async () => {
+  it("does NOT POST when every DOI-bearing ref has enrichedAt set", async () => {
     const citations = [
-      makeCitation({ id: 1, semanticScholarId: "s2id-1" }),
-      makeCitation({ id: 2, semanticScholarId: "s2id-2" }),
+      makeCitation({ id: 1, doi: "10.1/a", enrichedAt: new Date() }),
+      makeCitation({ id: 2, doi: "10.2/b", enrichedAt: new Date() }),
     ];
     render(
       <CitationsSidebar
@@ -183,6 +185,23 @@ describe("CitationsSidebar — auto-enrich", () => {
       />
     );
     // Wait a tick to confirm no fetch fires
+    await new Promise((r) => setTimeout(r, 50));
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("does NOT POST when unenriched refs have no DOI (S2 needs a resolvable id)", async () => {
+    const citations = [
+      makeCitation({ id: 1, doi: null, enrichedAt: null }),
+      makeCitation({ id: 2, doi: "", enrichedAt: null }),
+    ];
+    render(
+      <CitationsSidebar
+        paperId={PAPER_ID}
+        open={true}
+        citations={citations}
+        loading={false}
+      />
+    );
     await new Promise((r) => setTimeout(r, 50));
     expect(global.fetch).not.toHaveBeenCalled();
   });
@@ -202,7 +221,7 @@ describe("CitationsSidebar — auto-enrich", () => {
 
   it("calls onExtracted on successful enrich", async () => {
     const onExtracted = vi.fn();
-    const citations = [makeCitation({ semanticScholarId: null })];
+    const citations = [makeCitation({ doi: "10.1/needs-enrich", enrichedAt: null })];
     render(
       <CitationsSidebar
         paperId={PAPER_ID}
@@ -216,7 +235,7 @@ describe("CitationsSidebar — auto-enrich", () => {
   });
 
   it("does NOT fire enrich a second time on re-render", async () => {
-    const citations = [makeCitation({ semanticScholarId: null })];
+    const citations = [makeCitation({ doi: "10.1/needs-enrich", enrichedAt: null })];
     const { rerender } = render(
       <CitationsSidebar
         paperId={PAPER_ID}
@@ -255,7 +274,7 @@ describe("CitationsSidebar — auto-enrich", () => {
     );
     global.fetch = slowFetch;
 
-    const citations = [makeCitation({ semanticScholarId: null })];
+    const citations = [makeCitation({ doi: "10.1/needs-enrich", enrichedAt: null })];
     render(
       <CitationsSidebar
         paperId={PAPER_ID}
@@ -278,7 +297,7 @@ describe("CitationsSidebar — auto-enrich", () => {
 
   it("does not crash on fetch error; does not show enriching indicator after error; calls toast.error", async () => {
     global.fetch = vi.fn().mockRejectedValue(new Error("network fail"));
-    const citations = [makeCitation({ semanticScholarId: null })];
+    const citations = [makeCitation({ doi: "10.1/needs-enrich", enrichedAt: null })];
     render(
       <CitationsSidebar
         paperId={PAPER_ID}
@@ -296,7 +315,7 @@ describe("CitationsSidebar — auto-enrich", () => {
   it("fires enrich again when paperId changes", async () => {
     const PAPER_ID_A = "00000000-0000-0000-0000-000000000001";
     const PAPER_ID_B = "00000000-0000-0000-0000-000000000002";
-    const citations = [makeCitation({ semanticScholarId: null })];
+    const citations = [makeCitation({ doi: "10.1/needs-enrich", enrichedAt: null })];
     const { rerender } = render(
       <CitationsSidebar
         paperId={PAPER_ID_A}
@@ -345,7 +364,7 @@ describe("CitationsSidebar — auto-enrich", () => {
     );
 
     const onExtracted = vi.fn();
-    const citations = [makeCitation({ semanticScholarId: null })];
+    const citations = [makeCitation({ doi: "10.1/needs-enrich", enrichedAt: null })];
 
     const { rerender } = render(
       <CitationsSidebar

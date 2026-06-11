@@ -117,11 +117,23 @@ export function PaperCitationsList({ paperId }: PaperCitationsListProps) {
     };
   }, [clearPoll]);
 
+  // GSD-74: start polling on initial mount when the first GET returns any
+  // un-enriched DOI ref. Previously polling only fired via the refresh event
+  // (extract click), so a panel open on already-extracted refs would never
+  // re-poll for the GET `after()` lazy-enrich completion.
   useEffect(() => {
     const controller = new AbortController();
-    load(controller.signal);
+    void load(controller.signal).then((next) => {
+      if (!mounted.current) return;
+      if (next && next.some(isUnenriched)) {
+        clearPoll();
+        pollAttempt.current = 0;
+        setEnriching(true);
+        scheduleNextPoll();
+      }
+    });
     return () => controller.abort();
-  }, [load]);
+  }, [load, scheduleNextPoll, clearPoll]);
 
   useEffect(() => {
     async function onRefresh() {

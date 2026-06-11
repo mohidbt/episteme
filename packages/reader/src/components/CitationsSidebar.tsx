@@ -43,10 +43,17 @@ export function CitationsSidebar({
     enrichFiredRef.current = false;
   }, [paperId]);
 
-  // Auto-enrich once per session open when any ref lacks semanticScholarId
+  // Auto-enrich once per session open when any DOI-bearing ref lacks
+  // enrichedAt. GSD-74: switch from semanticScholarId to (enrichedAt + doi)
+  // so we share the same truth-source as the GET /citations route's
+  // after()-hooked lazy-enrich + the "enriching" chip in CitationCard. Refs
+  // without a DOI can't be resolved against S2 and must not trigger POST.
   useEffect(() => {
     if (!open || citations.length === 0) return;
-    if (!citations.some((r) => !r.semanticScholarId)) return;
+    const needsEnrichment = citations.some(
+      (r) => r.enrichedAt == null && r.doi != null && r.doi.length > 0,
+    );
+    if (!needsEnrichment) return;
     if (enrichFiredRef.current) return;
 
     enrichFiredRef.current = true;

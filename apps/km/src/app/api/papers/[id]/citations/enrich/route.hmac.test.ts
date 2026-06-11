@@ -21,8 +21,8 @@ vi.mock("@/lib/db", () => ({
   },
 }));
 
-vi.mock("@/lib/citations/enrich-paper", () => ({
-  enrichPaperReferencesInDb: vi.fn(async () => ({ enriched: 0, total: 0 })),
+vi.mock("@/lib/citations/lazy-enrich", () => ({
+  enrichRefsForPaperLazily: vi.fn(async () => ({ enriched: 0, total: 0 })),
 }));
 
 import { getAuthedUserId } from "@/lib/internal-auth";
