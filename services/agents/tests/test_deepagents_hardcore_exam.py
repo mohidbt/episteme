@@ -150,7 +150,8 @@ def test_deepagents_tool_inventory_is_stable():
     # Bumped 24 -> 37 in GSD-48 batch (GSD-53/54/56/57/58).
     # 37 -> 45 in GSD-55 (paper_citations pipeline: 8 tools).
     # 45 -> 46 in GSD-70 (list_revisions companion to diff_revision).
-    assert len(tool_names) == 46
+    # 46 -> 47: create_folder.
+    assert len(tool_names) == 47
     assert _CORE_TOOL_NAMES.issubset(tool_names)
     assert set(RESEARCHER_TOOL_NAMES).issubset(tool_names | {"arxiv_search", "biorxiv_search", "pubmed_search"})
     assert set(SYNTHESIZER_TOOL_NAMES).issubset(tool_names)
