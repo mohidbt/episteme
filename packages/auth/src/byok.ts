@@ -49,7 +49,10 @@ export async function getUserS2Key(userId: string): Promise<string | null> {
       and(eq(userApiKeys.userId, userId), eq(userApiKeys.providerType, "references"))
     );
 
-  if (!row) return null;
+  // Mirror EPISTEME_SHARED_LLM_KEY pattern at line 19: env fallback when no
+  // per-user BYOK row exists. Used by lazy citation enrichment so KM can hit
+  // Semantic Scholar without forcing every user to register a key.
+  if (!row) return process.env.SEMANTIC_SCHOLAR_API_KEY ?? null;
 
   return decrypt(row.encryptedKey);
 }
