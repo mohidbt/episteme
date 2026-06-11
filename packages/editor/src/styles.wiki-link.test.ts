@@ -62,3 +62,31 @@ describe("GSD-62 .wiki-link chip restyle", () => {
     expect(baseRule).toMatch(/font-size:\s*0\.8(7|75)em/);
   });
 });
+
+/**
+ * GSD-67 — unresolved chip (`data-resolved="false"`) must keep the single-line
+ * pill contract. Prod evidence: NodeView contenteditable="false" + shorthand
+ * border reset on the unresolved selector lets `white-space` fall back to
+ * `normal`, wrapping the label inside the overflow:hidden pill (height ~49.6px).
+ * Fix: re-declare nowrap + overflow + ellipsis explicitly on the unresolved
+ * rule so the cascade win is unconditional.
+ */
+describe("GSD-67 .wiki-link[data-resolved=\"false\"] nowrap", () => {
+  const css = readFileSync(join(here, "styles.css"), "utf-8");
+  const unresolvedRule =
+    css.match(
+      /\.episteme-prose\s+\.wiki-link\[data-resolved="false"\]\s*\{[\s\S]*?\}/,
+    )?.[0] ?? "";
+
+  it("declares white-space: nowrap on the unresolved rule", () => {
+    expect(unresolvedRule).toMatch(/white-space:\s*nowrap/);
+  });
+
+  it("declares overflow: hidden on the unresolved rule", () => {
+    expect(unresolvedRule).toMatch(/overflow:\s*hidden/);
+  });
+
+  it("declares text-overflow: ellipsis on the unresolved rule", () => {
+    expect(unresolvedRule).toMatch(/text-overflow:\s*ellipsis/);
+  });
+});
