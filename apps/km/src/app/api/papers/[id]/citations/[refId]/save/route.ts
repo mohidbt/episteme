@@ -10,6 +10,7 @@ import { jsonError, requireOwned } from "@/lib/crud";
 import { buildLibraryReference } from "@/lib/citations/library-sync";
 import { deriveCitationKey, type CslItem } from "@/lib/csl";
 import { insertReferenceWithSuffixBump } from "@/lib/references";
+import { getFolderChain } from "@/app/(app)/d/[id]/lib/folder-chain";
 
 export const runtime = "nodejs";
 
@@ -81,12 +82,14 @@ export async function POST(request: Request, { params }: Ctx) {
     let folderPath = "";
     if (folderId) {
       const [folder] = await db
-        .select({ id: folders.id, path: folders.path })
+        .select({ id: folders.id })
         .from(folders)
         .where(and(eq(folders.id, folderId), eq(folders.userId, userId)))
         .limit(1);
       if (!folder) return jsonError(400, "invalid_folder");
-      folderPath = folder.path;
+      // `folders` has no `path` column — derive by walking the parent chain.
+      const chain = await getFolderChain(folderId, userId);
+      folderPath = chain.map((f) => f.name).join("/");
     }
 
     const libraryId = paper.libraryId ?? (

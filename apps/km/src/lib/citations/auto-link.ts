@@ -98,7 +98,7 @@ export async function autoLinkPaperCitations(
     .where(eq(papers.id, paperId))
     .limit(1)) as Array<{ userId: string }>;
   const userId = ownerRows[0]?.userId;
-  if (!userId) return { linked: 0, matched: 0 };
+  if (!userId) return { linked: 0 };
 
   const refs = await db
     .select({

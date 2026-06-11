@@ -54,11 +54,11 @@ describe("DELETE /api/papers/[id]/auto-highlight/runs/[runId]", () => {
         where: () => ({ limit: async () => [{ id: PAPER_ID, userId: "u1" }] }),
       }),
     } as never);
-    vi.mocked(db.transaction).mockImplementationOnce(async (cb: never) => {
+    (vi.mocked(db.transaction) as unknown as { mockImplementationOnce: (fn: unknown) => void }).mockImplementationOnce(async (cb: unknown) => {
       const tx = {
-        delete: () => ({ where: async () => ({ rowCount: 0 }) }),
+        delete: () => ({ where: () => ({ returning: async () => [] }) }),
       };
-      return (cb as unknown as (t: typeof tx) => Promise<number>)(tx);
+      return (cb as (t: typeof tx) => Promise<number>)(tx);
     });
     const res = await DELETE(buildReq(), routeParams);
     expect(res.status).toBe(404);
@@ -83,16 +83,18 @@ describe("DELETE /api/papers/[id]/auto-highlight/runs/[runId]", () => {
     // paperId filter on user_highlights, a same-user runId collision across
     // papers could delete the wrong paper's highlights).
     const calls: { table: unknown; clause: unknown }[] = [];
-    vi.mocked(db.transaction).mockImplementationOnce(async (cb: never) => {
+    (vi.mocked(db.transaction) as unknown as { mockImplementationOnce: (fn: unknown) => void }).mockImplementationOnce(async (cb: unknown) => {
       const tx = {
         delete: (table: unknown) => ({
-          where: async (clause: unknown) => {
-            calls.push({ table, clause });
-            return { rowCount: 1 };
-          },
+          where: (clause: unknown) => ({
+            returning: async () => {
+              calls.push({ table, clause });
+              return [{ id: "x" }];
+            },
+          }),
         }),
       };
-      return (cb as unknown as (t: typeof tx) => Promise<number>)(tx);
+      return (cb as (t: typeof tx) => Promise<number>)(tx);
     });
 
     const res = await DELETE(buildReq(), routeParams);

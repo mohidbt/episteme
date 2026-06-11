@@ -427,6 +427,11 @@ export function agentStreamReducer(
       };
     }
 
+    case "usage": {
+      // Usage telemetry is handled outside the reducer; ignore here.
+      return state;
+    }
+
     default: {
       // Exhaustive: TS will error here if a new AgentEvent variant is
       // added without a case. Runtime no-op + warn for forward-compat.

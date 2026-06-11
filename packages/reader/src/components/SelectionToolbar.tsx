@@ -39,7 +39,7 @@ interface SelectionToolbarProps {
    * toolbar typically hides the Comment/Ask-AI actions since those flows
    * require a fresh text selection.
    */
-  editingHighlightId?: number;
+  editingHighlightId?: number | string;
   onErase?: () => void;
 }
 
