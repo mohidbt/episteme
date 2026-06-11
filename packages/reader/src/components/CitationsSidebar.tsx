@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect, useRef, type ReactNode } from "react";
+import { useState, useCallback, type ReactNode } from "react";
 import { Button } from "./ui/button";
 import { Alert, AlertTitle } from "./ui/alert";
 import { Skeleton } from "./ui/skeleton";
@@ -13,6 +13,12 @@ interface CitationsSidebarProps {
   open: boolean;
   citations: CitationWithStatus[];
   loading: boolean;
+  /**
+   * GSD-74 round 4: enrichment POST + polling are owned by the Reader parent
+   * (see `useCitationEnrichment`). The sidebar surfaces enrichment-in-flight
+   * via this flag and is otherwise a pure view.
+   */
+  enriching?: boolean;
   onExtracted?: () => void;
   onSaveToLibrary?: (citationId: number, folderId: string | null) => void;
   folders?: FolderOption[];
@@ -24,59 +30,13 @@ export function CitationsSidebar({
   open,
   citations,
   loading,
+  enriching = false,
   onExtracted,
   onSaveToLibrary,
   folders = [],
   dockControl,
 }: CitationsSidebarProps) {
   const [extracting, setExtracting] = useState(false);
-  const [enriching, setEnriching] = useState(false);
-  const enrichFiredRef = useRef(false);
-  // Keep latest callback in a ref so the enrich effect doesn't need it as a dep.
-  // Including an inline onExtracted in deps re-runs the effect on every parent
-  // render, causing double-fire of the enrich POST.
-  const onExtractedRef = useRef(onExtracted);
-  useEffect(() => { onExtractedRef.current = onExtracted; });
-
-  // Reset enrich gate when document changes
-  useEffect(() => {
-    enrichFiredRef.current = false;
-  }, [paperId]);
-
-  // Auto-enrich once per session open when any ref lacks semanticScholarId
-  useEffect(() => {
-    if (!open || citations.length === 0) return;
-    if (!citations.some((r) => !r.semanticScholarId)) return;
-    if (enrichFiredRef.current) return;
-
-    enrichFiredRef.current = true;
-    const controller = new AbortController();
-    setEnriching(true);
-
-    fetch(`/api/papers/${paperId}/citations/enrich`, {
-      method: "POST",
-      signal: controller.signal,
-      credentials: "include",
-    })
-      .then((res) => {
-        if (!res.ok) throw new Error(`enrich failed: ${res.status}`);
-        return res.json();
-      })
-      .then(() => {
-        onExtractedRef.current?.();
-      })
-      .catch((err) => {
-        if (err.name === "AbortError") return;
-        console.error("[citations-sidebar] enrich error", err);
-        toast.error("Enrichment failed. Citations shown with available data.");
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setEnriching(false);
-      });
-
-    return () => controller.abort();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, citations, paperId]);
 
   const handleExtract = useCallback(async () => {
     setExtracting(true);

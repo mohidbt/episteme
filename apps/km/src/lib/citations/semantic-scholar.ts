@@ -87,7 +87,11 @@ function buildHeaders(apiKey?: string): Record<string, string> {
   return {};
 }
 
-async function fetchGet(url: string, apiKey?: string): Promise<Response | null> {
+async function fetchGet(
+  url: string,
+  apiKey?: string,
+  opts: { throwOnRateLimit?: boolean } = {},
+): Promise<Response | null> {
   const headers = buildHeaders(apiKey);
   const fetchInit = Object.keys(headers).length ? { headers } : undefined;
   let response = await fetch(url, fetchInit);
@@ -95,6 +99,9 @@ async function fetchGet(url: string, apiKey?: string): Promise<Response | null> 
   if (response.status === 429) {
     await sleep(RETRY_DELAY_MS);
     response = await fetch(url, fetchInit);
+    if (response.status === 429 && opts.throwOnRateLimit) {
+      throw new SemanticScholarRateLimitError();
+    }
   }
 
   if (response.status === 404) return null;
@@ -107,16 +114,17 @@ async function fetchGet(url: string, apiKey?: string): Promise<Response | null> 
 
 export async function resolvePaperId(
   ref: ReferenceForEnrichment,
-  opts: { apiKey?: string } = {},
+  opts: { apiKey?: string; throwOnRateLimit?: boolean } = {},
 ): Promise<string | null> {
-  const { apiKey } = opts;
+  const { apiKey, throwOnRateLimit } = opts;
+  const fetchOpts = { throwOnRateLimit };
 
   if (ref.doi?.trim()) {
     const doi = ref.doi.trim();
     // Try DOI: scheme first.
     const encoded = encodeURIComponent(`DOI:${doi}`);
     const url = `${BASE_URL}/${encoded}?fields=paperId`;
-    const response = await fetchGet(url, apiKey);
+    const response = await fetchGet(url, apiKey, fetchOpts);
     if (response) {
       const data = (await response.json()) as { paperId?: string };
       if (data.paperId) return data.paperId;
@@ -130,7 +138,7 @@ export async function resolvePaperId(
       const arxivId = arxivMatch[1];
       const arxivEncoded = encodeURIComponent(`ARXIV:${arxivId}`);
       const arxivUrl = `${BASE_URL}/${arxivEncoded}?fields=paperId`;
-      const arxivResp = await fetchGet(arxivUrl, apiKey);
+      const arxivResp = await fetchGet(arxivUrl, apiKey, fetchOpts);
       if (arxivResp) {
         const data = (await arxivResp.json()) as { paperId?: string };
         if (data.paperId) return data.paperId;
@@ -141,7 +149,7 @@ export async function resolvePaperId(
   if (ref.title?.trim()) {
     const encoded = encodeURIComponent(ref.title.trim());
     const url = `${BASE_URL}/search/match?query=${encoded}&fields=paperId`;
-    const response = await fetchGet(url, apiKey);
+    const response = await fetchGet(url, apiKey, fetchOpts);
     if (response) {
       const data = (await response.json()) as { data?: { paperId?: string }[] };
       const first = data.data?.[0];
@@ -154,11 +162,11 @@ export async function resolvePaperId(
 
 export async function fetchPaperBatch(
   paperIds: string[],
-  opts: { apiKey?: string } = {},
+  opts: { apiKey?: string; throwOnRateLimit?: boolean } = {},
 ): Promise<PaperMetadata[]> {
   if (paperIds.length === 0) return [];
 
-  const { apiKey } = opts;
+  const { apiKey, throwOnRateLimit } = opts;
   const url = `${BASE_URL}/batch?fields=${FIELDS}`;
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -182,6 +190,9 @@ export async function fetchPaperBatch(
         headers,
         body: JSON.stringify({ ids: chunk }),
       });
+      if (retry.status === 429 && throwOnRateLimit) {
+        throw new SemanticScholarRateLimitError();
+      }
       if (!retry.ok) {
         console.warn(`[fetchPaperBatch] non-OK response after retry: ${retry.status} (chunk size: ${chunk.length})`);
         continue;

@@ -33,6 +33,7 @@ function makeCitation(overrides: Partial<CitationWithStatus> = {}): CitationWith
     externalIds: null,
     bibtex: null,
     isOpenAccess: false,
+    enrichedAt: new Date(),
     keptId: null,
     libraryReferenceId: null,
     ...overrides,

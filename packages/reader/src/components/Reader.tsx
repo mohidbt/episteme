@@ -18,6 +18,7 @@ import { usePdfDocument } from "../hooks/use-pdf-document";
 import { useTextSelection } from "../hooks/use-text-selection";
 import { useReaderState } from "../hooks/use-reader-state";
 import { useCitationClick } from "../hooks/use-citation-click";
+import { useCitationEnrichment } from "../hooks/use-citation-enrichment";
 import { useUserHighlights } from "../hooks/use-user-highlights";
 import { usePaperHighlights } from "../hooks/use-paper-highlights";
 import { postHighlightsChange } from "../lib/highlights-channel";
@@ -223,6 +224,7 @@ export function Reader({
   // Citations
   const [citations, setCitations] = useState<CitationWithStatus[]>([]);
   const [citationsLoading, setCitationsLoading] = useState(true);
+  const [citationsEnriching, setCitationsEnriching] = useState(false);
   const pendingCitationIds = useRef<Set<number>>(new Set());
   const { activeCitation, clickPosition, dismiss: dismissCitation } = useCitationClick(
     pdfScrollRef,
@@ -371,6 +373,18 @@ export function Reader({
       .catch(() => {/* non-fatal */})
       .finally(() => setCitationsLoading(false));
   }, [paperId, citationsRefreshKey]);
+
+  // GSD-74 round 4: orchestrate the per-paper enrichment POST + the backoff
+  // poll until every DOI-bearing ref has `enrichedAt` set. Parent-owned so
+  // sidebar close+reopen doesn't re-POST, and so polling survives the
+  // sidebar being unmounted while still working its way through the refs.
+  useCitationEnrichment({
+    paperId,
+    open: citationsOpen,
+    citations,
+    onRefetch: useCallback(() => setCitationsRefreshKey((k) => k + 1), []),
+    onEnrichingChange: setCitationsEnriching,
+  });
 
   useEffect(() => {
     fetch(`/api/papers/${paperId}/citations/markers`)
@@ -847,6 +861,7 @@ export function Reader({
           open={citationsOpen}
           citations={citations}
           loading={citationsLoading}
+          enriching={citationsEnriching}
           onExtracted={() => setCitationsRefreshKey((k) => k + 1)}
           onSaveToLibrary={handleSaveToLibrary}
           folders={folderOptions}

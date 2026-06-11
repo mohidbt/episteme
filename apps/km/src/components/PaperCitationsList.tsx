@@ -17,6 +17,8 @@ type CitationRow = CitationWithStatus & {
   matchedPaperId?: string | null;
   citedInCount?: number;
   citingCount?: number;
+  doi?: string | null;
+  enrichedAt?: string | null;
 };
 
 interface CitationsResponse {
@@ -27,12 +29,13 @@ export function citationsRefreshEvent(paperId: string): string {
   return `paper-citations-refresh:${paperId}`;
 }
 
-// A ref is "unenriched" when Semantic Scholar enrichment hasn't landed yet —
-// no S2 id, no abstract, no venue. Enrichment runs in an after() hook on the
-// /citations/extract route and lands ~30-150s later, so we poll until the
-// fields show up (or we hit the max-attempts ceiling).
+// GSD-74: a ref is "unenriched" when `enrichedAt` is null AND it has a DOI to
+// resolve against Semantic Scholar. Refs with no DOI cannot be enriched and
+// must not trigger client polling. Enrichment is kicked off by the GET
+// /citations route's `after()` hook and lands ~2-4s later (per-ref S2 lookup
+// + batch fetch); we poll until every DOI-bearing ref has `enrichedAt` set.
 function isUnenriched(row: CitationRow): boolean {
-  return row.semanticScholarId == null && row.abstract == null && row.venue == null;
+  return row.enrichedAt == null && row.doi != null && row.doi.length > 0;
 }
 
 // Polling cadence: 8s wait, then 6s × 5, then 12s × 6 → ~90s ceiling.
@@ -114,11 +117,23 @@ export function PaperCitationsList({ paperId }: PaperCitationsListProps) {
     };
   }, [clearPoll]);
 
+  // GSD-74: start polling on initial mount when the first GET returns any
+  // un-enriched DOI ref. Previously polling only fired via the refresh event
+  // (extract click), so a panel open on already-extracted refs would never
+  // re-poll for the GET `after()` lazy-enrich completion.
   useEffect(() => {
     const controller = new AbortController();
-    load(controller.signal);
+    void load(controller.signal).then((next) => {
+      if (!mounted.current) return;
+      if (next && next.some(isUnenriched)) {
+        clearPoll();
+        pollAttempt.current = 0;
+        setEnriching(true);
+        scheduleNextPoll();
+      }
+    });
     return () => controller.abort();
-  }, [load]);
+  }, [load, scheduleNextPoll, clearPoll]);
 
   useEffect(() => {
     async function onRefresh() {

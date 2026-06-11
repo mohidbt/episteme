@@ -90,6 +90,46 @@ describe("PaperCitationsList", () => {
     expect(citationsCalls.length).toBe(2);
   });
 
+  // GSD-74 round 2: initial mount must start polling when unenriched DOI refs
+  // come back from the first GET, not only after the refresh event.
+  it("starts polling on initial mount when first GET returns unenriched DOI refs", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const unenriched = (id: number) => ({
+        id,
+        title: `ref ${id}`,
+        markerIndex: id,
+        doi: `10.x/${id}`,
+        enrichedAt: null,
+      });
+      const enriched = (id: number) => ({
+        id,
+        title: `ref ${id}`,
+        markerIndex: id,
+        doi: `10.x/${id}`,
+        enrichedAt: new Date().toISOString(),
+      });
+      citationsFetch([
+        [unenriched(1)],
+        [enriched(1)],
+      ]);
+
+      render(<PaperCitationsList paperId="paper-1" />);
+      await waitFor(() => expect(screen.getByTestId("citation-card-1")).toBeTruthy());
+      // No refresh event fired. Header should still show "Enriching" because
+      // unenriched ref is present.
+      await waitFor(() => expect(screen.getByText(/Enriching/i)).toBeTruthy());
+
+      // Advance to first poll tick (8s initial delay).
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(9000);
+      });
+      await waitFor(() => expect(screen.queryByText(/Enriching/i)).toBeFalsy());
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("polls until all refs are enriched, then stops", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {
@@ -101,17 +141,15 @@ describe("PaperCitationsList", () => {
         id,
         title: `ref ${id}`,
         markerIndex: id,
-        semanticScholarId: null,
-        abstract: null,
-        venue: null,
+        doi: `10.x/${id}`,
+        enrichedAt: null,
       });
       const enriched = (id: number) => ({
         id,
         title: `ref ${id}`,
         markerIndex: id,
-        semanticScholarId: "s2-" + id,
-        abstract: "an abstract",
-        venue: "Nature",
+        doi: `10.x/${id}`,
+        enrichedAt: new Date().toISOString(),
       });
       citationsFetch([
         [unenriched(1), unenriched(2)],
@@ -166,9 +204,8 @@ describe("PaperCitationsList", () => {
         id,
         title: `ref ${id}`,
         markerIndex: id,
-        semanticScholarId: null,
-        abstract: null,
-        venue: null,
+        doi: `10.x/${id}`,
+        enrichedAt: null,
       });
       // Always return unenriched — never resolves
       mockFetch.mockImplementation(async (url: string) => {
@@ -205,9 +242,8 @@ describe("PaperCitationsList", () => {
         id,
         title: `ref ${id}`,
         markerIndex: id,
-        semanticScholarId: null,
-        abstract: null,
-        venue: null,
+        doi: `10.x/${id}`,
+        enrichedAt: null,
       });
       mockFetch.mockImplementation(async (url: string) => {
         if (typeof url === "string" && url.startsWith("/api/folders")) {
