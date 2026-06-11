@@ -168,7 +168,7 @@ export function SidebarShell({ library, tree, isAnonymous }: SidebarShellProps) 
               />
             )}
             {collapsed && <DriveCollapsedShortcut />}
-            <ByTypeNav />
+            <ByTypeNav libraryId={library.id} />
             <SidebarAgentSection />
             <SidebarSettingsSection />
           </SidebarContent>
