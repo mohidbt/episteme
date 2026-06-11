@@ -138,6 +138,9 @@ export async function POST(req: Request, { params }: Ctx) {
       authors: updated.authors,
       year: updated.year,
       doi: updated.doi,
+      // GSD-76: ref-twin inherits paper's drive folder at creation time.
+      folderId: updated.folderId,
+      folderPath: updated.folderPath,
     });
   } catch (err) {
     console.warn(`finalize: ensurePaperRef failed for paper ${id}`, err);

@@ -226,6 +226,13 @@ export async function moveItemToFolder(opts: {
   if (!row) throw Object.assign(new Error("not found"), { status: 404 });
   if (opts.targetFolderId) await assertFolder(row.libraryId, opts.userId, opts.targetFolderId);
   await db.update(t).set({ folderId: opts.targetFolderId }).where(eq(t.id, opts.itemId));
+  // GSD-76: when a paper moves, its hidden ref-twin follows so library export
+  // keeps them co-located. Identified by references_.paperId = paper.id.
+  if (opts.kind === "paper") {
+    await db.update(references_)
+      .set({ folderId: opts.targetFolderId })
+      .where(and(eq(references_.userId, opts.userId), eq(references_.paperId, opts.itemId)));
+  }
 }
 
 export async function moveToTrash(opts: {
