@@ -109,4 +109,47 @@ describe("enrichRefsForPaperLazily", () => {
     // No persistence happened — row left for next panel-open retry.
     expect(updateSetSpy).not.toHaveBeenCalled();
   });
+
+  // GSD-74 round 3: partial-progress on mid-batch rate-limit. With 76 free-tier
+  // refs the chunk-end Promise.all loses ALL work if the batch fetch rate-limits.
+  // Each successfully-resolved+fetched ref must persist before continuing so a
+  // 429 mid-stream doesn't wipe partial progress.
+  it("persists per-ref incrementally so a mid-batch rate-limit preserves earlier work", async () => {
+    mockRefs([
+      { id: 1, title: null, doi: "10.1/a" },
+      { id: 2, title: null, doi: "10.1/b" },
+      { id: 3, title: null, doi: "10.1/c" },
+    ]);
+    vi.mocked(resolvePaperId)
+      .mockResolvedValueOnce("S2-1")
+      .mockResolvedValueOnce("S2-2")
+      .mockRejectedValueOnce(new SemanticScholarRateLimitError());
+    vi.mocked(fetchPaperBatch).mockImplementation(async (ids: string[]) => {
+      // Per-ref incremental fetch: each call gets one ID.
+      const titles: Record<string, string> = { "S2-1": "First", "S2-2": "Second" };
+      return ids.map((id) => ({
+        paperId: id,
+        title: titles[id] ?? null,
+        authors: [],
+        year: 2024,
+        externalIds: null,
+        abstract: null,
+        venue: null,
+        citationCount: null,
+        influentialCitationCount: null,
+        openAccessPdfUrl: null,
+        isOpenAccess: null,
+        tldr: null,
+        bibtex: null,
+      }));
+    });
+
+    const result = await enrichRefsForPaperLazily(PAPER_ID, "u1");
+    // First two refs resolved + fetched + persisted before the 3rd 429'd.
+    expect(result.enriched).toBe(2);
+    expect(result.total).toBe(3);
+    const titles = updateSetSpy.mock.calls.map((c) => (c[0] as { title?: string }).title);
+    expect(titles).toContain("First");
+    expect(titles).toContain("Second");
+  });
 });

@@ -1,17 +1,18 @@
 // GSD-74 — lazy-on-view citation enrichment. Called from
-// GET /api/papers/[id]/citations via `after()` after the un-enriched
-// payload is already on the wire.
+// GET /api/papers/[id]/citations and POST /citations/enrich via `after()` so
+// the un-enriched payload is already on the wire when this runs.
 //
 // Behavior:
 //   - Only touches refs with `enriched_at IS NULL AND doi IS NOT NULL`.
-//   - Runs the same per-row S2 resolve+batch fetch as enrich-paper.ts.
-//   - Persists S2 fields AND stamps `enriched_at = now()`.
-//   - On `SemanticScholarRateLimitError` (or any error): swallow + log;
-//     `enriched_at` stays NULL so the next panel-open retries.
+//   - Per-ref incremental persistence: each successful resolve+fetch stamps
+//     `enriched_at` immediately, before moving to the next ref.
+//   - On `SemanticScholarRateLimitError`: returns partial progress; refs
+//     already persisted stay persisted, the rest are left for next panel-open.
+//   - On any other per-ref error: log + continue to next ref.
 //
-// No queue, no cron, no lock — concurrent GETs may double-fire S2 work,
-// but persistEnrichment's WHERE clause filters to `enriched_at IS NULL`
-// and the chunked-write design keeps partial progress durable.
+// No queue, no cron, no lock — concurrent calls may double-fire S2 work, but
+// the persist WHERE clause filters to `enriched_at IS NULL` so a winner takes
+// the row.
 
 import { and, eq, isNotNull, isNull } from "drizzle-orm";
 import { db } from "@/lib/db";
@@ -25,7 +26,11 @@ import {
   type ReferenceForEnrichment,
 } from "@/lib/citations/semantic-scholar";
 
-const CHUNK_SIZE = 20;
+// GSD-74 round 3: per-ref incremental persistence (no chunked Promise.all).
+// Earlier design batched persistence at chunk-end via Promise.all, but on
+// free-tier S2 a mid-chunk 429 lost all in-flight work — the entire batch was
+// abandoned without any DB write. Now each successful resolve+fetch persists
+// immediately so a 429 only loses the in-flight ref, not the whole batch.
 const RESOLVE_DELAY_MS = 1100;
 
 function sleep(ms: number): Promise<void> {
@@ -105,39 +110,31 @@ export async function enrichRefsForPaperLazily(
   const apiKey = s2Key ?? undefined;
   let enriched = 0;
 
-  try {
-    for (let i = 0; i < refs.length; i += CHUNK_SIZE) {
-      const chunk = refs.slice(i, i + CHUNK_SIZE) as ReferenceForEnrichment[];
-      const resolved: Array<{ ref: ReferenceForEnrichment; paperId: string | null }> = [];
-      for (let j = 0; j < chunk.length; j++) {
-        const sid = await resolvePaperId(chunk[j], { apiKey, throwOnRateLimit: true });
-        resolved.push({ ref: chunk[j], paperId: sid });
-        if (j < chunk.length - 1) await sleep(RESOLVE_DELAY_MS);
-      }
-      const ids = resolved.map((r) => r.paperId).filter((x): x is string => !!x);
-      const papers = ids.length > 0
-        ? await fetchPaperBatch(ids, { apiKey, throwOnRateLimit: true })
-        : [];
-      const byId = new Map(papers.map((p) => [p.paperId, p]));
+  for (let i = 0; i < refs.length; i++) {
+    const ref = refs[i] as ReferenceForEnrichment;
+    try {
+      const sid = await resolvePaperId(ref, { apiKey, throwOnRateLimit: true });
       const now = new Date();
-      await Promise.all(
-        resolved.map(async ({ ref, paperId: sid }) => {
-          const metadata = sid ? byId.get(sid) : undefined;
-          if (metadata) {
-            await persistRefEnrichment(ref.id, metadata, now);
-            enriched++;
-          } else {
-            await stampEnriched(ref.id, now);
-          }
-        }),
-      );
+      if (sid) {
+        const [metadata] = await fetchPaperBatch([sid], { apiKey, throwOnRateLimit: true });
+        if (metadata) {
+          await persistRefEnrichment(ref.id, metadata, now);
+          enriched++;
+        } else {
+          await stampEnriched(ref.id, now);
+        }
+      } else {
+        await stampEnriched(ref.id, now);
+      }
+    } catch (err) {
+      if (err instanceof SemanticScholarRateLimitError) {
+        console.warn("[lazy-enrich] S2 rate-limited mid-batch for paper", paperId, "after", enriched, "of", refs.length);
+        return { enriched, total: refs.length };
+      }
+      console.warn("[lazy-enrich] failed for ref", ref.id, "paper", paperId, err);
+      // Non-rate-limit error: leave this ref unenriched, continue with next.
     }
-  } catch (err) {
-    if (err instanceof SemanticScholarRateLimitError) {
-      console.warn("[lazy-enrich] S2 rate-limited for paper", paperId);
-      return { enriched, total: refs.length };
-    }
-    console.warn("[lazy-enrich] failed for paper", paperId, err);
+    if (i < refs.length - 1) await sleep(RESOLVE_DELAY_MS);
   }
 
   return { enriched, total: refs.length };
