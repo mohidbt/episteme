@@ -21,6 +21,8 @@ type PaperLike = {
   authors: string[] | null;
   year: number | null;
   doi: string | null;
+  folderId?: string | null;
+  folderPath?: string;
 };
 
 const PAPER: PaperLike = {
@@ -31,6 +33,8 @@ const PAPER: PaperLike = {
   authors: ["Vaswani, A.", "Shazeer, N."],
   year: 2017,
   doi: "10.5/test",
+  folderId: "22222222-2222-2222-2222-222222222222",
+  folderPath: "research/transformers/",
 };
 
 function stubSelectQueue(returnQueues: unknown[][]) {
@@ -99,6 +103,45 @@ describe("ensurePaperRef", () => {
 
     expect(result).toEqual({ created: true, refId: "ref-new" });
     expect(db.insert).toHaveBeenCalledTimes(1);
+  });
+
+  it("GSD-76: new ref inherits paper folderId and folderPath", async () => {
+    stubSelectQueue([[], []]);
+    const valuesSpy = vi.fn();
+    const insertChain: Record<string, unknown> = {
+      values: (v: unknown) => {
+        valuesSpy(v);
+        return insertChain;
+      },
+      returning: () => Promise.resolve([{ id: "ref-new" }]),
+    };
+    vi.mocked(db.insert).mockReturnValue(insertChain as never);
+
+    await ensurePaperRef(PAPER);
+
+    expect(valuesSpy).toHaveBeenCalledTimes(1);
+    const inserted = valuesSpy.mock.calls[0][0] as Record<string, unknown>;
+    expect(inserted.folderId).toBe("22222222-2222-2222-2222-222222222222");
+    expect(inserted.folderPath).toBe("research/transformers/");
+  });
+
+  it("GSD-76: defaults to root when paper has no folder", async () => {
+    stubSelectQueue([[], []]);
+    const valuesSpy = vi.fn();
+    const insertChain: Record<string, unknown> = {
+      values: (v: unknown) => {
+        valuesSpy(v);
+        return insertChain;
+      },
+      returning: () => Promise.resolve([{ id: "ref-new" }]),
+    };
+    vi.mocked(db.insert).mockReturnValue(insertChain as never);
+
+    await ensurePaperRef({ ...PAPER, folderId: null, folderPath: "" });
+
+    const inserted = valuesSpy.mock.calls[0][0] as Record<string, unknown>;
+    expect(inserted.folderId).toBeNull();
+    expect(inserted.folderPath).toBe("");
   });
 
   it("is idempotent — skips insert when a ref already points at paperId", async () => {

@@ -21,6 +21,10 @@ export interface PaperForRefTwin {
   authors: string[] | null;
   year: number | null;
   doi: string | null;
+  // GSD-76: hidden ref-twin inherits the paper's drive folder location so
+  // library export keeps the ref next to its paper instead of bloating root.
+  folderId?: string | null;
+  folderPath?: string;
 }
 
 export type EnsureResult = {
@@ -92,8 +96,8 @@ export async function ensurePaperRef(paper: PaperForRefTwin): Promise<EnsureResu
     .values({
       libraryId: paper.libraryId,
       userId: paper.userId,
-      folderPath: "",
-      folderId: null,
+      folderPath: paper.folderPath ?? "",
+      folderId: paper.folderId ?? null,
       citationKey,
       cslJson: csl,
       paperId: paper.id,

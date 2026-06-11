@@ -1,9 +1,9 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { db } from "@/lib/db";
-import { folders, libraries, notes, papersets } from "@episteme/db/schema";
+import { folders, libraries, notes, papers, papersets, references_ } from "@episteme/db/schema";
 import { eq, and, isNull } from "drizzle-orm";
 import {
-  createFolder, moveFolder, moveToTrash, restoreFromTrash, emptyTrash,
+  createFolder, moveFolder, moveItemToFolder, moveToTrash, restoreFromTrash, emptyTrash,
   getTrashFolderId, listFolderContents,
 } from "./folders-server";
 import { createTestUser, deleteTestUser, type TestUser } from "@/app/api/_test-utils";
@@ -75,6 +75,46 @@ describe("emptyTrash", () => {
     const leftover = await db.select().from(notes).where(eq(notes.id, n.id));
     expect(leftover).toHaveLength(0);
     expect(await getTrashFolderId(libraryId, u.id)).toBe(trashId);
+  });
+});
+
+describe("moveItemToFolder (GSD-76: paper ref-twin follows)", () => {
+  it("moving a paper moves its hidden ref-twin (paperId-linked) to the same folder", async () => {
+    const f = await createFolder({ libraryId, userId: u.id, parentId: null, name: "Dest" });
+    const [p] = await db.insert(papers).values({
+      libraryId, userId: u.id, filename: `p-${Date.now()}.pdf`,
+    }).returning({ id: papers.id });
+    const [r] = await db.insert(references_).values({
+      libraryId, userId: u.id, folderPath: "", folderId: null,
+      citationKey: `pk-${Date.now()}`, cslJson: { id: p.id, title: "twin" },
+      paperId: p.id,
+    }).returning({ id: references_.id });
+
+    await moveItemToFolder({ kind: "paper", itemId: p.id, userId: u.id, targetFolderId: f.id });
+
+    const [paperRow] = await db.select({ folderId: papers.folderId })
+      .from(papers).where(eq(papers.id, p.id));
+    const [refRow] = await db.select({ folderId: references_.folderId })
+      .from(references_).where(eq(references_.id, r.id));
+    expect(paperRow.folderId).toBe(f.id);
+    expect(refRow.folderId).toBe(f.id);
+  });
+
+  it("does not touch refs without paperId", async () => {
+    const f = await createFolder({ libraryId, userId: u.id, parentId: null, name: "Dest2" });
+    const [p] = await db.insert(papers).values({
+      libraryId, userId: u.id, filename: `p2-${Date.now()}.pdf`,
+    }).returning({ id: papers.id });
+    const [otherRef] = await db.insert(references_).values({
+      libraryId, userId: u.id, folderPath: "", folderId: null,
+      citationKey: `or-${Date.now()}`, cslJson: { id: "x", title: "unlinked" },
+    }).returning({ id: references_.id });
+
+    await moveItemToFolder({ kind: "paper", itemId: p.id, userId: u.id, targetFolderId: f.id });
+
+    const [refRow] = await db.select({ folderId: references_.folderId })
+      .from(references_).where(eq(references_.id, otherRef.id));
+    expect(refRow.folderId).toBeNull();
   });
 });
 
