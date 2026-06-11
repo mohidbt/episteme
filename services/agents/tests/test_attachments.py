@@ -103,6 +103,38 @@ async def test_build_user_content_failed_fetch_replaced_with_placeholder() -> No
 
 
 @pytest.mark.asyncio
+async def test_fetch_asset_uses_km_get_helper_for_hmac() -> None:
+    """Pin the contract: metadata fetch goes through `km_http.km_get` so the
+    HMAC signer + EPISTEME_KM_BASE_URL env are picked up uniformly. A bespoke
+    httpx call here would skip HMAC and 401 against KM (root cause of GSD-41
+    "fetch failed" placeholders)."""
+    meta = {"id": "a1", "filename": "p.png", "mimeType": "image/png", "downloadUrl": "https://signed/p"}
+    mock_get = AsyncMock(return_value=meta)
+    mock_resp = AsyncMock()
+    mock_resp.is_success = True
+    mock_resp.content = b"bytes"
+    with (
+        patch("lib.attachments.km_get", mock_get),
+        patch.object(attachments._client, "get", AsyncMock(return_value=mock_resp)),
+    ):
+        result = await attachments._fetch_asset("a1", user_id="u1")
+    assert result is not None
+    mock_get.assert_awaited_once_with("/api/assets/a1", user_id="u1")
+
+
+@pytest.mark.asyncio
+async def test_fetch_asset_returns_none_when_km_get_errors() -> None:
+    """km_get returns a `{"error": True, ...}` dict on non-2xx (e.g. KM 401
+    because dual-auth not yet shipped to KM-prod). _fetch_asset must treat
+    that as a failure and let build_user_content emit a placeholder, not
+    crash the agent loop."""
+    err = {"error": True, "status": 401, "path": "/api/assets/a1", "body": "unauthorized"}
+    with patch("lib.attachments.km_get", AsyncMock(return_value=err)):
+        result = await attachments._fetch_asset("a1", user_id="u1")
+    assert result is None
+
+
+@pytest.mark.asyncio
 async def test_build_user_content_oversized_image_replaced_with_placeholder() -> None:
     huge = b"x" * (attachments.MAX_INLINE_BYTES + 1)
     meta = {"id": "a3", "filename": "huge.png", "mimeType": "image/png", "downloadUrl": "https://signed/h"}
