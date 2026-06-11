@@ -623,10 +623,10 @@ describe("WikiLink prefix classification (K6)", () => {
         ],
       });
       const html = editor.getHTML();
-      // Visible label (last text node inside the pill span) is the alias,
-      // not the displayTitle. displayTitle may still appear inside the
+      // Visible label (text inside `.wiki-link__label` span — GSD-89) is the
+      // alias, not the displayTitle. displayTitle may still appear inside the
       // `data-display-title` attribute for parseHTML round-trip integrity.
-      expect(html).toMatch(/<\/svg>the paper<\/span>/);
+      expect(html).toMatch(/<\/svg><span class="wiki-link__label">the paper<\/span><\/span>/);
       expect(html).not.toMatch(/>Spontaneous Symmetry Breaking</);
       editor.destroy();
     });

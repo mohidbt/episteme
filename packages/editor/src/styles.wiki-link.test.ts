@@ -64,29 +64,61 @@ describe("GSD-62 .wiki-link chip restyle", () => {
 });
 
 /**
- * GSD-67 — unresolved chip (`data-resolved="false"`) must keep the single-line
- * pill contract. Prod evidence: NodeView contenteditable="false" + shorthand
- * border reset on the unresolved selector lets `white-space` fall back to
- * `normal`, wrapping the label inside the overflow:hidden pill (height ~49.6px).
- * Fix: re-declare nowrap + overflow + ellipsis explicitly on the unresolved
- * rule so the cascade win is unconditional.
+ * GSD-67/89 — unresolved + resolved chips share the single-line contract.
+ * After GSD-89 the truncation contract moved to a dedicated `.wiki-link__label`
+ * child span (text node alone in an inline-flex parent never triggers
+ * ellipsis reliably across browsers — the raw text becomes an anonymous flex
+ * item that overflows mid-glyph). The data-type selector still owns
+ * `white-space: nowrap` + `overflow: hidden` on the parent, and the label
+ * span owns `text-overflow: ellipsis` on the inline-block that contains the
+ * text.
  */
-describe("GSD-67 .wiki-link[data-resolved=\"false\"] nowrap", () => {
+describe("GSD-67/89 .wiki-link single-line contract", () => {
   const css = readFileSync(join(here, "styles.css"), "utf-8");
-  const unresolvedRule =
+  const dataTypeRule =
     css.match(
-      /\.episteme-prose\s+\.wiki-link\[data-resolved="false"\]\s*\{[\s\S]*?\}/,
+      /\.episteme-prose\s+\.wiki-link\[data-type="wiki-link"\]\s*\{[\s\S]*?\}/,
     )?.[0] ?? "";
 
-  it("declares white-space: nowrap on the unresolved rule", () => {
-    expect(unresolvedRule).toMatch(/white-space:\s*nowrap/);
+  it("declares white-space: nowrap on the data-type rule", () => {
+    expect(dataTypeRule).toMatch(/white-space:\s*nowrap/);
   });
 
-  it("declares overflow: hidden on the unresolved rule", () => {
-    expect(unresolvedRule).toMatch(/overflow:\s*hidden/);
+  it("declares overflow: hidden on the data-type rule", () => {
+    expect(dataTypeRule).toMatch(/overflow:\s*hidden/);
+  });
+});
+
+/**
+ * GSD-89 — Bug 1: ellipsis must live on a dedicated `.wiki-link__label`
+ * child span. `inline-flex` parent + a raw text-node sibling next to the
+ * SVG icon causes text-overflow:ellipsis on the parent to NOT take effect:
+ * the text becomes an anonymous flex item that overflows mid-glyph. Fix:
+ * wrap the label in `<span class="wiki-link__label">` with the standard
+ * inline-block + overflow + ellipsis contract.
+ */
+describe("GSD-89 .wiki-link__label truncation contract", () => {
+  const css = readFileSync(join(here, "styles.css"), "utf-8");
+  const labelRule =
+    css.match(/\.episteme-prose\s+\.wiki-link__label\s*\{[\s\S]*?\}/)?.[0] ?? "";
+
+  it("uses inline-block so text-overflow can clip", () => {
+    expect(labelRule).toMatch(/display:\s*inline-block/);
   });
 
-  it("declares text-overflow: ellipsis on the unresolved rule", () => {
-    expect(unresolvedRule).toMatch(/text-overflow:\s*ellipsis/);
+  it("declares overflow: hidden on the label span", () => {
+    expect(labelRule).toMatch(/overflow:\s*hidden/);
+  });
+
+  it("declares text-overflow: ellipsis on the label span", () => {
+    expect(labelRule).toMatch(/text-overflow:\s*ellipsis/);
+  });
+
+  it("declares white-space: nowrap on the label span", () => {
+    expect(labelRule).toMatch(/white-space:\s*nowrap/);
+  });
+
+  it("declares min-width: 0 so the flex item can shrink below content width", () => {
+    expect(labelRule).toMatch(/min-width:\s*0/);
   });
 });

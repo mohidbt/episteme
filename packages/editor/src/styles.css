@@ -150,15 +150,29 @@
   background: color-mix(in oklch, var(--accent-reference, oklch(0.58 0.20 295)) 8%, transparent);
   border-color: color-mix(in oklch, var(--accent-reference, oklch(0.58 0.20 295)) 35%, transparent);
 }
-/* GSD-67: NodeView path (contenteditable="false" + shorthand border reset)
-   lets `white-space` fall back to `normal` in prod for BOTH resolved and
-   unresolved chips, wrapping the label inside the overflow:hidden pill.
-   Re-declare the single-line contract on the data-type selector so the
-   cascade win is unconditional regardless of resolved state. */
+/* GSD-67/89: re-declare the single-line contract on the data-type selector so
+   the NodeView path (contenteditable="false" + shorthand border reset) cannot
+   regress to `white-space: normal` for either resolved or unresolved chips.
+   The actual ellipsis truncation lives on `.wiki-link__label` below — see
+   that rule for the rationale. */
 .episteme-prose .wiki-link[data-type="wiki-link"] {
   white-space: nowrap;
   overflow: hidden;
+}
+/* GSD-89: label-text wrapper. The chip is `display: inline-flex` with the SVG
+   icon as one flex item and the label text as the other. A bare Text node
+   becomes an anonymous flex item that overflows the container mid-glyph
+   without triggering `text-overflow: ellipsis` on the parent. Wrapping the
+   label in an inline-block child gives the text its own block formatting
+   context where `text-overflow: ellipsis` resolves reliably. `min-width: 0`
+   lets the flex item shrink below its intrinsic content width. */
+.episteme-prose .wiki-link__label {
+  display: inline-block;
+  overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  max-width: 100%;
 }
 .episteme-prose .wiki-link[data-resolved="false"] {
   background: transparent;

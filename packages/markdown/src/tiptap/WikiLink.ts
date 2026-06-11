@@ -217,9 +217,12 @@ export const WikiLink = Node.create({
         class: PILL_CLASS + kindClass,
       }),
       ...(icon ? [icon] : []),
-      label,
+      // GSD-89: wrap label in an inline-block span so `text-overflow: ellipsis`
+      // resolves on a real block formatting context rather than a bare text
+      // node that becomes an anonymous flex item and overflows mid-glyph.
+      ["span", { class: "wiki-link__label" }, label],
       // Tiptap's DOMOutputSpec union is narrower than what we emit (a span
-      // with mixed-arity children: optional svg + text). Cast keeps the
+      // with mixed-arity children: optional svg + label span). Cast keeps the
       // public types untouched while letting ProseMirror serialize it as a
       // standard DOM spec.
     ] as never;
@@ -295,6 +298,13 @@ export const WikiLink = Node.create({
           if (v == null) continue;
           span.setAttribute(k, String(v));
         }
+        // GSD-89 Bug 2: atom NodeViews must mark their DOM as non-editable so
+        // ProseMirror treats the entire wrapper as a single atomic leaf for
+        // cursor mapping. Without this, ArrowRight steps into the text child
+        // instead of past the chip. The renderHTML path gets this for free
+        // because ProseMirror applies it automatically; the custom NodeView
+        // owns the DOM, so we have to declare it explicitly.
+        span.setAttribute("contenteditable", "false");
         const paths =
           attrs.targetKind === "paper"
             ? FILE_TEXT_PATHS
@@ -314,7 +324,13 @@ export const WikiLink = Node.create({
           }
           span.appendChild(svg);
         }
-        span.appendChild(document.createTextNode(label));
+        // GSD-89 Bug 1: wrap label in an inline-block span (see renderHTML
+        // comment + .wiki-link__label CSS) so ellipsis resolves correctly
+        // when the chip is laid out as `inline-flex`.
+        const labelSpan = document.createElement("span");
+        labelSpan.className = "wiki-link__label";
+        labelSpan.appendChild(document.createTextNode(label));
+        span.appendChild(labelSpan);
         return span;
       };
       let dom = buildDom(node);
