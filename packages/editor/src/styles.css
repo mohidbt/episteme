@@ -150,18 +150,20 @@
   background: color-mix(in oklch, var(--accent-reference, oklch(0.58 0.20 295)) 8%, transparent);
   border-color: color-mix(in oklch, var(--accent-reference, oklch(0.58 0.20 295)) 35%, transparent);
 }
-/* GSD-67: NodeView path on the unresolved chip (contenteditable="false" +
-   shorthand border reset) lets `white-space` fall back to `normal` in prod,
-   wrapping the label inside the overflow:hidden pill. Re-declare the
-   single-line contract here so the cascade win is unconditional, equal to
-   the base `.wiki-link` rule's specificity ladder. */
+/* GSD-67: NodeView path (contenteditable="false" + shorthand border reset)
+   lets `white-space` fall back to `normal` in prod for BOTH resolved and
+   unresolved chips, wrapping the label inside the overflow:hidden pill.
+   Re-declare the single-line contract on the data-type selector so the
+   cascade win is unconditional regardless of resolved state. */
+.episteme-prose .wiki-link[data-type="wiki-link"] {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .episteme-prose .wiki-link[data-resolved="false"] {
   background: transparent;
   border: 1px dashed oklch(0.58 0.18 27);
   color: oklch(0.52 0.18 27);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 .episteme-prose .wiki-link[data-resolved="false"]:hover {
   background: oklch(0.58 0.18 27 / 0.06);
