@@ -359,4 +359,41 @@ describe("ReferencesView", () => {
     expect(cell.getAttribute("title")).toBeNull();
     expect(cell.textContent).toBe("—");
   });
+
+  // GSD-78 — Hidden refs (paperId != null) are rendered with a visual
+  // "Hidden" badge AND an "Enable enrichment" CTA so the user can opt in.
+  // Hidden refs share the same row layout as standalone refs to keep diff
+  // minimal and reuse @episteme/ui primitives.
+  it("GSD-78: hidden ref (paperId != null) renders Hidden badge + enrichment CTA", () => {
+    const hiddenRows: ReferenceRow[] = [
+      {
+        id: "r-hidden",
+        libraryId: 1,
+        userId: "u1",
+        folderPath: "",
+        folderId: null,
+        prevFolderId: null,
+        citationKey: "vaswani2017",
+        cslJson: { id: "r-hidden", type: "article-journal", title: "Attention" },
+        paperId: "p-vaswani",
+        createdAt: NOW,
+        updatedAt: NOW,
+      },
+    ] as unknown as ReferenceRow[];
+
+    render(<ReferencesView rows={hiddenRows} />);
+    const row = screen.getByTestId("refs-row-r-hidden");
+    expect(row.getAttribute("data-hidden-ref")).toBe("true");
+
+    // Hidden badge visible in the row
+    const badge = row.querySelector('[data-testid="refs-hidden-badge"]');
+    expect(badge).toBeTruthy();
+    expect(badge!.textContent).toMatch(/hidden/i);
+
+    // Enable-enrichment CTA links to the paper enrich endpoint
+    const cta = row.querySelector(
+      '[data-testid="refs-enable-enrichment"]',
+    ) as HTMLAnchorElement | HTMLButtonElement | null;
+    expect(cta).toBeTruthy();
+  });
 });

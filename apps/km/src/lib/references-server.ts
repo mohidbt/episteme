@@ -8,7 +8,16 @@ import { papers, references_ } from "@episteme/db/schema";
 // every paper has a hidden twin); only standalone (paperId IS NULL) refs
 // appear in the references tab and tree.
 
-/** Returns all references for the library regardless of folder. Used by /references page. */
+/**
+ * Returns all references for the library regardless of folder. Used by
+ * /references page.
+ *
+ * GSD-78: Hidden refs (paperId IS NOT NULL — the "twin" rows created by
+ * GSD-32 Phase 4 for every paper) are now included so users can see and
+ * opt into reference enrichment on them. Other drive surfaces still use
+ * `listReferences` which retains the `paperId IS NULL` filter to preserve
+ * the GSD-32 collapse behavior.
+ */
 export const listAllReferences = cache(
   async (libraryId: number, userId: string) =>
     db
@@ -18,7 +27,6 @@ export const listAllReferences = cache(
         and(
           eq(references_.libraryId, libraryId),
           eq(references_.userId, userId),
-          isNull(references_.paperId),
         ),
       )
       .orderBy(desc(references_.createdAt)),
