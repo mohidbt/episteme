@@ -400,17 +400,44 @@ export function NoteEditor({
           ])
           .run();
       },
+      // GSD-81: `props.clientRect` from @tiptap/suggestion is `null` when the
+      // decoration node isn't in `view.dom` at the moment the plugin builds
+      // its props (the decoration is applied as part of `view.update` and may
+      // race the suggestion plugin's view-update callback). When it's null we
+      // fall back to deriving the caret rect from the editor view's
+      // `coordsAtPos(range.from)` so the popover always positions.
       render: () => {
         let root: Root | null = null;
         let host: HTMLDivElement | null = null;
         let refObj: { current: WikiLinkTypeaheadRef | null } = { current: null };
 
-        const place = (clientRect: (() => DOMRect | null) | null | undefined) => {
+        const place = (
+          clientRect: (() => DOMRect | null) | null | undefined,
+          editor: TiptapEditor,
+          range: { from: number; to: number },
+        ) => {
           if (!host) return;
-          const rect = clientRect?.() ?? null;
+          let rect = clientRect?.() ?? null;
           if (!rect) {
-            host.style.display = "none";
-            return;
+            // Fallback when the suggestion plugin returned null (decoration
+            // not yet painted). Use the editor view's caret coords.
+            try {
+              const c = editor.view.coordsAtPos(range.from);
+              rect = {
+                top: c.top,
+                bottom: c.bottom,
+                left: c.left,
+                right: c.left,
+                width: 0,
+                height: c.bottom - c.top,
+                x: c.left,
+                y: c.top,
+                toJSON: () => ({}),
+              } as DOMRect;
+            } catch {
+              host.style.display = "none";
+              return;
+            }
           }
           host.style.display = "block";
           // Measure actual menu height so flip-up math reflects the real popover.
@@ -445,7 +472,7 @@ export function NoteEditor({
                 onSelect={(payload) => props.command(payload as never)}
               />,
             );
-            place(props.clientRect);
+            place(props.clientRect, props.editor, props.range);
           },
           onUpdate: (props) => {
             if (!root) return;
@@ -458,7 +485,7 @@ export function NoteEditor({
                 onSelect={(payload) => props.command(payload as never)}
               />,
             );
-            place(props.clientRect);
+            place(props.clientRect, props.editor, props.range);
           },
           onKeyDown: (props) => {
             if (props.event.key === "Escape") {
