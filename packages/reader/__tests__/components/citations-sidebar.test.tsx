@@ -147,251 +147,50 @@ describe("CitationsSidebar — compact CitationCard rendering", () => {
   });
 });
 
-describe("CitationsSidebar — auto-enrich", () => {
-  // GSD-74: trigger uses enrichedAt + DOI, not semanticScholarId. Refs without
-  // DOI are unenrichable via S2 → must not trigger POST.
-  it("POSTs to enrich when any DOI-bearing ref lacks enrichedAt", async () => {
-    const citations = [
-      makeCitation({ id: 1, doi: "10.1/a", enrichedAt: new Date() }),
-      makeCitation({ id: 2, doi: "10.2/b", enrichedAt: null }),
-    ];
+describe("CitationsSidebar — enriching banner (GSD-74 r4)", () => {
+  // Enrichment POST + polling moved to `useCitationEnrichment` (parent-owned).
+  // The sidebar is now a pure view of the `enriching` flag.
+  it("shows enriching banner when `enriching` prop is true", () => {
     render(
       <CitationsSidebar
         paperId={PAPER_ID}
         open={true}
-        citations={citations}
+        citations={[makeCitation()]}
         loading={false}
-      />
+        enriching={true}
+      />,
     );
-    await waitFor(() => {
-      expect(global.fetch).toHaveBeenCalledWith(
-        `/api/papers/${PAPER_ID}/citations/enrich`,
-        expect.objectContaining({ method: "POST", credentials: "include" })
-      );
-    });
+    expect(screen.queryByText(/enriching/i)).not.toBeNull();
   });
 
-  it("does NOT POST when every DOI-bearing ref has enrichedAt set", async () => {
-    const citations = [
-      makeCitation({ id: 1, doi: "10.1/a", enrichedAt: new Date() }),
-      makeCitation({ id: 2, doi: "10.2/b", enrichedAt: new Date() }),
-    ];
+  it("hides enriching banner when `enriching` prop is false", () => {
     render(
       <CitationsSidebar
         paperId={PAPER_ID}
         open={true}
-        citations={citations}
+        citations={[makeCitation()]}
         loading={false}
-      />
+        enriching={false}
+      />,
     );
-    // Wait a tick to confirm no fetch fires
-    await new Promise((r) => setTimeout(r, 50));
-    expect(global.fetch).not.toHaveBeenCalled();
+    expect(screen.queryByText(/enriching/i)).toBeNull();
   });
 
-  it("does NOT POST when unenriched refs have no DOI (S2 needs a resolvable id)", async () => {
-    const citations = [
-      makeCitation({ id: 1, doi: null, enrichedAt: null }),
-      makeCitation({ id: 2, doi: "", enrichedAt: null }),
-    ];
+  it("does NOT POST to /enrich on mount (parent owns enrichment now)", async () => {
+    const citations = [makeCitation({ doi: "10.1/a", enrichedAt: null })];
     render(
       <CitationsSidebar
         paperId={PAPER_ID}
         open={true}
         citations={citations}
         loading={false}
-      />
+      />,
     );
     await new Promise((r) => setTimeout(r, 50));
-    expect(global.fetch).not.toHaveBeenCalled();
-  });
-
-  it("does NOT POST when citations list is empty", async () => {
-    render(
-      <CitationsSidebar
-        paperId={PAPER_ID}
-        open={true}
-        citations={[]}
-        loading={false}
-      />
+    const enrichCalls = (global.fetch as ReturnType<typeof vi.fn>).mock.calls.filter(
+      (c) => typeof c[0] === "string" && (c[0] as string).endsWith("/citations/enrich"),
     );
-    await new Promise((r) => setTimeout(r, 50));
-    expect(global.fetch).not.toHaveBeenCalled();
-  });
-
-  it("calls onExtracted on successful enrich", async () => {
-    const onExtracted = vi.fn();
-    const citations = [makeCitation({ doi: "10.1/needs-enrich", enrichedAt: null })];
-    render(
-      <CitationsSidebar
-        paperId={PAPER_ID}
-        open={true}
-        citations={citations}
-        loading={false}
-        onExtracted={onExtracted}
-      />
-    );
-    await waitFor(() => expect(onExtracted).toHaveBeenCalledTimes(1));
-  });
-
-  it("does NOT fire enrich a second time on re-render", async () => {
-    const citations = [makeCitation({ doi: "10.1/needs-enrich", enrichedAt: null })];
-    const { rerender } = render(
-      <CitationsSidebar
-        paperId={PAPER_ID}
-        open={true}
-        citations={citations}
-        loading={false}
-      />
-    );
-    await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(1));
-
-    // Re-render with same citations
-    rerender(
-      <CitationsSidebar
-        paperId={PAPER_ID}
-        open={true}
-        citations={citations}
-        loading={false}
-      />
-    );
-    await new Promise((r) => setTimeout(r, 50));
-    expect(global.fetch).toHaveBeenCalledTimes(1);
-  });
-
-  it("shows enriching indicator while in flight, hides when done", async () => {
-    // Use a slow fetch to observe the loading state
-    let resolveEnrich!: () => void;
-    const slowFetch = vi.fn(
-      () =>
-        new Promise<Response>((resolve) => {
-          resolveEnrich = () =>
-            resolve({
-              ok: true,
-              json: async () => ({ enriched: 1, total: 1 }),
-            } as Response);
-        })
-    );
-    global.fetch = slowFetch;
-
-    const citations = [makeCitation({ doi: "10.1/needs-enrich", enrichedAt: null })];
-    render(
-      <CitationsSidebar
-        paperId={PAPER_ID}
-        open={true}
-        citations={citations}
-        loading={false}
-      />
-    );
-
-    await waitFor(() =>
-      expect(screen.queryByText(/enriching/i)).not.toBeNull()
-    );
-
-    resolveEnrich();
-
-    await waitFor(() =>
-      expect(screen.queryByText(/enriching/i)).toBeNull()
-    );
-  });
-
-  it("does not crash on fetch error; does not show enriching indicator after error; calls toast.error", async () => {
-    global.fetch = vi.fn().mockRejectedValue(new Error("network fail"));
-    const citations = [makeCitation({ doi: "10.1/needs-enrich", enrichedAt: null })];
-    render(
-      <CitationsSidebar
-        paperId={PAPER_ID}
-        open={true}
-        citations={citations}
-        loading={false}
-      />
-    );
-    await waitFor(() =>
-      expect(screen.queryByText(/enriching/i)).toBeNull()
-    );
-    expect(toast.error).toHaveBeenCalledTimes(1);
-  });
-
-  it("fires enrich again when paperId changes", async () => {
-    const PAPER_ID_A = "00000000-0000-0000-0000-000000000001";
-    const PAPER_ID_B = "00000000-0000-0000-0000-000000000002";
-    const citations = [makeCitation({ doi: "10.1/needs-enrich", enrichedAt: null })];
-    const { rerender } = render(
-      <CitationsSidebar
-        paperId={PAPER_ID_A}
-        open={true}
-        citations={citations}
-        loading={false}
-      />
-    );
-    await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(1));
-
-    rerender(
-      <CitationsSidebar
-        paperId={PAPER_ID_B}
-        open={true}
-        citations={citations}
-        loading={false}
-      />
-    );
-    await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(2));
-    expect(global.fetch).toHaveBeenNthCalledWith(
-      2,
-      `/api/papers/${PAPER_ID_B}/citations/enrich`,
-      expect.objectContaining({ method: "POST" })
-    );
-  });
-
-  it("does not call onExtracted if panel closes before fetch resolves", async () => {
-    let capturedSignal!: AbortSignal;
-    let resolveEnrich!: () => void;
-    global.fetch = vi.fn(
-      (_url: URL | RequestInfo, opts?: RequestInit) => {
-        capturedSignal = opts?.signal as AbortSignal;
-        return new Promise<Response>((resolve, reject) => {
-          resolveEnrich = () => {
-            if (capturedSignal?.aborted) {
-              reject(Object.assign(new Error("AbortError"), { name: "AbortError" }));
-            } else {
-              resolve({ ok: true, json: async () => ({ enriched: 1, total: 1 }) } as Response);
-            }
-          };
-          capturedSignal?.addEventListener("abort", () =>
-            reject(Object.assign(new Error("AbortError"), { name: "AbortError" }))
-          );
-        });
-      }
-    );
-
-    const onExtracted = vi.fn();
-    const citations = [makeCitation({ doi: "10.1/needs-enrich", enrichedAt: null })];
-
-    const { rerender } = render(
-      <CitationsSidebar
-        paperId={PAPER_ID}
-        open={true}
-        citations={citations}
-        loading={false}
-        onExtracted={onExtracted}
-      />
-    );
-
-    await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(1));
-
-    // Close the panel — triggers effect cleanup → controller.abort()
-    rerender(
-      <CitationsSidebar
-        paperId={PAPER_ID}
-        open={false}
-        citations={citations}
-        loading={false}
-        onExtracted={onExtracted}
-      />
-    );
-
-    // Wait for abort to propagate then confirm onExtracted not called
-    await new Promise((r) => setTimeout(r, 50));
-    expect(onExtracted).not.toHaveBeenCalled();
+    expect(enrichCalls).toHaveLength(0);
   });
 });
 
