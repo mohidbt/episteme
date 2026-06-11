@@ -27,7 +27,8 @@ def test_all_tools_count():
     # and the 6 drive_ops (move/rename/delete × paper/folder).
     # 37 -> 45 in GSD-55: paper_citations pipeline (8 tools).
     # 45 -> 46 in GSD-70: list_revisions (companion to diff_revision).
-    assert len(ALL_TOOLS) == 46, f"Expected 46, got {len(ALL_TOOLS)}"
+    # 46 -> 47: create_folder (drive ops parity with create_note).
+    assert len(ALL_TOOLS) == 47, f"Expected 47, got {len(ALL_TOOLS)}"
 
 
 def test_all_tools_are_base_tool():
@@ -87,6 +88,7 @@ def test_all_tools_contains_expected_names():
         "move_folder",                  # GSD-57
         "rename_folder",                # GSD-57
         "delete_folder",                # GSD-57
+        "create_folder",
         # GSD-55 — citation pipeline.
         "list_paper_citations",
         "list_paper_citation_edges",
