@@ -36,9 +36,23 @@ export default async function ReferencePage({
     library ? listAllFolders(library.id, userId) : Promise.resolve([]),
   ]);
 
-  const displayTitle =
-    denormaliseForList(validateCslJson(ref.cslJson)).title.trim() ||
-    ref.citationKey;
+  // GSD-43 follow-up: refs created via the sidebar "+" button may have a
+  // minimal cslJson ({type, title}) without an `id` field, which makes
+  // validateCslJson throw. Fall back to citationKey rather than crashing
+  // the entire Server Component.
+  let displayTitle = ref.citationKey;
+  try {
+    const csl = validateCslJson(ref.cslJson);
+    displayTitle = denormaliseForList(csl).title.trim() || ref.citationKey;
+  } catch {
+    const rawTitle =
+      typeof ref.cslJson === "object" &&
+      ref.cslJson !== null &&
+      typeof (ref.cslJson as { title?: unknown }).title === "string"
+        ? ((ref.cslJson as { title: string }).title.trim() || "")
+        : "";
+    displayTitle = rawTitle || ref.citationKey;
+  }
 
   return (
     <div className="mx-auto max-w-3xl p-6">
