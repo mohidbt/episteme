@@ -365,6 +365,20 @@
       "when": 1781395200000,
       "tag": "0051_drop_citation_enrichment_jobs",
       "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "7",
+      "when": 1781481600000,
+      "tag": "0052_papers_chunks_ready_at",
+      "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1781568000000,
+      "tag": "0053_document_chunks_unique_paper_index",
+      "breakpoints": true
     }
   ]
 }

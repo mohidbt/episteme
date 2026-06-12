@@ -39,12 +39,26 @@ async def embed_chunks(
         (body.paperId, c.chunkIndex, c.content, c.pageStart, c.pageEnd, c.tokenCount, v)
         for c, v in zip(body.chunks, vecs)
     ]
-    await conn.executemany(
-        """
-        INSERT INTO document_chunks
-          (paper_id, chunk_index, content, page_start, page_end, token_count, embedding)
-        VALUES ($1,$2,$3,$4,$5,$6,$7)
-        """,
-        rows,
-    )
+    # GSD-96 R1 fix: INSERT + UPDATE wrapped in a single transaction so the
+    # signal stamp is atomic with the chunk write (crash between leaves both
+    # unset, not orphaned chunks w/ a missing signal). ON CONFLICT DO NOTHING
+    # gives idempotency on retry — paired with UNIQUE (paper_id, chunk_index)
+    # added in 0053_document_chunks_unique_paper_index.sql.
+    async with conn.transaction():
+        await conn.executemany(
+            """
+            INSERT INTO document_chunks
+              (paper_id, chunk_index, content, page_start, page_end, token_count, embedding)
+            VALUES ($1,$2,$3,$4,$5,$6,$7)
+            ON CONFLICT (paper_id, chunk_index) DO NOTHING
+            """,
+            rows,
+        )
+        # Stamp chunks_ready_at once chunks + embeddings persist (both land
+        # in the same INSERT above, so this single UPDATE is the canonical
+        # "paper is RAG-ready" signal). Consumed by GET /api/papers/[id]/ingest-status.
+        await conn.execute(
+            "UPDATE papers SET chunks_ready_at = now() WHERE id = $1",
+            body.paperId,
+        )
     return EmbedChunksResponse(inserted=len(rows))

@@ -35,6 +35,7 @@ const basePaper = {
   sizeBytes: 1234,
   chandraStatus: "pending" as const,
   chandraCompletedAt: null,
+  chunksReadyAt: null,
   addedAt: new Date(),
   updatedAt: new Date(),
 };

@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, serial, integer, uuid, index, vector } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, serial, integer, uuid, index, uniqueIndex, vector } from "drizzle-orm/pg-core";
 import { papers } from "./papers";
 import { documentSections } from "./document-sections";
 
@@ -18,6 +18,11 @@ export const documentChunks = pgTable(
   },
   (table) => [
     index("document_chunks_paper_idx").on(table.paperId),
+    // GSD-96 R1 fix: idempotency guard for /agents/embed-chunks retries.
+    uniqueIndex("document_chunks_paper_chunk_idx_unique").on(
+      table.paperId,
+      table.chunkIndex,
+    ),
     index("document_chunks_embedding_idx")
       .using("ivfflat", table.embedding.op("vector_cosine_ops"))
       .with({ lists: 100 }),

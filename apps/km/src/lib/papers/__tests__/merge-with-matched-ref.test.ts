@@ -21,6 +21,7 @@ function makePaper(overrides: Partial<Record<string, unknown>> = {}) {
     abstractShort: null,
     chandraStatus: "pending" as const,
     chandraCompletedAt: null,
+    chunksReadyAt: null,
     sizeBytes: 0,
     addedAt: NOW,
     updatedAt: NOW,

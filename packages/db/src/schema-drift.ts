@@ -484,6 +484,24 @@ export async function runDbChecks(databaseUrl: string): Promise<DbCheckSummary> 
             where table_schema = 'public' and table_name = 'signup_waitlist' and column_name = 'updated_at'
           ),
           'required for waitlist audit metadata'
+        union all
+        select
+          'papers.chunks_ready_at_exists'::text as check_name,
+          exists (
+            select 1 from information_schema.columns
+            where table_schema = 'public' and table_name = 'papers' and column_name = 'chunks_ready_at'
+          ),
+          'GSD-96 R1: canonical RAG-ready signal stamped by /agents/embed-chunks'
+        union all
+        select
+          'document_chunks.paper_chunk_unique_index_exists'::text as check_name,
+          exists (
+            select 1 from pg_indexes
+            where schemaname = 'public'
+              and tablename = 'document_chunks'
+              and indexname = 'document_chunks_paper_chunk_idx_unique'
+          ),
+          'GSD-96 R1 fix: UNIQUE (paper_id, chunk_index) for embed-chunks idempotency'
       )
       select check_name, ok, details from checks
     `;

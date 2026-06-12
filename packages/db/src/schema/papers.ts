@@ -28,6 +28,7 @@ export const papers = pgTable(
       .notNull()
       .default("pending"),
     chandraCompletedAt: timestamp("chandra_completed_at", { withTimezone: true }),
+    chunksReadyAt: timestamp("chunks_ready_at", { withTimezone: true }),
   },
   (t) => [
     index("papers_library_idx").on(t.libraryId),

@@ -28,4 +28,11 @@ describe("papers schema — chandra columns", () => {
     expect(col?.columnType).toBe("PgTimestamp");
     expect(col?.notNull).toBe(false);
   });
+
+  it("has chunks_ready_at column (timestamptz nullable) — GSD-96 R1", () => {
+    const col = config.columns.find((c) => c.name === "chunks_ready_at");
+    expect(col).toBeDefined();
+    expect(col?.columnType).toBe("PgTimestamp");
+    expect(col?.notNull).toBe(false);
+  });
 });
