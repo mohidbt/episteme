@@ -259,6 +259,22 @@ export async function moveToTrash(opts: {
     folderId: trashId,
     prevFolderId: row.folderId,
   }).where(eq(t.id, opts.target.id));
+  // GSD-97: paper trash drags its ref-twin (paperId-linked) along so the
+  // hidden reference doesn't outlive its paper. Mirrors moveItemToFolder.
+  if (opts.target.kind === "paper") {
+    const twins = await db.select({
+      id: references_.id, folderId: references_.folderId,
+    }).from(references_).where(and(
+      eq(references_.userId, opts.userId),
+      eq(references_.paperId, opts.target.id),
+    ));
+    for (const tw of twins) {
+      await db.update(references_).set({
+        folderId: trashId,
+        prevFolderId: tw.folderId,
+      }).where(eq(references_.id, tw.id));
+    }
+  }
 }
 
 export async function restoreFromTrash(opts: {
@@ -278,6 +294,25 @@ export async function restoreFromTrash(opts: {
     folderId: row.prevFolderId ?? null,
     prevFolderId: null,
   }).where(eq(t.id, opts.target.id));
+  // GSD-97: paper restore brings its ref-twin back to the twin's own prev
+  // folder. Only restore twins currently in trash (folderId = trashId);
+  // legacy/manual states where the twin was elsewhere are left untouched.
+  if (opts.target.kind === "paper") {
+    const trashId = await getTrashFolderId(opts.libraryId, opts.userId);
+    const twins = await db.select({
+      id: references_.id, prev: references_.prevFolderId,
+    }).from(references_).where(and(
+      eq(references_.userId, opts.userId),
+      eq(references_.paperId, opts.target.id),
+      eq(references_.folderId, trashId),
+    ));
+    for (const tw of twins) {
+      await db.update(references_).set({
+        folderId: tw.prev ?? null,
+        prevFolderId: null,
+      }).where(eq(references_.id, tw.id));
+    }
+  }
 }
 
 export async function emptyTrash(opts: { libraryId: number; userId: string }): Promise<void> {
