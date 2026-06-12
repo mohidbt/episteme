@@ -76,6 +76,11 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { ChatComposer, type ChatComposerHandle } from "./ChatComposer";
 import { LibTokenizedText } from "./LibTokenizedText";
+import { PdfAnchorPill } from "./PdfAnchorPill";
+import {
+  replacePdfTokensWithLinks,
+  parsePdfSentinelHref,
+} from "@/lib/agent/pdf-tokens";
 import {
   ListChecksIcon,
   ChevronDownIcon,
@@ -96,11 +101,15 @@ import {
 import { humanizeToolName } from "@/lib/agents/tool-categories";
 import { ChatCodePre } from "./ChatCodePre";
 import { ChatTable } from "./ChatTable";
+import type { ExtraProps } from "streamdown";
 
 // #21 — replace Streamdown's built-in code-block toolbar (copy + download)
 // with our own renderer that exposes Copy + Add to library. Tables get a
 // matching hover toolbar (Copy as TSV + Download as CSV).
-const chatStreamdownComponents = { pre: ChatCodePre, table: ChatTable };
+const chatStreamdownComponents: import("streamdown").Components = {
+  pre: ChatCodePre as unknown as import("streamdown").Components["pre"],
+  table: ChatTable as unknown as import("streamdown").Components["table"],
+};
 
 export interface AgentTranscriptProps {
   threadId: string;
@@ -938,13 +947,39 @@ function TextCardView({
           {card.role === "user" ? (
             <LibTokenizedText text={stripBlankRows(card.text)} />
           ) : (
-            /* RG3 #58 — assistant prose paragraphs use leading-snug (1.375). */
+            /* RG3 #58 — assistant prose paragraphs use leading-snug (1.375).
+               GSD-100 — pre-rewrite `[[pdf:UUID#pN]]` tokens into sentinel
+               markdown links so a single Streamdown pass keeps prose
+               structure; a custom `a` renderer intercepts the sentinel
+               href and emits a PdfAnchorPill that routes through the
+               existing citation-click handler. */
             <MessageResponse
               className="[&_p]:leading-snug"
               controls={false}
-              components={chatStreamdownComponents}
+              components={{
+                ...chatStreamdownComponents,
+                a: (
+                  props: React.AnchorHTMLAttributes<HTMLAnchorElement> &
+                    ExtraProps,
+                ) => {
+                  const anchor = parsePdfSentinelHref(props.href);
+                  if (anchor) {
+                    return (
+                      <PdfAnchorPill
+                        paperId={anchor.paperId}
+                        page={anchor.page}
+                        onClick={onCitationClick}
+                      />
+                    );
+                  }
+                  const { node: _node, ...rest } = props;
+                  void _node;
+                  // eslint-disable-next-line jsx-a11y/anchor-has-content
+                  return <a {...rest} />;
+                },
+              }}
             >
-              {stripBlankRows(card.text)}
+              {replacePdfTokensWithLinks(stripBlankRows(card.text))}
             </MessageResponse>
           )}
         </MessageContent>
