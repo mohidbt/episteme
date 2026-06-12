@@ -121,6 +121,7 @@ export default async function NotePage({
       )}
       <NotePageClient
         id={note.id}
+        libraryId={note.libraryId}
         title={note.title}
         initialMd={prepareNoteContent(note.contentMd ?? "")}
         resolvedLinks={resolvedLinks}

@@ -29,11 +29,13 @@ vi.mock("@/components/VersionDrawer", () => ({ VersionDrawer: () => null }));
 vi.mock("@/components/AskNotesPanel", () => ({ AskNotesPanel: () => null }));
 vi.mock("@/components/PublishDialog", () => ({ PublishDialog: () => null }));
 vi.mock("@/components/DownloadButton", () => ({ DownloadButton: () => null }));
+vi.mock("@/components/DeleteToTrashButton", () => ({ DeleteToTrashButton: () => null }));
 
 import { NotePageClient } from "./NotePageClient";
 
 const baseProps = {
   id: "note-1",
+  libraryId: 1,
   title: "Hello",
   initialMd: "",
   initialUsername: null,
