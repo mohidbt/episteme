@@ -55,7 +55,9 @@ describe("PublishDialog (under construction)", () => {
     expect(banner.textContent ?? "").toMatch(/under construction/i);
   });
 
-  it("shows username-claim form when initialUsername is null, but Claim is disabled", async () => {
+  it("does not render an in-dialog username-claim form when initialUsername is null (GSD-95)", async () => {
+    // GSD-95: username now always comes from signup. The PublishDialog
+    // must not offer an inline username-claim form.
     mockFetch(() => new Response("nope", { status: 404 }));
     render(
       <PublishDialog
@@ -68,9 +70,8 @@ describe("PublishDialog (under construction)", () => {
     );
     openDialog();
     await waitFor(() => expect(screen.getByRole("dialog")).toBeTruthy());
-    expect(screen.getByTestId("username-input")).toBeTruthy();
-    const claim = screen.getByTestId("claim-username") as HTMLButtonElement;
-    expect(claim.disabled).toBe(true);
+    expect(screen.queryByTestId("username-input")).toBeNull();
+    expect(screen.queryByTestId("claim-username")).toBeNull();
   });
 
   it("renders URL preview from username + publicSlug", async () => {
