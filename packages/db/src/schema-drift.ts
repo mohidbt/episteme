@@ -502,6 +502,24 @@ export async function runDbChecks(databaseUrl: string): Promise<DbCheckSummary> 
               and indexname = 'document_chunks_paper_chunk_idx_unique'
           ),
           'GSD-96 R1 fix: UNIQUE (paper_id, chunk_index) for embed-chunks idempotency'
+        union all
+        select
+          'user_library_recents.user_library_recents_user_id_user_id_fk'::text as check_name,
+          exists (
+            -- information_schema.table_constraints hides FK rows from roles that
+            -- only hold SELECT on the table (Postgres docs: "any privilege other
+            -- than SELECT"). predeploy_ro has only SELECT on user_library_recents
+            -- via 0038's ALTER DEFAULT PRIVILEGES, so we query pg_constraint
+            -- directly — it's visible to anyone with USAGE on the schema.
+            select 1 from pg_constraint c
+            join pg_class t on t.oid = c.conrelid
+            join pg_namespace n on n.oid = t.relnamespace
+            where n.nspname = 'public'
+              and t.relname = 'user_library_recents'
+              and c.conname = 'user_library_recents_user_id_user_id_fk'
+              and c.contype = 'f'
+          ),
+          'GSD-96 R3: user_library_recents.user_id FK to user.id (cascade on delete)'
       )
       select check_name, ok, details from checks
     `;

@@ -379,6 +379,20 @@
       "when": 1781568000000,
       "tag": "0053_document_chunks_unique_paper_index",
       "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1781654400000,
+      "tag": "0054_user_library_recents",
+      "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "7",
+      "when": 1781740800000,
+      "tag": "0055_user_library_recents_fk_fix",
+      "breakpoints": true
     }
   ]
 }

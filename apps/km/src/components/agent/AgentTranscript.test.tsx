@@ -1,12 +1,20 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
-  render,
+  render as rtlRender,
   screen,
   cleanup,
   fireEvent,
   waitFor,
 } from "@testing-library/react";
+import { DndContext } from "@dnd-kit/core";
+import type { ReactElement } from "react";
+
+// GSD-96 R3-B: AgentTranscript now mounts ChatComposer which uses
+// useDndMonitor, so all renders must be wrapped in a DndContext.
+function render(ui: ReactElement, options?: Parameters<typeof rtlRender>[1]) {
+  return rtlRender(<DndContext>{ui}</DndContext>, options);
+}
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({
@@ -905,11 +913,16 @@ describe("AgentTranscript", () => {
   it("Task #10: input row centers textarea with items-center and equal padding (G9)", () => {
     render(<AgentTranscript threadId="t-align" />);
     const ta = screen.getByLabelText("Message agent") as HTMLTextAreaElement;
-    const row = ta.parentElement!;
-    expect(row.className).toContain("flex");
-    expect(row.className).toContain("items-center");
+    // GSD-96 R3-B: ChatComposer wraps the textarea in its own relative div,
+    // so the input row (paperclip + composer + Send) is now an ancestor —
+    // not parentElement. Walk up to find the flex row with p-2.
+    let row: HTMLElement | null = ta.parentElement;
+    while (row && !/\bitems-center\b/.test(row.className)) row = row.parentElement;
+    expect(row).toBeTruthy();
+    expect(row!.className).toContain("flex");
+    expect(row!.className).toContain("items-center");
     // equal L/R padding via single p-* token (e.g. p-2) — not split px-/py-
-    expect(/\bp-2\b/.test(row.className)).toBe(true);
+    expect(/\bp-2\b/.test(row!.className)).toBe(true);
   });
 
   it("Task #33: successful tool card has no Check icon and Tool collapsed by default (G9)", async () => {

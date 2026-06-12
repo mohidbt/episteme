@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { after } from "next/server";
 import { getRequiredUserId } from "@/lib/session";
+import { touchRecent } from "@/lib/library/touch-recents";
 import { getDefaultLibrary } from "@/lib/default-library";
 import { listAllFolders } from "@/lib/folders-server";
 import { getReference, listPapersInLibrary } from "@/lib/references-server";
@@ -28,6 +30,11 @@ export default async function ReferencePage({
     findIdentityPaperForReference(referenceId, userId),
   ]);
   if (!ref) notFound();
+
+  // GSD-96 R3 — fire-and-forget recents touch (powers @-picker empty state).
+  after(() =>
+    touchRecent({ userId, kind: "reference", itemId: ref.id, swallow: true }),
+  );
 
   // O2: manual attach picker needs the user's library papers. Only fetch when
   // we'll actually render the picker (identity not yet established).

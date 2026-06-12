@@ -1,4 +1,9 @@
 // @vitest-environment jsdom
+// GSD-27 — file upload + GSD-96 R3-B wiring: AgentTranscript now mounts
+// ChatComposer (which uses useDndMonitor), so render() wraps in DndContext.
+// Tests still assert OBSERVABLE behavior — chips render, toasts fire, the
+// network upload flow runs and the final outbound text contains the file
+// token — not inner textarea implementation.
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   render,
@@ -8,6 +13,7 @@ import {
   waitFor,
   act,
 } from "@testing-library/react";
+import { DndContext } from "@dnd-kit/core";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({
@@ -49,7 +55,7 @@ function makeFile(name: string, type: string, size = 100): File {
 
 describe("AgentTranscript — file upload (GSD-27)", () => {
   it("renders a paperclip attach button with hidden file input", () => {
-    render(<AgentTranscript threadId="t1" />);
+    render(<DndContext><AgentTranscript threadId="t1" /></DndContext>);
     const attach = screen.getByRole("button", { name: /attach file/i });
     expect(attach).toBeTruthy();
     const input = screen.getByTestId("chat-file-input") as HTMLInputElement;
@@ -57,7 +63,7 @@ describe("AgentTranscript — file upload (GSD-27)", () => {
   });
 
   it("drops a supported image file onto chat input and renders a chip", async () => {
-    render(<AgentTranscript threadId="t1" />);
+    render(<DndContext><AgentTranscript threadId="t1" /></DndContext>);
     const dropzone = screen.getByTestId("chat-input-dropzone");
     const file = makeFile("photo.png", "image/png");
     await act(async () => {
@@ -70,7 +76,7 @@ describe("AgentTranscript — file upload (GSD-27)", () => {
   });
 
   it("rejects unsupported file types with a toast and renders no chip", async () => {
-    render(<AgentTranscript threadId="t1" />);
+    render(<DndContext><AgentTranscript threadId="t1" /></DndContext>);
     const dropzone = screen.getByTestId("chat-input-dropzone");
     const file = makeFile("evil.exe", "application/x-msdownload");
     await act(async () => {
@@ -83,7 +89,7 @@ describe("AgentTranscript — file upload (GSD-27)", () => {
   });
 
   it("removes a chip when its remove button is clicked", async () => {
-    render(<AgentTranscript threadId="t1" />);
+    render(<DndContext><AgentTranscript threadId="t1" /></DndContext>);
     const dropzone = screen.getByTestId("chat-input-dropzone");
     const file = makeFile("photo.png", "image/png");
     await act(async () => {
@@ -124,7 +130,7 @@ describe("AgentTranscript — file upload (GSD-27)", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     const sent = vi.fn();
-    render(<AgentTranscript threadId="t1" onSendMessage={sent} />);
+    render(<DndContext><AgentTranscript threadId="t1" onSendMessage={sent} /></DndContext>);
     const dropzone = screen.getByTestId("chat-input-dropzone");
     const file = makeFile("photo.png", "image/png");
     await act(async () => {

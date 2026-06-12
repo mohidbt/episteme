@@ -74,6 +74,7 @@ import {
   AlertDescription,
 } from "@/components/ui/alert";
 import { Textarea } from "@/components/ui/textarea";
+import { ChatComposer, type ChatComposerHandle } from "./ChatComposer";
 import {
   ListChecksIcon,
   ChevronDownIcon,
@@ -317,10 +318,9 @@ export function AgentTranscript({
       return { ...base, cards, sourcesByMessage };
     },
   );
-  const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
-  const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  const composerRef = useRef<ChatComposerHandle | null>(null);
   const { attachments, addFiles, removeAttachment, clear, uploadAll } =
     useChatAttachments();
   const agentBall = useAgentBallOptional();
@@ -491,19 +491,13 @@ export function AgentTranscript({
   // (AgentBall) keys the AgentTranscript on threadId, so on every re-open with
   // a fresh thread this effect re-runs. requestAnimationFrame defers until
   // after the panel transitions in, avoiding browser focus-loss on layout.
-  useEffect(() => {
-    const id = requestAnimationFrame(() => {
-      inputRef.current?.focus();
-    });
-    return () => cancelAnimationFrame(id);
-  }, []);
+  // ChatComposer manages focus internally via autoFocus.
 
   const handleSend = useCallback(
     (textArg?: string) => {
-      const rawText = (textArg ?? input).trim();
+      const rawText = (textArg ?? composerRef.current?.getText() ?? "").trim();
       const hasAttachments = attachments.length > 0;
       if (!rawText && !hasAttachments) return;
-      if (textArg === undefined) setInput("");
 
       // Fast path — no attachments to upload.
       if (!hasAttachments) {
@@ -522,7 +516,7 @@ export function AgentTranscript({
         else void defaultSend(finalText);
       })();
     },
-    [input, onSendMessage, defaultSend, attachments, uploadAll, clear],
+    [onSendMessage, defaultSend, attachments, uploadAll, clear],
   );
 
   // Task #45: fork conversation at a prior user message. Truncates the
@@ -775,26 +769,18 @@ export function AgentTranscript({
         <AttachmentChips attachments={attachments} onRemove={removeAttachment} />
         <div className="p-2 flex items-center gap-2">
           <PaperclipButton onFiles={addFiles} />
-          <Textarea
-            ref={inputRef}
-            autoFocus
-            className="min-h-9 max-h-48 resize-none py-1.5 text-sm"
-            placeholder="Ask anything"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                handleSend();
-              }
-            }}
-            rows={1}
-            aria-label="Message agent"
-          />
+          <div className="flex-1 min-w-0">
+            <ChatComposer
+              ref={composerRef}
+              onSubmit={({ text }) => handleSend(text)}
+              streaming={streaming}
+              placeholder="Ask anything"
+            />
+          </div>
           <button
             type="button"
-            onClick={() => handleSend()}
-            disabled={(!input.trim() && attachments.length === 0) || streaming}
+            onClick={() => composerRef.current?.submit()}
+            disabled={streaming}
             className="rounded-md bg-primary px-3 py-1.5 text-sm text-primary-foreground disabled:opacity-50"
           >
             Send

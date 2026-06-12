@@ -1,5 +1,7 @@
 import { notFound } from "next/navigation";
+import { after } from "next/server";
 import { eq, inArray } from "drizzle-orm";
+import { touchRecent } from "@/lib/library/touch-recents";
 import Link from "next/link";
 import { Download } from "lucide-react";
 import { db } from "@/lib/db";
@@ -29,6 +31,11 @@ export default async function PapersetPage({
 
   const [ps] = await db.select().from(papersets).where(eq(papersets.id, id)).limit(1);
   if (!ps || ps.userId !== userId) notFound();
+
+  // GSD-96 R3 — fire-and-forget recents touch (powers @-picker empty state).
+  after(() =>
+    touchRecent({ userId, kind: "paperset", itemId: ps.id, swallow: true }),
+  );
 
   // Hide papersets sitting inside the trash folder (mirrors paper-page behaviour).
   const folderChain = await getFolderChain(ps.folderId, userId);

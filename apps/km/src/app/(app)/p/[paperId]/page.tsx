@@ -3,7 +3,9 @@ import { eq } from "drizzle-orm";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { BookMarked, BookOpen, Download } from "lucide-react";
+import { after } from "next/server";
 import { getRequiredUserId } from "@/lib/session";
+import { touchRecent } from "@/lib/library/touch-recents";
 import { db } from "@/lib/db";
 import { papers, documentReferences } from "@episteme/db/schema";
 import { sql } from "drizzle-orm";
@@ -49,6 +51,11 @@ export default async function PaperPage({
   const { paperId } = await params;
   const paper = await loadPaper(paperId, userId);
   if (!paper) notFound();
+
+  // GSD-96 R3 — fire-and-forget recents touch (powers @-picker empty state).
+  after(() =>
+    touchRecent({ userId, kind: "paper", itemId: paper.id, swallow: true }),
+  );
 
   const [library, refs, papersetCount, papersetList, citationCountRows, alreadyReferenced] = await Promise.all([
     getDefaultLibrary(userId),

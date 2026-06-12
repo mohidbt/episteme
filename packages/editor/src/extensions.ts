@@ -140,6 +140,13 @@ export interface CollabOptions {
 export function editorExtensions(opts?: {
   placeholder?: string;
   wikiLinkSuggestion?: WikiLinkSuggestion;
+  /**
+   * Trigger string for the WikiLink Suggestion plugin. Defaults to `"[["` so
+   * the existing NoteEditor call-site keeps working unchanged. Round B
+   * (GSD-96 Tiptap @-picker) sets this to `"@"` to reuse the same suggestion
+   * stack for ChatComposer mentions.
+   */
+  wikiLinkTriggerChar?: string;
   slashCommandSuggestion?: SlashCommandSuggestion;
   collab?: CollabOptions;
   fileUpload?: FileUploadOptions;
@@ -157,7 +164,7 @@ export function editorExtensions(opts?: {
             Suggestion({
               ...opts.wikiLinkSuggestion,
               editor: this.editor,
-              char: "[[",
+              char: opts.wikiLinkTriggerChar ?? "[[",
             }),
           ];
         },

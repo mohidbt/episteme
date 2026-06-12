@@ -5,7 +5,9 @@ export const dynamic = "force-dynamic";
 
 import { and, eq, sql } from "drizzle-orm";
 import { notFound } from "next/navigation";
+import { after } from "next/server";
 import { getRequiredUserId } from "@/lib/session";
+import { touchRecent } from "@/lib/library/touch-recents";
 import { db } from "@/lib/db";
 import { noteLinks, notes, papers, references_, user } from "@episteme/db/schema";
 import { getDefaultLibrary } from "@/lib/default-library";
@@ -28,6 +30,11 @@ export default async function NotePage({
     .from(notes)
     .where(and(eq(notes.userId, userId), eq(notes.slug, slug)));
   if (!note) notFound();
+
+  // GSD-96 R3 — fire-and-forget recents touch (powers @-picker empty state).
+  after(() =>
+    touchRecent({ userId, kind: "note", itemId: note.id, swallow: true }),
+  );
 
   const [me] = await db
     .select({

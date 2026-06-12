@@ -81,6 +81,38 @@ describe("schema drift critical check mapping", () => {
     );
   });
 
+  it("includes user_library_recents FK check", () => {
+    const checks = mapCriticalCheckRows([
+      {
+        check_name: "user_library_recents.user_library_recents_user_id_user_id_fk",
+        ok: true,
+        details: "ok",
+      },
+    ]);
+    expect(checks.map((c) => c.name)).toContain(
+      "user_library_recents.user_library_recents_user_id_user_id_fk",
+    );
+  });
+
+  it("queries the user_library_recents FK via pg_constraint (predeploy_ro-visible)", async () => {
+    // Regression: information_schema.table_constraints hides FK rows from roles
+    // with only SELECT (Postgres docs). predeploy_ro hits exactly that and the
+    // FK check went red despite the constraint being present in prod. Source
+    // SQL must use pg_constraint so the check is visibility-robust.
+    const fs = await import("node:fs");
+    const path = await import("node:path");
+    const src = fs.readFileSync(
+      path.resolve(__dirname, "../schema-drift.ts"),
+      "utf8",
+    );
+    const fkSectionMatch = src.match(
+      /user_library_recents_user_id_user_id_fk[\s\S]{0,800}/,
+    );
+    expect(fkSectionMatch).not.toBeNull();
+    expect(fkSectionMatch![0]).toContain("from pg_constraint");
+    expect(fkSectionMatch![0]).not.toMatch(/from information_schema\.table_constraints/);
+  });
+
   it("includes papers storage_url contract checks", () => {
     const checks = mapCriticalCheckRows([
       { check_name: "papers.storage_url_present_for_parse_active_rows", ok: false, details: "2 rows" },
