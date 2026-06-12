@@ -173,3 +173,125 @@ def test_data_tools_exported():
 
     names = {t.name for t in data.TOOLS}
     assert names == {"browse_papersets", "csv_read", "csv_write_cell"}
+
+
+# ---------------------------------------------------------------------------
+# GSD-102 Bug 1 — chat-path csv_write_cell must parse the SSE stream
+# rather than blindly returning "ok" for any 2xx response.
+# ---------------------------------------------------------------------------
+
+
+def _sse_response(body: bytes):
+    class Resp:
+        is_success = True
+        status_code = 200
+
+        async def aread(self_inner):  # noqa: N805
+            return body
+
+    return Resp()
+
+
+@pytest.mark.asyncio
+async def test_csv_write_cell_returns_error_on_cell_failed_event(monkeypatch):
+    """KM /enrich SSE returns 200 even when the underlying agent fails to
+    write any cell. The chat-path tool must surface cell_failed instead of
+    silently reporting "ok" (GSD-102 bug 1)."""
+    from tools import data  # noqa: PLC0415
+
+    sse = (
+        b"event: cell_started\ndata: {\"row\":0,\"col\":\"n_subjects\"}\n\n"
+        b"event: cell_failed\ndata: {\"row\":0,\"col\":\"n_subjects\","
+        b"\"error\":\"agent did not write cell\"}\n\n"
+        b"event: done\ndata: {\"filled\":0,\"failed\":1}\n\n"
+    )
+
+    async def fake_post(url, *, content, headers):
+        return _sse_response(sse)
+
+    monkeypatch.setattr(data.km_http, "_km_base_url", lambda: "http://km", raising=True)
+    monkeypatch.setattr(data.km_http, "_auth_headers", lambda *args: {"auth": "ok"}, raising=True)
+    monkeypatch.setattr(data.km_http._client, "post", fake_post, raising=True)
+
+    out = await data.csv_write_cell.ainvoke(
+        {
+            "file_id": FILE_ID,
+            "row": 0,
+            "col": "n_subjects",
+            "value": "42",
+            "grounding": {"paper_id": "p-1", "block_ids": []},
+        },
+        config=CFG,
+    )
+
+    assert isinstance(out, str)
+    assert out != "ok"
+    assert "error" in out.lower()
+    assert "agent did not write cell" in out
+
+
+@pytest.mark.asyncio
+async def test_csv_write_cell_returns_error_on_sse_error_event(monkeypatch):
+    """KM sseError() returns 200 with `event: error` (e.g. agents_url_missing).
+    Chat-path tool must surface the error, not return "ok"."""
+    from tools import data  # noqa: PLC0415
+
+    sse = (
+        b"event: error\ndata: {\"code\":\"agents_url_missing\","
+        b"\"message\":\"AGENTS_URL is not configured for this deployment\"}\n\n"
+    )
+
+    async def fake_post(url, *, content, headers):
+        return _sse_response(sse)
+
+    monkeypatch.setattr(data.km_http, "_km_base_url", lambda: "http://km", raising=True)
+    monkeypatch.setattr(data.km_http, "_auth_headers", lambda *args: {"auth": "ok"}, raising=True)
+    monkeypatch.setattr(data.km_http._client, "post", fake_post, raising=True)
+
+    out = await data.csv_write_cell.ainvoke(
+        {
+            "file_id": FILE_ID,
+            "row": 0,
+            "col": "n_subjects",
+            "value": "42",
+            "grounding": {"paper_id": "p-1", "block_ids": []},
+        },
+        config=CFG,
+    )
+
+    assert isinstance(out, str)
+    assert out != "ok"
+    assert "agents_url_missing" in out
+
+
+@pytest.mark.asyncio
+async def test_csv_write_cell_returns_ok_when_done_filled(monkeypatch):
+    """Happy path: done event reports filled>=1, failed==0 → return "ok"."""
+    from tools import data  # noqa: PLC0415
+
+    sse = (
+        b"event: cell_started\ndata: {\"row\":0,\"col\":\"n_subjects\"}\n\n"
+        b"event: cell_update\ndata: {\"row\":0,\"col\":\"n_subjects\","
+        b"\"value\":\"42\",\"grounding\":{}}\n\n"
+        b"event: done\ndata: {\"filled\":1,\"failed\":0}\n\n"
+    )
+
+    async def fake_post(url, *, content, headers):
+        return _sse_response(sse)
+
+    monkeypatch.setattr(data.km_http, "_km_base_url", lambda: "http://km", raising=True)
+    monkeypatch.setattr(data.km_http, "_auth_headers", lambda *args: {"auth": "ok"}, raising=True)
+    monkeypatch.setattr(data.km_http._client, "post", fake_post, raising=True)
+
+    out = await data.csv_write_cell.ainvoke(
+        {
+            "file_id": FILE_ID,
+            "row": 0,
+            "col": "n_subjects",
+            "value": "42",
+            "grounding": {"paper_id": "p-1", "block_ids": []},
+        },
+        config=CFG,
+    )
+
+    assert out == "ok"
