@@ -102,8 +102,27 @@ async def km_get(path: str, *, user_id: str) -> object:
     return _safe_response(resp)
 
 
+def _decode_success(resp: httpx.Response) -> object:
+    """Decode a 2xx httpx response body, tolerating 204/empty.
+
+    KM write endpoints (folders/move, folders/trash, folders/{id} PATCH,
+    folders/restore, folders/empty) return ``new NextResponse(null, { status: 204 })``;
+    calling ``resp.json()`` on an empty body raises JSONDecodeError into the
+    LangGraph stream (GSD-102 bug 2). Mirror km_delete's handling.
+    """
+    if resp.status_code == 204 or not getattr(resp, "content", b""):
+        return {"ok": True, "status": resp.status_code}
+    try:
+        return resp.json()
+    except Exception:  # noqa: BLE001 — non-JSON success body (rare)
+        return {"ok": True, "status": resp.status_code}
+
+
 async def km_post(path: str, body: dict, *, user_id: str) -> object:
-    """POST JSON to apps/km and return parsed JSON, or a structured error dict on failure."""
+    """POST JSON to apps/km and return parsed JSON, or a structured error dict on failure.
+
+    On 204/empty success body, returns ``{"ok": True, "status": N}``.
+    """
     body_bytes = json.dumps(body).encode()
     url = _km_base_url() + path
     headers = _auth_headers("POST", path, body_bytes, user_id)
@@ -112,12 +131,15 @@ async def km_post(path: str, body: dict, *, user_id: str) -> object:
     except httpx.RequestError as e:
         return _safe_request_error(e, method="POST", url=url)
     if resp.is_success:
-        return resp.json()
+        return _decode_success(resp)
     return _safe_response(resp)
 
 
 async def km_patch(path: str, body: dict, *, user_id: str) -> object:
-    """PATCH JSON on apps/km and return parsed JSON, or a structured error dict on failure."""
+    """PATCH JSON on apps/km and return parsed JSON, or a structured error dict on failure.
+
+    On 204/empty success body, returns ``{"ok": True, "status": N}``.
+    """
     body_bytes = json.dumps(body).encode()
     url = _km_base_url() + path
     headers = _auth_headers("PATCH", path, body_bytes, user_id)
@@ -126,7 +148,7 @@ async def km_patch(path: str, body: dict, *, user_id: str) -> object:
     except httpx.RequestError as e:
         return _safe_request_error(e, method="PATCH", url=url)
     if resp.is_success:
-        return resp.json()
+        return _decode_success(resp)
     return _safe_response(resp)
 
 
