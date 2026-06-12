@@ -64,7 +64,7 @@ async def test_csv_write_cell_calls_enrichment_endpoint(monkeypatch):
         status_code = 200
 
         async def aread(self):
-            return b"event: done\ndata: {}\n\n"
+            return b"event: done\ndata: {\"filled\":1,\"failed\":0}\n\n"
 
     async def fake_post(url, *, content, headers):
         captured.append((url, content, headers))
