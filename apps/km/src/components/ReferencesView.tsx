@@ -48,8 +48,9 @@ interface DisplayRow {
   missing: string[];
   known: Record<string, unknown>;
   cslJson: Record<string, unknown>;
-  // GSD-78: paperId != null marks a "hidden" ref-twin (GSD-32 Phase 4) — shown
-  // with a Hidden badge + Enable enrichment CTA instead of the per-row AI fill.
+  // GSD-78: paperId != null marks a ref-twin extracted from a paper
+  // (GSD-32 Phase 4). GSD-92: shown as "From Paper" badge; same Fill-Missing
+  // affordance as standalone refs (no separate enrichment CTA).
   paperId: string | null;
 }
 
@@ -224,10 +225,10 @@ function ReferencesListTable({
                     <Badge
                       variant="outline"
                       data-testid="refs-hidden-badge"
-                      title="Linked to a paper — collapsed in drive surfaces"
+                      title="Extracted from a paper in your library"
                       className="text-[10px]"
                     >
-                      Hidden
+                      From Paper
                     </Badge>
                   ) : null}
                 </div>
@@ -260,27 +261,16 @@ function ReferencesListTable({
                 <FolderPill folders={folders} folderId={r.folderId} folderPath={r.folderPath} />
               </TableCell>
               <TableCell>
-                {r.paperId ? (
-                  <Link
-                    href={`/p/${r.paperId}#enrich`}
-                    data-testid="refs-enable-enrichment"
-                    className="text-xs underline-offset-2 hover:underline text-muted-foreground"
-                    title="Open paper to enable reference enrichment"
-                  >
-                    Enable enrichment
-                  </Link>
-                ) : (
-                  <AiFillButton
-                    patchUrl={`/api/references/${r.id}`}
-                    kind="reference"
-                    known={r.known}
-                    missing={r.missing}
-                    cslJson={r.cslJson}
-                    ariaLabel={`Fill missing fields for ${r.citationKey}`}
-                    onFillStart={() => onFillStart(r.id)}
-                    onFillEnd={() => onFillEnd(r.id)}
-                  />
-                )}
+                <AiFillButton
+                  patchUrl={`/api/references/${r.id}`}
+                  kind="reference"
+                  known={r.known}
+                  missing={r.missing}
+                  cslJson={r.cslJson}
+                  ariaLabel={`Fill missing fields for ${r.citationKey}`}
+                  onFillStart={() => onFillStart(r.id)}
+                  onFillEnd={() => onFillEnd(r.id)}
+                />
               </TableCell>
             </TableRow>
           ))}

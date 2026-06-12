@@ -360,11 +360,11 @@ describe("ReferencesView", () => {
     expect(cell.textContent).toBe("—");
   });
 
-  // GSD-78 — Hidden refs (paperId != null) are rendered with a visual
-  // "Hidden" badge AND an "Enable enrichment" CTA so the user can opt in.
-  // Hidden refs share the same row layout as standalone refs to keep diff
-  // minimal and reuse @episteme/ui primitives.
-  it("GSD-78: hidden ref (paperId != null) renders Hidden badge + enrichment CTA", () => {
+  // GSD-78 (revised by GSD-92) — Hidden refs (paperId != null) still get a
+  // marker badge + data-hidden-ref attribute, but the visible badge text is
+  // "From Paper" (GSD-92(1)) and the last column uses the same Fill-Missing
+  // affordance as non-hidden rows (GSD-92(2)).
+  it("GSD-78: hidden ref (paperId != null) renders From-Paper badge + Fill-Missing affordance", () => {
     const hiddenRows: ReferenceRow[] = [
       {
         id: "r-hidden",
@@ -385,15 +385,68 @@ describe("ReferencesView", () => {
     const row = screen.getByTestId("refs-row-r-hidden");
     expect(row.getAttribute("data-hidden-ref")).toBe("true");
 
-    // Hidden badge visible in the row
+    // From-Paper badge visible in the row
     const badge = row.querySelector('[data-testid="refs-hidden-badge"]');
     expect(badge).toBeTruthy();
-    expect(badge!.textContent).toMatch(/hidden/i);
+    expect(badge!.textContent).toMatch(/from paper/i);
 
-    // Enable-enrichment CTA links to the paper enrich endpoint
-    const cta = row.querySelector(
-      '[data-testid="refs-enable-enrichment"]',
-    ) as HTMLAnchorElement | HTMLButtonElement | null;
-    expect(cta).toBeTruthy();
+    // Fill-Missing affordance (AiFillButton) — same as non-hidden rows
+    const fillBtn = row.querySelector('[data-testid="ai-fill-button"]');
+    expect(fillBtn).toBeTruthy();
+  });
+
+  // GSD-92 — Hidden refs (paperId != null) must be labeled "From Paper" to
+  // users (not "Hidden"), and the last column must render the same
+  // Fill-Missing (AiFillButton) affordance as non-hidden rows — NOT the
+  // legacy "Enable enrichment" link.
+  it("GSD-92(a): hidden ref badge reads 'From Paper', not 'Hidden'", () => {
+    const hiddenRows: ReferenceRow[] = [
+      {
+        id: "r-hidden-92",
+        libraryId: 1,
+        userId: "u1",
+        folderPath: "",
+        folderId: null,
+        prevFolderId: null,
+        citationKey: "vaswani2017",
+        cslJson: { id: "r-hidden-92", type: "article-journal", title: "Attention" },
+        paperId: "p-vaswani",
+        createdAt: NOW,
+        updatedAt: NOW,
+      },
+    ] as unknown as ReferenceRow[];
+
+    render(<ReferencesView rows={hiddenRows} />);
+    const row = screen.getByTestId("refs-row-r-hidden-92");
+    const badge = row.querySelector('[data-testid="refs-hidden-badge"]');
+    expect(badge).toBeTruthy();
+    expect(badge!.textContent).toMatch(/from paper/i);
+    expect(badge!.textContent).not.toMatch(/hidden/i);
+  });
+
+  it("GSD-92(b): hidden ref last column renders Fill-Missing (AiFillButton), not Enable-enrichment link", () => {
+    const hiddenRows: ReferenceRow[] = [
+      {
+        id: "r-hidden-92b",
+        libraryId: 1,
+        userId: "u1",
+        folderPath: "",
+        folderId: null,
+        prevFolderId: null,
+        citationKey: "vaswani2017",
+        cslJson: { id: "r-hidden-92b", type: "article-journal", title: "Attention" },
+        paperId: "p-vaswani",
+        createdAt: NOW,
+        updatedAt: NOW,
+      },
+    ] as unknown as ReferenceRow[];
+
+    render(<ReferencesView rows={hiddenRows} />);
+    const row = screen.getByTestId("refs-row-r-hidden-92b");
+    // Legacy CTA gone
+    expect(row.querySelector('[data-testid="refs-enable-enrichment"]')).toBeNull();
+    // Same AiFillButton as non-hidden rows
+    const fillBtn = row.querySelector('[data-testid="ai-fill-button"]');
+    expect(fillBtn).toBeTruthy();
   });
 });
