@@ -217,3 +217,66 @@ async def test_reader_get_uses_reader_base_url():
             await km_http_mod.reader_get("/api/pdfs", user_id="u1")
 
     assert captured["url"].startswith("http://reader-custom:8888")
+
+
+# ---------------------------------------------------------------------------
+# GSD-102 Bug 2 — 204 / empty body handling on writes
+# ---------------------------------------------------------------------------
+
+
+def _make_204_response() -> MagicMock:
+    """httpx.Response stand-in matching what KM returns from
+    `new NextResponse(null, { status: 204 })` — empty body, real .json()
+    raises JSONDecodeError just like httpx would.
+    """
+    import json as _json
+
+    resp = MagicMock(spec=httpx.Response)
+    resp.status_code = 204
+    resp.is_success = True
+    resp.content = b""
+    resp.text = ""
+
+    def _raise():
+        raise _json.JSONDecodeError("Expecting value", "", 0)
+
+    resp.json = _raise
+    return resp
+
+
+@pytest.mark.asyncio
+async def test_km_post_returns_ok_dict_on_204_no_content():
+    """KM routes like POST /api/folders/move return 204 with empty body.
+    km_post must NOT call .json() on empty content — that raises
+    JSONDecodeError into the LangGraph stream (GSD-102 bug 2)."""
+    from lib.km_http import km_post  # noqa: PLC0415
+
+    async def mock_post(url, *, content, headers, **kwargs):
+        return _make_204_response()
+
+    with patch("lib.km_http._client") as mock_client:
+        mock_client.post = mock_post
+        result = await km_post(
+            "/api/folders/move",
+            {"folderId": "f-1", "targetParentId": None},
+            user_id="u1",
+        )
+
+    assert result == {"ok": True, "status": 204}
+
+
+@pytest.mark.asyncio
+async def test_km_patch_returns_ok_dict_on_204_no_content():
+    """KM PATCH routes (e.g. /api/folders/{id} rename) return 204."""
+    from lib.km_http import km_patch  # noqa: PLC0415
+
+    async def mock_patch(url, *, content, headers, **kwargs):
+        return _make_204_response()
+
+    with patch("lib.km_http._client") as mock_client:
+        mock_client.patch = mock_patch
+        result = await km_patch(
+            "/api/folders/abc", {"name": "new"}, user_id="u1",
+        )
+
+    assert result == {"ok": True, "status": 204}
