@@ -13,10 +13,11 @@ afterEach(() => {
 
 const TOOLS_FIXTURE = {
   tools: [
-    { name: "web_search", description: "Search the web via Tavily.", category: "web", gateable: true, default_allowed: true },
-    { name: "create_note", description: "Create a new note.", category: "notes", gateable: true, default_allowed: true },
-    { name: "publish", description: "Publish a note.", category: "notes", gateable: true, default_allowed: true },
-    { name: "agentic_search_papers", description: "Search papers.", category: "paper_search", gateable: true, default_allowed: true },
+    { name: "web_search", description: "Search the web via Tavily.", category: "web", gateable: true, default_allowed: true, default_approval: "auto" },
+    { name: "create_note", description: "Create a new note.", category: "notes", gateable: true, default_allowed: true, default_approval: "auto" },
+    { name: "publish", description: "Publish a note.", category: "notes", gateable: true, default_allowed: true, default_approval: "require" },
+    { name: "agentic_search_papers", description: "Search papers.", category: "paper_search", gateable: true, default_allowed: true, default_approval: "auto" },
+    { name: "delete_paper", description: "Delete a paper.", category: "drive_ops", gateable: true, default_allowed: true, default_approval: "require" },
   ],
 };
 
@@ -59,19 +60,25 @@ describe("ApprovalRules (GSD-44)", () => {
     expect(screen.getAllByText(/^Web$/i).length).toBeGreaterThan(0);
   });
 
-  it('defaults rule to "require" when no saved value', async () => {
+  it("uses default_approval from tool inventory when no saved value (GSD-103)", async () => {
     mockToolsFetch();
     render(<ApprovalRules approvalRules={{}} onChange={vi.fn()} />);
-    await waitFor(() => {
-      // For each tool group, the "Require" toggle should be aria-pressed=true.
-      const group = screen.getByRole("group", {
-        name: /approval rule for create note/i,
-      });
-      const requireBtn = group.querySelector(
-        '[aria-label="Require"]',
-      ) as HTMLButtonElement;
-      expect(requireBtn.getAttribute("aria-pressed")).toBe("true");
+    // create_note has default_approval="auto" in the fixture → Auto highlighted.
+    const createNote = await screen.findByRole("group", {
+      name: /approval rule for create note/i,
     });
+    const autoBtn = createNote.querySelector(
+      '[aria-label="Auto"]',
+    ) as HTMLButtonElement;
+    expect(autoBtn.getAttribute("aria-pressed")).toBe("true");
+    // delete_paper has default_approval="require" → Require highlighted.
+    const deletePaper = screen.getByRole("group", {
+      name: /approval rule for delete paper/i,
+    });
+    const requireBtn = deletePaper.querySelector(
+      '[aria-label="Require"]',
+    ) as HTMLButtonElement;
+    expect(requireBtn.getAttribute("aria-pressed")).toBe("true");
   });
 
   it("reflects an explicit saved rule value", async () => {
@@ -102,16 +109,18 @@ describe("ApprovalRules (GSD-44)", () => {
         onChange={onChange}
       />,
     );
+    // create_note defaults to "auto" via the fixture's default_approval —
+    // click "Require" to flip it away from default and verify the merge.
     const group = await screen.findByRole("group", {
       name: /approval rule for create note/i,
     });
-    const autoBtn = group.querySelector(
-      '[aria-label="Auto"]',
+    const requireBtn = group.querySelector(
+      '[aria-label="Require"]',
     ) as HTMLButtonElement;
-    fireEvent.click(autoBtn);
+    fireEvent.click(requireBtn);
     expect(onChange).toHaveBeenCalledWith({
       web_search: "never",
-      create_note: "auto",
+      create_note: "require",
     });
   });
 
