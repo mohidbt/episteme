@@ -6,6 +6,7 @@ import { SidebarProvider } from "@/components/ui/sidebar";
 import { AnonAutoSignIn } from "@/components/AnonAutoSignIn";
 import { AgentBall } from "@/components/agent/AgentBall";
 import { AgentBallProvider } from "@/components/agent/agent-ball-context";
+import { AppDndContext } from "./app-dnd-context";
 import { AutoRefreshOnFocus } from "@/components/AutoRefreshOnFocus";
 import { TabBar, TabBarProvider } from "@/components/TabBar";
 import { GuestTour } from "@/components/guest-tour/GuestTour";
@@ -26,6 +27,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   return (
     <AgentBallProvider>
       <TabBarProvider isAnonymous={session.isAnonymous}>
+       <AppDndContext>
         <SidebarProvider className="h-dvh overflow-hidden">
           <Sidebar userId={session.userId} isAnonymous={session.isAnonymous} />
           <div className="flex-1 min-w-0 h-full flex flex-col overflow-hidden bg-[var(--bg-roof)]">
@@ -42,6 +44,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
           <AutoRefreshOnFocus />
           <GuestTour isAnonymous={session.isAnonymous} seedTargets={guestTourTargets} />
         </SidebarProvider>
+       </AppDndContext>
       </TabBarProvider>
     </AgentBallProvider>
   );
