@@ -10,10 +10,25 @@ import {
 import { DndContext } from "@dnd-kit/core";
 import type { ReactElement } from "react";
 
-// GSD-96 R3-B: AgentTranscript now mounts ChatComposer which uses
-// useDndMonitor, so all renders must be wrapped in a DndContext.
+// GSD-105: AgentTranscript mounts the Tiptap ChatComposer. DndContext
+// is no longer needed (composer drop wiring parked under _deferred/).
 function render(ui: ReactElement, options?: Parameters<typeof rtlRender>[1]) {
   return rtlRender(<DndContext>{ui}</DndContext>, options);
+}
+
+/**
+ * Type text into the Tiptap chat composer via paste (jsdom-friendly).
+ * Tiptap's view intercepts paste and inserts text/plain content into the
+ * doc, which the composer ref serializes on Send.
+ */
+function typeIntoComposer(text: string) {
+  const editor = screen.getByTestId("chat-composer-editor");
+  const clipboardData = {
+    getData: (t: string) => (t === "text/plain" ? text : ""),
+    types: ["text/plain"],
+    files: [] as File[],
+  };
+  fireEvent.paste(editor, { clipboardData });
 }
 
 vi.mock("next/navigation", () => ({
@@ -94,8 +109,10 @@ describe("AgentTranscript", () => {
 
   it("G-R3-07 #81: placeholder reads 'Ask anything'", () => {
     render(<AgentTranscript threadId="t-ph" />);
-    const ta = screen.getByLabelText("Message agent") as HTMLTextAreaElement;
-    expect(ta.placeholder).toBe("Ask anything");
+    // Tiptap renders Placeholder text via data-placeholder on the empty paragraph.
+    const editor = screen.getByTestId("chat-composer-editor");
+    const empty = editor.querySelector("[data-placeholder]") ?? editor;
+    expect(empty.getAttribute("data-placeholder")).toBe("Ask anything");
   });
 
   it("G-R3-07 #78: hydration renders tool cards from persisted parts (not literal text)", () => {
@@ -207,8 +224,7 @@ describe("AgentTranscript", () => {
   it("invokes onSendMessage override when provided (no fetch)", () => {
     const sent = vi.fn();
     render(<AgentTranscript threadId="t1" onSendMessage={sent} />);
-    const ta = screen.getByLabelText("Message agent") as HTMLTextAreaElement;
-    fireEvent.change(ta, { target: { value: "hi" } });
+    typeIntoComposer("hi");
     fireEvent.click(screen.getByRole("button", { name: /send/i }));
     expect(sent).toHaveBeenCalledWith("hi");
   });
@@ -216,13 +232,14 @@ describe("AgentTranscript", () => {
   it("Enter sends, Shift+Enter does not", () => {
     const sent = vi.fn();
     render(<AgentTranscript threadId="t1" onSendMessage={sent} />);
-    const ta = screen.getByLabelText("Message agent") as HTMLTextAreaElement;
-    fireEvent.change(ta, { target: { value: "x" } });
-    fireEvent.keyDown(ta, { key: "Enter", shiftKey: true });
+    const editor = screen.getByTestId("chat-composer-editor");
+    typeIntoComposer("x");
+    fireEvent.keyDown(editor, { key: "Enter", shiftKey: true });
     expect(sent).not.toHaveBeenCalled();
-    fireEvent.change(ta, { target: { value: "y" } });
-    fireEvent.keyDown(ta, { key: "Enter" });
-    expect(sent).toHaveBeenCalledWith("y");
+    typeIntoComposer("y");
+    fireEvent.keyDown(editor, { key: "Enter" });
+    expect(sent).toHaveBeenCalled();
+    expect(String(sent.mock.calls.at(-1)?.[0])).toContain("y");
   });
 
   it("renders one card per event from SSE stream", async () => {
@@ -251,8 +268,7 @@ describe("AgentTranscript", () => {
     );
 
     render(<AgentTranscript threadId="t1" />);
-    const ta = screen.getByLabelText("Message agent") as HTMLTextAreaElement;
-    fireEvent.change(ta, { target: { value: "go" } });
+    typeIntoComposer("go");
     fireEvent.click(screen.getByRole("button", { name: /send/i }));
 
     await waitFor(() => {
@@ -301,8 +317,7 @@ describe("AgentTranscript", () => {
     );
 
     render(<AgentTranscript threadId="t1" />);
-    const ta = screen.getByLabelText("Message agent") as HTMLTextAreaElement;
-    fireEvent.change(ta, { target: { value: "go" } });
+    typeIntoComposer("go");
     fireEvent.click(screen.getByRole("button", { name: /send/i }));
 
     await waitFor(() => {
@@ -334,8 +349,7 @@ describe("AgentTranscript", () => {
     );
 
     render(<AgentTranscript threadId="t1" />);
-    const ta = screen.getByLabelText("Message agent") as HTMLTextAreaElement;
-    fireEvent.change(ta, { target: { value: "go" } });
+    typeIntoComposer("go");
     fireEvent.click(screen.getByRole("button", { name: /send/i }));
 
     const pill = await screen.findByTestId("inline-citation-pill-c1");
@@ -375,8 +389,7 @@ describe("AgentTranscript", () => {
     );
 
     render(<AgentTranscript threadId="t1" />);
-    const ta = screen.getByLabelText("Message agent") as HTMLTextAreaElement;
-    fireEvent.change(ta, { target: { value: "go" } });
+    typeIntoComposer("go");
     fireEvent.click(screen.getByRole("button", { name: /send/i }));
 
     const pill = await screen.findByTestId("inline-citation-pill-c1");
@@ -417,8 +430,7 @@ describe("AgentTranscript", () => {
     );
 
     render(<AgentTranscript threadId="t1" />);
-    const ta = screen.getByLabelText("Message agent") as HTMLTextAreaElement;
-    fireEvent.change(ta, { target: { value: "go" } });
+    typeIntoComposer("go");
     fireEvent.click(screen.getByRole("button", { name: /send/i }));
 
     const pill = await screen.findByTestId(
@@ -475,8 +487,7 @@ describe("AgentTranscript", () => {
     );
 
     render(<AgentTranscript threadId="t-deep-read" />);
-    const ta = screen.getByLabelText("Message agent") as HTMLTextAreaElement;
-    fireEvent.change(ta, { target: { value: "go" } });
+    typeIntoComposer("go");
     fireEvent.click(screen.getByRole("button", { name: /send/i }));
 
     await waitFor(() => {
@@ -508,8 +519,7 @@ describe("AgentTranscript", () => {
       ); // /resume
 
     render(<AgentTranscript threadId="t-int" />);
-    const ta = screen.getByLabelText("Message agent") as HTMLTextAreaElement;
-    fireEvent.change(ta, { target: { value: "go" } });
+    typeIntoComposer("go");
     fireEvent.click(screen.getByRole("button", { name: /send/i }));
 
     const approveBtn = await waitFor(() =>
@@ -571,8 +581,7 @@ describe("AgentTranscript", () => {
       );
 
     render(<AgentTranscript threadId="t-batch" />);
-    const ta = screen.getByLabelText("Message agent") as HTMLTextAreaElement;
-    fireEvent.change(ta, { target: { value: "go" } });
+    typeIntoComposer("go");
     fireEvent.click(screen.getByRole("button", { name: /send/i }));
 
     const approveBtn = await waitFor(() =>
@@ -636,8 +645,7 @@ describe("AgentTranscript", () => {
       );
 
     render(<AgentTranscript threadId="t-batch-rej" />);
-    const ta = screen.getByLabelText("Message agent") as HTMLTextAreaElement;
-    fireEvent.change(ta, { target: { value: "go" } });
+    typeIntoComposer("go");
     fireEvent.click(screen.getByRole("button", { name: /send/i }));
 
     const rejectBtn = await waitFor(() =>
@@ -678,8 +686,7 @@ describe("AgentTranscript", () => {
     fetchMock.mockResolvedValueOnce(streamResponse(events));
 
     render(<AgentTranscript threadId="t-n1-edit" />);
-    const ta = screen.getByLabelText("Message agent") as HTMLTextAreaElement;
-    fireEvent.change(ta, { target: { value: "go" } });
+    typeIntoComposer("go");
     fireEvent.click(screen.getByRole("button", { name: /send/i }));
 
     await waitFor(() => screen.getByTestId("card-interrupt"));
@@ -703,8 +710,7 @@ describe("AgentTranscript", () => {
     fetchMock.mockResolvedValueOnce(streamResponse(events));
 
     render(<AgentTranscript threadId="t-n1-edit2" />);
-    const ta = screen.getByLabelText("Message agent") as HTMLTextAreaElement;
-    fireEvent.change(ta, { target: { value: "go" } });
+    typeIntoComposer("go");
     fireEvent.click(screen.getByRole("button", { name: /send/i }));
 
     await waitFor(() => screen.getByTestId("card-interrupt"));
@@ -736,8 +742,7 @@ describe("AgentTranscript", () => {
       ); // /resume
 
     render(<AgentTranscript threadId="t-n1-save" />);
-    const ta = screen.getByLabelText("Message agent") as HTMLTextAreaElement;
-    fireEvent.change(ta, { target: { value: "go" } });
+    typeIntoComposer("go");
     fireEvent.click(screen.getByRole("button", { name: /send/i }));
 
     await waitFor(() => screen.getByTestId("card-interrupt"));
@@ -812,8 +817,7 @@ describe("AgentTranscript", () => {
     fetchMock.mockResolvedValueOnce(streamResponse(events));
 
     render(<AgentTranscript threadId="t-batch-noedit" />);
-    const ta = screen.getByLabelText("Message agent") as HTMLTextAreaElement;
-    fireEvent.change(ta, { target: { value: "go" } });
+    typeIntoComposer("go");
     fireEvent.click(screen.getByRole("button", { name: /send/i }));
 
     await waitFor(() => screen.getByTestId("card-interrupt"));
@@ -833,8 +837,7 @@ describe("AgentTranscript", () => {
         pageContext={{ noteId: "my-current-note" }}
       />,
     );
-    const ta = screen.getByLabelText("Message agent") as HTMLTextAreaElement;
-    fireEvent.change(ta, { target: { value: "summarise this" } });
+    typeIntoComposer("summarise this");
     fireEvent.click(screen.getByRole("button", { name: /send/i }));
 
     await waitFor(() => {
@@ -888,8 +891,7 @@ describe("AgentTranscript", () => {
     );
 
     render(<AgentTranscript threadId="t-mem" />);
-    const ta = screen.getByLabelText("Message agent") as HTMLTextAreaElement;
-    fireEvent.change(ta, { target: { value: "go" } });
+    typeIntoComposer("go");
     fireEvent.click(screen.getByRole("button", { name: /send/i }));
 
     await waitFor(() => {
@@ -947,8 +949,7 @@ describe("AgentTranscript", () => {
     );
 
     render(<AgentTranscript threadId="t-tool" />);
-    const ta = screen.getByLabelText("Message agent") as HTMLTextAreaElement;
-    fireEvent.change(ta, { target: { value: "go" } });
+    typeIntoComposer("go");
     fireEvent.click(screen.getByRole("button", { name: /send/i }));
 
     const toolCard = await waitFor(() => screen.getByTestId("card-tool"));
@@ -976,14 +977,12 @@ describe("AgentTranscript", () => {
     expect(content!.className).not.toContain("gap-8");
   });
 
-  it("Task #43: prompt input is a field-sizing textarea capped at 8 rows (G9)", () => {
+  it("Task #43: prompt input grows but is capped at 8 rows (G9, Tiptap)", () => {
     render(<AgentTranscript threadId="t-grow" />);
-    const ta = screen.getByLabelText("Message agent") as HTMLTextAreaElement;
-    // shadcn Textarea sets data-slot="textarea" and uses field-sizing-content
-    expect(ta.getAttribute("data-slot")).toBe("textarea");
-    expect(ta.className).toContain("field-sizing-content");
-    // Cap at ~8 rows. Using max-h-48 (12rem) as the cap token.
-    expect(/max-h-48/.test(ta.className)).toBe(true);
+    // GSD-105: Tiptap surface replaces shadcn Textarea. The growth cap
+    // lives on the editor container's max-h class.
+    const editor = screen.getByTestId("chat-composer-editor");
+    expect(/max-h-48/.test(editor.className)).toBe(true);
   });
 
   it("Task #45: editing a past user message truncates following messages and re-invokes (fork)", async () => {
@@ -1004,8 +1003,7 @@ describe("AgentTranscript", () => {
     );
 
     render(<AgentTranscript threadId="t-fork" />);
-    const ta = screen.getByLabelText("Message agent") as HTMLTextAreaElement;
-    fireEvent.change(ta, { target: { value: "first" } });
+    typeIntoComposer("first");
     fireEvent.click(screen.getByRole("button", { name: /send/i }));
 
     // wait for assistant reply rendered
@@ -1095,13 +1093,19 @@ describe("AgentTranscript", () => {
     // Tightened — leading-snug (1.375) on assistant prose paragraphs
     expect(/\bleading-snug\b/.test(aCls) || /\[&_p\]:leading-snug/.test(aCls)).toBe(true);
 
-    // User bubble is NOT tightened with the assistant-only class (sanity:
-    // assistant-only override doesn't leak into user MessageResponse).
+    // GSD-105 fix-round (Fix 2): user bubble no longer routes through
+    // Streamdown markdown — it renders via LibTokenizedText so `[lib: ...]`
+    // tokens become inline `.wiki-link` chips. So the streamdown-root /
+    // size-full lookup will NOT match in the user card. Assert that
+    // explicitly (negative invariant: assistant-only leading-snug class
+    // never leaks into user content either).
     const userResponse = userCard.querySelector(
       "[data-streamdown='root'], .size-full",
     ) as HTMLElement | null;
-    expect(userResponse).toBeTruthy();
-    expect(/\[&_p\]:leading-snug/.test(userResponse!.className)).toBe(false);
+    expect(userResponse).toBeNull();
+    // Belt-and-suspenders: search the whole user-card subtree for the
+    // assistant-only [&_p]:leading-snug arbitrary class.
+    expect(userCard.outerHTML).not.toContain("[&_p]:leading-snug");
   });
 
   it("G2 codex: non-object JSON in edit draft disables Save and shows error", async () => {
@@ -1118,8 +1122,7 @@ describe("AgentTranscript", () => {
     fetchMock.mockResolvedValueOnce(streamResponse(events));
 
     render(<AgentTranscript threadId="t-nonobj" />);
-    const ta = screen.getByLabelText("Message agent") as HTMLTextAreaElement;
-    fireEvent.change(ta, { target: { value: "go" } });
+    typeIntoComposer("go");
     fireEvent.click(screen.getByRole("button", { name: /send/i }));
 
     await waitFor(() => screen.getByTestId("card-interrupt"));
@@ -1165,8 +1168,7 @@ describe("AgentTranscript", () => {
     fetchMock.mockResolvedValueOnce(streamResponse(events));
 
     render(<AgentTranscript threadId="t-cancel-reset" />);
-    const ta = screen.getByLabelText("Message agent") as HTMLTextAreaElement;
-    fireEvent.change(ta, { target: { value: "go" } });
+    typeIntoComposer("go");
     fireEvent.click(screen.getByRole("button", { name: /send/i }));
 
     await waitFor(() => screen.getByTestId("card-interrupt"));
@@ -1217,8 +1219,7 @@ describe("AgentTranscript", () => {
       streamResponse(events),
     );
     render(<AgentTranscript threadId="t-sug" />);
-    const ta = screen.getByLabelText("Message agent") as HTMLTextAreaElement;
-    fireEvent.change(ta, { target: { value: "kick" } });
+    typeIntoComposer("kick");
     fireEvent.click(screen.getByRole("button", { name: /send/i }));
 
     const chip = await waitFor(() =>
@@ -1259,8 +1260,7 @@ describe("AgentTranscript", () => {
 
     const onStreamDone = vi.fn();
     render(<AgentTranscript threadId="t-done" onStreamDone={onStreamDone} />);
-    const ta = screen.getByLabelText("Message agent") as HTMLTextAreaElement;
-    fireEvent.change(ta, { target: { value: "hello" } });
+    typeIntoComposer("hello");
     fireEvent.click(screen.getByRole("button", { name: /send/i }));
 
     await waitFor(() => {
@@ -1289,8 +1289,7 @@ describe("AgentTranscript", () => {
     );
 
     render(<AgentTranscript threadId="t-pretty" />);
-    const ta = screen.getByLabelText("Message agent") as HTMLTextAreaElement;
-    fireEvent.change(ta, { target: { value: "go" } });
+    typeIntoComposer("go");
     fireEvent.click(screen.getByRole("button", { name: /send/i }));
 
     await waitFor(() => {
@@ -1312,8 +1311,7 @@ describe("AgentTranscript", () => {
     );
 
     render(<AgentTranscript threadId="t-skill" />);
-    const ta = screen.getByLabelText("Message agent") as HTMLTextAreaElement;
-    fireEvent.change(ta, { target: { value: "go" } });
+    typeIntoComposer("go");
     fireEvent.click(screen.getByRole("button", { name: /send/i }));
 
     await waitFor(() => {

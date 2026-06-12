@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
-// GSD-27 — file upload + GSD-96 R3-B wiring: AgentTranscript now mounts
-// ChatComposer (which uses useDndMonitor), so render() wraps in DndContext.
-// Tests still assert OBSERVABLE behavior — chips render, toasts fire, the
-// network upload flow runs and the final outbound text contains the file
-// token — not inner textarea implementation.
+// GSD-27 file upload + GSD-105 (R6): AgentTranscript now mounts the Tiptap
+// ChatComposer. File drops are routed through useChatAttachments directly
+// (R4 finder routing is parked under _deferred/). Tests assert OBSERVABLE
+// behavior — chips render, toasts fire, the network upload flow runs and
+// the final outbound text contains the file token.
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   render,
@@ -13,8 +13,6 @@ import {
   waitFor,
   act,
 } from "@testing-library/react";
-import { DndContext } from "@dnd-kit/core";
-
 vi.mock("next/navigation", () => ({
   useRouter: () => ({
     refresh: vi.fn(),
@@ -55,7 +53,7 @@ function makeFile(name: string, type: string, size = 100): File {
 
 describe("AgentTranscript — file upload (GSD-27)", () => {
   it("renders a paperclip attach button with hidden file input", () => {
-    render(<DndContext><AgentTranscript threadId="t1" /></DndContext>);
+    render(<AgentTranscript threadId="t1" />);
     const attach = screen.getByRole("button", { name: /attach file/i });
     expect(attach).toBeTruthy();
     const input = screen.getByTestId("chat-file-input") as HTMLInputElement;
@@ -63,7 +61,7 @@ describe("AgentTranscript — file upload (GSD-27)", () => {
   });
 
   it("drops a supported image file onto chat input and renders a chip", async () => {
-    render(<DndContext><AgentTranscript threadId="t1" /></DndContext>);
+    render(<AgentTranscript threadId="t1" />);
     const dropzone = screen.getByTestId("chat-input-dropzone");
     const file = makeFile("photo.png", "image/png");
     await act(async () => {
@@ -75,10 +73,12 @@ describe("AgentTranscript — file upload (GSD-27)", () => {
     expect(screen.getByRole("button", { name: /remove photo\.png/i })).toBeTruthy();
   });
 
-  it("rejects unsupported file types with a red chip and no asset chip (GSD-96 R4)", async () => {
-    // R4 supersedes the GSD-27 toast: unsupported drops now surface as an
-    // inline red chip in the FinderChips row (plan §3.9). No /api/assets fires.
-    render(<DndContext><AgentTranscript threadId="t1" /></DndContext>);
+  it("rejects unsupported file types with a toast (GSD-105: R4 chip parked)", async () => {
+    // GSD-105 parks R4 finder routing under _deferred/. File drops now go
+    // directly through useChatAttachments which toasts on rejection (the
+    // legacy GSD-27 behavior). The red-chip surface returns when finder
+    // routing is resurrected — see apps/km/src/lib/agent/_deferred/.
+    render(<AgentTranscript threadId="t1" />);
     const dropzone = screen.getByTestId("chat-input-dropzone");
     const file = makeFile("evil.exe", "application/x-msdownload");
     await act(async () => {
@@ -86,14 +86,12 @@ describe("AgentTranscript — file upload (GSD-27)", () => {
         dataTransfer: { files: [file], types: ["Files"] },
       });
     });
-    expect(screen.getByText(/we cannot process this file/i)).toBeTruthy();
-    // Filename visible inside the rejection chip — assert via testid to avoid
-    // confusion with the legacy asset chip.
-    expect(screen.queryByTestId("finder-chip-rejected")).toBeTruthy();
+    expect(toastError).toHaveBeenCalled();
+    expect(String(toastError.mock.calls[0][0])).toMatch(/unsupported/i);
   });
 
   it("removes a chip when its remove button is clicked", async () => {
-    render(<DndContext><AgentTranscript threadId="t1" /></DndContext>);
+    render(<AgentTranscript threadId="t1" />);
     const dropzone = screen.getByTestId("chat-input-dropzone");
     const file = makeFile("photo.png", "image/png");
     await act(async () => {
@@ -134,7 +132,7 @@ describe("AgentTranscript — file upload (GSD-27)", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     const sent = vi.fn();
-    render(<DndContext><AgentTranscript threadId="t1" onSendMessage={sent} /></DndContext>);
+    render(<AgentTranscript threadId="t1" onSendMessage={sent} />);
     const dropzone = screen.getByTestId("chat-input-dropzone");
     const file = makeFile("photo.png", "image/png");
     await act(async () => {
@@ -142,8 +140,18 @@ describe("AgentTranscript — file upload (GSD-27)", () => {
         dataTransfer: { files: [file], types: ["Files"] },
       });
     });
-    const ta = screen.getByLabelText("Message agent") as HTMLTextAreaElement;
-    fireEvent.change(ta, { target: { value: "look at this" } });
+    // Drive the Tiptap surface via paste (jsdom-friendly): Tiptap's view
+    // intercepts paste and inserts text into the doc, which the parent's
+    // composer ref serializes on Send.
+    const editor = screen.getByTestId("chat-composer-editor");
+    await act(async () => {
+      const clipboardData = {
+        getData: (t: string) => (t === "text/plain" ? "look at this" : ""),
+        types: ["text/plain"],
+        files: [] as File[],
+      };
+      fireEvent.paste(editor, { clipboardData });
+    });
     fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
 
     await waitFor(() => {

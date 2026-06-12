@@ -6,6 +6,7 @@ export default defineConfig({
   plugins: [react()],
   test: {
     include: ["src/**/*.test.{ts,tsx}"],
+    exclude: ["src/lib/agent/_deferred/**", "node_modules/**", "dist/**"],
     environment: "node",
     setupFiles: ["./vitest.setup.ts"],
     env: {

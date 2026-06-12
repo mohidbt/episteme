@@ -137,10 +137,15 @@ describe("AgentBall — LITE @-picker + drop wiring (GSD-96 R5)", () => {
     renderBall();
     fireEvent.click(screen.getByTestId("agent-ball"));
     await waitFor(() => screen.getByTestId("chat-composer"));
-    const editor = screen.getByLabelText(
-      "Message agent",
-    ) as HTMLTextAreaElement;
-    fireEvent.change(editor, { target: { value: "@" } });
+    // GSD-105: Tiptap composer — drive via paste of `@` so the
+    // Suggestion plugin's onStart fires inside jsdom.
+    const editor = screen.getByTestId("chat-composer-editor");
+    const clipboardData = {
+      getData: (t: string) => (t === "text/plain" ? "@" : ""),
+      types: ["text/plain"],
+      files: [] as File[],
+    };
+    fireEvent.paste(editor, { clipboardData });
     await waitFor(() => {
       expect(screen.getByTestId("chat-composer-picker")).toBeTruthy();
     });

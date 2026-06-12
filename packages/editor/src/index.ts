@@ -13,3 +13,10 @@ export { parseSlashCommand, insertCitation, insertWikiLink, invokeAgent, renumbe
 export type { ParsedSlashCommand, CiteCommandPayload, LinkCommandPayload, AgentCommandPayload, CitationMeta } from "./slash/index";
 export { BibliographyHeading } from "./slash/BibliographyHeading";
 export { MdPaste } from "./MdPaste";
+export {
+  chatEditorExtensions,
+  serializeChatDoc,
+  isChatDocEmpty,
+} from "./chat-editor";
+export type { ChatWikiLinkSuggestion, ChatExtensionOptions } from "./chat-editor";
+export { useEditor, EditorContent } from "@tiptap/react";

@@ -37,7 +37,11 @@ describe("episteme-prose .wiki-link interactivity", () => {
  */
 describe("GSD-62 .wiki-link chip restyle", () => {
   const css = readFileSync(join(here, "styles.css"), "utf-8");
-  const baseRule = css.match(/\.episteme-prose\s+\.wiki-link\s*\{[\s\S]*?\}/)?.[0] ?? "";
+  // Accept either a single selector or a comma-separated selector list
+  // ending with `{` (GSD-105 fix-round widened scope to include
+  // `.episteme-chat-composer` as a sibling selector).
+  const baseRule =
+    css.match(/\.episteme-prose\s+\.wiki-link\s*(?:,[^{]*)?\{[\s\S]*?\}/)?.[0] ?? "";
 
   it("uses inline-flex for icon+text vertical centering", () => {
     expect(baseRule).toMatch(/display:\s*inline-flex/);
@@ -77,7 +81,7 @@ describe("GSD-67/89 .wiki-link single-line contract", () => {
   const css = readFileSync(join(here, "styles.css"), "utf-8");
   const dataTypeRule =
     css.match(
-      /\.episteme-prose\s+\.wiki-link\[data-type="wiki-link"\]\s*\{[\s\S]*?\}/,
+      /\.episteme-prose\s+\.wiki-link\[data-type="wiki-link"\]\s*(?:,[^{]*)?\{[\s\S]*?\}/,
     )?.[0] ?? "";
 
   it("declares white-space: nowrap on the data-type rule", () => {
@@ -86,6 +90,46 @@ describe("GSD-67/89 .wiki-link single-line contract", () => {
 
   it("declares overflow: hidden on the data-type rule", () => {
     expect(dataTypeRule).toMatch(/overflow:\s*hidden/);
+  });
+});
+
+/**
+ * GSD-105 fix-round (Fix 1) — the agent chat composer host carries the
+ * class `episteme-chat-composer` (not `episteme-prose`), so the wiki-link
+ * pill CSS must apply under BOTH ancestor classes. Without this, chips
+ * inserted in the composer render unstyled (SVG icon ballooning to ~1060px
+ * because the size: 0.875em rule never applies).
+ *
+ * Edge cases (§12):
+ *   - base rule covers `.wiki-link` background + radius
+ *   - data-type rule covers `[data-type="wiki-link"]` single-line contract
+ *   - svg sizing rule covers icon shrink + width:0.875em
+ *   - label rule covers ellipsis truncation
+ *
+ * Strategy: each .episteme-prose .wiki-link* rule must have a sibling
+ * selector under `.episteme-chat-composer .wiki-link*`. We don't enforce a
+ * specific syntax (comma list vs duplicate rule) — only that the selector
+ * appears somewhere in the file.
+ */
+describe("GSD-105 fix-round — wiki-link CSS scoped to .episteme-chat-composer host", () => {
+  const css = readFileSync(join(here, "styles.css"), "utf-8");
+
+  it("declares .episteme-chat-composer .wiki-link (base pill)", () => {
+    expect(css).toMatch(/\.episteme-chat-composer\s+\.wiki-link\b/);
+  });
+
+  it("declares the [data-type=\"wiki-link\"] single-line contract under the composer host", () => {
+    expect(css).toMatch(
+      /\.episteme-chat-composer\s+\.wiki-link\[data-type="wiki-link"\]/,
+    );
+  });
+
+  it("declares the svg sizing rule under the composer host", () => {
+    expect(css).toMatch(/\.episteme-chat-composer\s+\.wiki-link\s+svg/);
+  });
+
+  it("declares the .wiki-link__label rule under the composer host", () => {
+    expect(css).toMatch(/\.episteme-chat-composer\s+\.wiki-link__label/);
   });
 });
 
@@ -100,7 +144,7 @@ describe("GSD-67/89 .wiki-link single-line contract", () => {
 describe("GSD-89 .wiki-link__label truncation contract", () => {
   const css = readFileSync(join(here, "styles.css"), "utf-8");
   const labelRule =
-    css.match(/\.episteme-prose\s+\.wiki-link__label\s*\{[\s\S]*?\}/)?.[0] ?? "";
+    css.match(/\.episteme-prose\s+\.wiki-link__label\s*(?:,[^{]*)?\{[\s\S]*?\}/)?.[0] ?? "";
 
   it("uses inline-block so text-overflow can clip", () => {
     expect(labelRule).toMatch(/display:\s*inline-block/);

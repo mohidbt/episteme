@@ -116,7 +116,13 @@
    inline-flex + align-items:center solves the icon vertical-misalignment
    issue (paper icon used to sit below text baseline). max-width + ellipsis
    truncates long resolved paper titles. */
-.episteme-prose .wiki-link {
+/* GSD-105 fix-round (Fix 1): the agent chat composer host carries
+   `.episteme-chat-composer` (not `.episteme-prose`). Each rule below adds
+   the composer ancestor as a sibling selector so chips render styled inside
+   the composer AND inside the user-message bubble (which also opts into
+   the `.episteme-chat-composer` host class via LibTokenizedText). */
+.episteme-prose .wiki-link,
+.episteme-chat-composer .wiki-link {
   display: inline-flex;
   align-items: center;
   gap: 0.25rem;
@@ -134,19 +140,23 @@
   cursor: pointer;
   transition: background-color 120ms ease, border-color 120ms ease, transform 120ms ease;
 }
-.episteme-prose .wiki-link:hover {
+.episteme-prose .wiki-link:hover,
+.episteme-chat-composer .wiki-link:hover {
   background: color-mix(in oklch, var(--accent) 8%, transparent);
   border-color: color-mix(in oklch, var(--accent) 35%, transparent);
   transform: translateY(-1px);
 }
-.episteme-prose .wiki-link:active {
+.episteme-prose .wiki-link:active,
+.episteme-chat-composer .wiki-link:active {
   transform: translateY(0);
 }
-.episteme-prose .wiki-link--paper:hover {
+.episteme-prose .wiki-link--paper:hover,
+.episteme-chat-composer .wiki-link--paper:hover {
   background: color-mix(in oklch, var(--accent-paper, oklch(0.58 0.18 250)) 8%, transparent);
   border-color: color-mix(in oklch, var(--accent-paper, oklch(0.58 0.18 250)) 35%, transparent);
 }
-.episteme-prose .wiki-link--reference:hover {
+.episteme-prose .wiki-link--reference:hover,
+.episteme-chat-composer .wiki-link--reference:hover {
   background: color-mix(in oklch, var(--accent-reference, oklch(0.58 0.20 295)) 8%, transparent);
   border-color: color-mix(in oklch, var(--accent-reference, oklch(0.58 0.20 295)) 35%, transparent);
 }
@@ -155,7 +165,8 @@
    regress to `white-space: normal` for either resolved or unresolved chips.
    The actual ellipsis truncation lives on `.wiki-link__label` below — see
    that rule for the rationale. */
-.episteme-prose .wiki-link[data-type="wiki-link"] {
+.episteme-prose .wiki-link[data-type="wiki-link"],
+.episteme-chat-composer .wiki-link[data-type="wiki-link"] {
   white-space: nowrap;
   overflow: hidden;
 }
@@ -166,7 +177,8 @@
    label in an inline-block child gives the text its own block formatting
    context where `text-overflow: ellipsis` resolves reliably. `min-width: 0`
    lets the flex item shrink below its intrinsic content width. */
-.episteme-prose .wiki-link__label {
+.episteme-prose .wiki-link__label,
+.episteme-chat-composer .wiki-link__label {
   display: inline-block;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -174,12 +186,14 @@
   min-width: 0;
   max-width: 100%;
 }
-.episteme-prose .wiki-link[data-resolved="false"] {
+.episteme-prose .wiki-link[data-resolved="false"],
+.episteme-chat-composer .wiki-link[data-resolved="false"] {
   background: transparent;
   border: 1px dashed oklch(0.58 0.18 27);
   color: oklch(0.52 0.18 27);
 }
-.episteme-prose .wiki-link[data-resolved="false"]:hover {
+.episteme-prose .wiki-link[data-resolved="false"]:hover,
+.episteme-chat-composer .wiki-link[data-resolved="false"]:hover {
   background: oklch(0.58 0.18 27 / 0.06);
   border-color: oklch(0.52 0.18 27);
   color: oklch(0.52 0.18 27);
@@ -188,15 +202,18 @@
 /* Inline kind icon (FileText / BookMarked) injected by WikiLink renderHTML.
    GSD-62: flex parent handles centering + gap, so no margin/vertical-align
    hacks needed. flex-shrink:0 keeps icon size stable when text truncates. */
-.episteme-prose .wiki-link svg {
+.episteme-prose .wiki-link svg,
+.episteme-chat-composer .wiki-link svg {
   width: 0.875em;
   height: 0.875em;
   flex-shrink: 0;
 }
-.episteme-prose .wiki-link--paper svg {
+.episteme-prose .wiki-link--paper svg,
+.episteme-chat-composer .wiki-link--paper svg {
   color: var(--accent-paper, oklch(0.58 0.18 250));
 }
-.episteme-prose .wiki-link--reference svg {
+.episteme-prose .wiki-link--reference svg,
+.episteme-chat-composer .wiki-link--reference svg {
   color: var(--accent-reference, oklch(0.58 0.20 295));
 }
 /* Unresolved pill: icon color must match the red dashed border, not the
@@ -205,7 +222,9 @@
    another attribute to match their specificity and override the color via
    `inherit` from the pill's red `color:`. */
 .episteme-prose .wiki-link[data-resolved="false"].wiki-link--paper svg,
-.episteme-prose .wiki-link[data-resolved="false"].wiki-link--reference svg {
+.episteme-prose .wiki-link[data-resolved="false"].wiki-link--reference svg,
+.episteme-chat-composer .wiki-link[data-resolved="false"].wiki-link--paper svg,
+.episteme-chat-composer .wiki-link[data-resolved="false"].wiki-link--reference svg {
   color: inherit;
 }
 

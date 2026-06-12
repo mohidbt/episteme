@@ -1,34 +1,49 @@
 "use client";
 
-// GSD-96 R3 — chat composer with @-mention picker + library-handle support
-// + composer drop zone.
+// GSD-105 (R6 of GSD-96) — Tiptap chat composer with truly inline
+// wikilink-style chips.
 //
-// Implementation note (deviation from plan §3B step 1-4 noted in §11):
-// Ships as a textarea-backed composer w/ a popover @-picker (mirroring the
-// AgentBall "LITE" picker pattern in §3.7), NOT a Tiptap single-line. We
-// still emit library-handle tokens via formatLibToken so the agent
-// middleware (R2) processes them identically. The Tiptap upgrade can land
-// in a follow-up round once the token round-trip is proven end-to-end.
+// Replaces the R3 textarea + out-of-flow handles row. The wikiLink atom
+// node ships from @episteme/markdown (same node + styling as the notes
+// editor), inserted via the @-trigger Suggestion plugin OR the ref-based
+// imperative API. Submit serializes the doc in DFS order and emits
+// `[lib: kind=... id=... title="..."]` tokens at the EXACT positions where
+// chips sit so a prompt like "look at @paper then summarise" produces
+// `look at [lib: ...] then summarise` — text + tokens INTERLEAVED.
 //
-// Surface contracts:
-//   - onSubmit({text}) called on Enter (no shift). Text includes
-//     interleaved [lib: ...] tokens for any inserted library handles.
-//   - useDroppable("chat-composer") registers a drop target for
-//     SidebarDragActive payloads — DndContext lives at the (app) root
-//     (R2 hoist).
-//   - During streaming, submit is suppressed (matches AgentTranscript).
+// Drop-target wiring (R3/R4 composer drop) is parked under
+// apps/km/src/lib/agent/_deferred/finder-routing/. Cmd+V image paste is
+// deferred to GSD-106.
+//
+// Surface contract:
+//   - onSubmit({ text, handles }): text is the ordered string. handles
+//     is the flat array of inserted library handles (for callers that
+//     still need it, though the agent middleware now parses tokens
+//     directly out of `text`).
+//   - streaming=true → submit no-op.
+//   - ChatComposerHandle.submit() / insertHandle() / isEmpty() / getText()
+//     keep parity with the R3 API so AgentTranscript wiring is unchanged.
+//   - `_editor` is exposed for tests to drive the editor directly.
 
 import {
+  useCallback,
   useEffect,
   useImperativeHandle,
   useMemo,
   useRef,
   useState,
   forwardRef,
-  type KeyboardEvent,
 } from "react";
-import { useDroppable, useDndMonitor, type DragEndEvent } from "@dnd-kit/core";
-import { Textarea } from "@/components/ui/textarea";
+import { createRoot, type Root } from "react-dom/client";
+import {
+  EditorContent,
+  chatEditorExtensions,
+  serializeChatDoc,
+  isChatDocEmpty,
+  useEditor,
+  type ChatWikiLinkSuggestion,
+  type TiptapEditor,
+} from "@episteme/editor";
 import { formatLibraryHandles, type LibraryHandle, type LibraryKind } from "@/lib/agent/lib-tokens";
 
 export interface ChatComposerSubmitPayload {
@@ -41,6 +56,10 @@ export interface ChatComposerProps {
   streaming: boolean;
   placeholder?: string;
   initialText?: string;
+  /** Fires when emptiness changes — used by the outer Send button to
+   *  flip `disabled` (GSD-105 fix-round Fix 3). Called once on mount and
+   *  on every editor update; also called after submit clears the doc. */
+  onIsEmptyChange?: (isEmpty: boolean) => void;
 }
 
 export interface ChatComposerHandle {
@@ -50,52 +69,10 @@ export interface ChatComposerHandle {
   getText: () => string;
   /** Fire the same submit path Enter triggers (external Send button). */
   submit: () => void;
-  /** True when there's no text + no handles (drives Send button disabled). */
+  /** True when there's no text + no chips. */
   isEmpty: () => boolean;
-}
-
-// Helper exported for tests + drop-target use. Returns the textual
-// [lib: ...] token for a single handle.
-export function insertLibraryHandle(handle: LibraryHandle): string {
-  return formatLibraryHandles([handle]);
-}
-
-/**
- * Decode a SidebarDragActive-shaped payload into a LibraryHandle if it can
- * be dropped on the chat composer. Returns null for non-leaf, folder, or
- * shaped-wrong payloads so the caller can ignore them. Exported for tests.
- */
-export function decodeDropPayload(
-  data: unknown,
-): LibraryHandle | null {
-  if (!data || typeof data !== "object") return null;
-  const d = data as {
-    kind?: string;
-    itemKind?: string;
-    id?: string;
-    title?: string;
-  };
-  if (d.kind !== "leaf") return null;
-  if (!d.id || !d.itemKind) return null;
-  if (
-    d.itemKind !== "paper" &&
-    d.itemKind !== "note" &&
-    d.itemKind !== "reference" &&
-    d.itemKind !== "paperset"
-  ) {
-    return null;
-  }
-  return {
-    kind: d.itemKind,
-    id: d.id,
-    title: d.title ?? d.itemKind,
-  };
-}
-
-interface RecentItem {
-  id: string;
-  kind: LibraryKind;
-  title: string;
+  /** Test hook: raw Tiptap editor instance. */
+  _editor: TiptapEditor | null;
 }
 
 interface SearchHit {
@@ -104,56 +81,309 @@ interface SearchHit {
   title: string;
 }
 
+function formatLibToken(h: { kind: string; id: string; title: string }): string {
+  // Funnel through formatLibraryHandles so the grammar stays the single
+  // source of truth (lib-tokens.ts).
+  return formatLibraryHandles([
+    { kind: h.kind as LibraryKind, id: h.id, title: h.title },
+  ]);
+}
+
 export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
   function ChatComposer(
-    { onSubmit, streaming, placeholder = "Ask anything", initialText = "" },
+    { onSubmit, streaming, placeholder = "Ask anything", onIsEmptyChange },
     ref,
   ) {
-    const [text, setText] = useState(initialText);
-    const [handles, setHandles] = useState<LibraryHandle[]>([]);
+    const onSubmitRef = useRef(onSubmit);
+    onSubmitRef.current = onSubmit;
+    const streamingRef = useRef(streaming);
+    streamingRef.current = streaming;
+    const onIsEmptyChangeRef = useRef(onIsEmptyChange);
+    onIsEmptyChangeRef.current = onIsEmptyChange;
+
+    // Picker popover state (mirror of R3 picker — Tiptap suggestion
+    // delivers the query + range, we render the same listbox inline).
     const [pickerOpen, setPickerOpen] = useState(false);
     const [pickerQuery, setPickerQuery] = useState("");
-    const [pickerAt, setPickerAt] = useState<number | null>(null);
     const [items, setItems] = useState<SearchHit[]>([]);
     const [selected, setSelected] = useState(0);
-    const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+    const itemsRef = useRef<SearchHit[]>([]);
+    const selectedRef = useRef(0);
+    itemsRef.current = items;
+    selectedRef.current = selected;
+    const suggestionCommandRef = useRef<((props: unknown) => void) | null>(null);
 
-    // Droppable surface for SidebarDragActive payloads (R2 type).
-    const { setNodeRef, isOver } = useDroppable({ id: "chat-composer" });
+    const trySubmit = useCallback(() => {
+      const e = editorRef.current;
+      if (!e) return false;
+      if (streamingRef.current) return false;
+      if (isChatDocEmpty(e.state.doc)) return false;
+      const text = serializeChatDoc(e.state.doc, formatLibToken);
+      if (!text.trim() && !text.includes("[lib:")) return false;
+      // Re-derive flat handle list from the doc for callers that still
+      // want the typed array (agent middleware parses tokens out of text
+      // either way).
+      const handles: LibraryHandle[] = [];
+      e.state.doc.descendants((n) => {
+        if (n.type.name === "wikiLink") {
+          const a = n.attrs as {
+            targetKind: LibraryKind | null;
+            targetId: string | null;
+            title: string;
+            displayTitle: string | null;
+            alias: string | null;
+          };
+          if (a.targetKind && a.targetId) {
+            handles.push({
+              kind: a.targetKind as LibraryKind,
+              id: a.targetId,
+              title: a.displayTitle ?? a.alias ?? a.title ?? "",
+            });
+          }
+        }
+      });
+      onSubmitRef.current({ text, handles });
+      e.commands.clearContent();
+      // Editor `update` event does not fire reliably from inside the same
+      // synchronous tick as the clearContent command (Tiptap batches
+      // transactions); push the empty notification explicitly so the outer
+      // Send button re-disables immediately after submit (Fix 3).
+      onIsEmptyChangeRef.current?.(true);
+      return true;
+    }, []);
 
-    // Listen to drag-end events at the outer DndContext (AppDndContext from
-    // the (app) layout). When a SidebarDragActive lands on us, decode the
-    // payload + insert it as a library handle chip.
-    useDndMonitor({
-      onDragEnd(ev: DragEndEvent) {
-        if (ev.over?.id !== "chat-composer") return;
-        const handle = decodeDropPayload(ev.active?.data?.current);
-        if (handle) appendHandle(handle);
+    const wikiLinkSuggestion = useMemo<ChatWikiLinkSuggestion>(
+      () => ({
+        items: async ({ query }) => {
+          // Items come from the popover's fetcher (effect below). The
+          // suggestion plugin only needs *some* array; the popover handles
+          // the keyboard + click. We return an empty list and let the
+          // host-rendered picker drive selection.
+          void query;
+          return [];
+        },
+        command: ({ editor, range, props }) => {
+          const p = props as {
+            title: string;
+            targetKind: LibraryKind;
+            targetId: string | null;
+          };
+          editor
+            .chain()
+            .focus()
+            .deleteRange(range)
+            .insertContent([
+              {
+                type: "wikiLink",
+                attrs: {
+                  title: p.title,
+                  alias: null,
+                  targetKind: p.targetKind,
+                  targetId: p.targetId,
+                  displayTitle: null,
+                },
+              },
+              { type: "text", text: " " },
+            ])
+            .run();
+        },
+        render: () => {
+          let host: HTMLDivElement | null = null;
+          let root: Root | null = null;
+          const place = (
+            clientRect: (() => DOMRect | null) | null | undefined,
+            ed: TiptapEditor,
+            range: { from: number; to: number },
+          ) => {
+            if (!host) return;
+            let rect = clientRect?.() ?? null;
+            if (!rect) {
+              try {
+                const c = ed.view.coordsAtPos(range.from);
+                rect = {
+                  top: c.top,
+                  bottom: c.bottom,
+                  left: c.left,
+                  right: c.left,
+                  width: 0,
+                  height: c.bottom - c.top,
+                  x: c.left,
+                  y: c.top,
+                  toJSON: () => ({}),
+                } as DOMRect;
+              } catch {
+                host.style.display = "none";
+                return;
+              }
+            }
+            host.style.display = "block";
+            // Tiptap suggestion popover floats above the caret; place by
+            // estimating 240px popover height.
+            const POPOVER_H = 240;
+            const top = rect.top + window.scrollY - POPOVER_H - 4;
+            host.style.top = `${Math.max(window.scrollY + 4, top)}px`;
+            host.style.left = `${rect.left + window.scrollX}px`;
+          };
+          return {
+            onStart: (props) => {
+              suggestionCommandRef.current = props.command as never;
+              host = document.createElement("div");
+              host.style.position = "absolute";
+              host.style.zIndex = "50";
+              host.setAttribute("data-testid", "chat-composer-picker-anchor");
+              document.body.appendChild(host);
+              root = createRoot(host);
+              setPickerQuery(props.query ?? "");
+              setPickerOpen(true);
+              place(props.clientRect, props.editor, props.range);
+            },
+            onUpdate: (props) => {
+              setPickerQuery(props.query ?? "");
+              place(props.clientRect, props.editor, props.range);
+            },
+            onKeyDown: (props) => {
+              if (!pickerOpenRef.current) return false;
+              const k = props.event.key;
+              if (k === "ArrowDown") {
+                props.event.preventDefault();
+                setSelected((s) => (s + 1) % Math.max(1, itemsRef.current.length));
+                return true;
+              }
+              if (k === "ArrowUp") {
+                props.event.preventDefault();
+                setSelected(
+                  (s) =>
+                    (s + itemsRef.current.length - 1) %
+                    Math.max(1, itemsRef.current.length),
+                );
+                return true;
+              }
+              if (k === "Enter") {
+                props.event.preventDefault();
+                const it = itemsRef.current[selectedRef.current];
+                if (it && suggestionCommandRef.current) {
+                  suggestionCommandRef.current({
+                    title: it.title,
+                    targetKind: it.kind,
+                    targetId: it.id,
+                  });
+                }
+                return true;
+              }
+              if (k === "Escape") {
+                setPickerOpen(false);
+                return true;
+              }
+              return false;
+            },
+            onExit: () => {
+              setPickerOpen(false);
+              if (root) root.unmount();
+              if (host && host.parentNode) host.parentNode.removeChild(host);
+              host = null;
+              root = null;
+              suggestionCommandRef.current = null;
+            },
+          };
+        },
+      }),
+      [],
+    );
+
+    const editor = useEditor({
+      extensions: chatEditorExtensions({
+        placeholder,
+        wikiLinkSuggestion,
+      }),
+      autofocus: true,
+      immediatelyRender: false,
+      onUpdate: ({ editor: ed }) => {
+        // Notify the outer Send button of emptiness changes (Fix 3).
+        onIsEmptyChangeRef.current?.(isChatDocEmpty(ed.state.doc));
+      },
+      onCreate: ({ editor: ed }) => {
+        // Fire once at mount so the initial Send-button state matches doc
+        // emptiness (typically `true`).
+        onIsEmptyChangeRef.current?.(isChatDocEmpty(ed.state.doc));
+      },
+      editorProps: {
+        attributes: {
+          "aria-label": "Message agent",
+          "data-testid": "chat-composer-editor",
+          // Single-line vibe + matches the prior textarea sizing.
+          class:
+            "episteme-chat-composer outline-none min-h-9 max-h-48 overflow-y-auto py-1.5 px-2 text-sm",
+        },
+        handleKeyDown(view, event) {
+          // Enter (no shift, no picker) → submit.
+          if (event.key === "Enter" && !event.shiftKey) {
+            // If the suggestion popover is open, let its onKeyDown run.
+            if (pickerOpenRef.current) return false;
+            event.preventDefault();
+            trySubmit();
+            return true;
+          }
+          return false;
+        },
       },
     });
+
+    const editorRef = useRef<TiptapEditor | null>(null);
+    editorRef.current = editor;
+    const pickerOpenRef = useRef(false);
+    pickerOpenRef.current = pickerOpen;
+
+    // Fire initial onIsEmptyChange once the editor instance materializes.
+    // `useEditor({ immediatelyRender: false })` defers editor creation past
+    // the first render, and Tiptap's `onCreate` callback does not fire
+    // reliably in jsdom under that setting; this effect closes the gap so
+    // the outer Send button starts in the correct disabled state.
+    useEffect(() => {
+      if (!editor) return;
+      onIsEmptyChangeRef.current?.(isChatDocEmpty(editor.state.doc));
+    }, [editor]);
 
     useImperativeHandle(
       ref,
       () => ({
         insertHandle: (handle: LibraryHandle) => {
-          appendHandle(handle);
+          const e = editorRef.current;
+          if (!e) return;
+          e.chain()
+            .focus()
+            .insertContent({
+              type: "wikiLink",
+              attrs: {
+                title: handle.title,
+                alias: null,
+                targetKind: handle.kind,
+                targetId: handle.id,
+                displayTitle: null,
+              },
+            })
+            .run();
         },
-        getText: () => composeOutput(text, handles),
-        submit: () => handleSubmit(),
-        isEmpty: () => text.trim().length === 0 && handles.length === 0,
+        getText: () => {
+          const e = editorRef.current;
+          if (!e) return "";
+          return serializeChatDoc(e.state.doc, formatLibToken);
+        },
+        submit: () => {
+          trySubmit();
+        },
+        isEmpty: () => {
+          const e = editorRef.current;
+          if (!e) return true;
+          return isChatDocEmpty(e.state.doc);
+        },
+        get _editor() {
+          return editorRef.current;
+        },
       }),
-      [text, handles],
+      [trySubmit],
     );
 
-    // Watch for `@` and open the picker.
-    useEffect(() => {
-      const at = pickerAt;
-      if (at === null) return;
-      const q = text.slice(at + 1).match(/^[^\s@]*/)?.[0] ?? "";
-      setPickerQuery(q);
-    }, [text, pickerAt]);
-
-    // Load items as query changes.
+    // Load picker items as the query changes.
     useEffect(() => {
       if (!pickerOpen) return;
       let cancelled = false;
@@ -167,8 +397,14 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
         .then((data) => {
           if (cancelled || !data) return;
           if (q.length === 0) {
-            const arr = (data.items ?? []) as RecentItem[];
-            setItems(arr.map((it) => ({ id: it.id, kind: it.kind, title: it.title })));
+            const arr = (data.items ?? []) as Array<{
+              id: string;
+              kind: LibraryKind;
+              title: string;
+            }>;
+            setItems(
+              arr.map((it) => ({ id: it.id, kind: it.kind, title: it.title })),
+            );
           } else {
             const merged: SearchHit[] = [];
             for (const p of data.papers ?? []) {
@@ -192,120 +428,26 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
       };
     }, [pickerOpen, pickerQuery]);
 
-    function appendHandle(handle: LibraryHandle) {
-      setHandles((h) => [...h, handle]);
-      // Replace the typed `@query` (if any) with empty so the textarea
-      // doesn't keep a stale literal `@foo`.
-      if (pickerAt !== null) {
-        setText((cur) => cur.slice(0, pickerAt) + cur.slice(pickerAt + 1 + pickerQuery.length));
+    const onPick = useCallback((it: SearchHit) => {
+      if (suggestionCommandRef.current) {
+        suggestionCommandRef.current({
+          title: it.title,
+          targetKind: it.kind,
+          targetId: it.id,
+        } as never);
       }
-      setPickerOpen(false);
-      setPickerAt(null);
-      setPickerQuery("");
-    }
-
-    function handleSubmit() {
-      if (streaming) return;
-      const composed = composeOutput(text, handles);
-      if (composed.trim().length === 0 && handles.length === 0) return;
-      onSubmit({ text: composed, handles });
-      setText("");
-      setHandles([]);
-    }
-
-    function onKey(e: KeyboardEvent<HTMLTextAreaElement>) {
-      if (pickerOpen && items.length > 0) {
-        if (e.key === "ArrowDown") {
-          e.preventDefault();
-          setSelected((s) => (s + 1) % items.length);
-          return;
-        }
-        if (e.key === "ArrowUp") {
-          e.preventDefault();
-          setSelected((s) => (s + items.length - 1) % items.length);
-          return;
-        }
-        if (e.key === "Enter") {
-          e.preventDefault();
-          const it = items[selected];
-          if (it) appendHandle({ kind: it.kind, id: it.id, title: it.title });
-          return;
-        }
-        if (e.key === "Escape") {
-          setPickerOpen(false);
-          setPickerAt(null);
-          return;
-        }
-      }
-      if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault();
-        handleSubmit();
-      }
-    }
-
-    function onChange(value: string) {
-      setText(value);
-      // Detect a new `@` insertion at the caret position.
-      const caret = textareaRef.current?.selectionStart ?? value.length;
-      const prev = value.slice(Math.max(0, caret - 1), caret);
-      if (prev === "@") {
-        setPickerAt(caret - 1);
-        setPickerOpen(true);
-        setPickerQuery("");
-      }
-    }
+    }, []);
 
     return (
-      <div
-        ref={setNodeRef}
-        data-testid="chat-composer"
-        className={`relative ${isOver ? "ring-1 ring-primary/40 ring-inset" : ""}`}
-      >
-        {handles.length > 0 ? (
-          <div className="flex flex-wrap gap-1.5 px-2 pt-2" data-testid="chat-composer-handles">
-            {handles.map((h, i) => (
-              <span
-                key={`${h.kind}-${h.id}-${i}`}
-                className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs"
-              >
-                <span className="text-muted-foreground">{h.kind}</span>
-                <span>{h.title}</span>
-                <button
-                  type="button"
-                  aria-label={`Remove ${h.title}`}
-                  onClick={() => setHandles((cur) => cur.filter((_, idx) => idx !== i))}
-                  className="ml-1 text-muted-foreground hover:text-foreground"
-                >
-                  ×
-                </button>
-              </span>
-            ))}
-          </div>
-        ) : null}
-        <Textarea
-          ref={textareaRef}
-          autoFocus
-          aria-label="Message agent"
-          className="min-h-9 max-h-48 resize-none py-1.5 text-sm"
-          placeholder={placeholder}
-          value={text}
-          onChange={(e) => onChange(e.target.value)}
-          onKeyDown={onKey}
-          rows={1}
-        />
+      <div data-testid="chat-composer" className="relative">
+        <EditorContent editor={editor} />
         {pickerOpen ? (
-          <Picker items={items} selected={selected} onPick={appendHandle} />
+          <Picker items={items} selected={selected} onPick={onPick} />
         ) : null}
       </div>
     );
   },
 );
-
-function composeOutput(text: string, handles: LibraryHandle[]): string {
-  const tokens = formatLibraryHandles(handles);
-  if (tokens.length === 0) return text;
-  return text.length > 0 ? `${text} ${tokens}` : tokens;
-}
 
 function Picker({
   items,
@@ -314,7 +456,7 @@ function Picker({
 }: {
   items: SearchHit[];
   selected: number;
-  onPick: (h: LibraryHandle) => void;
+  onPick: (it: SearchHit) => void;
 }) {
   const grouped = useMemo(() => {
     const g: Record<LibraryKind, SearchHit[]> = {
@@ -349,7 +491,7 @@ function Picker({
                   type="button"
                   onMouseDown={(e) => {
                     e.preventDefault();
-                    onPick({ kind: it.kind, id: it.id, title: it.title });
+                    onPick(it);
                   }}
                   className={`w-full rounded px-2 py-1 text-left ${
                     isSel ? "bg-accent text-accent-foreground" : ""

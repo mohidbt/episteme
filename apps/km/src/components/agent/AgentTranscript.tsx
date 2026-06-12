@@ -75,6 +75,7 @@ import {
 } from "@/components/ui/alert";
 import { Textarea } from "@/components/ui/textarea";
 import { ChatComposer, type ChatComposerHandle } from "./ChatComposer";
+import { LibTokenizedText } from "./LibTokenizedText";
 import {
   ListChecksIcon,
   ChevronDownIcon,
@@ -89,8 +90,9 @@ import {
   PaperclipButton,
   formatMessageWithAttachments,
 } from "./ChatFileAttachments";
-import { useFinderDropDispatch, FinderChips } from "./FinderDropDispatch";
-import { formatLibraryHandles } from "@/lib/agent/lib-tokens";
+// GSD-105: R4 finder routing parked under _deferred/. Chat-input dropzone
+// now routes file drops back through useChatAttachments (legacy image-only
+// path); library handles ship as inline wikiLink chips in the composer.
 import { humanizeToolName } from "@/lib/agents/tool-categories";
 import { ChatCodePre } from "./ChatCodePre";
 import { ChatTable } from "./ChatTable";
@@ -322,20 +324,14 @@ export function AgentTranscript({
   );
   const [streaming, setStreaming] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
+  // GSD-105 fix-round (Fix 3): Send button must be disabled when the
+  // composer is empty. ChatComposer pushes emptiness updates via
+  // `onIsEmptyChange`. Default to `true` so the button is disabled before
+  // the first composer-mount notification arrives.
+  const [composerEmpty, setComposerEmpty] = useState(true);
   const composerRef = useRef<ChatComposerHandle | null>(null);
   const { attachments, addFiles, removeAttachment, clear, uploadAll } =
     useChatAttachments();
-  // GSD-96 R4: Finder drop routing — branches by MIME/ext. Images delegate
-  // back to addFiles (legacy GSD-41 path); paper/note/reference flow through
-  // their own ingest pipelines + chip lifecycle.
-  const {
-    chips: finderChips,
-    dispatch: finderDispatch,
-    removeChip: removeFinderChip,
-    clearChips: clearFinderChips,
-    someNotReady: finderNotReady,
-    readyHandles: finderReadyHandles,
-  } = useFinderDropDispatch(addFiles ? (file) => addFiles([file]) : () => {});
   const agentBall = useAgentBallOptional();
   useEffect(() => {
     agentBall?.setWorking(streaming);
@@ -510,19 +506,12 @@ export function AgentTranscript({
     (textArg?: string) => {
       const rawText = (textArg ?? composerRef.current?.getText() ?? "").trim();
       const hasAttachments = attachments.length > 0;
-      const finderTokens = formatLibraryHandles(finderReadyHandles);
-      const withFinder = finderTokens
-        ? rawText.length > 0
-          ? `${rawText} ${finderTokens}`
-          : finderTokens
-        : rawText;
-      if (!withFinder && !hasAttachments) return;
+      if (!rawText && !hasAttachments) return;
 
       // Fast path — no asset uploads pending.
       if (!hasAttachments) {
-        if (onSendMessage) onSendMessage(withFinder);
-        else void defaultSend(withFinder);
-        clearFinderChips();
+        if (onSendMessage) onSendMessage(rawText);
+        else void defaultSend(rawText);
         return;
       }
 
@@ -530,22 +519,13 @@ export function AgentTranscript({
       void (async () => {
         const uploaded = await uploadAll();
         if (uploaded === null) return; // toast.error already fired
-        const finalText = formatMessageWithAttachments(withFinder, uploaded);
+        const finalText = formatMessageWithAttachments(rawText, uploaded);
         clear();
-        clearFinderChips();
         if (onSendMessage) onSendMessage(finalText);
         else void defaultSend(finalText);
       })();
     },
-    [
-      onSendMessage,
-      defaultSend,
-      attachments,
-      uploadAll,
-      clear,
-      finderReadyHandles,
-      clearFinderChips,
-    ],
+    [onSendMessage, defaultSend, attachments, uploadAll, clear],
   );
 
   // Task #45: fork conversation at a prior user message. Truncates the
@@ -782,7 +762,9 @@ export function AgentTranscript({
         onDrop={(e) => {
           if (e.dataTransfer?.files?.length) {
             e.preventDefault();
-            finderDispatch(e.dataTransfer.files);
+            // GSD-105: R4 finder routing parked; route to legacy
+            // attachment upload (image/PDF only).
+            addFiles(e.dataTransfer.files);
           }
           setIsDragOver(false);
         }}
@@ -796,7 +778,6 @@ export function AgentTranscript({
           </div>
         ) : null}
         <AttachmentChips attachments={attachments} onRemove={removeAttachment} />
-        <FinderChips chips={finderChips} onRemove={removeFinderChip} />
         <div className="p-2 flex items-center gap-2">
           <PaperclipButton onFiles={addFiles} />
           <div className="flex-1 min-w-0">
@@ -804,13 +785,14 @@ export function AgentTranscript({
               ref={composerRef}
               onSubmit={({ text }) => handleSend(text)}
               streaming={streaming}
+              onIsEmptyChange={setComposerEmpty}
               placeholder="Ask anything"
             />
           </div>
           <button
             type="button"
             onClick={() => composerRef.current?.submit()}
-            disabled={streaming || finderNotReady}
+            disabled={streaming || composerEmpty}
             className="rounded-md bg-primary px-3 py-1.5 text-sm text-primary-foreground disabled:opacity-50"
           >
             Send
@@ -947,14 +929,24 @@ function TextCardView({
     <div data-testid="card-text" data-role={card.role} className="group flex flex-col">
       <Message from={card.role}>
         <MessageContent>
-          {/* RG3 #58 — assistant prose paragraphs use leading-snug (1.375); user bubble inherits. */}
-          <MessageResponse
-            className={card.role === "assistant" ? "[&_p]:leading-snug" : undefined}
-            controls={false}
-            components={chatStreamdownComponents}
-          >
-            {stripBlankRows(card.text)}
-          </MessageResponse>
+          {/* GSD-105 fix-round (Fix 2): the user message bubble must render
+              `[lib: ...]` tokens as inline `.wiki-link` chips matching the
+              composer chips the user just sent. Streamdown markdown would
+              render the bracket grammar as plain prose and lose the visual
+              handle context. Assistant bubbles still use Streamdown for
+              code blocks / tables / math; the chip pass is a separate path. */}
+          {card.role === "user" ? (
+            <LibTokenizedText text={stripBlankRows(card.text)} />
+          ) : (
+            /* RG3 #58 — assistant prose paragraphs use leading-snug (1.375). */
+            <MessageResponse
+              className="[&_p]:leading-snug"
+              controls={false}
+              components={chatStreamdownComponents}
+            >
+              {stripBlankRows(card.text)}
+            </MessageResponse>
+          )}
         </MessageContent>
       </Message>
       {card.role === "assistant" && citations.length > 0 ? (
