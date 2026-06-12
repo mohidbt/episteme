@@ -71,6 +71,9 @@ export async function listFolderContents(
       eq(papers.userId, userId),
       folderId == null ? isNull(papers.folderId) : eq(papers.folderId, folderId),
     )),
+    // GSD-93: hide ref-twins (paperId set) — same filter as sidebar tree
+    // in lib/tree-server.ts. Auto-created on paper upload; would otherwise
+    // duplicate the paper row in the drive grid.
     db.select({
       id: references_.id, cslJson: references_.cslJson, citationKey: references_.citationKey,
       folderId: references_.folderId, updatedAt: references_.updatedAt,
@@ -78,6 +81,7 @@ export async function listFolderContents(
       eq(references_.libraryId, libraryId),
       eq(references_.userId, userId),
       folderId == null ? isNull(references_.folderId) : eq(references_.folderId, folderId),
+      isNull(references_.paperId),
     )),
     db.select({
       id: notes.id, title: notes.title, slug: notes.slug,

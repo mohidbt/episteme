@@ -64,6 +64,32 @@ describe("listFolderContents", () => {
     expect(out.papersets).toHaveLength(1);
     expect(out.papersets[0].filename).toBe("bench.csv");
   });
+
+  // GSD-93: ref-twins (paperId IS NOT NULL) must be hidden from drive grid,
+  // matching sidebar tree filter in lib/tree-server.ts.
+  it("hides ref-twins (paperId set) from drive listing", async () => {
+    const [folder] = await db.insert(folders)
+      .values({ libraryId, userId: u.id, name: `RefHide-${Date.now()}` })
+      .returning({ id: folders.id });
+    const [p] = await db.insert(papers).values({
+      libraryId, userId: u.id, folderId: folder.id, filename: `gsd93-${Date.now()}.pdf`,
+    }).returning({ id: papers.id });
+    // Hidden ref-twin (auto-created on upload).
+    await db.insert(references_).values({
+      libraryId, userId: u.id, folderPath: "", folderId: folder.id,
+      citationKey: `twin-${Date.now()}`, cslJson: { title: "twin" },
+      paperId: p.id,
+    });
+    // Standalone reference (visible).
+    await db.insert(references_).values({
+      libraryId, userId: u.id, folderPath: "", folderId: folder.id,
+      citationKey: `solo-${Date.now()}`, cslJson: { title: "solo" },
+    });
+
+    const out = await listFolderContents(libraryId, u.id, folder.id);
+    expect(out.references).toHaveLength(1);
+    expect(out.references[0].title).toBe("solo");
+  });
 });
 
 describe("emptyTrash", () => {
