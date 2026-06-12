@@ -89,6 +89,8 @@ import {
   PaperclipButton,
   formatMessageWithAttachments,
 } from "./ChatFileAttachments";
+import { useFinderDropDispatch, FinderChips } from "./FinderDropDispatch";
+import { formatLibraryHandles } from "@/lib/agent/lib-tokens";
 import { humanizeToolName } from "@/lib/agents/tool-categories";
 import { ChatCodePre } from "./ChatCodePre";
 import { ChatTable } from "./ChatTable";
@@ -323,6 +325,17 @@ export function AgentTranscript({
   const composerRef = useRef<ChatComposerHandle | null>(null);
   const { attachments, addFiles, removeAttachment, clear, uploadAll } =
     useChatAttachments();
+  // GSD-96 R4: Finder drop routing — branches by MIME/ext. Images delegate
+  // back to addFiles (legacy GSD-41 path); paper/note/reference flow through
+  // their own ingest pipelines + chip lifecycle.
+  const {
+    chips: finderChips,
+    dispatch: finderDispatch,
+    removeChip: removeFinderChip,
+    clearChips: clearFinderChips,
+    someNotReady: finderNotReady,
+    readyHandles: finderReadyHandles,
+  } = useFinderDropDispatch(addFiles ? (file) => addFiles([file]) : () => {});
   const agentBall = useAgentBallOptional();
   useEffect(() => {
     agentBall?.setWorking(streaming);
@@ -497,26 +510,42 @@ export function AgentTranscript({
     (textArg?: string) => {
       const rawText = (textArg ?? composerRef.current?.getText() ?? "").trim();
       const hasAttachments = attachments.length > 0;
-      if (!rawText && !hasAttachments) return;
+      const finderTokens = formatLibraryHandles(finderReadyHandles);
+      const withFinder = finderTokens
+        ? rawText.length > 0
+          ? `${rawText} ${finderTokens}`
+          : finderTokens
+        : rawText;
+      if (!withFinder && !hasAttachments) return;
 
-      // Fast path — no attachments to upload.
+      // Fast path — no asset uploads pending.
       if (!hasAttachments) {
-        if (onSendMessage) onSendMessage(rawText);
-        else void defaultSend(rawText);
+        if (onSendMessage) onSendMessage(withFinder);
+        else void defaultSend(withFinder);
+        clearFinderChips();
         return;
       }
 
-      // Slow path — upload attachments first, then send the formatted text.
+      // Slow path — upload asset attachments first, then send the formatted text.
       void (async () => {
         const uploaded = await uploadAll();
         if (uploaded === null) return; // toast.error already fired
-        const finalText = formatMessageWithAttachments(rawText, uploaded);
+        const finalText = formatMessageWithAttachments(withFinder, uploaded);
         clear();
+        clearFinderChips();
         if (onSendMessage) onSendMessage(finalText);
         else void defaultSend(finalText);
       })();
     },
-    [onSendMessage, defaultSend, attachments, uploadAll, clear],
+    [
+      onSendMessage,
+      defaultSend,
+      attachments,
+      uploadAll,
+      clear,
+      finderReadyHandles,
+      clearFinderChips,
+    ],
   );
 
   // Task #45: fork conversation at a prior user message. Truncates the
@@ -753,7 +782,7 @@ export function AgentTranscript({
         onDrop={(e) => {
           if (e.dataTransfer?.files?.length) {
             e.preventDefault();
-            addFiles(e.dataTransfer.files);
+            finderDispatch(e.dataTransfer.files);
           }
           setIsDragOver(false);
         }}
@@ -767,6 +796,7 @@ export function AgentTranscript({
           </div>
         ) : null}
         <AttachmentChips attachments={attachments} onRemove={removeAttachment} />
+        <FinderChips chips={finderChips} onRemove={removeFinderChip} />
         <div className="p-2 flex items-center gap-2">
           <PaperclipButton onFiles={addFiles} />
           <div className="flex-1 min-w-0">
@@ -780,7 +810,7 @@ export function AgentTranscript({
           <button
             type="button"
             onClick={() => composerRef.current?.submit()}
-            disabled={streaming}
+            disabled={streaming || finderNotReady}
             className="rounded-md bg-primary px-3 py-1.5 text-sm text-primary-foreground disabled:opacity-50"
           >
             Send

@@ -75,7 +75,9 @@ describe("AgentTranscript — file upload (GSD-27)", () => {
     expect(screen.getByRole("button", { name: /remove photo\.png/i })).toBeTruthy();
   });
 
-  it("rejects unsupported file types with a toast and renders no chip", async () => {
+  it("rejects unsupported file types with a red chip and no asset chip (GSD-96 R4)", async () => {
+    // R4 supersedes the GSD-27 toast: unsupported drops now surface as an
+    // inline red chip in the FinderChips row (plan §3.9). No /api/assets fires.
     render(<DndContext><AgentTranscript threadId="t1" /></DndContext>);
     const dropzone = screen.getByTestId("chat-input-dropzone");
     const file = makeFile("evil.exe", "application/x-msdownload");
@@ -84,8 +86,10 @@ describe("AgentTranscript — file upload (GSD-27)", () => {
         dataTransfer: { files: [file], types: ["Files"] },
       });
     });
-    expect(toastError).toHaveBeenCalled();
-    expect(screen.queryByText(/evil\.exe/)).toBeNull();
+    expect(screen.getByText(/we cannot process this file/i)).toBeTruthy();
+    // Filename visible inside the rejection chip — assert via testid to avoid
+    // confusion with the legacy asset chip.
+    expect(screen.queryByTestId("finder-chip-rejected")).toBeTruthy();
   });
 
   it("removes a chip when its remove button is clicked", async () => {
