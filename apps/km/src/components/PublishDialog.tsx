@@ -12,7 +12,6 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { isValidUsername } from "@/lib/username";
 
 // B11: publishing pipeline is paused for soak. Dialog renders read-only with a
 // prominent banner; submit actions are disabled so users see the panel they
@@ -37,47 +36,18 @@ export function PublishDialog({
   initialPublicSlug: string | null;
   defaultSlug: string;
 }) {
-  const [username, setUsername] = useState<string | null>(initialUsername);
   const [isPublic, setIsPublic] = useState(initialIsPublic);
   const [publicSlug, setPublicSlug] = useState(
     initialPublicSlug ?? defaultSlug,
   );
-  const [usernameDraft, setUsernameDraft] = useState("");
-  const [claimError, setClaimError] = useState<string | null>(null);
   const [publishError, setPublishError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const url = username ? `${username}.${PUBLISH_DOMAIN}/${publicSlug}` : "";
-
-  async function claimUsername() {
-    if (PUBLISHING_DISABLED || busy) return;
-    setClaimError(null);
-    const name = usernameDraft.trim().toLowerCase();
-    if (!isValidUsername(name)) {
-      setClaimError("Invalid username");
-      return;
-    }
-    setBusy(true);
-    try {
-      const res = await fetch("/api/users/username", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ username: name }),
-      });
-      if (res.status === 409) {
-        setClaimError("Username taken");
-        return;
-      }
-      if (!res.ok) {
-        setClaimError("Could not claim username");
-        return;
-      }
-      const data = (await res.json()) as { username: string };
-      setUsername(data.username);
-    } finally {
-      setBusy(false);
-    }
-  }
+  // GSD-95: username always comes from signup. No in-dialog claim form.
+  // Rare null case (legacy/anon) → render a read-only note pointing to sign-up.
+  const url = initialUsername
+    ? `${initialUsername}.${PUBLISH_DOMAIN}/${publicSlug}`
+    : "";
 
   async function togglePublish(next: boolean) {
     if (PUBLISHING_DISABLED || busy) return;
@@ -137,35 +107,14 @@ export function PublishDialog({
           </AlertDescription>
         </Alert>
         <div className="flex flex-col gap-3 p-1">
-          {!username ? (
-            <div className="flex flex-col gap-2">
-              <p className="text-sm text-muted-foreground">
-                Choose a username to enable publishing.
-              </p>
-              <div className="flex gap-2">
-                <Input
-                  value={usernameDraft}
-                  onChange={(e) => setUsernameDraft(e.target.value)}
-                  placeholder="yourname"
-                  data-testid="username-input"
-                />
-                <Button
-                  onClick={claimUsername}
-                  disabled={busy || PUBLISHING_DISABLED}
-                  data-testid="claim-username"
-                >
-                  Claim
-                </Button>
-              </div>
-              {claimError && (
-                <div
-                  data-testid="claim-error"
-                  className="text-xs text-destructive"
-                >
-                  {claimError}
-                </div>
-              )}
-            </div>
+          {!initialUsername ? (
+            <p
+              data-testid="publish-needs-signup"
+              className="text-sm text-muted-foreground"
+            >
+              Sign up to publish — your account username becomes the publish
+              subdomain.
+            </p>
           ) : (
             <div className="flex flex-col gap-3">
               <label className="flex items-center gap-2 text-sm">
