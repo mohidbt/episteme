@@ -118,6 +118,84 @@ describe("moveItemToFolder (GSD-76: paper ref-twin follows)", () => {
   });
 });
 
+describe("moveToTrash / restoreFromTrash paper (GSD-97: ref-twin follows)", () => {
+  it("moveToTrash(paper) cascades to ref-twin: twin folderId=trash, prev=origFolder", async () => {
+    const f = await createFolder({ libraryId, userId: u.id, parentId: null, name: "T-A" });
+    const [p] = await db.insert(papers).values({
+      libraryId, userId: u.id, folderId: f.id, filename: `tp-${Date.now()}.pdf`,
+    }).returning({ id: papers.id });
+    const [r] = await db.insert(references_).values({
+      libraryId, userId: u.id, folderPath: "", folderId: f.id,
+      citationKey: `tk-${Date.now()}`, cslJson: { id: p.id, title: "twin" },
+      paperId: p.id,
+    }).returning({ id: references_.id });
+
+    await moveToTrash({ libraryId, userId: u.id, target: { kind: "paper", id: p.id } });
+
+    const [refRow] = await db.select({
+      folderId: references_.folderId, prev: references_.prevFolderId,
+    }).from(references_).where(eq(references_.id, r.id));
+    expect(refRow.folderId).toBe(trashId);
+    expect(refRow.prev).toBe(f.id);
+  });
+
+  it("restoreFromTrash(paper) restores ref-twin to its prev folder", async () => {
+    const f = await createFolder({ libraryId, userId: u.id, parentId: null, name: "T-B" });
+    const [p] = await db.insert(papers).values({
+      libraryId, userId: u.id, folderId: f.id, filename: `tp2-${Date.now()}.pdf`,
+    }).returning({ id: papers.id });
+    const [r] = await db.insert(references_).values({
+      libraryId, userId: u.id, folderPath: "", folderId: f.id,
+      citationKey: `tk2-${Date.now()}`, cslJson: { id: p.id, title: "twin" },
+      paperId: p.id,
+    }).returning({ id: references_.id });
+
+    await moveToTrash({ libraryId, userId: u.id, target: { kind: "paper", id: p.id } });
+    await restoreFromTrash({ libraryId, userId: u.id, target: { kind: "paper", id: p.id } });
+
+    const [refRow] = await db.select({
+      folderId: references_.folderId, prev: references_.prevFolderId,
+    }).from(references_).where(eq(references_.id, r.id));
+    expect(refRow.folderId).toBe(f.id);
+    expect(refRow.prev).toBeNull();
+  });
+
+  it("emptyTrash deletes the ref-twin that followed the paper into trash", async () => {
+    const f = await createFolder({ libraryId, userId: u.id, parentId: null, name: "T-C" });
+    const [p] = await db.insert(papers).values({
+      libraryId, userId: u.id, folderId: f.id, filename: `tp3-${Date.now()}.pdf`,
+    }).returning({ id: papers.id });
+    const [r] = await db.insert(references_).values({
+      libraryId, userId: u.id, folderPath: "", folderId: f.id,
+      citationKey: `tk3-${Date.now()}`, cslJson: { id: p.id, title: "twin" },
+      paperId: p.id,
+    }).returning({ id: references_.id });
+
+    await moveToTrash({ libraryId, userId: u.id, target: { kind: "paper", id: p.id } });
+    await emptyTrash({ libraryId, userId: u.id });
+
+    const refLeft = await db.select().from(references_).where(eq(references_.id, r.id));
+    expect(refLeft).toHaveLength(0);
+  });
+
+  it("moveToTrash(paper) does not touch unrelated refs (no paperId match)", async () => {
+    const f = await createFolder({ libraryId, userId: u.id, parentId: null, name: "T-D" });
+    const [p] = await db.insert(papers).values({
+      libraryId, userId: u.id, folderId: f.id, filename: `tp4-${Date.now()}.pdf`,
+    }).returning({ id: papers.id });
+    const [other] = await db.insert(references_).values({
+      libraryId, userId: u.id, folderPath: "", folderId: f.id,
+      citationKey: `or-${Date.now()}`, cslJson: { id: "x", title: "unlinked" },
+    }).returning({ id: references_.id });
+
+    await moveToTrash({ libraryId, userId: u.id, target: { kind: "paper", id: p.id } });
+
+    const [refRow] = await db.select({ folderId: references_.folderId })
+      .from(references_).where(eq(references_.id, other.id));
+    expect(refRow.folderId).toBe(f.id);
+  });
+});
+
 describe("paperset trash flow", () => {
   it("moveToTrash sets prev_folder_id and folder_id=trash for paperset", async () => {
     const f = await createFolder({ libraryId, userId: u.id, parentId: null, name: "PS-A" });
