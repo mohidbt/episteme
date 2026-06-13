@@ -393,6 +393,13 @@
       "when": 1781740800000,
       "tag": "0055_user_library_recents_fk_fix",
       "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "7",
+      "when": 1781827200000,
+      "tag": "0056_user_invite_codes",
+      "breakpoints": true
     }
   ]
 }

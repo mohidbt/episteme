@@ -26,9 +26,47 @@ import {
   inviteCodes,
   signupWaitlist,
   user,
+  userInviteCodes,
   userSignupProfiles,
 } from "@episteme/db/schema";
 import { auth } from "@/lib/auth-wired";
+import { ensureUserReferralCodes } from "@/lib/referral-codes";
+
+// GSD-46 — env gate. Defaults to enforced (matches launch posture: every
+// signup needs a code). Set INVITE_ONLY_SIGNUP=false to disable in dev.
+function inviteOnlySignupEnabled(): boolean {
+  const v = process.env.INVITE_ONLY_SIGNUP;
+  if (v === "0" || v === "false") return false;
+  return true;
+}
+
+type InviteLookup =
+  | { kind: "admin"; code: string }
+  | { kind: "user"; code: string; ownerUserId: string }
+  | null;
+
+async function lookupInvite(code: string): Promise<InviteLookup> {
+  const [admin] = await db
+    .select({ code: inviteCodes.code, usedBy: inviteCodes.usedByUserId })
+    .from(inviteCodes)
+    .where(eq(inviteCodes.code, code))
+    .limit(1);
+  if (admin && !admin.usedBy) return { kind: "admin", code: admin.code };
+
+  const [refer] = await db
+    .select({
+      code: userInviteCodes.code,
+      ownerUserId: userInviteCodes.ownerUserId,
+      consumedBy: userInviteCodes.consumedByUserId,
+    })
+    .from(userInviteCodes)
+    .where(eq(userInviteCodes.code, code))
+    .limit(1);
+  if (refer && !refer.consumedBy) {
+    return { kind: "user", code: refer.code, ownerUserId: refer.ownerUserId };
+  }
+  return null;
+}
 
 const USER_TYPES = ["student", "researcher", "industry", "other"] as const;
 const POKEMON = ["charmander", "squirtle", "bulbasaur"] as const;
@@ -158,14 +196,8 @@ export async function validateInviteCode(
   }
 
   try {
-    const [invite] = await db
-      .select({ code: inviteCodes.code, usedBy: inviteCodes.usedByUserId })
-      .from(inviteCodes)
-      .where(eq(inviteCodes.code, parsed.data))
-      .limit(1);
-    if (!invite || invite.usedBy) {
-      return { ok: false, error: "invite_invalid" };
-    }
+    const found = await lookupInvite(parsed.data);
+    if (!found) return { ok: false, error: "invite_invalid" };
     return { ok: true };
   } catch (err) {
     console.error("[signup-real] invite validation failed", err);
@@ -236,14 +268,18 @@ export async function signupRealUser(
   // multi-step insert, and lets us give a precise error before any state
   // changes. We re-check atomically during stamping so a concurrent
   // redeemer can't sneak past this gate.
-  const [invite] = await db
-    .select({ code: inviteCodes.code, usedBy: inviteCodes.usedByUserId })
-    .from(inviteCodes)
-    .where(eq(inviteCodes.code, input.inviteCode))
-    .limit(1);
-  if (!invite || invite.usedBy) {
+  // GSD-46: when INVITE_ONLY_SIGNUP is disabled, the code is optional and
+  // any invalid value still falls through to create the account (matches
+  // pre-launch UX). When enabled, an unused code from either the admin
+  // allowlist or a per-user referral pool is required.
+  const gateEnabled = inviteOnlySignupEnabled();
+  const invite = await lookupInvite(input.inviteCode);
+  if (gateEnabled && !invite) {
     return { ok: false, error: "invite_invalid" };
   }
+  // When the gate is off but the user still sent a (valid) code we honour
+  // it so referrals are still tracked. An unknown code in disabled-mode is
+  // silently ignored.
 
   // Optional cheap username pre-check — lets us return a specific error
   // instead of better-auth's generic 422. Race-safe path is still the
@@ -304,23 +340,46 @@ export async function signupRealUser(
     });
 
     // Atomic invite-stamp: only updates if still unused. Returning rowCount
-    // lets us detect the lost race.
-    const stamped = await db
-      .update(inviteCodes)
-      .set({ usedByUserId: userId, usedAt: sql`now()` })
-      .where(
-        and(
-          eq(inviteCodes.code, input.inviteCode),
-          isNull(inviteCodes.usedByUserId),
-        ),
-      )
-      .returning({ code: inviteCodes.code });
+    // lets us detect the lost race. Stamps whichever table the code came
+    // from (admin allowlist vs per-user referral).
+    if (invite) {
+      const stamped =
+        invite.kind === "admin"
+          ? await db
+              .update(inviteCodes)
+              .set({ usedByUserId: userId, usedAt: sql`now()` })
+              .where(
+                and(
+                  eq(inviteCodes.code, input.inviteCode),
+                  isNull(inviteCodes.usedByUserId),
+                ),
+              )
+              .returning({ code: inviteCodes.code })
+          : await db
+              .update(userInviteCodes)
+              .set({ consumedByUserId: userId, consumedAt: sql`now()` })
+              .where(
+                and(
+                  eq(userInviteCodes.code, input.inviteCode),
+                  isNull(userInviteCodes.consumedByUserId),
+                ),
+              )
+              .returning({ code: userInviteCodes.code });
 
-    if (stamped.length === 0) {
-      // Lost the race. Undo the user we just created so the invite stays
-      // the only source of truth and the email is freed up.
-      await db.delete(user).where(eq(user.id, userId));
-      return { ok: false, error: "invite_invalid" };
+      if (stamped.length === 0) {
+        // Lost the race. Undo the user we just created so the invite stays
+        // the only source of truth and the email is freed up.
+        await db.delete(user).where(eq(user.id, userId));
+        return { ok: false, error: "invite_invalid" };
+      }
+    }
+
+    // Generate the new user's own 5 referral codes. Idempotent (PK conflict
+    // on retry). Non-fatal — log and continue if something goes wrong.
+    try {
+      await ensureUserReferralCodes(userId, input.username);
+    } catch (err) {
+      console.error("[signup-real] referral code generation failed", err);
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

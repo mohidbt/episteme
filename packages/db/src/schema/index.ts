@@ -39,6 +39,7 @@ export * from "./pending-recompute";
 export * from "./openrouter-usage";
 export * from "./paper-citations";
 export * from "./invite-codes";
+export * from "./user-invite-codes";
 export * from "./signup";
 export * from "./provider-key-alerts";
 export * from "./user-library-recents";

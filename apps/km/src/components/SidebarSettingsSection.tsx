@@ -2,7 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Cog, Database as DataIcon, Palette, ShieldCheck, UserCog } from "lucide-react";
+import {
+  Cog,
+  Database as DataIcon,
+  Gift,
+  Palette,
+  ShieldCheck,
+  UserCog,
+} from "lucide-react";
 import {
   SidebarMenuButton,
   SidebarMenuItem,
@@ -16,6 +23,7 @@ const LINKS = [
   { label: "Data", href: "/settings/data", Icon: DataIcon },
   { label: "Editor", href: "/settings/appearance", Icon: Palette },
   { label: "Agent settings", href: "/settings/agents", Icon: ShieldCheck },
+  { label: "Referrals", href: "/settings/referrals", Icon: Gift },
 ] as const;
 
 export function SidebarSettingsSection() {
