@@ -20,6 +20,7 @@ import { PaperMetadataPanel } from "@/components/PaperMetadataPanel";
 import { PaperHighlightsList } from "@/components/PaperHighlightsList";
 import { PaperCitationsList } from "@/components/PaperCitationsList";
 import { PaperActionsButtons } from "@/components/PaperActionsButtons";
+import { DeleteToTrashButton } from "@/components/DeleteToTrashButton";
 import { TabTitleUpdater } from "@/components/TabBar";
 import { PaperPdfPreview } from "./PaperPdfPreview";
 
@@ -131,6 +132,14 @@ export default async function PaperPage({
               <Download className="h-3 w-3" data-icon="inline-start" />
               Download
             </Link>
+            {paper.libraryId != null && (
+              <DeleteToTrashButton
+                libraryId={paper.libraryId}
+                kind="paper"
+                id={paper.id}
+                title={displayTitle}
+              />
+            )}
           </div>
         </div>
       </div>

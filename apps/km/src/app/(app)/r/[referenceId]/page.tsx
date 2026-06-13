@@ -10,6 +10,7 @@ import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { ReferenceForm } from "@/components/ReferenceForm";
 import { ReferenceAgenticSearchButton } from "@/components/ReferenceAgenticSearchButton";
 import { ReferenceAttachPaperControl } from "@/components/ReferenceAttachPaperControl";
+import { DeleteToTrashButton } from "@/components/DeleteToTrashButton";
 import { TabTitleUpdater } from "@/components/TabBar";
 import { Badge } from "@/components/ui/badge";
 import { denormaliseForList, validateCslJson } from "@/lib/csl";
@@ -104,6 +105,14 @@ export default async function ReferencePage({
             papers={pickerPapers}
           />
         )}
+        <div className="ml-auto">
+          <DeleteToTrashButton
+            libraryId={ref.libraryId}
+            kind="reference"
+            id={ref.id}
+            title={displayTitle}
+          />
+        </div>
       </div>
       <ReferenceForm reference={ref} folders={allFolders} />
 

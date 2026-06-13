@@ -14,6 +14,7 @@ import { VersionDrawer } from "@/components/VersionDrawer";
 import { AskNotesPanel } from "@/components/AskNotesPanel";
 import { PublishDialog } from "@/components/PublishDialog";
 import { DownloadButton } from "@/components/DownloadButton";
+import { DeleteToTrashButton } from "@/components/DeleteToTrashButton";
 
 function formatRelativeTime(date: Date): string {
   const now = new Date();
@@ -30,6 +31,7 @@ function formatRelativeTime(date: Date): string {
 
 export function NotePageClient({
   id,
+  libraryId,
   title,
   initialMd,
   resolvedLinks,
@@ -43,6 +45,7 @@ export function NotePageClient({
   referenceCount = 0,
 }: {
   id: string;
+  libraryId: number;
   title: string;
   initialMd: string;
   resolvedLinks?: ResolvedLinksMap;
@@ -194,6 +197,12 @@ export function NotePageClient({
                 : initialBody;
               return buildMarkdownWithFrontmatter(rowsRef.current, body);
             }}
+          />
+          <DeleteToTrashButton
+            libraryId={libraryId}
+            kind="note"
+            id={id}
+            title={title}
           />
         </div>
       </div>
