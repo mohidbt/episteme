@@ -64,7 +64,7 @@ async def test_csv_write_cell_calls_enrichment_endpoint(monkeypatch):
         status_code = 200
 
         async def aread(self):
-            return b"event: done\ndata: {}\n\n"
+            return b"event: done\ndata: {\"filled\":1,\"failed\":0}\n\n"
 
     async def fake_post(url, *, content, headers):
         captured.append((url, content, headers))
@@ -173,3 +173,169 @@ def test_data_tools_exported():
 
     names = {t.name for t in data.TOOLS}
     assert names == {"browse_papersets", "csv_read", "csv_write_cell"}
+
+
+# ---------------------------------------------------------------------------
+# GSD-102 Bug 1 — chat-path csv_write_cell must parse the SSE stream
+# rather than blindly returning "ok" for any 2xx response.
+# ---------------------------------------------------------------------------
+
+
+def _sse_response(body: bytes):
+    class Resp:
+        is_success = True
+        status_code = 200
+
+        async def aread(self_inner):  # noqa: N805
+            return body
+
+    return Resp()
+
+
+@pytest.mark.asyncio
+async def test_csv_write_cell_returns_error_on_cell_failed_event(monkeypatch):
+    """KM /enrich SSE returns 200 even when the underlying agent fails to
+    write any cell. The chat-path tool must surface cell_failed instead of
+    silently reporting "ok" (GSD-102 bug 1)."""
+    from tools import data  # noqa: PLC0415
+
+    sse = (
+        b"event: cell_started\ndata: {\"row\":0,\"col\":\"n_subjects\"}\n\n"
+        b"event: cell_failed\ndata: {\"row\":0,\"col\":\"n_subjects\","
+        b"\"error\":\"agent did not write cell\"}\n\n"
+        b"event: done\ndata: {\"filled\":0,\"failed\":1}\n\n"
+    )
+
+    async def fake_post(url, *, content, headers):
+        return _sse_response(sse)
+
+    monkeypatch.setattr(data.km_http, "_km_base_url", lambda: "http://km", raising=True)
+    monkeypatch.setattr(data.km_http, "_auth_headers", lambda *args: {"auth": "ok"}, raising=True)
+    monkeypatch.setattr(data.km_http._client, "post", fake_post, raising=True)
+
+    out = await data.csv_write_cell.ainvoke(
+        {
+            "file_id": FILE_ID,
+            "row": 0,
+            "col": "n_subjects",
+            "value": "42",
+            "grounding": {"paper_id": "p-1", "block_ids": []},
+        },
+        config=CFG,
+    )
+
+    assert isinstance(out, str)
+    assert out != "ok"
+    assert "error" in out.lower()
+    assert "agent did not write cell" in out
+
+
+@pytest.mark.asyncio
+async def test_csv_write_cell_returns_error_on_sse_error_event(monkeypatch):
+    """KM sseError() returns 200 with `event: error` (e.g. agents_url_missing).
+    Chat-path tool must surface the error, not return "ok"."""
+    from tools import data  # noqa: PLC0415
+
+    sse = (
+        b"event: error\ndata: {\"code\":\"agents_url_missing\","
+        b"\"message\":\"AGENTS_URL is not configured for this deployment\"}\n\n"
+    )
+
+    async def fake_post(url, *, content, headers):
+        return _sse_response(sse)
+
+    monkeypatch.setattr(data.km_http, "_km_base_url", lambda: "http://km", raising=True)
+    monkeypatch.setattr(data.km_http, "_auth_headers", lambda *args: {"auth": "ok"}, raising=True)
+    monkeypatch.setattr(data.km_http._client, "post", fake_post, raising=True)
+
+    out = await data.csv_write_cell.ainvoke(
+        {
+            "file_id": FILE_ID,
+            "row": 0,
+            "col": "n_subjects",
+            "value": "42",
+            "grounding": {"paper_id": "p-1", "block_ids": []},
+        },
+        config=CFG,
+    )
+
+    assert isinstance(out, str)
+    assert out != "ok"
+    assert "agents_url_missing" in out
+
+
+@pytest.mark.asyncio
+async def test_csv_write_cell_returns_ok_when_done_filled(monkeypatch):
+    """Happy path: done event reports filled>=1, failed==0 → return "ok"."""
+    from tools import data  # noqa: PLC0415
+
+    sse = (
+        b"event: cell_started\ndata: {\"row\":0,\"col\":\"n_subjects\"}\n\n"
+        b"event: cell_update\ndata: {\"row\":0,\"col\":\"n_subjects\","
+        b"\"value\":\"42\",\"grounding\":{}}\n\n"
+        b"event: done\ndata: {\"filled\":1,\"failed\":0}\n\n"
+    )
+
+    async def fake_post(url, *, content, headers):
+        return _sse_response(sse)
+
+    monkeypatch.setattr(data.km_http, "_km_base_url", lambda: "http://km", raising=True)
+    monkeypatch.setattr(data.km_http, "_auth_headers", lambda *args: {"auth": "ok"}, raising=True)
+    monkeypatch.setattr(data.km_http._client, "post", fake_post, raising=True)
+
+    out = await data.csv_write_cell.ainvoke(
+        {
+            "file_id": FILE_ID,
+            "row": 0,
+            "col": "n_subjects",
+            "value": "42",
+            "grounding": {"paper_id": "p-1", "block_ids": []},
+        },
+        config=CFG,
+    )
+
+    assert out == "ok"
+
+
+@pytest.mark.asyncio
+async def test_csv_write_cell_returns_noop_on_cell_no_change_event(monkeypatch):
+    """GSD-102 bug 1 phase-2: the inner /extract agent re-runs against the
+    paper and may produce the SAME value the cell already had (typically
+    "n/a"). In that case the CSV bytes don't change — but the agent's
+    `done` event still reports filled=1 because a tool call was made.
+
+    The chat-path tool must surface this as a no-op so the chat user sees
+    "tool ran but cell wasn't actually written" instead of a misleading
+    bare "ok".
+    """
+    from tools import data  # noqa: PLC0415
+
+    sse = (
+        b"event: cell_started\ndata: {\"row\":1,\"col\":\"Uses PCA\"}\n\n"
+        b"event: cell_no_change\ndata: {\"row\":1,\"col\":\"Uses PCA\","
+        b"\"value\":\"n/a\"}\n\n"
+        b"event: done\ndata: {\"filled\":0,\"failed\":0,\"unchanged\":1}\n\n"
+    )
+
+    async def fake_post(url, *, content, headers):
+        return _sse_response(sse)
+
+    monkeypatch.setattr(data.km_http, "_km_base_url", lambda: "http://km", raising=True)
+    monkeypatch.setattr(data.km_http, "_auth_headers", lambda *args: {"auth": "ok"}, raising=True)
+    monkeypatch.setattr(data.km_http._client, "post", fake_post, raising=True)
+
+    out = await data.csv_write_cell.ainvoke(
+        {
+            "file_id": FILE_ID,
+            "row": 1,
+            "col": "Uses PCA",
+            "value": "agent test value",
+            "grounding": {"paper_id": "p-1", "block_ids": []},
+        },
+        config=CFG,
+    )
+
+    assert isinstance(out, str)
+    assert out != "ok"
+    assert "noop" in out.lower() or "no change" in out.lower() or "unchanged" in out.lower()
+    assert "n/a" in out

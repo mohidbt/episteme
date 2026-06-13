@@ -38,6 +38,96 @@ def _is_error(resp: object) -> bool:
     return isinstance(resp, dict) and bool(resp.get("error"))
 
 
+def _parse_enrich_sse(body: bytes) -> str:
+    """Inspect the SSE stream returned by ``POST /api/papersets/{id}/enrich``
+    and decide whether the cell write actually persisted.
+
+    KM and the agent /extract route both encode failures inside a 200 SSE
+    (``event: error`` for KM-side problems; ``event: cell_failed`` +
+    ``done {filled:0, failed:N}`` for agent-side per-cell problems).
+    A 2xx HTTP status therefore is not sufficient evidence of success
+    (GSD-102 bug 1).
+
+    Returns ``"ok"`` only when an ``event: done`` payload reports
+    ``filled >= 1`` and ``failed == 0``. Otherwise returns
+    ``"error: <reason>"`` so the LLM can adapt.
+    """
+    text = body.decode("utf-8", errors="replace")
+    cur_event: str | None = None
+    cur_data: list[str] = []
+    error_msg: str | None = None
+    cell_failed_msg: str | None = None
+    no_change: dict | None = None
+    done: dict | None = None
+
+    def _flush() -> None:
+        nonlocal cur_event, cur_data, error_msg, cell_failed_msg, no_change, done
+        if cur_event is None and not cur_data:
+            return
+        raw = "\n".join(cur_data).strip()
+        payload: object = raw
+        if raw:
+            try:
+                payload = json.loads(raw)
+            except json.JSONDecodeError:
+                payload = raw
+        if cur_event == "error" and error_msg is None:
+            if isinstance(payload, dict):
+                code = payload.get("code") or payload.get("error") or "sse_error"
+                msg = payload.get("message") or ""
+                error_msg = f"{code}: {msg}".strip().rstrip(":")
+            else:
+                error_msg = f"sse_error: {payload}"
+        elif cur_event == "cell_failed" and cell_failed_msg is None:
+            if isinstance(payload, dict):
+                cell_failed_msg = str(payload.get("error") or payload)
+            else:
+                cell_failed_msg = str(payload)
+        elif cur_event == "cell_no_change" and no_change is None and isinstance(payload, dict):
+            no_change = payload
+        elif cur_event == "done" and isinstance(payload, dict):
+            done = payload
+        cur_event = None
+        cur_data = []
+
+    for raw_line in text.split("\n"):
+        line = raw_line.rstrip("\r")
+        if line == "":
+            _flush()
+            continue
+        if line.startswith(":"):
+            continue  # SSE comment
+        if line.startswith("event:"):
+            cur_event = line[len("event:"):].strip()
+        elif line.startswith("data:"):
+            cur_data.append(line[len("data:"):].lstrip())
+    _flush()
+
+    if error_msg:
+        return f"error: {error_msg}"
+    if cell_failed_msg:
+        return f"error: cell_failed: {cell_failed_msg}"
+    if isinstance(done, dict):
+        filled = done.get("filled") or 0
+        failed = done.get("failed") or 0
+        unchanged = done.get("unchanged") or 0
+        if failed == 0 and filled >= 1:
+            return "ok"
+        # GSD-102 bug 1 phase-2: chat-path tool ignores the model's value and
+        # triggers re-extraction; if the inner agent produces the same value
+        # the cell already contained, the CSV bytes don't change. Surface
+        # this honestly so the chat user sees "tool ran, nothing was written"
+        # instead of a misleading bare "ok".
+        if failed == 0 and unchanged >= 1 and isinstance(no_change, dict):
+            existing_value = no_change.get("value")
+            return (
+                f"noop: cell already contained {existing_value!r}; "
+                "no write was needed (re-extraction returned same value)"
+            )
+        return f"error: enrich incomplete (filled={filled}, failed={failed})"
+    return "error: no terminal event in enrich stream"
+
+
 @tool
 async def browse_papersets(*, config: RunnableConfig) -> object:
     """List all papersets / spreadsheets / extraction tables the user owns.
@@ -153,8 +243,11 @@ async def csv_write_cell(
             return f"error: {code} (status={status})"
         # Drain the SSE body so the enrichment run completes before the tool
         # returns. The client UI receives updates through the paperset stream.
-        await resp.aread()
-        return "ok"
+        # We also parse it for `done` / `cell_failed` / `error` events: KM
+        # encodes failures inside a 200 SSE, so HTTP status alone never
+        # tells us whether the cell was actually persisted (GSD-102 bug 1).
+        body = await resp.aread()
+        return _parse_enrich_sse(body)
 
     body = {"row": row, "col": col, "value": value, "grounding": grounding}
     resp = await km_patch(f"/api/papersets/{file_id}/cells", body, user_id=user_id)
