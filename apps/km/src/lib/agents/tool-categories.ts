@@ -4,6 +4,12 @@ export type ToolInventoryEntry = {
   category: string;
   gateable: boolean;
   default_allowed: boolean;
+  // GSD-103 — agent service publishes the per-tool default approval mode
+  // ("auto" | "require") via /agents/km/tools. The UI uses this as the
+  // visual default when the user has no explicit saved rule for the tool,
+  // so what the user sees matches what `_build_interrupt_on` applies on the
+  // server. Optional for forward-compat with older payloads.
+  default_approval?: "auto" | "require";
 };
 
 export function humanizeToolName(name: string): string {

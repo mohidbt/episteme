@@ -21,16 +21,22 @@ export async function POST(req: Request) {
   }
   const bodyText = await req.text();
 
-  // Mirror /invoke: pass modelPreference + enabledSkills from Postgres so
-  // resume turns also use the real model and SkillsMiddleware stays wired.
+  // Mirror /invoke: pass modelPreference + enabledSkills + approvalRules +
+  // permissions from Postgres so the agent-side `build_km_agent` rebuild on
+  // resume re-applies the same gates the initial /invoke did. Without this,
+  // the agent falls back to its in-process cache (cold after restart →
+  // user-saved approval rules silently dropped on the post-approval
+  // continuation turn). GSD-103.
   let modelPreference: string | null = null;
   let enabledSkills: string[] | null = null;
   let permissions: Record<string, boolean> | null = null;
+  let approvalRules: Record<string, unknown> | null = null;
   try {
     const rows = await db
       .select({
         modelPreference: agentConfigs.modelPreference,
         enabledSkills: agentConfigs.enabledSkills,
+        approvalRules: agentConfigs.approvalRules,
         settingsJson: agentConfigs.settingsJson,
       })
       .from(agentConfigs)
@@ -38,6 +44,8 @@ export async function POST(req: Request) {
       .limit(1);
     modelPreference = rows[0]?.modelPreference ?? null;
     enabledSkills = rows[0]?.enabledSkills ?? null;
+    approvalRules =
+      (rows[0]?.approvalRules as Record<string, unknown>) ?? null;
     const settings = (rows[0]?.settingsJson ?? {}) as {
       permissions?: Record<string, boolean>;
     };
@@ -46,11 +54,25 @@ export async function POST(req: Request) {
     console.warn("[resume] agentConfigs lookup failed", err);
   }
 
+  // Mirror /invoke's skill-hint merge: a `body.skill` from the client (e.g.
+  // the Agentic Search button) must land in `enabled_skills` so the
+  // resumed turn loads the same skill workflow + tool allow-list as the
+  // initial /invoke. Without this, post-approval continuation rebuilt
+  // without paper-search → pruned tools → runtime mismatch.
+  const parsedBody = JSON.parse(bodyText) as { skill?: string | null };
+  const skillHint: string | undefined = parsedBody.skill ?? undefined;
+  let mergedSkills: string[] | null = enabledSkills ? [...enabledSkills] : null;
+  if (skillHint) {
+    mergedSkills ??= [];
+    if (!mergedSkills.includes(skillHint)) mergedSkills.push(skillHint);
+  }
+
   const upstreamBody = JSON.stringify({
-    ...JSON.parse(bodyText),
+    ...parsedBody,
     ...(modelPreference ? { model_preference: modelPreference } : {}),
-    ...(Array.isArray(enabledSkills) ? { enabled_skills: enabledSkills } : {}),
+    ...(Array.isArray(mergedSkills) ? { enabled_skills: mergedSkills } : {}),
     ...(permissions ? { permissions } : {}),
+    ...(approvalRules ? { approval_rules: approvalRules } : {}),
   });
 
   const path = "/agents/km/resume";

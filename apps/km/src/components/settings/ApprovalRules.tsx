@@ -100,8 +100,20 @@ export function ApprovalRules({
     (n) => !liveNames.has(n),
   );
 
+  // GSD-103 — index live tools by name so we can read each tool's
+  // `default_approval` from the inventory when the user has no explicit
+  // saved rule. Without this the UI hard-defaulted to "require" for every
+  // tool, lying about the server's true default ("auto" for non-destructive
+  // tools per `_DEFAULT_APPROVAL_RULES`).
+  const liveByName: Map<string, ToolInventoryEntry> =
+    state.kind === "ready"
+      ? new Map(state.tools.map((t) => [t.name, t]))
+      : new Map();
+
   function renderToolField(name: string, opts: { removed?: boolean } = {}) {
-    const current: ApprovalRule = approvalRules[name] ?? "require";
+    const fallback: ApprovalRule =
+      liveByName.get(name)?.default_approval ?? "require";
+    const current: ApprovalRule = approvalRules[name] ?? fallback;
     const label = humanizeToolName(name);
     return (
       <Field key={name}>
