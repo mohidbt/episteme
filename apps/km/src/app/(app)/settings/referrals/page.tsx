@@ -47,9 +47,31 @@ export default async function ReferralsSettingsPage() {
     .where(eq(userTable.id, session.userId))
     .limit(1);
 
-  if (me?.username) {
-    await ensureUserReferralCodes(session.userId, me.username);
+  // Legacy users (pre-username-required signup) have no username yet, so we
+  // can't derive their codes. Don't lie about "5 codes / 0 remaining" — point
+  // them at account settings where they can claim a username.
+  if (!me?.username) {
+    return (
+      <div className="mx-auto max-w-lg px-6 py-10">
+        <h1 className="font-display text-2xl mb-1">Referrals</h1>
+        <p
+          className="text-sm text-muted-foreground mb-6"
+          data-testid="referrals-needs-username"
+        >
+          Pick a username in{" "}
+          <Link
+            href="/settings/account"
+            className="underline hover:text-foreground"
+          >
+            account settings
+          </Link>{" "}
+          to unlock your {REFERRAL_CODES_PER_USER} personal invite codes.
+        </p>
+      </div>
+    );
   }
+
+  await ensureUserReferralCodes(session.userId, me.username);
 
   const codes = await listReferralCodesForUser(session.userId);
   const remaining = codes.filter((c) => !c.consumedByUserId).length;
