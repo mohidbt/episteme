@@ -386,3 +386,107 @@ def test_extract_concurrency_cap_4():
     assert max_in_flight <= 4, f"concurrency cap violated: max_in_flight={max_in_flight}"
     # Sanity: at least 4 cells overlap at some point given 8 dispatched + sleeps.
     assert max_in_flight == 4
+
+
+# ---------------------------------------------------------------------------
+# GSD-102 bug 1 phase-2: cell already contains the same value the agent
+# would write. Emit `cell_no_change` instead of `cell_update`, and report
+# `unchanged` count in `done` so the chat-path tool can surface "noop"
+# instead of bare "ok".
+# ---------------------------------------------------------------------------
+
+
+def test_extract_emits_cell_no_change_when_value_matches_existing():
+    """The inner extract agent re-runs against the paper and produces the
+    SAME value the cell already had (typically "n/a"). The CSV bytes don't
+    change. We must NOT report this as `cell_update` + filled=1, because
+    the chat user observes no change in the spreadsheet.
+    """
+    pset = {
+        "file_id": "pset-1",
+        "columns": [{"name": "Uses PCA", "description": "Does this paper use PCA?"}],
+        "row_refs": [{"paper_id": "paper-A"}, {"paper_id": "paper-B"}],
+        # Row 1 already has the value "n/a" — same as what inner agent will write.
+        "cells": {"1:Uses PCA": "n/a"},
+    }
+    cells = [{"row_idx": 1, "col_name": "Uses PCA"}]
+    body = json.dumps({"paperset_id": "pset-1", "cells": cells}).encode()
+    headers = _signed_headers("POST", "/agents/km/extract", body)
+
+    per_thread = {
+        "extract:pset-1:1:Uses PCA": _csv_write_cell_event(
+            1, "Uses PCA", "n/a", "paper-B", []
+        ),
+    }
+    agent = _build_agent_with_events(per_thread)
+
+    with patch(
+        "routers.km_agent.km_get",
+        new_callable=AsyncMock,
+        return_value=pset,
+    ), patch(
+        "routers.km_agent.build_km_agent",
+        new_callable=AsyncMock,
+        return_value=agent,
+    ):
+        r = client.post("/agents/km/extract", content=body, headers=headers)
+
+    assert r.status_code == 200
+    events = _parse_sse(r.text)
+    types = [e["event"] for e in events]
+
+    # Bug: previous behaviour emitted `cell_update` and done filled=1.
+    assert "cell_update" not in types, (
+        "cell_update implies a real write happened; existing value was unchanged."
+    )
+    assert types.count("cell_no_change") == 1
+    no_change = [e["data"] for e in events if e["event"] == "cell_no_change"][0]
+    assert no_change["row"] == 1
+    assert no_change["col"] == "Uses PCA"
+    assert no_change["value"] == "n/a"
+
+    done = [e["data"] for e in events if e["event"] == "done"][0]
+    assert done.get("filled", 0) == 0
+    assert done.get("failed", 0) == 0
+    assert done.get("unchanged", 0) == 1
+
+
+def test_extract_emits_cell_update_when_value_differs_from_existing():
+    """Regression guard: when inner agent writes a DIFFERENT value than the
+    existing cell, we must still emit `cell_update` + filled=1.
+    """
+    pset = {
+        "file_id": "pset-1",
+        "columns": [{"name": "Uses PCA", "description": "?"}],
+        "row_refs": [{"paper_id": "paper-A"}],
+        "cells": {"0:Uses PCA": "n/a"},  # existing value
+    }
+    cells = [{"row_idx": 0, "col_name": "Uses PCA"}]
+    body = json.dumps({"paperset_id": "pset-1", "cells": cells}).encode()
+    headers = _signed_headers("POST", "/agents/km/extract", body)
+
+    per_thread = {
+        "extract:pset-1:0:Uses PCA": _csv_write_cell_event(
+            0, "Uses PCA", "Yes", "paper-A", ["paper-A:3"]
+        ),
+    }
+    agent = _build_agent_with_events(per_thread)
+
+    with patch(
+        "routers.km_agent.km_get",
+        new_callable=AsyncMock,
+        return_value=pset,
+    ), patch(
+        "routers.km_agent.build_km_agent",
+        new_callable=AsyncMock,
+        return_value=agent,
+    ):
+        r = client.post("/agents/km/extract", content=body, headers=headers)
+
+    assert r.status_code == 200
+    events = _parse_sse(r.text)
+    types = [e["event"] for e in events]
+    assert "cell_no_change" not in types
+    assert types.count("cell_update") == 1
+    done = [e["data"] for e in events if e["event"] == "done"][0]
+    assert done.get("filled") == 1

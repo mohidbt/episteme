@@ -295,3 +295,47 @@ async def test_csv_write_cell_returns_ok_when_done_filled(monkeypatch):
     )
 
     assert out == "ok"
+
+
+@pytest.mark.asyncio
+async def test_csv_write_cell_returns_noop_on_cell_no_change_event(monkeypatch):
+    """GSD-102 bug 1 phase-2: the inner /extract agent re-runs against the
+    paper and may produce the SAME value the cell already had (typically
+    "n/a"). In that case the CSV bytes don't change — but the agent's
+    `done` event still reports filled=1 because a tool call was made.
+
+    The chat-path tool must surface this as a no-op so the chat user sees
+    "tool ran but cell wasn't actually written" instead of a misleading
+    bare "ok".
+    """
+    from tools import data  # noqa: PLC0415
+
+    sse = (
+        b"event: cell_started\ndata: {\"row\":1,\"col\":\"Uses PCA\"}\n\n"
+        b"event: cell_no_change\ndata: {\"row\":1,\"col\":\"Uses PCA\","
+        b"\"value\":\"n/a\"}\n\n"
+        b"event: done\ndata: {\"filled\":0,\"failed\":0,\"unchanged\":1}\n\n"
+    )
+
+    async def fake_post(url, *, content, headers):
+        return _sse_response(sse)
+
+    monkeypatch.setattr(data.km_http, "_km_base_url", lambda: "http://km", raising=True)
+    monkeypatch.setattr(data.km_http, "_auth_headers", lambda *args: {"auth": "ok"}, raising=True)
+    monkeypatch.setattr(data.km_http._client, "post", fake_post, raising=True)
+
+    out = await data.csv_write_cell.ainvoke(
+        {
+            "file_id": FILE_ID,
+            "row": 1,
+            "col": "Uses PCA",
+            "value": "agent test value",
+            "grounding": {"paper_id": "p-1", "block_ids": []},
+        },
+        config=CFG,
+    )
+
+    assert isinstance(out, str)
+    assert out != "ok"
+    assert "noop" in out.lower() or "no change" in out.lower() or "unchanged" in out.lower()
+    assert "n/a" in out
