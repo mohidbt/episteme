@@ -1,6 +1,6 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { papers } from "@episteme/db/schema";
+import { papers, references_ } from "@episteme/db/schema";
 import {
   getAuthedUserId,
   MissingInternalSecretError,
@@ -90,6 +90,14 @@ export async function DELETE(req: Request, { params }: Ctx) {
   if (res.row.folderId !== trashId) {
     return jsonError(400, "items must be in trash before permanent delete");
   }
+
+  // GSD-97: purge the linked ref-twin BEFORE the paper. The FK is
+  // `set null` not `cascade`, so the twin would otherwise become an orphan
+  // reference (paperId=NULL) visible in the references view.
+  await db.delete(references_).where(and(
+    eq(references_.userId, userId),
+    eq(references_.paperId, id),
+  ));
 
   // DB delete first — paper_highlights + paper_embeddings cascade via FK.
   await db.delete(papers).where(eq(papers.id, id));

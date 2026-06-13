@@ -17,7 +17,7 @@ import {
 import { ensureMinIOReady } from "../../_minio-setup";
 import { storage, paperSourceKey, paperCoverKey } from "@/lib/storage";
 import { db } from "@/lib/db";
-import { folders, libraries, paperHighlights, papers } from "@episteme/db/schema";
+import { folders, libraries, paperHighlights, papers, references_ } from "@episteme/db/schema";
 import { getTrashFolderId } from "@/lib/folders-server";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -415,4 +415,25 @@ describe("DELETE /api/papers/:id", () => {
     },
     60_000,
   );
+
+  it("GSD-97: hard-delete also purges the linked ref-twin row", async () => {
+    const paperId = await initPaper();
+    const trashId = await getTrashId();
+    await db.update(papers).set({ folderId: trashId }).where(eq(papers.id, paperId));
+
+    const [twin] = await db.insert(references_).values({
+      libraryId, userId: u.id, folderPath: "", folderId: trashId,
+      citationKey: `gsd97-${Date.now()}`, cslJson: { id: paperId, title: "twin" },
+      paperId,
+    }).returning({ id: references_.id });
+
+    const del = await DELETE(
+      req(`/api/papers/${paperId}`, { method: "DELETE", cookie: u.cookie }),
+      params({ id: paperId }),
+    );
+    expect(del.status).toBe(204);
+
+    const twinLeft = await db.select().from(references_).where(eq(references_.id, twin.id));
+    expect(twinLeft).toHaveLength(0);
+  });
 });
