@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { withSentryConfig } from "@sentry/nextjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -36,4 +37,12 @@ const config: NextConfig = {
   turbopack: { root: path.resolve(here, "..", "..") },
 };
 
-export default config;
+export default withSentryConfig(config, {
+  org: "episteme-rb",
+  project: "tryepisteme",
+  authToken: process.env.SENTRY_AUTH_TOKEN,
+  silent: !process.env.CI,
+  disableLogger: true,
+  // Tunnel Sentry requests through Next to bypass ad-blockers.
+  tunnelRoute: "/monitoring",
+});
