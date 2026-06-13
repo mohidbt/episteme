@@ -1291,6 +1291,7 @@ async def extract(req: Request, auth: InternalAuthDep):
     columns = pset.get("columns") or []
     row_refs = pset.get("row_refs") or []
     col_by_name = {c["name"]: c for c in columns if isinstance(c, dict) and "name" in c}
+    existing_cells = pset.get("cells") or {}
 
     for c in cells:
         if c["row_idx"] >= len(row_refs):
@@ -1318,13 +1319,19 @@ async def extract(req: Request, auth: InternalAuthDep):
 
     skill_body = _data_extract_skill_body()
 
-    async def run_cell(cell: dict) -> bool:
+    async def run_cell(cell: dict) -> str:
+        """Return ``"filled"`` when a new value was written, ``"unchanged"``
+        when the agent's value matched the existing cell, ``"failed"``
+        otherwise. The string is used by the outer ``run_all`` to tally the
+        ``done`` event (GSD-102 bug 1 phase-2).
+        """
         row = cell["row_idx"]
         col = cell["col_name"]
         async with sem:
             await queue.put(("cell_started", {"row": row, "col": col}))
             paper_id = (row_refs[row] or {}).get("paper_id", "")
             description = col_by_name[col].get("description", "")
+            prev_value = existing_cells.get(f"{row}:{col}")
             prompt = (
                 f"{skill_body}\n\n"
                 "---\n\n# Current task\n"
@@ -1360,32 +1367,50 @@ async def extract(req: Request, auth: InternalAuthDep):
             except Exception as e:  # noqa: BLE001
                 logger.exception("extract cell failed row=%s col=%s", row, col)
                 await queue.put(("cell_failed", {"row": row, "col": col, "error": str(e)}))
-                return False
+                return "failed"
             if filled_payload is None:
                 await queue.put((
                     "cell_failed",
                     {"row": row, "col": col, "error": "agent did not write cell"},
                 ))
-                return False
+                return "failed"
+            new_value = filled_payload.get("value")
+            # GSD-102 bug 1 phase-2: when the inner agent re-extracts and
+            # produces the SAME value the cell already held (typical for
+            # paper-doesn't-discuss-X → "n/a"), the CSV bytes don't change.
+            # Surface this as cell_no_change so the chat-path tool can
+            # report a noop instead of a misleading bare "ok".
+            if prev_value is not None and isinstance(new_value, str) and new_value == prev_value:
+                await queue.put((
+                    "cell_no_change",
+                    {"row": row, "col": col, "value": new_value},
+                ))
+                return "unchanged"
             # Normalize row/col on the filled payload (the agent might mismatch).
             await queue.put((
                 "cell_update",
                 {
                     "row": row,
                     "col": col,
-                    "value": filled_payload.get("value"),
+                    "value": new_value,
                     "grounding": filled_payload.get("grounding") or {},
                 },
             ))
-            return True
+            return "filled"
 
     async def run_all() -> None:
         results = await asyncio.gather(
             *[run_cell(c) for c in cells], return_exceptions=True,
         )
-        filled = sum(1 for r in results if r is True)
-        failed = len(results) - filled
-        await queue.put(("done", {"filled": filled, "failed": failed}))
+        filled = sum(1 for r in results if r == "filled")
+        unchanged = sum(1 for r in results if r == "unchanged")
+        failed = len(results) - filled - unchanged
+        done_payload: dict = {"filled": filled, "failed": failed}
+        # Only include `unchanged` when > 0 — keeps wire shape backward
+        # compatible with clients that strict-match {filled, failed}.
+        if unchanged:
+            done_payload["unchanged"] = unchanged
+        await queue.put(("done", done_payload))
         await queue.put((SENTINEL, None))
 
     async def gen():
