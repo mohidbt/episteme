@@ -8,6 +8,12 @@ CREATE TYPE public.agent_thread_status AS ENUM (
     'awaiting_hitl',
     'error'
 );
+CREATE TYPE public.citation_enrichment_job_status AS ENUM (
+    'queued',
+    'running',
+    'completed',
+    'failed'
+);
 CREATE TYPE public.font_pref AS ENUM (
     'sans',
     'serif',
@@ -233,6 +239,20 @@ CREATE TABLE public.checkpoints (
     checkpoint jsonb NOT NULL,
     metadata jsonb DEFAULT '{}'::jsonb NOT NULL
 );
+CREATE TABLE public.citation_enrichment_jobs (
+    paper_id uuid NOT NULL,
+    status public.citation_enrichment_job_status DEFAULT 'queued'::public.citation_enrichment_job_status NOT NULL,
+    attempts integer DEFAULT 0 NOT NULL,
+    next_run_at timestamp with time zone DEFAULT now() NOT NULL,
+    locked_until timestamp with time zone,
+    last_error text,
+    total_refs integer DEFAULT 0 NOT NULL,
+    enriched_refs integer DEFAULT 0 NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT citation_enrichment_jobs_attempts_nonnegative CHECK ((attempts >= 0)),
+    CONSTRAINT citation_enrichment_jobs_totals_nonnegative CHECK (((total_refs >= 0) AND (enriched_refs >= 0)))
+);
 CREATE TABLE public.document_chunks (
     id integer NOT NULL,
     section_id integer,
@@ -307,7 +327,8 @@ CREATE TABLE public.document_references (
     tldr_text text,
     external_ids jsonb,
     bibtex text,
-    paper_id uuid NOT NULL
+    paper_id uuid NOT NULL,
+    enriched_at timestamp with time zone
 );
 CREATE SEQUENCE public.document_references_id_seq
     AS integer
@@ -567,7 +588,8 @@ CREATE TABLE public.papers (
     chandra_status text DEFAULT 'pending'::text NOT NULL,
     chandra_completed_at timestamp with time zone,
     size_bytes bigint DEFAULT 0 NOT NULL,
-    abstract_short text
+    abstract_short text,
+    chunks_ready_at timestamp with time zone
 );
 CREATE TABLE public.papersets (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
@@ -758,6 +780,20 @@ CREATE SEQUENCE public.user_highlights_id_seq
     NO MAXVALUE
     CACHE 1;
 ALTER SEQUENCE public.user_highlights_id_seq OWNED BY public.user_highlights.id;
+CREATE TABLE public.user_invite_codes (
+    code text NOT NULL,
+    owner_user_id text NOT NULL,
+    consumed_by_user_id text,
+    consumed_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+CREATE TABLE public.user_library_recents (
+    user_id text NOT NULL,
+    kind text NOT NULL,
+    item_id uuid NOT NULL,
+    opened_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT user_library_recents_kind_check CHECK ((kind = ANY (ARRAY['paper'::text, 'note'::text, 'reference'::text, 'paperset'::text])))
+);
 CREATE TABLE public.user_preferences (
     user_id text NOT NULL,
     font public.font_pref DEFAULT 'sans'::public.font_pref NOT NULL,
@@ -829,6 +865,8 @@ ALTER TABLE ONLY public.checkpoint_writes
     ADD CONSTRAINT checkpoint_writes_pkey PRIMARY KEY (thread_id, checkpoint_ns, checkpoint_id, task_id, idx);
 ALTER TABLE ONLY public.checkpoints
     ADD CONSTRAINT checkpoints_pkey PRIMARY KEY (thread_id, checkpoint_ns, checkpoint_id);
+ALTER TABLE ONLY public.citation_enrichment_jobs
+    ADD CONSTRAINT citation_enrichment_jobs_pkey PRIMARY KEY (paper_id);
 ALTER TABLE ONLY public.document_chunks
     ADD CONSTRAINT document_chunks_pkey PRIMARY KEY (id);
 ALTER TABLE ONLY public.document_outlines
@@ -911,6 +949,10 @@ ALTER TABLE ONLY public."user"
     ADD CONSTRAINT user_email_unique UNIQUE (email);
 ALTER TABLE ONLY public.user_highlights
     ADD CONSTRAINT user_highlights_pkey PRIMARY KEY (id);
+ALTER TABLE ONLY public.user_invite_codes
+    ADD CONSTRAINT user_invite_codes_pkey PRIMARY KEY (code);
+ALTER TABLE ONLY public.user_library_recents
+    ADD CONSTRAINT user_library_recents_pkey PRIMARY KEY (user_id, kind, item_id);
 ALTER TABLE ONLY public."user"
     ADD CONSTRAINT user_pkey PRIMARY KEY (id);
 ALTER TABLE ONLY public.user_preferences
@@ -933,7 +975,9 @@ CREATE INDEX assets_library_idx ON public.assets USING btree (library_id);
 CREATE INDEX checkpoint_blobs_thread_id_idx ON public.checkpoint_blobs USING btree (thread_id);
 CREATE INDEX checkpoint_writes_thread_id_idx ON public.checkpoint_writes USING btree (thread_id);
 CREATE INDEX checkpoints_thread_id_idx ON public.checkpoints USING btree (thread_id);
+CREATE UNIQUE INDEX citation_enrichment_jobs_paper_id_unique ON public.citation_enrichment_jobs USING btree (paper_id);
 CREATE INDEX document_chunks_embedding_idx ON public.document_chunks USING ivfflat (embedding public.vector_cosine_ops) WITH (lists='100');
+CREATE UNIQUE INDEX document_chunks_paper_chunk_idx_unique ON public.document_chunks USING btree (paper_id, chunk_index);
 CREATE INDEX document_chunks_paper_idx ON public.document_chunks USING btree (paper_id);
 CREATE INDEX document_reference_markers_reference_id_idx ON public.document_reference_markers USING btree (reference_id);
 CREATE INDEX document_sections_paper_idx ON public.document_sections USING btree (paper_id);
@@ -952,6 +996,7 @@ CREATE INDEX idx_provider_key_alerts_last_seen ON public.provider_key_alerts USI
 CREATE INDEX idx_references_doi_lower ON public."references" USING btree (lower(TRIM(BOTH FROM (csl_json ->> 'DOI'::text)))) WHERE ((csl_json ->> 'DOI'::text) IS NOT NULL);
 CREATE INDEX idx_references_title_trgm ON public."references" USING gin (((csl_json ->> 'title'::text)) public.gin_trgm_ops) WHERE ((csl_json ->> 'title'::text) IS NOT NULL);
 CREATE INDEX idx_store_expires_at ON public.store USING btree (expires_at) WHERE (expires_at IS NOT NULL);
+CREATE INDEX idx_user_invite_codes_owner ON public.user_invite_codes USING btree (owner_user_id);
 CREATE INDEX kept_citations_user_id_idx ON public.kept_citations USING btree (user_id);
 CREATE UNIQUE INDEX libraries_user_id_unique ON public.libraries USING btree (user_id);
 CREATE INDEX library_references_folder_idx ON public.library_references USING btree (user_id, folder_id);
@@ -975,6 +1020,7 @@ CREATE INDEX paper_highlights_paper_idx ON public.paper_highlights USING btree (
 CREATE UNIQUE INDEX paper_highlights_run_page_bbox_uk ON public.paper_highlights USING btree (run_id, page, ((bbox)::text)) WHERE (run_id IS NOT NULL);
 CREATE INDEX papers_folder_path_idx ON public.papers USING btree (library_id, folder_path);
 CREATE INDEX papers_library_idx ON public.papers USING btree (library_id);
+CREATE INDEX papers_user_chunks_ready_idx ON public.papers USING btree (user_id, chunks_ready_at);
 CREATE INDEX papersets_row_refs_gin ON public.papersets USING gin (row_refs jsonb_path_ops);
 CREATE INDEX papersets_user_folder_idx ON public.papersets USING btree (user_id, folder_id);
 CREATE INDEX pending_recompute_claimed ON public.pending_recompute USING btree (claimed_at);
@@ -990,6 +1036,7 @@ CREATE INDEX store_prefix_idx ON public.store USING btree (prefix text_pattern_o
 CREATE INDEX user_highlights_layer_idx ON public.user_highlights USING btree (layer_id);
 CREATE UNIQUE INDEX user_highlights_layer_page_offsets_uk ON public.user_highlights USING btree (layer_id, page_number, start_offset, end_offset) WHERE (layer_id IS NOT NULL);
 CREATE INDEX user_highlights_user_paper_idx ON public.user_highlights USING btree (user_id, paper_id);
+CREATE INDEX user_library_recents_user_opened_idx ON public.user_library_recents USING btree (user_id, opened_at DESC);
 CREATE INDEX verification_identifier_idx ON public.verification USING btree (identifier);
 ALTER TABLE ONLY public.account
     ADD CONSTRAINT account_user_id_user_id_fk FOREIGN KEY (user_id) REFERENCES public."user"(id) ON DELETE CASCADE;
@@ -1023,6 +1070,8 @@ ALTER TABLE ONLY public.assets
     ADD CONSTRAINT assets_library_id_libraries_id_fk FOREIGN KEY (library_id) REFERENCES public.libraries(id) ON DELETE CASCADE;
 ALTER TABLE ONLY public.assets
     ADD CONSTRAINT assets_user_id_user_id_fk FOREIGN KEY (user_id) REFERENCES public."user"(id) ON DELETE CASCADE;
+ALTER TABLE ONLY public.citation_enrichment_jobs
+    ADD CONSTRAINT citation_enrichment_jobs_paper_id_papers_id_fk FOREIGN KEY (paper_id) REFERENCES public.papers(id) ON DELETE CASCADE;
 ALTER TABLE ONLY public.document_chunks
     ADD CONSTRAINT document_chunks_paper_id_papers_id_fk FOREIGN KEY (paper_id) REFERENCES public.papers(id) ON DELETE CASCADE;
 ALTER TABLE ONLY public.document_chunks
@@ -1121,6 +1170,12 @@ ALTER TABLE ONLY public.user_highlights
     ADD CONSTRAINT user_highlights_user_id_user_id_fk FOREIGN KEY (user_id) REFERENCES public."user"(id) ON DELETE CASCADE;
 ALTER TABLE ONLY public."user"
     ADD CONSTRAINT user_invite_code_fkey FOREIGN KEY (invite_code) REFERENCES public.invite_codes(code) ON DELETE SET NULL;
+ALTER TABLE ONLY public.user_invite_codes
+    ADD CONSTRAINT user_invite_codes_consumed_by_user_id_fk FOREIGN KEY (consumed_by_user_id) REFERENCES public."user"(id) ON DELETE SET NULL;
+ALTER TABLE ONLY public.user_invite_codes
+    ADD CONSTRAINT user_invite_codes_owner_user_id_fk FOREIGN KEY (owner_user_id) REFERENCES public."user"(id) ON DELETE CASCADE;
+ALTER TABLE ONLY public.user_library_recents
+    ADD CONSTRAINT user_library_recents_user_id_user_id_fk FOREIGN KEY (user_id) REFERENCES public."user"(id) ON DELETE CASCADE;
 ALTER TABLE ONLY public.user_preferences
     ADD CONSTRAINT user_preferences_user_id_user_id_fk FOREIGN KEY (user_id) REFERENCES public."user"(id) ON DELETE CASCADE;
 ALTER TABLE ONLY public.user_signup_profiles
