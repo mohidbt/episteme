@@ -33,6 +33,7 @@
     "@episteme/storage": "workspace:*",
     "@napi-rs/canvas": "^0.1.80",
     "@radix-ui/react-use-controllable-state": "^1.2.2",
+    "@sentry/nextjs": "^10.57.0",
     "@streamdown/cjk": "^1.0.3",
     "@streamdown/code": "^1.1.1",
     "@streamdown/math": "^1.0.2",
