@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { isValidUsername, isReservedUsername, RESERVED } from "./username";
+import {
+  deriveUsernameBase,
+  isReservedUsername,
+  isValidUsername,
+  RESERVED,
+} from "./username";
 
 describe("isValidUsername", () => {
   it("accepts lowercase+digits+hyphens, 3–30 chars", () => {
@@ -33,5 +38,37 @@ describe("isReservedUsername", () => {
   it("is case-insensitive", () => {
     expect(isReservedUsername("App")).toBe(true);
     expect(isReservedUsername("API")).toBe(true);
+  });
+});
+
+describe("deriveUsernameBase", () => {
+  it("slugifies the name", () => {
+    expect(
+      deriveUsernameBase({ name: "Test User", email: null, userId: "u1" }),
+    ).toBe("test-user");
+  });
+  it("falls back to email local-part when name is missing", () => {
+    expect(
+      deriveUsernameBase({
+        name: null,
+        email: "alice.smith@example.com",
+        userId: "u1",
+      }),
+    ).toBe("alice-smith");
+  });
+  it("collapses non-alphanumerics", () => {
+    expect(
+      deriveUsernameBase({ name: "Möhid F. Bütt", email: null, userId: "u1" }),
+    ).toBe("mo-hid-f-bu-tt");
+  });
+  it("falls back to userId tail when name + email yield no slug", () => {
+    expect(
+      deriveUsernameBase({ name: " ", email: "", userId: "u_CAFEBABE12" }),
+    ).toBe("user-febabe12");
+  });
+  it("skips reserved slugs and falls through", () => {
+    expect(
+      deriveUsernameBase({ name: "api", email: null, userId: "uABCDEF" }),
+    ).toBe("user-uabcdef");
   });
 });

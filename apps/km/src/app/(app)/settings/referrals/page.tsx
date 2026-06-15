@@ -1,9 +1,7 @@
 import Link from "next/link";
-import { eq } from "drizzle-orm";
 import { UserPlus } from "lucide-react";
-import { db } from "@/lib/db";
-import { user as userTable } from "@episteme/db/schema";
 import { getCurrentSession } from "@/lib/session";
+import { ensureUsername } from "@/lib/ensure-username";
 import {
   ensureUserReferralCodes,
   listReferralCodesForUser,
@@ -38,40 +36,25 @@ export default async function ReferralsSettingsPage() {
     );
   }
 
-  // Lookup username for the username-derived codes. Pre-launch accounts that
-  // never went through signupRealUser have no rows yet — generate them
-  // lazily on first view (idempotent).
-  const [me] = await db
-    .select({ username: userTable.username })
-    .from(userTable)
-    .where(eq(userTable.id, session.userId))
-    .limit(1);
-
-  // Legacy users (pre-username-required signup) have no username yet, so we
-  // can't derive their codes. Don't lie about "5 codes / 0 remaining" — point
-  // them at account settings where they can claim a username.
-  if (!me?.username) {
+  // GSD-46: defensively backfill a username for legacy / non-wizard accounts
+  // so this page never dead-ends. /settings/account has no username editor,
+  // so the previous "Pick a username in account settings" CTA pointed
+  // nowhere. ensureUsername derives one from the user's name/email + claims
+  // it under the unique index with collision retry.
+  const username = await ensureUsername(session.userId);
+  if (!username) {
     return (
       <div className="mx-auto max-w-lg px-6 py-10">
         <h1 className="font-display text-2xl mb-1">Referrals</h1>
-        <p
-          className="text-sm text-muted-foreground mb-6"
-          data-testid="referrals-needs-username"
-        >
-          Pick a username in{" "}
-          <Link
-            href="/settings/account"
-            className="underline hover:text-foreground"
-          >
-            account settings
-          </Link>{" "}
-          to unlock your {REFERRAL_CODES_PER_USER} personal invite codes.
+        <p className="text-sm text-muted-foreground">
+          Your invite codes aren&apos;t ready yet. Refresh in a moment — if
+          this keeps happening, ping support.
         </p>
       </div>
     );
   }
 
-  await ensureUserReferralCodes(session.userId, me.username);
+  await ensureUserReferralCodes(session.userId, username);
 
   const codes = await listReferralCodesForUser(session.userId);
   const remaining = codes.filter((c) => !c.consumedByUserId).length;
