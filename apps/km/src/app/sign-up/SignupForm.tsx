@@ -17,6 +17,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { USERNAME_REGEX } from "@/lib/username";
 
 export const POKEMON_OPTIONS = [
   { value: "charmander", label: "Charmander", color: "#f08030" },
@@ -54,7 +55,6 @@ const STEPS: Step[] = [
   "invite",
   "password",
 ];
-const USERNAME_RE = /^[a-z0-9-]{3,30}$/;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 type UsernameAvail =
@@ -131,7 +131,7 @@ export function SignupForm({
       setUsernameAvail("idle");
       return;
     }
-    if (!USERNAME_RE.test(name)) {
+    if (!USERNAME_REGEX.test(name)) {
       setUsernameAvail("invalid");
       return;
     }
@@ -184,7 +184,7 @@ export function SignupForm({
       if (!firstname.trim()) return "Name is required";
       if (!username.trim()) return "Username is required";
       if (username.length < 3) return "Username must be at least 3 characters";
-      if (!USERNAME_RE.test(username))
+      if (!USERNAME_REGEX.test(username))
         return "Username must use only lowercase a-z, 0-9 or -";
     }
     if (current === "email") {

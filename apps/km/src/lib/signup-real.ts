@@ -31,6 +31,8 @@ import {
 } from "@episteme/db/schema";
 import { auth } from "@/lib/auth-wired";
 import { ensureUserReferralCodes } from "@/lib/referral-codes";
+import { isValidUsername } from "@/lib/username";
+import { isUniqueViolation } from "@/lib/pg-errors";
 
 // GSD-46 — env gate. Defaults to enforced (matches launch posture: every
 // signup needs a code). Set INVITE_ONLY_SIGNUP=false to disable in dev.
@@ -79,9 +81,7 @@ const signupBaseShape = {
   email: z.string().email(),
   username: z
     .string()
-    .min(3)
-    .max(32)
-    .regex(/^[a-z0-9_-]+$/, "username must be lowercase a-z0-9_-"),
+    .refine(isValidUsername, "username must be 3-30 lowercase a-z0-9-, not reserved"),
   userType: z.enum(USER_TYPES),
   pokemon: z.enum(POKEMON),
   studentLevel: z.enum(STUDENT_LEVELS).optional(),
@@ -382,10 +382,11 @@ export async function signupRealUser(
       console.error("[signup-real] referral code generation failed", err);
     }
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    // Drizzle/pg duplicate key. We pre-checked but a concurrent signup may
-    // have claimed the username between our SELECT and UPDATE.
-    if (msg.includes("user_username_unique") || msg.includes("username")) {
+    // Drizzle/pg duplicate key (SQLSTATE 23505). We pre-checked but a
+    // concurrent signup may have claimed the username between our SELECT
+    // and UPDATE. Username is the only UNIQUE column updated here, so a
+    // 23505 unambiguously means username collision.
+    if (isUniqueViolation(err)) {
       await db.delete(user).where(eq(user.id, userId));
       return { ok: false, error: "username_taken" };
     }

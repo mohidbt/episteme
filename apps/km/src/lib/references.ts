@@ -2,6 +2,9 @@
 
 import { db } from "./db";
 import { references_ } from "@episteme/db/schema";
+import { isUniqueViolation } from "./pg-errors";
+
+export { isUniqueViolation };
 
 /**
  * Given a citation key, produce the next "-N" suggestion.
@@ -17,24 +20,6 @@ export function suggestNextCitationKey(key: string): string {
     return `${base}-${n + 1}`;
   }
   return `${key}-2`;
-}
-
-/**
- * Detects Postgres unique-violation errors (SQLSTATE 23505).
- *
- * The `postgres` (postgres-js) driver throws PostgresError with `.code` set
- * directly. Drizzle wraps those in its own `DrizzleQueryError` and preserves
- * the original via `.cause`. Check both.
- */
-export function isUniqueViolation(err: unknown): boolean {
-  if (typeof err !== "object" || err === null) return false;
-  const direct = (err as { code?: unknown }).code;
-  if (direct === "23505") return true;
-  const cause = (err as { cause?: unknown }).cause;
-  if (typeof cause === "object" && cause !== null && (cause as { code?: unknown }).code === "23505") {
-    return true;
-  }
-  return false;
 }
 
 type InsertValues = {

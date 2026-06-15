@@ -65,7 +65,7 @@ describe("signupRealUser", () => {
       firstname: "Alice",
       email: `a_${uniq()}@test.local`,
       password: "test-password-1234",
-      username: `alice_${uniq()}`.slice(0, 24),
+      username: `alice-${uniq()}`.slice(0, 24),
       userType: "student",
       studentLevel: "Master",
       pokemon: "charmander",
@@ -96,7 +96,7 @@ describe("signupRealUser", () => {
       firstname: "Bob",
       email: `b_${uniq()}@test.local`,
       password: "test-password-1234",
-      username: `bob_${uniq()}`.slice(0, 24),
+      username: `bob-${uniq()}`.slice(0, 24),
       userType: "researcher",
       jobRole: "Principal investigator",
       pokemon: "squirtle",
@@ -120,12 +120,45 @@ describe("signupRealUser", () => {
     if (!result.ok) expect(result.error).toBe("validation");
   });
 
+  it.each(["admin", "settings", "root", "support", "drive"])(
+    "rejects reserved username %p with validation error",
+    async (badName) => {
+      const result = await signupRealUser({
+        firstname: "Reserved",
+        email: `r_${uniq()}@test.local`,
+        password: "test-password-1234",
+        username: badName,
+        userType: "student",
+        studentLevel: "Master",
+        pokemon: "charmander",
+        inviteCode: "not-needed-for-validation",
+      });
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.error).toBe("validation");
+    },
+  );
+
+  it("rejects underscores in username (unified regex)", async () => {
+    const result = await signupRealUser({
+      firstname: "Under",
+      email: `u_${uniq()}@test.local`,
+      password: "test-password-1234",
+      username: "foo_bar",
+      userType: "student",
+      studentLevel: "Master",
+      pokemon: "charmander",
+      inviteCode: "not-needed-for-validation",
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toBe("validation");
+  });
+
   it("rejects mismatched persona details server-side", async () => {
     const result = await signupRealUser({
       firstname: "Mismatch",
       email: `m_${uniq()}@test.local`,
       password: "test-password-1234",
-      username: `mismatch_${uniq()}`.slice(0, 24),
+      username: `mismatch-${uniq()}`.slice(0, 24),
       userType: "student",
       jobRole: "Analyst",
       pokemon: "charmander",
@@ -137,7 +170,7 @@ describe("signupRealUser", () => {
 
   it("creates user, stamps invite, and persists extras plus persona profile on success", async () => {
     const code = await seedInvite();
-    const username = `carol_${uniq()}`.slice(0, 24);
+    const username = `carol-${uniq()}`.slice(0, 24);
     const email = `c_${uniq()}@test.local`;
 
     const result = await signupRealUser({
@@ -216,7 +249,7 @@ describe("signupRealUser", () => {
     const first = await saveSignupWaitlistEntry({
       firstname: "Wendy",
       email,
-      username: "wendy_one",
+      username: "wendy-one",
       userType: "student",
       studentLevel: "Bachelor",
       pokemon: "squirtle",
@@ -227,7 +260,7 @@ describe("signupRealUser", () => {
     const second = await saveSignupWaitlistEntry({
       firstname: "Wendy",
       email,
-      username: "wendy_two",
+      username: "wendy-two",
       userType: "student",
       studentLevel: "PhD",
       pokemon: "bulbasaur",
@@ -240,7 +273,7 @@ describe("signupRealUser", () => {
       .from(signupWaitlist)
       .where(eq(signupWaitlist.email, email))
       .limit(1);
-    expect(row.username).toBe("wendy_two");
+    expect(row.username).toBe("wendy-two");
     expect(row.studentLevel).toBe("PhD");
     expect(row.pokemon).toBe("bulbasaur");
     expect(row.attemptedInviteCode).toBe("BAD-TWO");

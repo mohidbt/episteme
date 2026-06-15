@@ -2,12 +2,16 @@ import { RESERVED } from "./reserved-usernames";
 
 export { RESERVED };
 
+// Canonical username format. Shared by signup wizard (client + server) and
+// settings rename. Tightened in GSD-111 to drop underscores.
+export const USERNAME_REGEX = /^[a-z0-9-]{3,30}$/;
+
 export function isReservedUsername(name: string): boolean {
   return RESERVED.has(name.toLowerCase());
 }
 
 export function isValidUsername(name: string): boolean {
-  return /^[a-z0-9-]{3,30}$/.test(name) && !isReservedUsername(name);
+  return USERNAME_REGEX.test(name) && !isReservedUsername(name);
 }
 
 /**
