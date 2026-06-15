@@ -188,7 +188,7 @@ describe("WikiLink tiptap node", () => {
     editor.destroy();
   });
 
-  it("does not render svg icon for note targetKind", () => {
+  it("renders an inline svg icon and wiki-link--note modifier for note targetKind (GSD-106)", () => {
     const editor = makeEditor({
       type: "doc",
       content: [
@@ -204,7 +204,9 @@ describe("WikiLink tiptap node", () => {
       ],
     });
     const html = editor.getHTML();
-    expect(html).not.toContain("<svg");
+    expect(html).toContain('data-target-kind="note"');
+    expect(html).toContain("<svg");
+    expect(html).toContain("wiki-link--note");
     editor.destroy();
   });
 
@@ -444,9 +446,11 @@ describe("WikiLink prefix classification (K6)", () => {
       typeText(editor, "[[Just Note]]");
       const html = editor.getHTML();
       expect(html).toContain('data-title="Just Note"');
-      // Note kind: no data-target-kind attribute (renderHTML omits when null)
-      // AND no svg icon (none rendered for note kind).
-      expect(html).not.toContain("<svg");
+      // GSD-106: note kind now renders an svg icon + wiki-link--note modifier
+      // so it visually matches paper/reference chips.
+      expect(html).toContain('data-target-kind="note"');
+      expect(html).toContain("<svg");
+      expect(html).toContain("wiki-link--note");
       editor.destroy();
     });
   });

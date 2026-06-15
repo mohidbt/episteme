@@ -69,6 +69,20 @@ const BOOK_MARKED_PATHS: ReadonlyArray<string> = [
   "M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z",
 ];
 
+// lucide NotebookText (GSD-106): visual parity icon for note-kind chips so
+// they match the paper (FileText) and reference (BookMarked) chip shape.
+const NOTEBOOK_TEXT_PATHS: ReadonlyArray<string> = [
+  "M2 6h4",
+  "M2 10h4",
+  "M2 14h4",
+  "M2 18h4",
+  "M4 2v20",
+  "M20.4 2H8a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12.4a.6.6 0 0 0 .6-.6V2.6a.6.6 0 0 0-.6-.6z",
+  "M9.5 8h7",
+  "M9.5 12h7",
+  "M9.5 16h4",
+];
+
 function iconSpec(paths: ReadonlyArray<string>): unknown[] {
   return ["svg", SVG_ATTRS, ...paths.map((d) => ["path", { d }])];
 }
@@ -197,18 +211,25 @@ export const WikiLink = Node.create({
     const resolved = attrs.targetId != null;
     // GSD-62: alias (user override) > displayTitle (resolved DB title) > title (raw token).
     const label = attrs.alias ?? attrs.displayTitle ?? attrs.title;
+    // GSD-106: note kind now gets its own modifier + icon so it matches the
+    // paper/reference chip shape (icon + colored hover). Legacy nodes with
+    // targetKind=null (pre-classifier) still render plain.
     const kindClass =
       attrs.targetKind === "paper"
         ? " wiki-link--paper"
         : attrs.targetKind === "reference"
           ? " wiki-link--reference"
-          : "";
+          : attrs.targetKind === "note"
+            ? " wiki-link--note"
+            : "";
     const icon =
       attrs.targetKind === "paper"
         ? iconSpec(FILE_TEXT_PATHS)
         : attrs.targetKind === "reference"
           ? iconSpec(BOOK_MARKED_PATHS)
-          : null;
+          : attrs.targetKind === "note"
+            ? iconSpec(NOTEBOOK_TEXT_PATHS)
+            : null;
     return [
       "span",
       mergeAttributes(HTMLAttributes, {
@@ -279,7 +300,9 @@ export const WikiLink = Node.create({
             ? " wiki-link--paper"
             : attrs.targetKind === "reference"
               ? " wiki-link--reference"
-              : "";
+              : attrs.targetKind === "note"
+                ? " wiki-link--note"
+                : "";
         const label = attrs.alias ?? attrs.displayTitle ?? attrs.title;
         const merged = mergeAttributes(HTMLAttributes, {
           "data-type": "wiki-link",
@@ -310,7 +333,9 @@ export const WikiLink = Node.create({
             ? FILE_TEXT_PATHS
             : attrs.targetKind === "reference"
               ? BOOK_MARKED_PATHS
-              : null;
+              : attrs.targetKind === "note"
+                ? NOTEBOOK_TEXT_PATHS
+                : null;
         if (paths) {
           const SVG_NS = "http://www.w3.org/2000/svg";
           const svg = document.createElementNS(SVG_NS, "svg");

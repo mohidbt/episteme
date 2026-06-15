@@ -72,6 +72,37 @@ describe("NoteEditor — wiki-link pill click navigation", () => {
     expect(mockPush).toHaveBeenCalledWith("/r/ref-42");
   });
 
+  it("clicking a note pill calls router.push(/n/<slug>) via resolvedLinks (GSD-106)", () => {
+    const { container } = render(
+      <NoteEditor
+        id="note-1"
+        initialMd=""
+        userName="alice"
+        resolvedLinks={{
+          "note::my note": {
+            targetKind: "note",
+            targetId: "note-99",
+            targetSlug: "my-note",
+            displayTitle: "My Note",
+          },
+        }}
+      />,
+    );
+    const host = container.firstChild as HTMLElement;
+    const pill = document.createElement("span");
+    pill.setAttribute("data-type", "wiki-link");
+    pill.setAttribute("data-target-kind", "note");
+    // Notes don't carry data-target-id-as-slug; the slug lives in resolvedLinks.
+    pill.setAttribute("data-title", "My Note");
+    pill.textContent = "My Note";
+    host.appendChild(pill);
+
+    pill.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    vi.advanceTimersByTime(260);
+
+    expect(mockPush).toHaveBeenCalledWith("/n/my-note");
+  });
+
   it("clicking a paper pill calls router.push(/p/<id>)", () => {
     const { container } = render(
       <NoteEditor id="note-1" initialMd="" userName="alice" />,

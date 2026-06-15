@@ -160,6 +160,14 @@
   background: color-mix(in oklch, var(--accent-reference, oklch(0.58 0.20 295)) 8%, transparent);
   border-color: color-mix(in oklch, var(--accent-reference, oklch(0.58 0.20 295)) 35%, transparent);
 }
+/* GSD-106: note chips get a colored hover tint that matches paper/reference
+   chrome, using a green tone to differentiate from paper (blue) and
+   reference (purple). */
+.episteme-prose .wiki-link--note:hover,
+.episteme-chat-composer .wiki-link--note:hover {
+  background: color-mix(in oklch, var(--accent-note, oklch(0.62 0.15 155)) 8%, transparent);
+  border-color: color-mix(in oklch, var(--accent-note, oklch(0.62 0.15 155)) 35%, transparent);
+}
 /* GSD-67/89: re-declare the single-line contract on the data-type selector so
    the NodeView path (contenteditable="false" + shorthand border reset) cannot
    regress to `white-space: normal` for either resolved or unresolved chips.
@@ -216,6 +224,10 @@
 .episteme-chat-composer .wiki-link--reference svg {
   color: var(--accent-reference, oklch(0.58 0.20 295));
 }
+.episteme-prose .wiki-link--note svg,
+.episteme-chat-composer .wiki-link--note svg {
+  color: var(--accent-note, oklch(0.62 0.15 155));
+}
 /* Unresolved pill: icon color must match the red dashed border, not the
    resolved blue/green. The `--paper` / `--reference` rules above would
    otherwise win by specificity; this `[data-resolved="false"]` selector adds
@@ -223,8 +235,10 @@
    `inherit` from the pill's red `color:`. */
 .episteme-prose .wiki-link[data-resolved="false"].wiki-link--paper svg,
 .episteme-prose .wiki-link[data-resolved="false"].wiki-link--reference svg,
+.episteme-prose .wiki-link[data-resolved="false"].wiki-link--note svg,
 .episteme-chat-composer .wiki-link[data-resolved="false"].wiki-link--paper svg,
-.episteme-chat-composer .wiki-link[data-resolved="false"].wiki-link--reference svg {
+.episteme-chat-composer .wiki-link[data-resolved="false"].wiki-link--reference svg,
+.episteme-chat-composer .wiki-link[data-resolved="false"].wiki-link--note svg {
   color: inherit;
 }
 

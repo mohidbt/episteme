@@ -285,8 +285,13 @@ export function NoteEditor({
         return;
       }
       // Notes: we need the slug, which the pill doesn't carry. Fall back to
-      // the server-hydrated resolvedLinks map (keyed by lowercased title).
-      const hit = resolvedLinks?.[title.toLowerCase()];
+      // the server-hydrated resolvedLinks map. GSD-106: the map is keyed
+      // `${kind}::${title.toLowerCase()}` (see page.tsx), not bare title —
+      // matching the hydration lookup in `hydrate-wiki-links.ts`. Keep a
+      // bare-title fallback for back-compat with any older map shape.
+      const lower = title.toLowerCase();
+      const hit =
+        resolvedLinks?.[`note::${lower}`] ?? resolvedLinks?.[lower];
       if (hit?.targetKind === "note" && hit.targetSlug) {
         router.push(`/n/${encodeURIComponent(hit.targetSlug)}`);
       }
