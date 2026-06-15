@@ -1,7 +1,9 @@
 import Link from "next/link";
+import { eq } from "drizzle-orm";
 import { UserPlus } from "lucide-react";
+import { db } from "@/lib/db";
+import { user as userTable } from "@episteme/db/schema";
 import { getCurrentSession } from "@/lib/session";
-import { ensureUsername } from "@/lib/ensure-username";
 import {
   ensureUserReferralCodes,
   listReferralCodesForUser,
@@ -14,8 +16,6 @@ export const dynamic = "force-dynamic";
 export default async function ReferralsSettingsPage() {
   const session = await getCurrentSession();
 
-  // Anonymous guests don't own referral codes — surface the same upgrade
-  // CTA the account page uses for consistency.
   if (!session || session.isAnonymous) {
     return (
       <div className="mx-auto max-w-lg px-6 py-10">
@@ -36,25 +36,19 @@ export default async function ReferralsSettingsPage() {
     );
   }
 
-  // GSD-46: defensively backfill a username for legacy / non-wizard accounts
-  // so this page never dead-ends. /settings/account has no username editor,
-  // so the previous "Pick a username in account settings" CTA pointed
-  // nowhere. ensureUsername derives one from the user's name/email + claims
-  // it under the unique index with collision retry.
-  const username = await ensureUsername(session.userId);
-  if (!username) {
-    return (
-      <div className="mx-auto max-w-lg px-6 py-10">
-        <h1 className="font-display text-2xl mb-1">Referrals</h1>
-        <p className="text-sm text-muted-foreground">
-          Your invite codes aren&apos;t ready yet. Refresh in a moment — if
-          this keeps happening, ping support.
-        </p>
-      </div>
+  const [me] = await db
+    .select({ username: userTable.username })
+    .from(userTable)
+    .where(eq(userTable.id, session.userId))
+    .limit(1);
+
+  if (!me?.username) {
+    throw new Error(
+      `[referrals] user ${session.userId} has no username — signup wizard should always set one`,
     );
   }
 
-  await ensureUserReferralCodes(session.userId, username);
+  await ensureUserReferralCodes(session.userId, me.username);
 
   const codes = await listReferralCodesForUser(session.userId);
   const remaining = codes.filter((c) => !c.consumedByUserId).length;
