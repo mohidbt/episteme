@@ -54,8 +54,21 @@ const STEPS: Step[] = [
   "invite",
   "password",
 ];
-const USERNAME_RE = /^[a-z0-9_-]+$/;
+const USERNAME_RE = /^[a-z0-9-]{3,30}$/;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+type UsernameAvail =
+  | "idle"
+  | "checking"
+  | "available"
+  | "invalid"
+  | "reserved"
+  | "taken";
+
+interface AvailabilityResponse {
+  available: boolean;
+  reason?: "invalid" | "reserved" | "taken";
+}
 
 export interface SignupFormProps {
   /** Override the fetch endpoint for tests. */
@@ -84,6 +97,7 @@ export function SignupForm({
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [isGuest, setIsGuest] = useState(false);
+  const [usernameAvail, setUsernameAvail] = useState<UsernameAvail>("idle");
 
   const stepIndex = STEPS.indexOf(step);
   const progress = useMemo(
@@ -108,6 +122,37 @@ export function SignupForm({
       cancelled = true;
     };
   }, []);
+
+  // Debounced availability check. Only fires after username passes
+  // local format/length. Stale debounces ignored via cancelled flag.
+  useEffect(() => {
+    const name = username.trim();
+    if (!name) {
+      setUsernameAvail("idle");
+      return;
+    }
+    if (!USERNAME_RE.test(name)) {
+      setUsernameAvail("invalid");
+      return;
+    }
+    setUsernameAvail("checking");
+    let cancelled = false;
+    const t = setTimeout(() => {
+      fetchAvailability(name)
+        .then((s) => {
+          if (!cancelled) setUsernameAvail(s);
+        })
+        .catch(() => {
+          // Network error: don't block; fall back to idle so handleContinue
+          // can re-fetch race-safe.
+          if (!cancelled) setUsernameAvail("idle");
+        });
+    }, 350);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [username]);
 
   function personaDetails() {
     if (userType === "student") return { studentLevel };
@@ -140,7 +185,7 @@ export function SignupForm({
       if (!username.trim()) return "Username is required";
       if (username.length < 3) return "Username must be at least 3 characters";
       if (!USERNAME_RE.test(username))
-        return "Username must use only lowercase a-z, 0-9, _ or -";
+        return "Username must use only lowercase a-z, 0-9 or -";
     }
     if (current === "email") {
       if (!email.trim()) return "Email is required";
@@ -173,6 +218,19 @@ export function SignupForm({
     return null;
   }
 
+  async function fetchAvailability(name: string): Promise<UsernameAvail> {
+    const res = await fetch(
+      `/api/auth/username/available?u=${encodeURIComponent(name)}`,
+      { credentials: "include" },
+    );
+    if (!res.ok) throw new Error(`availability ${res.status}`);
+    const body = (await res.json()) as AvailabilityResponse;
+    if (body.available) return "available";
+    if (body.reason === "reserved") return "reserved";
+    if (body.reason === "taken") return "taken";
+    return "invalid";
+  }
+
   async function validateInvite(): Promise<boolean> {
     setLoading(true);
     try {
@@ -201,6 +259,25 @@ export function SignupForm({
     if (v) {
       setError(v);
       return;
+    }
+    if (step === "identity") {
+      let avail = usernameAvail;
+      if (avail === "idle" || avail === "checking") {
+        setLoading(true);
+        try {
+          avail = await fetchAvailability(username.trim());
+          setUsernameAvail(avail);
+        } catch {
+          setError("Could not verify username, try again");
+          setLoading(false);
+          return;
+        }
+        setLoading(false);
+      }
+      if (avail !== "available") {
+        setError(messageForAvail(avail));
+        return;
+      }
     }
     if (step === "invite") {
       const ok = await validateInvite();
@@ -351,10 +428,33 @@ export function SignupForm({
                     type="text"
                     value={username}
                     onChange={(e) => setUsername(e.target.value.toLowerCase())}
-                    placeholder="lowercase, numbers, _ or -"
+                    placeholder="lowercase, numbers or -"
                     minLength={3}
                     required
+                    aria-invalid={
+                      usernameAvail === "taken" ||
+                      usernameAvail === "reserved" ||
+                      usernameAvail === "invalid"
+                    }
+                    aria-describedby="username-status"
                   />
+                  {username.trim() && usernameAvail !== "idle" && (
+                    <p
+                      id="username-status"
+                      data-testid="username-status"
+                      className={
+                        usernameAvail === "available"
+                          ? "text-xs text-muted-foreground"
+                          : usernameAvail === "checking"
+                            ? "text-xs text-muted-foreground"
+                            : "text-xs text-destructive"
+                      }
+                    >
+                      {usernameAvail === "available"
+                        ? "Username is available"
+                        : messageForAvail(usernameAvail)}
+                    </p>
+                  )}
                 </div>
               </>
             )}
@@ -575,7 +675,10 @@ export function SignupForm({
                 <Button
                   type="button"
                   className="flex-1"
-                  disabled={loading}
+                  disabled={
+                    loading ||
+                    (step === "identity" && usernameAvail !== "available")
+                  }
                   onClick={handleContinue}
                 >
                   Continue
@@ -607,6 +710,21 @@ export function SignupForm({
       </Card>
     </div>
   );
+}
+
+function messageForAvail(s: UsernameAvail): string {
+  switch (s) {
+    case "taken":
+      return "That username is taken";
+    case "reserved":
+      return "That username is reserved";
+    case "invalid":
+      return "Username must be 3-30 chars, lowercase a-z, 0-9 or -";
+    case "checking":
+      return "Checking username availability...";
+    default:
+      return "Username is required";
+  }
 }
 
 function descriptionForStep(step: Step): string {
