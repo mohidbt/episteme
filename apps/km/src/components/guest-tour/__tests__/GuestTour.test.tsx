@@ -508,8 +508,8 @@ describe("GuestTour", () => {
     }>;
     const expectations: Array<{ id: string; title: string; captionStart: string }> = [
       { id: "wow_paper_understanding", title: "Understanding across papers and notes", captionStart: "Ask the agent across papers and notes" },
-      { id: "graph_intro", title: "Graph (WIP)", captionStart: "Lines are set connections" },
-      { id: "wow_refs_fill", title: "Fill missing reference fields", captionStart: "Drop a half-filled BibTeX" },
+      { id: "graph_intro", title: "Graph (WIP)", captionStart: "Lines show explicit connections" },
+      { id: "wow_refs_fill", title: "Fill missing reference fields", captionStart: "Drop a half-filled reference" },
       { id: "wow_reader_highlight", title: "Dynamic Reading: Let the agent highlight anything for you", captionStart: "Ask the agent to highlight" },
       { id: "wow_paper_search", title: "One-click PDF discovery", captionStart: "On any reference with no PDF" },
       { id: "wow_extract", title: "Paperset enrich (concurrent)", captionStart: "Define columns once" },

@@ -63,7 +63,7 @@ function buildSteps(targets: GuestTourTargets | null): Step[] {
       placement: "bottom",
       skipBeacon: true,
       content:
-        "Your drive holds 4 things: Notes, Papers, References, and Assets (images). Everything is searchable and connected.",
+        "Your library has 4 things: Notes, Papers, References, and Images. All searchable, all linked.",
       data: { next: "/notes" } as StepData,
       styles: { buttonBack: { display: "none" } },
     },
@@ -73,7 +73,7 @@ function buildSteps(targets: GuestTourTargets | null): Step[] {
       placement: "right",
       skipBeacon: true,
       content:
-        "Notes are your living write-ups. Type [[ inside a note to wiki-link any paper, reference, or note. Use Import (top-right) to bring in markdown, PDFs, or BibTeX/RIS.",
+        "Notes is writing space, where your ideas and connections live. Type [[ to link any paper, reference, or other note. Import button (top-right) pulls markdown files -> you can bulk load your Obsidian vault.",
       data: { next: welcome, prev: "/" } as StepData,
     },
     {
@@ -91,7 +91,7 @@ function buildSteps(targets: GuestTourTargets | null): Step[] {
       placement: "right",
       skipBeacon: true,
       content:
-        "References are lightweight citation metadata — no PDF attached. The same Import button handles BibTeX, RIS, and EndNote.",
+        "References are citations without the PDF — author, title, year, DOI. Import handles BibTeX, RIS, and EndNote files.",
       data: { next: "/references", prev: welcome } as StepData,
     },
     {
@@ -103,7 +103,7 @@ function buildSteps(targets: GuestTourTargets | null): Step[] {
       content: (
         <TourPreviewCard
           title="Fill missing reference fields"
-          caption="Drop a half-filled BibTeX entry. The agent fills in DOI, authors, year, and abstract."
+          caption="Drop a half-filled reference. The agent fills in DOI, authors, year, and abstract."
           mediaSrc="/tour/wow_refs_fill.webm"
           mediaPoster="/tour/wow_refs_fill.poster.jpg"
           mediaAlt="Reference row going from sparse to filled"
@@ -241,7 +241,7 @@ function buildSteps(targets: GuestTourTargets | null): Step[] {
       content: (
         <TourPreviewCard
           title="Graph (WIP)"
-          caption="Lines are set connections. Proximity is semantic similarity — papers that read alike sit closer."
+          caption="Lines show explicit connections. Distance shows how similar papers read — closer means more alike."
           mediaSrc="/tour/graph_intro.svg"
           mediaAlt="Graph view illustration with nodes and edges"
         />

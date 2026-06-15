@@ -730,19 +730,19 @@ function messageForAvail(s: UsernameAvail): string {
 function descriptionForStep(step: Step): string {
   switch (step) {
     case "identity":
-      return "Choose how your account appears in Episteme";
+      return "How should your account show up?";
     case "email":
-      return "Use the email you want attached to your account";
+      return "What email do you want to use?";
     case "persona":
-      return "Tell us which setup should fit you best";
+      return "Which fits you best?";
     case "persona-detail":
-      return "Add a little context for your workspace";
+      return "A bit more about you";
     case "starter":
-      return "Pick an 8-bit starter for your empty library";
+      return "Pick your starter";
     case "invite":
-      return "Validate your invite before setting a password";
+      return "Got an invite code?";
     case "password":
-      return "Finish your account credentials";
+      return "Set your password";
   }
 }
 
