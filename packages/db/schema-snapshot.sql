@@ -1168,8 +1168,6 @@ ALTER TABLE ONLY public.user_highlights
     ADD CONSTRAINT user_highlights_paper_id_papers_id_fk FOREIGN KEY (paper_id) REFERENCES public.papers(id) ON DELETE CASCADE;
 ALTER TABLE ONLY public.user_highlights
     ADD CONSTRAINT user_highlights_user_id_user_id_fk FOREIGN KEY (user_id) REFERENCES public."user"(id) ON DELETE CASCADE;
-ALTER TABLE ONLY public."user"
-    ADD CONSTRAINT user_invite_code_fkey FOREIGN KEY (invite_code) REFERENCES public.invite_codes(code) ON DELETE SET NULL;
 ALTER TABLE ONLY public.user_invite_codes
     ADD CONSTRAINT user_invite_codes_consumed_by_user_id_fk FOREIGN KEY (consumed_by_user_id) REFERENCES public."user"(id) ON DELETE SET NULL;
 ALTER TABLE ONLY public.user_invite_codes
