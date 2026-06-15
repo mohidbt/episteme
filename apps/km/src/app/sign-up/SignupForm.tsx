@@ -391,7 +391,7 @@ export function SignupForm({
         </CardHeader>
         <form onSubmit={handleSubmit}>
           <CardContent className="space-y-4">
-            {isGuest && (
+            {isGuest && step === "identity" && (
               <p
                 role="note"
                 data-testid="guest-data-warning"

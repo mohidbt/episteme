@@ -482,4 +482,29 @@ describe("SignupForm", () => {
 
     expect(await screen.findByTestId("guest-data-warning")).toBeTruthy();
   });
+
+  it("hides guest data warning after advancing past the identity step", async () => {
+    mockFetch((url) => {
+      if (url.endsWith("/api/auth/get-session")) {
+        return json({ user: { isAnonymous: true } });
+      }
+      if (url.includes("/api/auth/username/available")) {
+        return json({ available: true });
+      }
+      return new Response("nope", { status: 404 });
+    });
+
+    render(<SignupForm />);
+
+    // Warning shows on identity step.
+    expect(await screen.findByTestId("guest-data-warning")).toBeTruthy();
+
+    // Advance to the email (second) step.
+    await reachEmailStep();
+
+    // Warning gone on subsequent steps.
+    await waitFor(() => {
+      expect(screen.queryByTestId("guest-data-warning")).toBeNull();
+    });
+  });
 });
