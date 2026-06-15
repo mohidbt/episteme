@@ -54,52 +54,32 @@ const SEED_REFERENCES = [
 const READING_LIST_FOLDER = "Reading List";
 const FOUNDATIONS_FOLDER = "Foundations";
 const PSM_FOLDER = "PSM";
-const BIO_FOLDER = "Bio";
 
-const BIO_REFERENCE_FILE = "bio-fungi.csl.json";
-const BIO_PAPER1 = {
-  filename: "fungi.pdf",
-  title: "A travelling-wave strategy for plant–fungal trade",
-  authors: [
-    "Loreto Oyarte Galvez",
-    "Corentin Bisot",
-    "Philippe Bourrianne",
-    "Howard A. Stone",
-    "E. Toby Kiers",
-    "Thomas S. Shimizu",
-  ],
-  year: 2025,
-  doi: "10.1038/s41586-025-08614-x",
-} as const;
-const BIO_PAPER2 = {
-  filename: "spontaneous.pdf",
-  title:
-    "Spontaneous switching in a protein signalling array reveals near-critical cooperativity",
-  authors: ["Johannes M. Keegstra"],
-  year: 2026,
-  doi: "10.1038/s41567-025-03158-3",
-} as const;
-const BIO_NOTE_FUNGAL_TITLE = "Fungal";
-const BIO_NOTE_ECOLI_TITLE = "EColi";
-const BIO_NOTE_FUNGAL_MD = `# Fungal chemotaxis — scratchpad
+// GSD-91: PSM-folder demo notes (replace the prior Bio chemotaxis pair). Each
+// note demonstrates the same Episteme features the old bio notes did: H1, an
+// inline `#tag`, **bold**, bulleted list, one paper wiki-link, one note
+// wiki-link to its sibling (so backlinks render in both directions).
+const PSM_NOTE_UNDERSERVED_TITLE = "Underserved Pathway";
+const PSM_NOTE_GAN_TITLE = "GAN Controls";
+const PSM_NOTE_UNDERSERVED_MD = `# Underserved Pathway — scratchpad
 
-#chemotaxis
+#psm
 
-- Mycorrhizal hyphae forage as a self-regulating **travelling wave** — growing tips pull an expanding mycelium, density self-tuned by fusion. See [[pdf:fungi.pdf]].
-- Tip steering is a slow integration of chemical gradients (sugars, phosphate, host root exudates) — way longer timescales than bacterial chemotaxis.
-- No flagellum, no run-and-tumble: directionality emerges from differential growth + branch reinforcement.
-- Open question: is the "wave" really a chemotactic response or a network-level optimisation that *looks* chemotactic from outside?
-- Compare with EColi run-and-tumble (see [[EColi]]) — totally different mechanism, similar functional outcome (find the resource).
+- Shimkin et al. evaluate the UW Underserved Pathway via **propensity-score matched cohorts** of medical graduates. See [[pdf:psm-paper-1.pdf]].
+- Matching is the core identification strategy: pathway participants vs comparable non-participants on demographics, prior training, financial-aid status.
+- Career-outcome endpoints (primary-care placement, rural practice) measured ~5 yrs out — long-tail outcome inference where an RCT would be impossible.
+- Open question: does matching on observables capture self-selection? Hidden bias on motivation is likely under-corrected.
+- Compare with the GAN-augmented design (see [[GAN Controls]]) — totally different control-construction, similar PSM target estimand.
 `;
-const BIO_NOTE_ECOLI_MD = `# E. coli chemotaxis — scratchpad
+const PSM_NOTE_GAN_MD = `# GAN-augmented PSM — scratchpad
 
-#chemotaxis
+#psm
 
-- Run-and-tumble: ~1s straight runs, brief tumbles, biased by recent ligand history.
-- CheA → CheY-P binds FliM → CW rotation → tumble. CheR/CheB methylation = adaptation, gives the cell a memory of ~3s.
-- **Logarithmic sensing** — response depends on fold-change in ligand, not absolute conc. Weber's law for bacteria.
-- Receptor clusters at the pole are cooperative; spontaneous switching of the array is near-critical — see [[pdf:spontaneous.pdf]].
-- Contrast with hyphal foraging in [[Fungal]]: same goal (climb gradient), wildly different machinery + timescale.
+- Run-of-the-mill PSM: match treated units to nearest control on estimated propensity. Bouvarel et al. instead **generate synthetic controls** via a GAN over EHR vitals. See [[pdf:psm-paper-2.pdf]].
+- Why: in-ICU prone-positioning has thin overlap — few non-proned patients resemble proned ones on baseline severity. Synthetic data fills the overlap region.
+- Validated against simulation + applied to ~4.3k ventilated COVID-19 patients.
+- Open question: does GAN-imputed overlap inherit the original sample's confounding? If the generator never saw an unmeasured covariate, neither does the matched set.
+- Contrast with the Underserved Pathway cohort in [[Underserved Pathway]]: same goal (causal effect under selection), wildly different control-construction.
 `;
 
 // Real PSM references (Propensity-Score Matching canon). Citation keys are
@@ -318,7 +298,7 @@ export async function seedAnonymousUser(userId: string): Promise<void> {
     await db.delete(libraries).where(eq(libraries.userId, userId));
   }
 
-  const { lib, foundationsFolder, psmFolder, bioFolder } = await db.transaction(async (tx) => {
+  const { lib, foundationsFolder, psmFolder } = await db.transaction(async (tx) => {
     const [created] = await tx
       .insert(libraries)
       .values({ userId, name: "Example Library" })
@@ -357,16 +337,7 @@ export async function seedAnonymousUser(userId: string): Promise<void> {
         name: PSM_FOLDER,
       })
       .returning();
-    const [bio] = await tx
-      .insert(folders)
-      .values({
-        libraryId: created.id,
-        userId,
-        parentId: null,
-        name: BIO_FOLDER,
-      })
-      .returning();
-    return { lib: created, foundationsFolder: foundations, psmFolder: psm, bioFolder: bio };
+    return { lib: created, foundationsFolder: foundations, psmFolder: psm };
   });
 
   const noteMdPath = path.join(process.cwd(), SEED_DIR, WELCOME_NOTE_FILE);
@@ -585,111 +556,45 @@ export async function seedAnonymousUser(userId: string): Promise<void> {
     content: dummyPapersetCsv(rowLabels),
   });
 
-  // Bio folder — chemotaxis demo: 2 papers + 1 RIS-derived reference (linked to
-  // paper1) + 2 cross-linked notes with #chemotaxis tags.
-  const bioPapers: Record<"fungi" | "spontaneous", { id: string }> = {
-    fungi: { id: "" },
-    spontaneous: { id: "" },
-  };
-  for (const [key, meta] of [
-    ["fungi", BIO_PAPER1] as const,
-    ["spontaneous", BIO_PAPER2] as const,
-  ]) {
-    const pdfFsPath = path.join(process.cwd(), SEED_DIR, meta.filename);
-    const buf = await fs.readFile(pdfFsPath);
-    const [inserted] = await db
-      .insert(papers)
-      .values({
-        libraryId: lib.id,
-        userId,
-        folderPath: BIO_FOLDER,
-        folderId: bioFolder.id,
-        filename: meta.filename,
-        title: meta.title,
-        authors: [...meta.authors],
-        year: meta.year,
-        doi: meta.doi,
-        sizeBytes: buf.byteLength,
-      })
-      .returning();
-    await storage.uploadObject(
-      paperSourceKey(inserted.id),
-      buf,
-      "application/pdf",
-    );
-    await db
-      .update(papers)
-      .set({ storageUrl: paperSourceKey(inserted.id) })
-      .where(eq(papers.id, inserted.id));
-    try {
-      const cover = await extractCover(new Uint8Array(buf));
-      await storage.uploadObject(paperCoverKey(inserted.id), cover, "image/png");
-    } catch (err) {
-      console.warn(`seed: cover extraction failed for bio paper ${inserted.id}`, err);
-    }
-    bioPapers[key] = { id: inserted.id };
-    // GSD-32 Phase 4: hidden ref-twin for the bio paper. The manually-seeded
-    // fungi ref below also targets this paper via paperId, so this insert is
-    // skipped via the paperId-hit dedup branch on fungi (idempotent).
-    await ensurePaperRef({
-      id: inserted.id,
-      libraryId: lib.id,
-      userId,
-      title: meta.title,
-      authors: [...meta.authors],
-      year: meta.year,
-      doi: meta.doi,
-    });
-  }
-
-  // Reference: same publication as fungi.pdf — paperId links the two.
-  const bioCslRaw = JSON.parse(
-    await fs.readFile(path.join(process.cwd(), SEED_DIR, BIO_REFERENCE_FILE), "utf8"),
-  ) as CslItem;
-  const bioCsl = validateCslJson(bioCslRaw);
-  const bioCitationKey = deriveCitationKey(bioCsl);
-  await db.insert(references_).values({
-    libraryId: lib.id,
+  // GSD-91: PSM-folder demo notes — replace the prior Bio chemotaxis pair.
+  // Two cross-linked notes (sibling [[wiki-links]] both directions) anchored
+  // on the existing Shimkin 2025 + Bouvarel 2025 PSM PDFs. Same feature
+  // coverage as the bio notes: H1, inline #tag, **bold**, bulleted list, one
+  // paper wiki-link, one note wiki-link, cross-linked backlinks.
+  const underservedSlug = await resolveNoteSlug(
     userId,
-    folderPath: BIO_FOLDER,
-    folderId: bioFolder.id,
-    citationKey: bioCitationKey,
-    cslJson: bioCsl,
-    paperId: bioPapers.fungi.id,
-  });
-
-  // Notes — insert Fungal first (EColi links to Fungal by title via [[Fungal]]).
-  const fungalSlug = await resolveNoteSlug(userId, BIO_NOTE_FUNGAL_TITLE);
-  const [fungalNote] = await db
+    PSM_NOTE_UNDERSERVED_TITLE,
+  );
+  const [underservedNote] = await db
     .insert(notes)
     .values({
       libraryId: lib.id,
       userId,
-      folderPath: BIO_FOLDER,
-      folderId: bioFolder.id,
-      title: BIO_NOTE_FUNGAL_TITLE,
-      slug: fungalSlug,
-      contentMd: BIO_NOTE_FUNGAL_MD,
-      sizeBytes: Buffer.byteLength(BIO_NOTE_FUNGAL_MD, "utf8"),
+      folderPath: PSM_FOLDER,
+      folderId: psmFolder.id,
+      title: PSM_NOTE_UNDERSERVED_TITLE,
+      slug: underservedSlug,
+      contentMd: PSM_NOTE_UNDERSERVED_MD,
+      sizeBytes: Buffer.byteLength(PSM_NOTE_UNDERSERVED_MD, "utf8"),
     })
     .returning();
-  const ecoliSlug = await resolveNoteSlug(userId, BIO_NOTE_ECOLI_TITLE);
-  const [ecoliNote] = await db
+  const ganSlug = await resolveNoteSlug(userId, PSM_NOTE_GAN_TITLE);
+  const [ganNote] = await db
     .insert(notes)
     .values({
       libraryId: lib.id,
       userId,
-      folderPath: BIO_FOLDER,
-      folderId: bioFolder.id,
-      title: BIO_NOTE_ECOLI_TITLE,
-      slug: ecoliSlug,
-      contentMd: BIO_NOTE_ECOLI_MD,
-      sizeBytes: Buffer.byteLength(BIO_NOTE_ECOLI_MD, "utf8"),
+      folderPath: PSM_FOLDER,
+      folderId: psmFolder.id,
+      title: PSM_NOTE_GAN_TITLE,
+      slug: ganSlug,
+      contentMd: PSM_NOTE_GAN_MD,
+      sizeBytes: Buffer.byteLength(PSM_NOTE_GAN_MD, "utf8"),
     })
     .returning();
 
-  await rebuildLinks(fungalNote.id, BIO_NOTE_FUNGAL_MD, userId);
-  await rebuildLinks(ecoliNote.id, BIO_NOTE_ECOLI_MD, userId);
+  await rebuildLinks(underservedNote.id, PSM_NOTE_UNDERSERVED_MD, userId);
+  await rebuildLinks(ganNote.id, PSM_NOTE_GAN_MD, userId);
 
   // Root-folder image asset: "Context Matters" demo image.
   const IMG_FILE = "context-matters.jpeg";

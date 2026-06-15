@@ -32,7 +32,7 @@ describe("seedAnonymousUser sizeBytes", () => {
       .select({ id: papers.id, filename: papers.filename, sizeBytes: papers.sizeBytes })
       .from(papers)
       .where(eq(papers.userId, userId));
-    expect(rows.length).toBeGreaterThanOrEqual(6); // RAG + 3 PSM + 2 Bio
+    expect(rows.length).toBeGreaterThanOrEqual(4); // RAG + 3 PSM (GSD-91: bio removed)
     for (const r of rows) {
       expect(r.sizeBytes, `paper ${r.filename}`).not.toBeNull();
       expect(Number(r.sizeBytes), `paper ${r.filename}`).toBeGreaterThan(0);
@@ -44,7 +44,7 @@ describe("seedAnonymousUser sizeBytes", () => {
       .select({ id: notes.id, title: notes.title, sizeBytes: notes.sizeBytes })
       .from(notes)
       .where(eq(notes.userId, userId));
-    expect(rows.length).toBeGreaterThanOrEqual(3); // Welcome + Fungal + EColi
+    expect(rows.length).toBeGreaterThanOrEqual(3); // Welcome + Underserved Pathway + GAN Controls (GSD-91)
     for (const r of rows) {
       expect(r.sizeBytes, `note ${r.title}`).not.toBeNull();
       expect(Number(r.sizeBytes), `note ${r.title}`).toBeGreaterThan(0);

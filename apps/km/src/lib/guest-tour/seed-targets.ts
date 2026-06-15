@@ -17,7 +17,7 @@ export type GuestTourTargets = {
  *
  * - Welcome note: slug is deterministic, no DB lookup.
  * - Reference: first library_references row (seed order = alphafold first).
- * - Paper: "Spontaneous switching…" PSM survey paper, title-matched.
+ * - Paper: Shimkin 2025 Underserved-Pathway PSM paper, title-matched.
  * - Paperset: psm-survey.csv (seed filename).
  */
 export async function getGuestTourTargets(userId: string): Promise<GuestTourTargets> {
@@ -31,7 +31,7 @@ export async function getGuestTourTargets(userId: string): Promise<GuestTourTarg
     db
       .select({ id: papers.id })
       .from(papers)
-      .where(and(eq(papers.userId, userId), ilike(papers.title, "Spontaneous switching%")))
+      .where(and(eq(papers.userId, userId), ilike(papers.title, "Using Propensity-Score Matched Cohorts%")))
       .limit(1),
     db
       .select({ id: papersets.id })

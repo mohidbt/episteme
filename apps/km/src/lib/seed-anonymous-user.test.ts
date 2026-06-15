@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import {
   folders,
   libraries,
+  noteLinks,
   notes,
   paperCitations,
   papers,
@@ -58,7 +59,7 @@ afterAll(async () => {
 });
 
 describe("seedAnonymousUser", () => {
-  it("creates library + TRASH + nested Reading List/Foundations + welcome note + paper (cover + PDF in MinIO) + 5 references", { timeout: 60_000 }, async () => {
+  it("creates library + TRASH + nested Reading List/Foundations + welcome note + paper (cover + PDF in MinIO) + references (no bio folder)", { timeout: 60_000 }, async () => {
     const userId = await insertAnonymousUser();
 
     await seedAnonymousUser(userId);
@@ -95,12 +96,44 @@ describe("seedAnonymousUser", () => {
     expect(welcomeNote!.contentMd).toContain("*italic*");
     expect(welcomeNote!.contentMd).toContain("`code`");
 
+    // GSD-91: Bio folder removed. PSM folder now hosts the 2 demo notes
+    // (Underserved Pathway + GAN Controls), replacing the Fungal/EColi pair.
+    const bioFolder = allFolders.find((f) => f.name === "Bio");
+    expect(bioFolder).toBeUndefined();
+    const underservedNote = noteRows.find((n) => n.title === "Underserved Pathway");
+    const ganNote = noteRows.find((n) => n.title === "GAN Controls");
+    expect(underservedNote).toBeDefined();
+    expect(ganNote).toBeDefined();
+    expect(underservedNote!.contentMd).toContain("#psm");
+    expect(ganNote!.contentMd).toContain("#psm");
+    expect(underservedNote!.contentMd).toContain("[[pdf:psm-paper-1.pdf]]");
+    expect(ganNote!.contentMd).toContain("[[pdf:psm-paper-2.pdf]]");
+    expect(underservedNote!.contentMd).toContain("[[GAN Controls]]");
+    expect(ganNote!.contentMd).toContain("[[Underserved Pathway]]");
+    // Notes live in the PSM folder, not at root.
+    expect(underservedNote!.folderPath).toBe("PSM");
+    expect(ganNote!.folderPath).toBe("PSM");
+    // rebuildLinks materializes the cross-note edges so backlinks render.
+    const underservedLinks = await db
+      .select({ targetKind: noteLinks.targetKind, targetTitleRaw: noteLinks.targetTitleRaw })
+      .from(noteLinks)
+      .where(eq(noteLinks.sourceNoteId, underservedNote!.id));
+    const ganLinks = await db
+      .select({ targetKind: noteLinks.targetKind, targetTitleRaw: noteLinks.targetTitleRaw })
+      .from(noteLinks)
+      .where(eq(noteLinks.sourceNoteId, ganNote!.id));
+    expect(underservedLinks.some((l) => l.targetTitleRaw === "GAN Controls")).toBe(true);
+    expect(ganLinks.some((l) => l.targetTitleRaw === "Underserved Pathway")).toBe(true);
+
     const paperRows = await db
       .select()
       .from(papers)
       .where(eq(papers.userId, userId));
-    // 1 RAG seed paper at root + 3 PSM folder PDFs + 2 Bio folder PDFs.
-    expect(paperRows).toHaveLength(6);
+    // GSD-91: 1 RAG seed paper at root + 3 PSM folder PDFs. Bio papers removed.
+    expect(paperRows).toHaveLength(4);
+    // Bio papers must NOT be present.
+    expect(paperRows.some((p) => p.filename === "fungi.pdf")).toBe(false);
+    expect(paperRows.some((p) => p.filename === "spontaneous.pdf")).toBe(false);
     const ragPaper = paperRows.find((p) => p.filename === "2005.11401.pdf");
     expect(ragPaper).toBeDefined();
     expect(ragPaper!.doi).toBe("10.48550/arXiv.2005.11401");
@@ -139,9 +172,8 @@ describe("seedAnonymousUser", () => {
       .select()
       .from(references_)
       .where(eq(references_.userId, userId));
-    // 5 original demo refs + 6 PSM references seeded into a "PSM" folder
-    // + 1 Bio reference (fungi).
-    expect(refRows).toHaveLength(12);
+    // GSD-91: 5 original demo refs + 6 PSM references. Bio reference removed.
+    expect(refRows).toHaveLength(11);
     const dois = refRows.map((r) => (r.cslJson as CslItem).DOI).sort();
     expect(dois).toContain("10.1038/s41586-021-03819-2");
     expect(dois).toContain("10.48550/arXiv.1706.03762");
@@ -251,13 +283,13 @@ describe("seedAnonymousUser", () => {
       .select()
       .from(papers)
       .where(eq(papers.userId, userId));
-    expect(paperRows).toHaveLength(6);
+    expect(paperRows).toHaveLength(4);
 
     const refRows = await db
       .select()
       .from(references_)
       .where(eq(references_.userId, userId));
-    expect(refRows).toHaveLength(12);
+    expect(refRows).toHaveLength(11);
   });
 
   it("recovers from a partial seed (orphan library, no other rows)", { timeout: 60_000 }, async () => {
@@ -283,12 +315,12 @@ describe("seedAnonymousUser", () => {
       .select()
       .from(papers)
       .where(eq(papers.userId, userId));
-    expect(paperRows).toHaveLength(6);
+    expect(paperRows).toHaveLength(4);
 
     const refRows = await db
       .select()
       .from(references_)
       .where(eq(references_.userId, userId));
-    expect(refRows).toHaveLength(12);
+    expect(refRows).toHaveLength(11);
   });
 });

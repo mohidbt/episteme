@@ -152,7 +152,7 @@ function buildSteps(targets: GuestTourTargets | null): Step[] {
       placement: "center",
       skipBeacon: true,
       content:
-        "Here's the Spontaneous Switching paper — title, abstract, authors, every parsed reference clickable.",
+        "Here's the Underserved Pathway paper — title, abstract, authors, every parsed reference clickable.",
       data: { next: readerHref, prev: "/papers" } as StepData,
     },
     {
