@@ -18,10 +18,8 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { USERNAME_REGEX } from "@/lib/username";
-import {
-  fetchUniversities,
-  type UniversityOption,
-} from "@/lib/universities";
+
+const UNIVERSITY_MAX_LENGTH = 200;
 
 export const POKEMON_OPTIONS = [
   { value: "charmander", label: "Charmander", color: "#f08030" },
@@ -115,7 +113,6 @@ export function SignupForm({
   const [pokemon, setPokemon] = useState<Pokemon | "">("");
   const [inviteCode, setInviteCode] = useState("");
   const [university, setUniversity] = useState("");
-  const [uniSuggestions, setUniSuggestions] = useState<UniversityOption[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [isGuest, setIsGuest] = useState(false);
@@ -176,28 +173,6 @@ export function SignupForm({
       clearTimeout(t);
     };
   }, [username]);
-
-  // GSD-119: debounced Hipolabs lookup. AbortController cancels stale
-  // queries when the user keeps typing. Failures silently yield no
-  // suggestions — caller can still submit free-text.
-  useEffect(() => {
-    if (step !== "university") return;
-    const q = university.trim();
-    if (q.length < 2) {
-      setUniSuggestions([]);
-      return;
-    }
-    const ctrl = new AbortController();
-    const t = setTimeout(() => {
-      fetchUniversities(q, ctrl.signal)
-        .then((list) => setUniSuggestions(list.slice(0, 8)))
-        .catch(() => setUniSuggestions([]));
-    }, 350);
-    return () => {
-      ctrl.abort();
-      clearTimeout(t);
-    };
-  }, [university, step]);
 
   function personaDetails() {
     if (userType === "student") return { studentLevel };
@@ -548,7 +523,6 @@ export function SignupForm({
                         setIndustry("");
                         setPersonaOther("");
                         setUniversity("");
-                        setUniSuggestions([]);
                       }}
                       className={`flex items-center justify-center rounded-md border px-3 py-2 text-sm ${
                         userType === opt.value
@@ -650,47 +624,14 @@ export function SignupForm({
             {step === "university" && (
               <div className="space-y-1.5">
                 <Label htmlFor="university">University</Label>
-                <div className="relative">
-                  <Input
-                    id="university"
-                    type="text"
-                    autoComplete="off"
-                    value={university}
-                    onChange={(e) => setUniversity(e.target.value)}
-                    placeholder="Start typing a name..."
-                    aria-autocomplete="list"
-                    aria-expanded={uniSuggestions.length > 0}
-                  />
-                  {uniSuggestions.length > 0 && (
-                    <ul
-                      role="listbox"
-                      aria-label="university suggestions"
-                      className="absolute z-10 mt-1 w-full overflow-hidden rounded-md border border-border bg-popover shadow-md"
-                    >
-                      {uniSuggestions.map((u, i) => (
-                        <li
-                          key={`${u.name}-${u.country}-${i}`}
-                          role="option"
-                          aria-selected={false}
-                        >
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setUniversity(u.name);
-                              setUniSuggestions([]);
-                            }}
-                            className="flex w-full flex-col items-start gap-0.5 px-3 py-1.5 text-left text-sm hover:bg-accent"
-                          >
-                            <span>{u.name}</span>
-                            <span className="text-xs text-muted-foreground">
-                              {u.country}
-                            </span>
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
+                <Input
+                  id="university"
+                  type="text"
+                  value={university}
+                  onChange={(e) => setUniversity(e.target.value)}
+                  placeholder="University of Cambridge"
+                  maxLength={UNIVERSITY_MAX_LENGTH}
+                />
               </div>
             )}
 

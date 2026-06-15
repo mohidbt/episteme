@@ -509,19 +509,6 @@ describe("SignupForm", () => {
   });
 
   it("shows university step for student userType after persona-detail", async () => {
-    mockFetch((url) => {
-      if (url.endsWith("/api/auth/get-session")) {
-        return json({ user: { isAnonymous: false } });
-      }
-      if (url.includes("/api/auth/username/available")) {
-        return json({ available: true });
-      }
-      if (url.startsWith("http://universities.hipolabs.com")) {
-        return json([]);
-      }
-      return new Response("nope", { status: 404 });
-    });
-
     render(<SignupForm />);
     await reachPersonaStep();
     fireEvent.click(screen.getByRole("radio", { name: /^student$/i }));
@@ -534,16 +521,6 @@ describe("SignupForm", () => {
   });
 
   it("skips university step for industry userType", async () => {
-    mockFetch((url) => {
-      if (url.endsWith("/api/auth/get-session")) {
-        return json({ user: { isAnonymous: false } });
-      }
-      if (url.includes("/api/auth/username/available")) {
-        return json({ available: true });
-      }
-      return new Response("nope", { status: 404 });
-    });
-
     render(<SignupForm />);
     await reachStarterStepForIndustry();
     expect(screen.queryByLabelText(/university/i)).toBeNull();
@@ -551,48 +528,7 @@ describe("SignupForm", () => {
     expect(screen.getByText(/step 5 of 7/i)).toBeTruthy();
   });
 
-  it("shows university suggestions from Hipolabs API for student", async () => {
-    mockFetch((url) => {
-      if (url.endsWith("/api/auth/get-session")) {
-        return json({ user: { isAnonymous: false } });
-      }
-      if (url.includes("/api/auth/username/available")) {
-        return json({ available: true });
-      }
-      if (url.startsWith("http://universities.hipolabs.com")) {
-        return json([
-          {
-            name: "Massachusetts Institute of Technology",
-            country: "USA",
-            domains: [],
-            web_pages: [],
-          },
-        ]);
-      }
-      return new Response("nope", { status: 404 });
-    });
-
-    render(<SignupForm />);
-    await reachPersonaStep();
-    fireEvent.click(screen.getByRole("radio", { name: /^student$/i }));
-    await continueStep();
-    fireEvent.click(screen.getByRole("radio", { name: /^bachelor$/i }));
-    await continueStep();
-
-    const input = screen.getByLabelText(/university/i) as HTMLInputElement;
-    fireEvent.change(input, { target: { value: "Mass" } });
-
-    await waitFor(
-      () => {
-        expect(
-          screen.getByText(/Massachusetts Institute of Technology/i),
-        ).toBeTruthy();
-      },
-      { timeout: 2000 },
-    );
-  });
-
-  it("accepts free-text university when API fails (student path)", async () => {
+  it("accepts free-text university and submits it (student path)", async () => {
     const onSuccess = vi.fn();
     const fetchMock = mockFetch((url) => {
       if (url.endsWith("/api/auth/get-session")) {
@@ -603,9 +539,6 @@ describe("SignupForm", () => {
       }
       if (url.endsWith("/api/auth/invite/validate")) {
         return json({ ok: true });
-      }
-      if (url.startsWith("http://universities.hipolabs.com")) {
-        return new Response("boom", { status: 500 });
       }
       if (url.endsWith("/test/signup")) {
         return json({ ok: true, userId: "u_test" });
