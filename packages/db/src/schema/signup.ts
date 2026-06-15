@@ -12,6 +12,7 @@ export const userSignupProfiles = pgTable(
     jobRole: text("job_role"),
     industry: text("industry"),
     personaOther: text("persona_other"),
+    university: text("university"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -40,6 +41,7 @@ export const signupWaitlist = pgTable(
     jobRole: text("job_role"),
     industry: text("industry"),
     personaOther: text("persona_other"),
+    university: text("university"),
     attemptedInviteCode: text("attempted_invite_code"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()

@@ -18,6 +18,10 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { USERNAME_REGEX } from "@/lib/username";
+import {
+  fetchUniversities,
+  type UniversityOption,
+} from "@/lib/universities";
 
 export const POKEMON_OPTIONS = [
   { value: "charmander", label: "Charmander", color: "#f08030" },
@@ -42,19 +46,35 @@ type Step =
   | "email"
   | "persona"
   | "persona-detail"
+  | "university"
   | "starter"
   | "invite"
   | "password";
 
-const STEPS: Step[] = [
-  "identity",
-  "email",
-  "persona",
-  "persona-detail",
-  "starter",
-  "invite",
-  "password",
-];
+// GSD-119: university step shown only for students/researchers.
+function stepsFor(userType: UserType | ""): Step[] {
+  const includeUni = userType === "student" || userType === "researcher";
+  return includeUni
+    ? [
+        "identity",
+        "email",
+        "persona",
+        "persona-detail",
+        "university",
+        "starter",
+        "invite",
+        "password",
+      ]
+    : [
+        "identity",
+        "email",
+        "persona",
+        "persona-detail",
+        "starter",
+        "invite",
+        "password",
+      ];
+}
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 type UsernameAvail =
@@ -94,15 +114,18 @@ export function SignupForm({
   const [personaOther, setPersonaOther] = useState("");
   const [pokemon, setPokemon] = useState<Pokemon | "">("");
   const [inviteCode, setInviteCode] = useState("");
+  const [university, setUniversity] = useState("");
+  const [uniSuggestions, setUniSuggestions] = useState<UniversityOption[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [isGuest, setIsGuest] = useState(false);
   const [usernameAvail, setUsernameAvail] = useState<UsernameAvail>("idle");
 
-  const stepIndex = STEPS.indexOf(step);
+  const steps = useMemo(() => stepsFor(userType), [userType]);
+  const stepIndex = steps.indexOf(step);
   const progress = useMemo(
-    () => Math.round(((stepIndex + 1) / STEPS.length) * 100),
-    [stepIndex],
+    () => Math.round(((stepIndex + 1) / steps.length) * 100),
+    [stepIndex, steps.length],
   );
 
   useEffect(() => {
@@ -154,6 +177,28 @@ export function SignupForm({
     };
   }, [username]);
 
+  // GSD-119: debounced Hipolabs lookup. AbortController cancels stale
+  // queries when the user keeps typing. Failures silently yield no
+  // suggestions — caller can still submit free-text.
+  useEffect(() => {
+    if (step !== "university") return;
+    const q = university.trim();
+    if (q.length < 2) {
+      setUniSuggestions([]);
+      return;
+    }
+    const ctrl = new AbortController();
+    const t = setTimeout(() => {
+      fetchUniversities(q, ctrl.signal)
+        .then((list) => setUniSuggestions(list.slice(0, 8)))
+        .catch(() => setUniSuggestions([]));
+    }, 350);
+    return () => {
+      ctrl.abort();
+      clearTimeout(t);
+    };
+  }, [university, step]);
+
   function personaDetails() {
     if (userType === "student") return { studentLevel };
     if (userType === "researcher") return { jobRole: jobRole.trim() };
@@ -169,6 +214,11 @@ export function SignupForm({
     // Keep DB column firstName: use the first whitespace-delimited token
     // (so "John Doe" → "John", "Madonna" → "Madonna").
     const firstToken = name.split(/\s+/)[0] || name;
+    const uni = university.trim();
+    const uniField =
+      (userType === "student" || userType === "researcher") && uni
+        ? { university: uni }
+        : {};
     return {
       firstname: firstToken,
       username: username.trim(),
@@ -176,6 +226,7 @@ export function SignupForm({
       userType,
       pokemon,
       ...personaDetails(),
+      ...uniField,
     };
   }
 
@@ -283,12 +334,12 @@ export function SignupForm({
       const ok = await validateInvite();
       if (!ok) return;
     }
-    setStep(STEPS[Math.min(stepIndex + 1, STEPS.length - 1)]);
+    setStep(steps[Math.min(stepIndex + 1, steps.length - 1)]);
   }
 
   function handleBack() {
     setError(null);
-    setStep(STEPS[Math.max(stepIndex - 1, 0)]);
+    setStep(steps[Math.max(stepIndex - 1, 0)]);
   }
 
   async function handleWaitlist() {
@@ -378,7 +429,7 @@ export function SignupForm({
               Create account
             </CardTitle>
             <span className="text-xs text-muted-foreground">
-              Step {stepIndex + 1} of {STEPS.length}
+              Step {stepIndex + 1} of {steps.length}
             </span>
           </div>
           <div className="h-1.5 overflow-hidden rounded-full bg-muted">
@@ -496,6 +547,8 @@ export function SignupForm({
                         setJobRole("");
                         setIndustry("");
                         setPersonaOther("");
+                        setUniversity("");
+                        setUniSuggestions([]);
                       }}
                       className={`flex items-center justify-center rounded-md border px-3 py-2 text-sm ${
                         userType === opt.value
@@ -591,6 +644,53 @@ export function SignupForm({
                   placeholder="Independent scholar"
                   required
                 />
+              </div>
+            )}
+
+            {step === "university" && (
+              <div className="space-y-1.5">
+                <Label htmlFor="university">University</Label>
+                <div className="relative">
+                  <Input
+                    id="university"
+                    type="text"
+                    autoComplete="off"
+                    value={university}
+                    onChange={(e) => setUniversity(e.target.value)}
+                    placeholder="Start typing a name..."
+                    aria-autocomplete="list"
+                    aria-expanded={uniSuggestions.length > 0}
+                  />
+                  {uniSuggestions.length > 0 && (
+                    <ul
+                      role="listbox"
+                      aria-label="university suggestions"
+                      className="absolute z-10 mt-1 w-full overflow-hidden rounded-md border border-border bg-popover shadow-md"
+                    >
+                      {uniSuggestions.map((u, i) => (
+                        <li
+                          key={`${u.name}-${u.country}-${i}`}
+                          role="option"
+                          aria-selected={false}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setUniversity(u.name);
+                              setUniSuggestions([]);
+                            }}
+                            className="flex w-full flex-col items-start gap-0.5 px-3 py-1.5 text-left text-sm hover:bg-accent"
+                          >
+                            <span>{u.name}</span>
+                            <span className="text-xs text-muted-foreground">
+                              {u.country}
+                            </span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
               </div>
             )}
 
@@ -737,6 +837,8 @@ function descriptionForStep(step: Step): string {
       return "Which fits you best?";
     case "persona-detail":
       return "A bit more about you";
+    case "university":
+      return "Where do you study or research?";
     case "starter":
       return "Pick your starter";
     case "invite":

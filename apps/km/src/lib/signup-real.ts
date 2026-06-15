@@ -75,6 +75,8 @@ const POKEMON = ["charmander", "squirtle", "bulbasaur"] as const;
 const STUDENT_LEVELS = ["Bachelor", "Master", "PhD"] as const;
 
 const optionalTrimmed = z.string().trim().max(120).optional();
+// Wider cap (200) for full official university names.
+const optionalUniversity = z.string().trim().max(200).optional();
 
 const signupBaseShape = {
   firstname: z.string().min(1).max(80).trim(),
@@ -88,6 +90,7 @@ const signupBaseShape = {
   jobRole: optionalTrimmed,
   industry: optionalTrimmed,
   personaOther: optionalTrimmed,
+  university: optionalUniversity,
 };
 
 type PersonaInput = {
@@ -96,6 +99,7 @@ type PersonaInput = {
   jobRole?: unknown;
   industry?: unknown;
   personaOther?: unknown;
+  university?: unknown;
 };
 
 function hasText(value: unknown): value is string {
@@ -184,6 +188,13 @@ function profileValues(input: PersonaInput) {
     industry: input.userType === "industry" ? (input.industry as string) : null,
     personaOther:
       input.userType === "other" ? (input.personaOther as string) : null,
+    // GSD-119: university only stored for student/researcher; ignored
+    // otherwise. Trim again defensively (zod already trims).
+    university:
+      (input.userType === "student" || input.userType === "researcher") &&
+      hasText(input.university)
+        ? input.university.trim()
+        : null,
   };
 }
 
@@ -229,6 +240,7 @@ export async function saveSignupWaitlistEntry(
         jobRole: details.jobRole,
         industry: details.industry,
         personaOther: details.personaOther,
+        university: details.university,
         attemptedInviteCode: input.attemptedInviteCode ?? null,
         updatedAt: now,
       })
@@ -243,6 +255,7 @@ export async function saveSignupWaitlistEntry(
           jobRole: details.jobRole,
           industry: details.industry,
           personaOther: details.personaOther,
+          university: details.university,
           attemptedInviteCode: input.attemptedInviteCode ?? null,
           updatedAt: now,
         },
@@ -337,6 +350,7 @@ export async function signupRealUser(
       jobRole: details.jobRole,
       industry: details.industry,
       personaOther: details.personaOther,
+      university: details.university,
     });
 
     // Atomic invite-stamp: only updates if still unused. Returning rowCount

@@ -507,4 +507,143 @@ describe("SignupForm", () => {
       expect(screen.queryByTestId("guest-data-warning")).toBeNull();
     });
   });
+
+  it("shows university step for student userType after persona-detail", async () => {
+    mockFetch((url) => {
+      if (url.endsWith("/api/auth/get-session")) {
+        return json({ user: { isAnonymous: false } });
+      }
+      if (url.includes("/api/auth/username/available")) {
+        return json({ available: true });
+      }
+      if (url.startsWith("http://universities.hipolabs.com")) {
+        return json([]);
+      }
+      return new Response("nope", { status: 404 });
+    });
+
+    render(<SignupForm />);
+    await reachPersonaStep();
+    fireEvent.click(screen.getByRole("radio", { name: /^student$/i }));
+    await continueStep();
+    fireEvent.click(screen.getByRole("radio", { name: /^bachelor$/i }));
+    await continueStep();
+
+    expect(screen.getByLabelText(/university/i)).toBeTruthy();
+    expect(screen.getByText(/step 5 of 8/i)).toBeTruthy();
+  });
+
+  it("skips university step for industry userType", async () => {
+    mockFetch((url) => {
+      if (url.endsWith("/api/auth/get-session")) {
+        return json({ user: { isAnonymous: false } });
+      }
+      if (url.includes("/api/auth/username/available")) {
+        return json({ available: true });
+      }
+      return new Response("nope", { status: 404 });
+    });
+
+    render(<SignupForm />);
+    await reachStarterStepForIndustry();
+    expect(screen.queryByLabelText(/university/i)).toBeNull();
+    // Starter step shown — 7-step flow for industry, no extra university step.
+    expect(screen.getByText(/step 5 of 7/i)).toBeTruthy();
+  });
+
+  it("shows university suggestions from Hipolabs API for student", async () => {
+    mockFetch((url) => {
+      if (url.endsWith("/api/auth/get-session")) {
+        return json({ user: { isAnonymous: false } });
+      }
+      if (url.includes("/api/auth/username/available")) {
+        return json({ available: true });
+      }
+      if (url.startsWith("http://universities.hipolabs.com")) {
+        return json([
+          {
+            name: "Massachusetts Institute of Technology",
+            country: "USA",
+            domains: [],
+            web_pages: [],
+          },
+        ]);
+      }
+      return new Response("nope", { status: 404 });
+    });
+
+    render(<SignupForm />);
+    await reachPersonaStep();
+    fireEvent.click(screen.getByRole("radio", { name: /^student$/i }));
+    await continueStep();
+    fireEvent.click(screen.getByRole("radio", { name: /^bachelor$/i }));
+    await continueStep();
+
+    const input = screen.getByLabelText(/university/i) as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "Mass" } });
+
+    await waitFor(
+      () => {
+        expect(
+          screen.getByText(/Massachusetts Institute of Technology/i),
+        ).toBeTruthy();
+      },
+      { timeout: 2000 },
+    );
+  });
+
+  it("accepts free-text university when API fails (student path)", async () => {
+    const onSuccess = vi.fn();
+    const fetchMock = mockFetch((url) => {
+      if (url.endsWith("/api/auth/get-session")) {
+        return json({ user: { isAnonymous: false } });
+      }
+      if (url.includes("/api/auth/username/available")) {
+        return json({ available: true });
+      }
+      if (url.endsWith("/api/auth/invite/validate")) {
+        return json({ ok: true });
+      }
+      if (url.startsWith("http://universities.hipolabs.com")) {
+        return new Response("boom", { status: 500 });
+      }
+      if (url.endsWith("/test/signup")) {
+        return json({ ok: true, userId: "u_test" });
+      }
+      return new Response("nope", { status: 404 });
+    });
+
+    render(<SignupForm endpoint="/test/signup" onSuccess={onSuccess} />);
+    await reachPersonaStep();
+    fireEvent.click(screen.getByRole("radio", { name: /^student$/i }));
+    await continueStep();
+    fireEvent.click(screen.getByRole("radio", { name: /^bachelor$/i }));
+    await continueStep();
+
+    fireEvent.change(screen.getByLabelText(/university/i), {
+      target: { value: "Some Custom College" },
+    });
+    await continueStep();
+    fireEvent.click(screen.getByTestId("pokemon-bulbasaur"));
+    await continueStep();
+    fireEvent.change(screen.getByLabelText(/invite code/i), {
+      target: { value: "INVITE-ABC" },
+    });
+    await continueStep();
+    fireEvent.change(await screen.findByLabelText(/password/i), {
+      target: { value: "supersecret1" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /create account/i }));
+
+    await waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(1));
+
+    const signupCall = fetchMock.mock.calls.find((c) =>
+      String(c[0]).endsWith("/test/signup"),
+    );
+    expect(signupCall).toBeDefined();
+    const body = bodyOf(signupCall!);
+    expect(body.university).toBe("Some Custom College");
+    expect(body.userType).toBe("student");
+    expect(body.studentLevel).toBe("Bachelor");
+  });
 });
