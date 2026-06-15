@@ -35,6 +35,18 @@ const config: NextConfig = {
   // apps/km alone fails because Turbopack can't follow ../../../node_modules.
   // See memory project_turbopack_worktree_crash.
   turbopack: { root: path.resolve(here, "..", "..") },
+  // Document-Policy: js-profiling is required for Sentry browser profiling.
+  // See GSD-110. Chromium-only header; other browsers ignore.
+  async headers() {
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          { key: "Document-Policy", value: "js-profiling" },
+        ],
+      },
+    ];
+  },
 };
 
 export default withSentryConfig(config, {

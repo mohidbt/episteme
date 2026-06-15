@@ -6,6 +6,9 @@ const SENTRY_DSN =
 Sentry.init({
   dsn: SENTRY_DSN,
   tracesSampleRate: process.env.NODE_ENV === "development" ? 1.0 : 0.1,
+  // Browser profiling: 10% of sessions in prod. Needs `Document-Policy:
+  // js-profiling` header (set in next.config.ts). See GSD-110.
+  profileSessionSampleRate: process.env.NODE_ENV === "development" ? 1.0 : 0.1,
   tracePropagationTargets: [
     "localhost",
     /^https:\/\/tryepisteme\.com/,
@@ -14,6 +17,7 @@ Sentry.init({
   replaysSessionSampleRate: 0,
   replaysOnErrorSampleRate: 1.0,
   integrations: [
+    Sentry.browserProfilingIntegration(),
     Sentry.feedbackIntegration({
       colorScheme: "system",
       autoInject: true,
