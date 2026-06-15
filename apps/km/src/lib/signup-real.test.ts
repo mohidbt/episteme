@@ -13,6 +13,7 @@ import {
   notes,
   signupWaitlist,
   user as userTable,
+  userInviteCodes,
   userSignupProfiles,
 } from "@episteme/db/schema";
 import {
@@ -240,6 +241,61 @@ describe("signupRealUser", () => {
     const missing = await validateInviteCode("missing-code");
     expect(missing.ok).toBe(false);
     if (!missing.ok) expect(missing.error).toBe("invite_invalid");
+  });
+
+  it("accepts a per-user referral code without FK violation (GSD-121)", async () => {
+    // Seed an owner user + a user_invite_codes row.
+    // Pre-fix: 0037 FK on user.invite_code rejects this with
+    //   user_invite_code_fkey violation because referral codes live in
+    //   user_invite_codes, not invite_codes.
+    // Post-fix (0057): FK dropped → signup succeeds.
+    const ownerUsername = `owner-${uniq()}`.slice(0, 24);
+    const [owner] = await db
+      .insert(userTable)
+      .values({
+        id: `owner_${uniq()}`,
+        name: "Owner",
+        email: `o_${uniq()}@test.local`,
+        username: ownerUsername,
+      })
+      .returning({ id: userTable.id });
+    createdUserIds.push(owner.id);
+
+    const referralCode = `episteme-${ownerUsername}-1`;
+    await db.insert(userInviteCodes).values({
+      code: referralCode,
+      ownerUserId: owner.id,
+    });
+
+    const result = await signupRealUser({
+      firstname: "Referee",
+      email: `r_${uniq()}@test.local`,
+      password: "test-password-1234",
+      username: `referee-${uniq()}`.slice(0, 24),
+      userType: "researcher",
+      jobRole: "Principal investigator",
+      pokemon: "charmander",
+      inviteCode: referralCode,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    createdUserIds.push(result.userId);
+
+    const [row] = await db
+      .select()
+      .from(userTable)
+      .where(eq(userTable.id, result.userId))
+      .limit(1);
+    expect(row.inviteCode).toBe(referralCode);
+
+    // Belt-and-suspenders cleanup.
+    await db.delete(notes).where(eq(notes.userId, result.userId));
+    await db.delete(folders).where(eq(folders.userId, result.userId));
+    await db.delete(libraries).where(eq(libraries.userId, result.userId));
+    await db
+      .delete(userInviteCodes)
+      .where(eq(userInviteCodes.code, referralCode));
   });
 
   it("upserts waitlist entries without requiring a password", async () => {
