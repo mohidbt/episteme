@@ -43,6 +43,9 @@ beforeEach(() => {
     if (url.endsWith("/api/auth/get-session")) {
       return json({ user: { isAnonymous: false } });
     }
+    if (url.includes("/api/auth/username/available")) {
+      return json({ available: true });
+    }
     return new Response("nope", { status: 404 });
   });
 });
@@ -62,7 +65,13 @@ async function reachEmailStep(nameValue = "Alex") {
     target: { value: nameValue },
   });
   fireEvent.change(screen.getByLabelText(/username/i), {
-    target: { value: "Alex_99" },
+    target: { value: "alex-99" },
+  });
+  await waitFor(() => {
+    expect(
+      (screen.getByRole("button", { name: /continue/i }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(false);
   });
   await continueStep();
 }
@@ -117,6 +126,9 @@ describe("SignupForm", () => {
       if (url.endsWith("/api/auth/get-session")) {
         return json({ user: { isAnonymous: false } });
       }
+      if (url.includes("/api/auth/username/available")) {
+        return json({ available: true });
+      }
       if (url.endsWith("/api/auth/invite/validate")) {
         return json({ ok: true });
       }
@@ -144,6 +156,9 @@ describe("SignupForm", () => {
       if (url.endsWith("/api/auth/get-session")) {
         return json({ user: { isAnonymous: false } });
       }
+      if (url.includes("/api/auth/username/available")) {
+        return json({ available: true });
+      }
       if (url.endsWith("/api/auth/waitlist")) return json({ ok: true });
       return new Response("nope", { status: 404 });
     });
@@ -169,7 +184,7 @@ describe("SignupForm", () => {
     const body = bodyOf(waitlistCall!);
     expect(body).toMatchObject({
       firstname: "Alex",
-      username: "alex_99",
+      username: "alex-99",
       email: "alex@example.com",
       userType: "industry",
       pokemon: "bulbasaur",
@@ -184,6 +199,9 @@ describe("SignupForm", () => {
     const fetchMock = mockFetch((url) => {
       if (url.endsWith("/api/auth/get-session")) {
         return json({ user: { isAnonymous: false } });
+      }
+      if (url.includes("/api/auth/username/available")) {
+        return json({ available: true });
       }
       if (url.endsWith("/api/auth/waitlist")) return json({ ok: true });
       return new Response("nope", { status: 404 });
@@ -215,6 +233,9 @@ describe("SignupForm", () => {
       if (url.endsWith("/api/auth/get-session")) {
         return json({ user: { isAnonymous: false } });
       }
+      if (url.includes("/api/auth/username/available")) {
+        return json({ available: true });
+      }
       if (url.endsWith("/api/auth/invite/validate")) {
         return json({ error: "invite_invalid" }, 400);
       }
@@ -245,6 +266,9 @@ describe("SignupForm", () => {
       if (url.endsWith("/api/auth/get-session")) {
         return json({ user: { isAnonymous: false } });
       }
+      if (url.includes("/api/auth/username/available")) {
+        return json({ available: true });
+      }
       if (url.endsWith("/api/auth/invite/validate")) {
         return json({ ok: true });
       }
@@ -273,7 +297,7 @@ describe("SignupForm", () => {
     expect(signupCall).toBeDefined();
     expect(bodyOf(signupCall!)).toEqual({
       firstname: "Alex",
-      username: "alex_99",
+      username: "alex-99",
       email: "alex@example.com",
       password: "supersecret1",
       userType: "industry",
@@ -296,6 +320,9 @@ describe("SignupForm", () => {
         if (url.endsWith("/api/auth/get-session")) {
           return json({ user: { isAnonymous: false } });
         }
+        if (url.includes("/api/auth/username/available")) {
+          return json({ available: true });
+        }
         if (url.endsWith("/api/auth/invite/validate")) {
           return json({ ok: true });
         }
@@ -311,7 +338,16 @@ describe("SignupForm", () => {
         target: { value: input },
       });
       fireEvent.change(screen.getByLabelText(/username/i), {
-        target: { value: "alex_99" },
+        target: { value: "alex-99" },
+      });
+      await waitFor(() => {
+        expect(
+          (
+            screen.getByRole("button", {
+              name: /continue/i,
+            }) as HTMLButtonElement
+          ).disabled,
+        ).toBe(false);
       });
       await continueStep();
       // email
@@ -349,6 +385,90 @@ describe("SignupForm", () => {
       expect(bodyOf(signupCall!).firstname).toBe(expected);
     },
   );
+
+  it("disables Continue and shows 'taken' message when username is taken", async () => {
+    mockFetch((url) => {
+      if (url.endsWith("/api/auth/get-session")) {
+        return json({ user: { isAnonymous: false } });
+      }
+      if (url.includes("/api/auth/username/available")) {
+        return json({ available: false, reason: "taken" });
+      }
+      return new Response("nope", { status: 404 });
+    });
+
+    render(<SignupForm />);
+    fireEvent.change(screen.getByLabelText(/^name$/i), {
+      target: { value: "Alex" },
+    });
+    fireEvent.change(screen.getByLabelText(/username/i), {
+      target: { value: "taken-name" },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("username-status").textContent).toMatch(
+        /taken/i,
+      );
+    });
+    expect(
+      (screen.getByRole("button", { name: /continue/i }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    // Click should not advance.
+    await continueStep();
+    expect(screen.getByText(/step 1 of 7/i)).toBeTruthy();
+  });
+
+  it("disables Continue and shows 'reserved' message when username is reserved", async () => {
+    mockFetch((url) => {
+      if (url.endsWith("/api/auth/get-session")) {
+        return json({ user: { isAnonymous: false } });
+      }
+      if (url.includes("/api/auth/username/available")) {
+        return json({ available: false, reason: "reserved" });
+      }
+      return new Response("nope", { status: 404 });
+    });
+
+    render(<SignupForm />);
+    fireEvent.change(screen.getByLabelText(/^name$/i), {
+      target: { value: "Alex" },
+    });
+    fireEvent.change(screen.getByLabelText(/username/i), {
+      target: { value: "app" },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("username-status").textContent).toMatch(
+        /reserved/i,
+      );
+    });
+    expect(
+      (screen.getByRole("button", { name: /continue/i }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+  });
+
+  it("shows 'invalid' inline when username has uppercase/underscore", async () => {
+    render(<SignupForm />);
+    fireEvent.change(screen.getByLabelText(/^name$/i), {
+      target: { value: "Alex" },
+    });
+    // setUsername lowercases; supply an underscore which the new regex rejects.
+    fireEvent.change(screen.getByLabelText(/username/i), {
+      target: { value: "alex_99" },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("username-status").textContent).toMatch(
+        /lowercase/i,
+      );
+    });
+    expect(
+      (screen.getByRole("button", { name: /continue/i }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+  });
 
   it("shows guest data warning when session is anonymous", async () => {
     mockFetch((url) => {
