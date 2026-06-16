@@ -32,3 +32,8 @@ test-results
 .claude/scheduled_tasks.lock
 .playwright-mcp/
 .tmp/tour-record/
+.tmp/
+.tmp-*/
+*.tmp
+apps/*/.tmp/
+services/*/.tmp/
