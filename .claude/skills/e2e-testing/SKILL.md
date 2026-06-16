@@ -7,8 +7,8 @@ description: Use when verifying bug fixes or features in the browser. Covers log
 
 ## Test Account
 
-- **Email:** `test@mohid.de`
-- **Password:** `Testest2026`
+Credentials are in Claude memory (`reference_test_account.md`) — do not hardcode here.
+
 - **Login URL:** `http://localhost:3000/login`
 
 ## Chrome DevTools MCP — Required Tool
