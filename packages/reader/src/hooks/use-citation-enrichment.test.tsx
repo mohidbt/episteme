@@ -10,13 +10,14 @@ import {
 
 interface HarnessProps {
   paperId: string;
-  open: boolean;
+  /** Retained for compat with existing call-sites; ignored by the hook. */
+  open?: boolean;
   initial: EnrichableCitation[];
   /** Step through these snapshots on each onRefetch() call. */
   steps: EnrichableCitation[][];
 }
 
-function Harness({ paperId, open, initial, steps }: HarnessProps) {
+function Harness({ paperId, initial, steps }: HarnessProps) {
   const [citations, setCitations] = useState<EnrichableCitation[]>(initial);
   const stepIdxRef = useRef(0);
   const [enriching, setEnriching] = useState(false);
@@ -32,7 +33,6 @@ function Harness({ paperId, open, initial, steps }: HarnessProps) {
 
   useCitationEnrichment({
     paperId,
-    open,
     citations,
     onRefetch,
     onEnrichingChange: setEnriching,
@@ -72,8 +72,10 @@ function enriched(id: number): EnrichableCitation {
 }
 
 describe("useCitationEnrichment", () => {
-  it("POSTs /enrich once when opened with un-enriched DOI refs", async () => {
-
+  // GSD-125: auto-POST removed. Opening the sidebar must NOT trigger
+  // /citations/enrich — that path is now driven by the manual "Enrich
+  // citations" button in CitationsSidebar.
+  it("does NOT POST /enrich on open even with un-enriched DOI refs", async () => {
     render(
       <Harness
         paperId="p-1"
@@ -83,60 +85,14 @@ describe("useCitationEnrichment", () => {
       />,
     );
 
-    // Microtask flush so the effect's POST is queued.
+    // Microtask flush so any pending effect would have queued a POST.
     await act(async () => {
       await Promise.resolve();
     });
     const enrichCalls = mockFetch.mock.calls.filter(
       ([url]) => typeof url === "string" && url.endsWith("/citations/enrich"),
     );
-    expect(enrichCalls.length).toBe(1);
-    expect(enrichCalls[0][1]).toMatchObject({ method: "POST" });
-  });
-
-  it("does NOT re-POST when sidebar closes + reopens for same paperId", async () => {
-
-    function Wrapper() {
-      const [open, setOpen] = useState(true);
-      return (
-        <div>
-          <button data-testid="toggle" onClick={() => setOpen((v) => !v)}>
-            toggle
-          </button>
-          <Harness
-            paperId="p-1"
-            open={open}
-            initial={[unenriched(1)]}
-            steps={[]}
-          />
-        </div>
-      );
-    }
-
-    const { getByTestId, unmount } = render(<Wrapper />);
-    await act(async () => {
-      await Promise.resolve();
-    });
-    let posts = mockFetch.mock.calls.filter(
-      (args) => typeof args[0] === "string" && args[0].endsWith("/citations/enrich"),
-    ).length;
-    expect(posts).toBe(1);
-
-    // Close + reopen — child Harness unmounts and remounts.
-    await act(async () => {
-      getByTestId("toggle").click();
-    });
-    await act(async () => {
-      getByTestId("toggle").click();
-    });
-    await act(async () => {
-      await Promise.resolve();
-    });
-    posts = mockFetch.mock.calls.filter(
-      (args) => typeof args[0] === "string" && args[0].endsWith("/citations/enrich"),
-    ).length;
-    expect(posts).toBe(1);
-    unmount();
+    expect(enrichCalls.length).toBe(0);
   });
 
   it("polls onRefetch on backoff schedule until all refs enriched, then stops", async () => {
@@ -187,7 +143,6 @@ describe("useCitationEnrichment", () => {
       }, []);
       useCitationEnrichment({
         paperId: "p-1",
-        open: true,
         citations,
         onRefetch,
       });

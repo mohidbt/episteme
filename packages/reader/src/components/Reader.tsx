@@ -380,7 +380,6 @@ export function Reader({
   // sidebar being unmounted while still working its way through the refs.
   useCitationEnrichment({
     paperId,
-    open: citationsOpen,
     citations,
     onRefetch: useCallback(() => setCitationsRefreshKey((k) => k + 1), []),
     onEnrichingChange: setCitationsEnriching,

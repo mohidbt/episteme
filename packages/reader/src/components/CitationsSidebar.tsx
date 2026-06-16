@@ -1,12 +1,20 @@
 "use client";
 
-import { useState, useCallback, type ReactNode } from "react";
+import { useState, useCallback, useMemo, type ReactNode } from "react";
 import { Button } from "./ui/button";
 import { Alert, AlertTitle } from "./ui/alert";
 import { Skeleton } from "./ui/skeleton";
-import { BookOpen, FileSearch, Loader2 } from "lucide-react";
+import { BookOpen, FileSearch, Loader2, Sparkles } from "lucide-react";
 import { CitationCard, type CitationWithStatus, type FolderOption } from "./CitationCard";
 import { toast } from "sonner";
+
+// GSD-125: same predicate as PaperCitationsList.isUnenriched — a ref is
+// "enrichable" only when it has a DOI to resolve against Semantic Scholar
+// AND no enrichedAt stamp yet.
+function isUnenriched(row: CitationWithStatus): boolean {
+  const doi = row.doi;
+  return row.enrichedAt == null && doi != null && doi.length > 0;
+}
 
 interface CitationsSidebarProps {
   paperId: string;
@@ -37,6 +45,32 @@ export function CitationsSidebar({
   dockControl,
 }: CitationsSidebarProps) {
   const [extracting, setExtracting] = useState(false);
+  const [enrichPending, setEnrichPending] = useState(false);
+
+  // GSD-125: enable when any DOI-bearing ref still lacks enrichedAt. Disable
+  // when nothing left to enrich (mirrors PaperCitationsList).
+  const canEnrich = useMemo(() => citations.some(isUnenriched), [citations]);
+
+  const handleEnrich = useCallback(async () => {
+    if (enrichPending) return;
+    setEnrichPending(true);
+    try {
+      const res = await fetch(`/api/papers/${paperId}/citations/enrich`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!res.ok) {
+        toast.error("Failed to enrich citations");
+        return;
+      }
+      onExtracted?.();
+    } catch (err) {
+      console.error("[citations-sidebar] enrich error", err);
+      toast.error("Failed to enrich citations");
+    } finally {
+      setEnrichPending(false);
+    }
+  }, [paperId, enrichPending, onExtracted]);
 
   const handleExtract = useCallback(async () => {
     setExtracting(true);
@@ -80,7 +114,27 @@ export function CitationsSidebar({
     <div className="flex h-full w-full flex-col bg-background">
       <div className="flex items-center justify-between gap-2 border-b px-4 py-3">
         <h2 className="truncate text-sm font-semibold">Citations</h2>
-        {dockControl}
+        <div className="flex items-center gap-2">
+          {citations.length > 0 && (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              data-testid="reader-enrich-citations-button"
+              disabled={!canEnrich || enrichPending}
+              onClick={handleEnrich}
+              className="h-7 gap-1.5 text-xs"
+            >
+              {enrichPending ? (
+                <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
+              ) : (
+                <Sparkles className="h-3 w-3" aria-hidden />
+              )}
+              Enrich citations
+            </Button>
+          )}
+          {dockControl}
+        </div>
       </div>
       {enriching && (
         <Alert className="rounded-none border-x-0 border-t-0 px-4">
