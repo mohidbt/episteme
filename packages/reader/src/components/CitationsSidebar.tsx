@@ -45,21 +45,30 @@ export function CitationsSidebar({
         method: "POST",
         credentials: "include",
       });
+      // GSD-124: align messaging with the /p/[id] "Find citations" button
+      // (PaperActionsButtons) so the same backend response produces the same
+      // user-visible outcome regardless of entry point.
       if (!res.ok) {
-        throw new Error(`extract failed: ${res.status}`);
+        toast.error("Citation extraction failed", { description: `HTTP ${res.status}` });
+        return;
       }
+      const data = (await res.json().catch(() => ({}))) as {
+        unavailable?: boolean;
+        stats?: { referencesInserted?: number };
+      };
       // The route degrades to 200 + { unavailable: true } when the upstream
       // PDF/agents service is unreachable. Surface that to the user instead
       // of silently calling onExtracted with an empty result.
-      const data = (await res.json().catch(() => ({}))) as { unavailable?: boolean };
       if (data?.unavailable) {
         toast.error("Citation extraction service is unavailable. Please try again later.");
         return;
       }
+      const n = data.stats?.referencesInserted ?? 0;
+      toast.success(n > 0 ? `Found ${n} citation${n === 1 ? "" : "s"}` : "No citations detected");
       onExtracted?.();
     } catch (err) {
       console.error("[citations-sidebar] extract error", err);
-      toast.error("Extraction failed. Please try again.");
+      toast.error("Citation extraction failed");
     } finally {
       setExtracting(false);
     }

@@ -34,7 +34,7 @@ vi.mock("../../src/components/CitationCard", async (importOriginal) => {
 });
 
 // Mock sonner toast
-vi.mock("sonner", () => ({ toast: { error: vi.fn() } }));
+vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -230,7 +230,7 @@ describe("CitationsSidebar — extract button", () => {
     );
   });
 
-  it("shows generic error toast when extract returns non-2xx", async () => {
+  it("GSD-124: surfaces HTTP status in error description on non-2xx (parity with /p)", async () => {
     global.fetch = vi.fn().mockResolvedValue({ ok: false, status: 500 });
     const onExtracted = vi.fn();
 
@@ -250,16 +250,22 @@ describe("CitationsSidebar — extract button", () => {
     });
 
     await waitFor(() => {
-      expect(toast.error).toHaveBeenCalledWith("Extraction failed. Please try again.");
+      expect(toast.error).toHaveBeenCalledWith(
+        "Citation extraction failed",
+        { description: "HTTP 500" },
+      );
     });
     expect(onExtracted).not.toHaveBeenCalled();
   });
 
-  it("calls onExtracted on successful 200 with no unavailable flag", async () => {
+  it("GSD-124: success toast surfaces inserted reference count (parity with /p)", async () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
-      json: async () => ({ references: [], stats: { extractionMethod: "text-regex" } }),
+      json: async () => ({
+        references: [],
+        stats: { referencesInserted: 3, extractionMethod: "text-regex" },
+      }),
     });
     const onExtracted = vi.fn();
 
@@ -279,6 +285,67 @@ describe("CitationsSidebar — extract button", () => {
     });
 
     await waitFor(() => expect(onExtracted).toHaveBeenCalledTimes(1));
+    expect(toast.success).toHaveBeenCalledWith("Found 3 citations");
     expect(toast.error).not.toHaveBeenCalled();
+  });
+
+  it("GSD-124: success toast says 'No citations detected' when none inserted", async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        references: [],
+        stats: { referencesInserted: 0, extractionMethod: "text-regex" },
+      }),
+    });
+    const onExtracted = vi.fn();
+
+    render(
+      <CitationsSidebar
+        paperId={PAPER_ID}
+        open={true}
+        citations={[]}
+        loading={false}
+        onExtracted={onExtracted}
+      />
+    );
+
+    const btn = screen.getByRole("button", { name: /extract citations/i });
+    await act(async () => {
+      btn.click();
+    });
+
+    await waitFor(() => expect(onExtracted).toHaveBeenCalledTimes(1));
+    expect(toast.success).toHaveBeenCalledWith("No citations detected");
+  });
+
+  it("GSD-124: singular 'citation' when exactly 1 inserted", async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        references: [],
+        stats: { referencesInserted: 1, extractionMethod: "text-regex" },
+      }),
+    });
+
+    render(
+      <CitationsSidebar
+        paperId={PAPER_ID}
+        open={true}
+        citations={[]}
+        loading={false}
+        onExtracted={vi.fn()}
+      />
+    );
+
+    const btn = screen.getByRole("button", { name: /extract citations/i });
+    await act(async () => {
+      btn.click();
+    });
+
+    await waitFor(() =>
+      expect(toast.success).toHaveBeenCalledWith("Found 1 citation"),
+    );
   });
 });
