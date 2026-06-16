@@ -1,13 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Loader2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import {
   CitationCard,
   type CitationWithStatus,
   type FolderOption,
 } from "@episteme/reader/citation-card";
+import { Button } from "@/components/ui/button";
 
 interface PaperCitationsListProps {
   paperId: string;
@@ -48,6 +49,7 @@ export function PaperCitationsList({ paperId }: PaperCitationsListProps) {
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [enriching, setEnriching] = useState(false);
+  const [manualEnrichPending, setManualEnrichPending] = useState(false);
   const pendingIds = useRef<Set<number>>(new Set());
   const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pollAttempt = useRef(0);
@@ -117,23 +119,15 @@ export function PaperCitationsList({ paperId }: PaperCitationsListProps) {
     };
   }, [clearPoll]);
 
-  // GSD-74: start polling on initial mount when the first GET returns any
-  // un-enriched DOI ref. Previously polling only fired via the refresh event
-  // (extract click), so a panel open on already-extracted refs would never
-  // re-poll for the GET `after()` lazy-enrich completion.
+  // GSD-125: initial mount only loads citations. Enrichment polling no longer
+  // auto-starts because GET is read-only — polling without a server-side S2
+  // trigger would never converge. Polling starts only after the manual Enrich
+  // button click (or the post-extract refresh event).
   useEffect(() => {
     const controller = new AbortController();
-    void load(controller.signal).then((next) => {
-      if (!mounted.current) return;
-      if (next && next.some(isUnenriched)) {
-        clearPoll();
-        pollAttempt.current = 0;
-        setEnriching(true);
-        scheduleNextPoll();
-      }
-    });
+    void load(controller.signal);
     return () => controller.abort();
-  }, [load, scheduleNextPoll, clearPoll]);
+  }, [load]);
 
   useEffect(() => {
     async function onRefresh() {
@@ -228,23 +222,73 @@ export function PaperCitationsList({ paperId }: PaperCitationsListProps) {
     [paperId, patchCitation],
   );
 
+  // GSD-125: manual enrich trigger replaces the auto-on-view enrichment.
+  // Disabled when every DOI-bearing ref is already enriched, or no ref has a
+  // DOI (S2 cannot resolve without one).
+  const canEnrich = useMemo(
+    () => (rows ?? []).some(isUnenriched),
+    [rows],
+  );
+
+  const handleEnrichClick = useCallback(async () => {
+    if (manualEnrichPending) return;
+    setManualEnrichPending(true);
+    try {
+      const res = await fetch(`/api/papers/${paperId}/citations/enrich`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!res.ok) {
+        toast.error("Failed to enrich citations");
+        return;
+      }
+      const next = await load();
+      if (next && next.some(isUnenriched)) {
+        clearPoll();
+        pollAttempt.current = 0;
+        setEnriching(true);
+        scheduleNextPoll();
+      }
+    } finally {
+      setManualEnrichPending(false);
+    }
+  }, [paperId, manualEnrichPending, load, scheduleNextPoll, clearPoll]);
+
   return (
     <section className="flex flex-col gap-3" data-testid="paper-citations-section">
       <div className="flex items-center justify-between">
         <p className="text-[11px] text-muted-foreground">
           Citations{rows ? ` · ${rows.length}` : ""}
         </p>
-        {refreshing ? (
-          <span className="text-[11px] text-muted-foreground">Extracting…</span>
-        ) : enriching ? (
-          <span
-            className="inline-flex items-center gap-1 text-[11px] text-muted-foreground"
-            data-testid="citations-enriching"
+        <div className="flex items-center gap-2">
+          {refreshing ? (
+            <span className="text-[11px] text-muted-foreground">Extracting…</span>
+          ) : enriching ? (
+            <span
+              className="inline-flex items-center gap-1 text-[11px] text-muted-foreground"
+              data-testid="citations-enriching"
+            >
+              <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
+              Enriching
+            </span>
+          ) : null}
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            data-testid="enrich-citations-button"
+            disabled={!canEnrich || manualEnrichPending}
+            onClick={handleEnrichClick}
+            className="h-7 gap-1.5 text-[11px]"
           >
-            <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
-            Enriching
-          </span>
-        ) : null}
+            {manualEnrichPending ? (
+              <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
+            ) : (
+              <Sparkles className="h-3 w-3" aria-hidden />
+            )}
+            Enrich citations
+          </Button>
+        </div>
       </div>
       {error ? (
         <p className="text-sm text-muted-foreground">Couldn&rsquo;t load citations.</p>

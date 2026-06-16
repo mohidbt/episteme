@@ -115,9 +115,11 @@ describe("GET /api/papers/[id]/citations", () => {
     expect(body.citations.map((c) => c.markerIndex)).toEqual([1, 2, 3, 10]);
   });
 
-  // GSD-74 — lazy-on-view enrichment
+  // GSD-125 — GET is read-only. Enrichment moved to manual POST /citations/enrich.
+  // Auto `after()` enrichment was removed because S2 rate-limit churn on every
+  // panel open was wasteful; users now trigger it explicitly.
 
-  it("returns un-enriched payload immediately and schedules S2 batch when any ref has enrichedAt=null + doi", async () => {
+  it("does NOT trigger enrichment even when refs have enrichedAt=null + doi", async () => {
     vi.mocked(getAuthedUserId).mockResolvedValue({ userId: "u1", viaHmac: false } as never);
     mockOwnership("u1");
     const rows = [
@@ -132,32 +134,18 @@ describe("GET /api/papers/[id]/citations", () => {
     expect(body.citations).toHaveLength(2);
     expect(body.citations[0].enrichedAt).toBeNull();
 
-    // Let after() microtask flush
+    // Flush any pending microtasks; lazy-enrich must NOT have been invoked.
     await new Promise((r) => setTimeout(r, 0));
-    expect(enrichRefsForPaperLazily).toHaveBeenCalledWith(PAPER_ID, "u1");
+    expect(enrichRefsForPaperLazily).not.toHaveBeenCalled();
   });
 
-  it("does NOT schedule S2 batch when every ref already has enrichedAt set", async () => {
+  it("does NOT trigger enrichment when every ref already has enrichedAt set", async () => {
     vi.mocked(getAuthedUserId).mockResolvedValue({ userId: "u1", viaHmac: false } as never);
     mockOwnership("u1");
     const now = new Date();
     const rows = [
       { id: 1, markerIndex: 1, markerText: "[1]", doi: "10.1/abc", enrichedAt: now, title: "T1" },
       { id: 2, markerIndex: 2, markerText: "[2]", doi: "10.2/def", enrichedAt: now, title: "T2" },
-    ];
-    mockCitationsRows(rows);
-
-    await GET(buildReq(), routeParams);
-    await new Promise((r) => setTimeout(r, 0));
-    expect(enrichRefsForPaperLazily).not.toHaveBeenCalled();
-  });
-
-  it("does NOT schedule S2 batch when un-enriched refs have no DOI (S2 needs a resolvable id)", async () => {
-    vi.mocked(getAuthedUserId).mockResolvedValue({ userId: "u1", viaHmac: false } as never);
-    mockOwnership("u1");
-    const rows = [
-      { id: 1, markerIndex: 1, markerText: "[1]", doi: null, enrichedAt: null, title: "T1" },
-      { id: 2, markerIndex: 2, markerText: "[2]", doi: "", enrichedAt: null, title: "T2" },
     ];
     mockCitationsRows(rows);
 
