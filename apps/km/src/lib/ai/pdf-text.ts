@@ -49,15 +49,22 @@ export async function extractPdfPages(
     llmKey: context.llmKey ?? "",
   });
 
-  const res = await fetch(`${agentsUrl}${path}`, {
-    method: "POST",
-    headers: { ...headers, "Content-Type": "application/json" },
-    body,
-  });
-  if (!res.ok) {
-    throw new Error(`[pdf-text] agents request failed: ${res.status}`);
-  }
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), 15_000);
+  try {
+    const res = await fetch(`${agentsUrl}${path}`, {
+      method: "POST",
+      headers: { ...headers, "Content-Type": "application/json" },
+      body,
+      signal: ctrl.signal,
+    });
+    if (!res.ok) {
+      throw new Error(`[pdf-text] agents request failed: ${res.status}`);
+    }
 
-  const payload = await res.json();
-  return toExtractedPages(payload);
+    const payload = await res.json();
+    return toExtractedPages(payload);
+  } finally {
+    clearTimeout(t);
+  }
 }

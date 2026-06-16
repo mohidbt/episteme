@@ -116,14 +116,21 @@ export async function extractAnnotationMarkers(
     llmKey: context.llmKey ?? "",
   });
 
-  const res = await fetch(`${agentsUrl}${path}`, {
-    method: "POST",
-    headers: { ...headers, "Content-Type": "application/json" },
-    body,
-  });
-  if (!res.ok) {
-    throw new Error(`[annotation-extractor] agents request failed: ${res.status}`);
-  }
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), 15_000);
+  try {
+    const res = await fetch(`${agentsUrl}${path}`, {
+      method: "POST",
+      headers: { ...headers, "Content-Type": "application/json" },
+      body,
+      signal: ctrl.signal,
+    });
+    if (!res.ok) {
+      throw new Error(`[annotation-extractor] agents request failed: ${res.status}`);
+    }
 
-  return toAnnotationResult(await res.json());
+    return toAnnotationResult(await res.json());
+  } finally {
+    clearTimeout(t);
+  }
 }

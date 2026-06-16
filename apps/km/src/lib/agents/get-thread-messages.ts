@@ -73,16 +73,21 @@ export async function getThreadMessages(
     llmKey: "",
   });
 
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), 15_000);
   try {
     const res = await fetch(`${agentsUrl}${path}`, {
       method: "GET",
       headers: { ...headers } as Record<string, string>,
       cache: "no-store",
+      signal: ctrl.signal,
     });
     if (!res.ok) return [];
     const data = (await res.json()) as { messages?: PersistedMessage[] };
     return Array.isArray(data.messages) ? data.messages : [];
   } catch {
     return [];
+  } finally {
+    clearTimeout(t);
   }
 }

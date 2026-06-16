@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { resolvePaperId } from "../semantic-scholar";
+import { fetchPaperBatch, resolvePaperId } from "../semantic-scholar";
 
 const BASE = "https://api.semanticscholar.org/graph/v1/paper";
 
@@ -68,4 +68,53 @@ describe("resolvePaperId — ARXIV: fallback", () => {
     expect(fetchSpy.mock.calls[1][0]).toContain("/search/match?query=");
   });
 
+});
+
+describe("semantic-scholar fetch timeout", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
+
+  it("aborts resolvePaperId after 15s when upstream never responds", { timeout: 20_000 }, async () => {
+    vi.useFakeTimers();
+    let aborted = false;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((_url: unknown, init?: RequestInit) => {
+        return new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener("abort", () => {
+            aborted = true;
+            reject(new DOMException("aborted", "AbortError"));
+          });
+        });
+      }),
+    );
+    const done = resolvePaperId({ id: 1, doi: "10.1/timeout" });
+    const failed = expect(done).rejects.toThrow(/abort/i);
+    await vi.advanceTimersByTimeAsync(15_000);
+    await failed;
+    expect(aborted).toBe(true);
+  });
+
+  it("aborts fetchPaperBatch after 15s when upstream never responds", { timeout: 20_000 }, async () => {
+    vi.useFakeTimers();
+    let aborted = false;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((_url: unknown, init?: RequestInit) => {
+        return new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener("abort", () => {
+            aborted = true;
+            reject(new DOMException("aborted", "AbortError"));
+          });
+        });
+      }),
+    );
+    const done = fetchPaperBatch(["pid-1"]);
+    const failed = expect(done).rejects.toThrow(/abort/i);
+    await vi.advanceTimersByTimeAsync(15_000);
+    await failed;
+    expect(aborted).toBe(true);
+  });
 });

@@ -87,6 +87,22 @@ function buildHeaders(apiKey?: string): Record<string, string> {
   return {};
 }
 
+// Wrap fetch with a 15s AbortController timeout. Re-thrown AbortError surfaces
+// to existing try/catch sites just like a network error would. ≥3 fetch sites
+// in this file justify the helper per GSD-123 spec.
+async function fetchWithTimeout(
+  url: string,
+  init?: RequestInit,
+): Promise<Response> {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), 15_000);
+  try {
+    return await fetch(url, { ...init, signal: ctrl.signal });
+  } finally {
+    clearTimeout(t);
+  }
+}
+
 async function fetchGet(
   url: string,
   apiKey?: string,
@@ -94,11 +110,11 @@ async function fetchGet(
 ): Promise<Response | null> {
   const headers = buildHeaders(apiKey);
   const fetchInit = Object.keys(headers).length ? { headers } : undefined;
-  let response = await fetch(url, fetchInit);
+  let response = await fetchWithTimeout(url, fetchInit);
 
   if (response.status === 429) {
     await sleep(RETRY_DELAY_MS);
-    response = await fetch(url, fetchInit);
+    response = await fetchWithTimeout(url, fetchInit);
     if (response.status === 429 && opts.throwOnRateLimit) {
       throw new SemanticScholarRateLimitError();
     }
@@ -177,7 +193,7 @@ export async function fetchPaperBatch(
 
   for (let i = 0; i < paperIds.length; i += BATCH_CHUNK_SIZE) {
     const chunk = paperIds.slice(i, i + BATCH_CHUNK_SIZE);
-    const response = await fetch(url, {
+    const response = await fetchWithTimeout(url, {
       method: "POST",
       headers,
       body: JSON.stringify({ ids: chunk }),
@@ -185,7 +201,7 @@ export async function fetchPaperBatch(
 
     if (response.status === 429) {
       await sleep(RETRY_DELAY_MS);
-      const retry = await fetch(url, {
+      const retry = await fetchWithTimeout(url, {
         method: "POST",
         headers,
         body: JSON.stringify({ ids: chunk }),

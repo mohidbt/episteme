@@ -120,4 +120,28 @@ describe("fetchModelCatalog", () => {
     expect(ok.models).toHaveLength(2);
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
+
+  it("aborts the request after 15s when upstream never responds", { timeout: 20_000 }, async () => {
+    _resetCatalogCacheForTests();
+    vi.useFakeTimers();
+    let aborted = false;
+    const fetchMock = vi.fn((_url: unknown, init?: RequestInit) => {
+      return new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => {
+          aborted = true;
+          reject(new DOMException("aborted", "AbortError"));
+        });
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      const done = fetchModelCatalog();
+      const failed = expect(done).rejects.toThrow(/abort/i);
+      await vi.advanceTimersByTimeAsync(15_000);
+      await failed;
+      expect(aborted).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

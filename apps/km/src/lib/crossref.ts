@@ -90,17 +90,24 @@ export function crossRefToCsl(message: unknown): CslItem {
 
 export async function fetchCrossRef(doi: string): Promise<CslItem | null> {
   const url = `https://api.crossref.org/works/${encodeURIComponent(doi)}`;
-  const res = await fetch(url, {
-    headers: {
-      "User-Agent": "Episteme/0.1 (mailto:team@episteme.local)",
-    },
-  });
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), 15_000);
+  try {
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent": "Episteme/0.1 (mailto:team@episteme.local)",
+      },
+      signal: ctrl.signal,
+    });
 
-  if (res.status === 404) return null;
-  if (res.status !== 200) {
-    throw new Error(`CrossRef returned HTTP ${res.status} for DOI ${doi}`);
+    if (res.status === 404) return null;
+    if (res.status !== 200) {
+      throw new Error(`CrossRef returned HTTP ${res.status} for DOI ${doi}`);
+    }
+
+    const body = (await res.json()) as { status: string; message: unknown };
+    return crossRefToCsl(body.message);
+  } finally {
+    clearTimeout(t);
   }
-
-  const body = (await res.json()) as { status: string; message: unknown };
-  return crossRefToCsl(body.message);
 }

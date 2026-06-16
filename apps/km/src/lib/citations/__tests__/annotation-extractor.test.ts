@@ -1,5 +1,12 @@
-import { describe, it, expect } from "vitest";
+import { afterEach, beforeEach, describe, it, expect, vi } from "vitest";
 import { reparseSanitizedRawText, sanitizeRefField } from "../parser";
+
+vi.mock("@/lib/agents/sign-request", () => ({
+  signRequest: vi.fn(() => ({
+    headers: { "X-Inhale-User-Id": "u1", "X-Inhale-Sig": "mock" },
+    ts: "1",
+  })),
+}));
 
 // ---------------------------------------------------------------------------
 // These tests cover the regression observed live in prod after commit 26585eb:
@@ -67,5 +74,40 @@ describe("reparseSanitizedRawText — recover title when agent omitted it", () =
     expect(ref.title ?? "").not.toBe("");
     expect(ref.title ?? "").toMatch(/arbuscular mycorrhiza market/i);
     expect(ref.year).toBe("2019");
+  });
+});
+
+describe("extractAnnotationMarkers timeout", () => {
+  const originalFetch = global.fetch;
+  beforeEach(() => {
+    process.env.AGENTS_URL = "http://test-agents:8000";
+    process.env.INHALE_INTERNAL_SECRET = "secret";
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+    global.fetch = originalFetch;
+  });
+
+  it("aborts after 15s when upstream never responds", { timeout: 20_000 }, async () => {
+    const { extractAnnotationMarkers } = await import("../annotation-extractor");
+    vi.useFakeTimers();
+    let aborted = false;
+    global.fetch = vi.fn((_url: unknown, init?: RequestInit) => {
+      return new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => {
+          aborted = true;
+          reject(new DOMException("aborted", "AbortError"));
+        });
+      });
+    }) as unknown as typeof fetch;
+    try {
+      const done = extractAnnotationMarkers("/x.pdf", { userId: "u1" });
+      const failed = expect(done).rejects.toThrow(/abort/i);
+      await vi.advanceTimersByTimeAsync(15_000);
+      await failed;
+      expect(aborted).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

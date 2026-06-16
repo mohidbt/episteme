@@ -107,4 +107,25 @@ describe("getThreadMessages", () => {
     expect(result).toEqual([]);
     expect(fetchMock).not.toHaveBeenCalled();
   });
+
+  it("aborts the request after 15s when upstream never responds", { timeout: 20_000 }, async () => {
+    vi.useFakeTimers();
+    let aborted = false;
+    global.fetch = vi.fn((_url: unknown, init?: RequestInit) => {
+      return new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => {
+          aborted = true;
+          reject(new DOMException("aborted", "AbortError"));
+        });
+      });
+    }) as unknown as typeof fetch;
+    try {
+      const done = getThreadMessages("u1", "thread-timeout");
+      await vi.advanceTimersByTimeAsync(15_000);
+      await expect(done).resolves.toEqual([]);
+      expect(aborted).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

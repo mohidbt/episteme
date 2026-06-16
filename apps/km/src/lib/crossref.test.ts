@@ -1,6 +1,39 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { crossRefToCsl, fetchCrossRef } from "./crossref";
 
+describe("fetchCrossRef timeout", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it("aborts the request after 15s when upstream never responds", { timeout: 20_000 }, async () => {
+    const originalFetch = global.fetch;
+    global.fetch = vi.fn((_url, init?: RequestInit) => {
+      const signal = init?.signal;
+      return new Promise((_resolve, reject) => {
+        if (signal) {
+          signal.addEventListener("abort", () => {
+            reject(new DOMException("aborted", "AbortError"));
+          });
+        }
+      });
+    }) as unknown as typeof fetch;
+
+    try {
+      const promise = fetchCrossRef("10.1/x");
+      const failed = expect(promise).rejects.toThrow(/abort/i);
+      await vi.advanceTimersByTimeAsync(15_000);
+      await failed;
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+});
+
 // Minimal CrossRef message fixture for "Attention Is All You Need"
 const vaswaniMessage = {
   DOI: "10.48550/arXiv.1706.03762",

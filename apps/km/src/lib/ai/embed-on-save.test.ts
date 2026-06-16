@@ -86,6 +86,31 @@ describe("embedOnSave", () => {
     await expect(embedOnSave("note-1", "hello", "user-1")).resolves.toBeUndefined();
   });
 
+  it("aborts the request after 15s when upstream never responds", { timeout: 20_000 }, async () => {
+    vi.useFakeTimers();
+    let abortedSignalSeen = false;
+    const fetchMock = vi.fn((_url: unknown, init?: RequestInit) => {
+      return new Promise((_resolve, reject) => {
+        const signal = init?.signal;
+        if (signal) {
+          signal.addEventListener("abort", () => {
+            abortedSignalSeen = true;
+            reject(new DOMException("aborted", "AbortError"));
+          });
+        }
+      });
+    });
+    global.fetch = fetchMock as unknown as typeof fetch;
+    try {
+      const done = embedOnSave("note-1", "hello", "user-1");
+      await vi.advanceTimersByTimeAsync(15_000);
+      await expect(done).resolves.toBeUndefined();
+      expect(abortedSignalSeen).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("uses AGENTS_URL from env", async () => {
     process.env.AGENTS_URL = "http://test-agents:8000";
     const fetchMock = vi.fn().mockResolvedValue(

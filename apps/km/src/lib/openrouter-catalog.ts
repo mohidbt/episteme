@@ -34,21 +34,28 @@ export function _resetCatalogCacheForTests(): void {
 }
 
 async function _doFetch(): Promise<ModelCatalog> {
-  const r = await fetch("/api/openrouter/catalog", {
-    method: "GET",
-    headers: { Accept: "application/json" },
-  });
-  if (!r.ok) {
-    throw new Error(`openrouter catalog fetch failed: ${r.status}`);
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), 15_000);
+  try {
+    const r = await fetch("/api/openrouter/catalog", {
+      method: "GET",
+      headers: { Accept: "application/json" },
+      signal: ctrl.signal,
+    });
+    if (!r.ok) {
+      throw new Error(`openrouter catalog fetch failed: ${r.status}`);
+    }
+    const body = (await r.json()) as {
+      models: OpenRouterModel[];
+      fetched_at: string | null;
+    };
+    return {
+      models: body.models ?? [],
+      fetchedAt: body.fetched_at ?? "",
+    };
+  } finally {
+    clearTimeout(t);
   }
-  const body = (await r.json()) as {
-    models: OpenRouterModel[];
-    fetched_at: string | null;
-  };
-  return {
-    models: body.models ?? [],
-    fetchedAt: body.fetched_at ?? "",
-  };
 }
 
 export async function fetchModelCatalog(): Promise<ModelCatalog> {
