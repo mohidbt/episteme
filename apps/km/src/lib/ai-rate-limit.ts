@@ -88,10 +88,18 @@ export function __resetRateLimitForTests(): void {
 }
 
 export function getClientIp(req: Request): string {
+  // Prefer x-real-ip — Vercel/most reverse proxies set this to the true edge
+  // IP (one value, set by infra, not user-controllable). Falling back to the
+  // RIGHTMOST x-forwarded-for hop is the safe XFF semantic: clients can prepend
+  // arbitrary spoofed entries to the LEFT, but the rightmost entry was set by
+  // our own proxy and can be trusted.
+  const realIp = req.headers.get("x-real-ip");
+  if (realIp) return realIp.trim();
   const xff = req.headers.get("x-forwarded-for");
-  // Leftmost XFF entry — known IP-spoofable. Acceptable for Phase 1.1 since
-  // anon abuse risk is bounded by the shared LLM key budget; harden post-launch
-  // by trusting only the rightmost N hops behind a known proxy.
-  if (xff) return xff.split(",")[0].trim();
-  return req.headers.get("x-real-ip") ?? "unknown";
+  if (xff) {
+    const hops = xff.split(",");
+    const rightmost = hops[hops.length - 1].trim();
+    if (rightmost) return rightmost;
+  }
+  return "unknown";
 }
