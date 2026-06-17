@@ -401,6 +401,39 @@ describe("UnifiedDropzone", () => {
     });
   });
 
+  it("truncates very long filenames so the dialog cannot expand (GSD-94)", async () => {
+    // Bug: dropping a file with a very long name expanded the Import dialog
+    // because the filename row in the upload list did not truncate. Fix
+    // verifies the rendered <p> carries `truncate` + `min-w-0`, its grid-child
+    // wrapper carries `min-w-0`, and the full name lives in `title` for a11y.
+    mockFetch({
+      "/api/notes/from-file": {
+        status: 201,
+        body: { id: "note-1", slug: "x", title: "x" },
+      },
+    });
+    const longName = "a".repeat(300) + ".md";
+    render(<UnifiedDropzone libraryId={1} folderPath="" folderId={null} />);
+    const input = document.querySelector("input[type=file]") as HTMLInputElement;
+    const file = new File(["# x"], longName, { type: "text/markdown" });
+
+    await act(async () => {
+      dropFile(input, file);
+    });
+
+    const para = await screen.findByText(longName);
+    expect(para.className).toMatch(/\btruncate\b/);
+    expect(para.className).toMatch(/\bmin-w-0\b/);
+    expect(para.getAttribute("title")).toBe(longName);
+
+    // Outer container needs min-w-0 so it can shrink inside the dialog grid.
+    const root = document.querySelector(
+      "[data-testid='unified-dropzone-root']",
+    ) as HTMLElement | null;
+    expect(root).not.toBeNull();
+    expect(root!.className).toMatch(/\bmin-w-0\b/);
+  });
+
   it("shows toast.error for unknown extension files", async () => {
     render(<UnifiedDropzone libraryId={1} folderPath="" folderId={null} />);
     const input = document.querySelector("input[type=file]") as HTMLInputElement;

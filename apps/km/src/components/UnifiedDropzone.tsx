@@ -453,7 +453,7 @@ export function UnifiedDropzone({
   };
 
   return (
-    <div className="mb-6">
+    <div className="mb-6 min-w-0" data-testid="unified-dropzone-root">
       <div
         {...getRootProps()}
         role="presentation"
@@ -483,7 +483,12 @@ export function UnifiedDropzone({
               >
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <p className="min-w-0 flex-1 truncate text-sm">{it.file.name}</p>
+                    <p
+                      className="min-w-0 flex-1 truncate text-sm"
+                      title={it.file.name}
+                    >
+                      {it.file.name}
+                    </p>
                     <span className="shrink-0 text-[11px] text-muted-foreground">
                       {typeLabel[it.fileType]} · {it.status}
                     </span>
