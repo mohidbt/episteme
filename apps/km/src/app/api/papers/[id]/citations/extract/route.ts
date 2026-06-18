@@ -80,16 +80,22 @@ export async function POST(request: Request, { params }: Ctx) {
     }
   }
   const sourceLocator = paper.storageUrl ?? paperSourceKey(paperId);
-  // BYOK first, then server-side OPENROUTER_API_KEY fallback. Guests
-  // without BYOK still get DOI extract via the server key (~$0.001/paper).
+  // BYOK → managed bucket → env. Downstream DOI extract is gated on
+  // truthy llmKey, so any resolver failure (no env, no provisioning key,
+  // OR network blip) degrades gracefully to "" — annotation + text-regex
+  // extraction still runs; we just skip the optional DOI guess.
   let llmKey = "";
   try {
     llmKey = await getOrApiKey(userId);
   } catch (err) {
-    // OpenRouterKeyMissing → no LLM available; downstream DOI extract is
-    // gated on truthy llmKey, so empty string is the safe no-op.
-    if (!(err instanceof OpenRouterKeyMissing)) throw err;
-    llmKey = "";
+    if (err instanceof OpenRouterKeyMissing) {
+      llmKey = "";
+    } else {
+      // Provisioning hiccup / OR outage → log + degrade. Citations
+      // extraction is the user-facing product; the DOI assist is bonus.
+      console.warn("[citations/extract] getOrApiKey failed, continuing without llmKey", err);
+      llmKey = "";
+    }
   }
 
   try {

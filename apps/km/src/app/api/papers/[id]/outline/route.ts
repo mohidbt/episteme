@@ -32,6 +32,11 @@ export async function GET(request: NextRequest, { params }: Ctx) {
     llmKey,
   });
   const res = await fetch(`${process.env.AGENTS_URL}${path}`, { headers: { ...headers } });
+  // GSD-126 P0: bucket exhaustion → stable JSON code, replacing whatever
+  // upstream shape the agents service returned.
+  if (res.status === 402) {
+    return Response.json({ error: "trial_exhausted" }, { status: 402 });
+  }
   return new Response(res.body, {
     status: res.status,
     headers: { "Content-Type": "application/json" },

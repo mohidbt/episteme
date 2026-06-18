@@ -1,5 +1,15 @@
-// Round C — /settings/data OR-spend panel. Mirrors DriveUsage shape so the
-// two rows line up vertically inside the same card.
+// GSD-126 P0 — bar-only AI usage panel.
+//
+// Numeric "$X / $5 — 30-day spend" readout removed across the board. We
+// keep only the bar + an "Over budget" badge. Label is conditional:
+//   • guest      → "AI usage"     (no time qualifier)
+//   • signed-in  → "Weekly usage" (cosmetic; the trial bucket is one-time
+//                                   $5, but P1 subscriptions will be weekly
+//                                   so the label leads with the future)
+//
+// Signed-in `totalUsd` is sourced upstream from OR's `/api/v1/keys/{hash}`
+// (truth source), not the local catalog estimate. Guests stay on local
+// 7-day sum until they sign up + get a managed bucket.
 
 export interface OrUsageData {
   totalUsd: number;
@@ -8,16 +18,8 @@ export interface OrUsageData {
   limitUsd: number;
 }
 
-function fmtUsd(n: number): string {
-  // Sub-cent spend would round to $0.00 with 2 decimals, which reads as
-  // "nothing happened" even though a few cheap turns have landed. Switch to
-  // 4 decimals below $0.01 so a single nano-model turn ($0.002) is visible.
-  const decimals = n > 0 && n < 0.01 ? 4 : 2;
-  return `$${n.toFixed(decimals)}`;
-}
-
 export function OrUsage({ usage }: { usage: OrUsageData }) {
-  const { totalUsd, limitUsd } = usage;
+  const { totalUsd, limitUsd, isGuest } = usage;
   const overLimit = totalUsd > limitUsd;
   const pctRaw = limitUsd > 0 ? (totalUsd / limitUsd) * 100 : 0;
   // Clamp the visible bar to [0,100]; the badge communicates over-limit.
@@ -26,9 +28,8 @@ export function OrUsage({ usage }: { usage: OrUsageData }) {
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center justify-between gap-2">
-        <span className="text-sm">
-          {fmtUsd(totalUsd)} / {fmtUsd(limitUsd)}{" "}
-          <span className="text-muted-foreground">— 30-day spend</span>
+        <span className="text-sm text-muted-foreground">
+          {isGuest ? "AI usage" : "Weekly usage"}
         </span>
         {overLimit && (
           <span

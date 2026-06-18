@@ -414,6 +414,13 @@
       "when": 1782000000000,
       "tag": "0058_signup_profiles_university",
       "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1782086400000,
+      "tag": "0059_user_openrouter_keys",
+      "breakpoints": true
     }
   ]
 }

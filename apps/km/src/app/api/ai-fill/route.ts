@@ -73,11 +73,13 @@ export async function POST(req: Request): Promise<Response> {
   }
   const { kind, known, missing } = parsed.data;
 
-  // Round C: BYOK first, then server env fallback (also covers anonymous
-  // users — they hit ai-fill via the same route once they're past auth).
+  // GSD-126 P0: signed-in users resolve through BYOK → managed bucket;
+  // guests skip both and use the shared env key. Pass null for guests so
+  // the resolver doesn't try to lazy-provision a managed OR bucket for an
+  // anonymous identity (no FK to user table).
   let llmKey: string;
   try {
-    llmKey = await getOrApiKey(session.userId);
+    llmKey = await getOrApiKey(session.isAnonymous ? null : session.userId);
   } catch (err) {
     if (err instanceof OpenRouterKeyMissing) {
       return Response.json({ error: OPENROUTER_KEY_MISSING }, { status: 400 });
@@ -112,6 +114,12 @@ export async function POST(req: Request): Promise<Response> {
       apiKey: llmKey,
       response: upstream,
     });
+    // GSD-126 P0: 402 means the user's managed bucket (or BYOK quota) is
+    // exhausted. Surface a stable code so the client can render the
+    // upgrade-required state instead of a generic 502.
+    if (upstream.status === 402) {
+      return Response.json({ error: "trial_exhausted" }, { status: 402 });
+    }
     const keyErr = mapOpenRouterStatus(upstream.status);
     if (keyErr) {
       return Response.json({ error: keyErr }, { status: 401 });

@@ -7,6 +7,11 @@ import {
   OR_GUEST_SOFT_LIMIT_USD,
   OR_USER_SOFT_LIMIT_USD,
 } from "@/lib/openrouter-usage";
+import { loadUserBucket } from "@/lib/user-bucket-store";
+import { getUserBucketUsage } from "@/lib/openrouter-provisioning";
+import { db } from "@/lib/db";
+import { userOpenrouterKeys } from "@episteme/db/schema";
+import { eq } from "drizzle-orm";
 import { ExportControls } from "@/components/ExportControls";
 import { ImportControls } from "@/components/ImportControls";
 import { DriveUsage } from "./DriveUsage";
@@ -20,17 +25,46 @@ export default async function DataSettingsPage() {
   // One-library-per-user invariant (enforced at POST /api/libraries) means
   // "active library" === getDefaultLibrary. Multi-library users would need
   // a picker here; safe to revisit when the invariant lifts.
-  // Round B + C usage panels run in parallel — independent reads, no waterfall.
-  const [usage, orSpend] = await Promise.all([
+  // GSD-126 P0: data source split.
+  //   • Guests       → local 7-day openrouter_usage sum (no managed bucket).
+  //   • Signed-in    → OR-reported usage on the managed bucket (truth source).
+  //                    Falls back to local 30-day sum if the bucket row
+  //                    doesn't exist yet (user hasn't hit any AI feature).
+  const [usage, orSpend, orHashRow] = await Promise.all([
     lib ? getLibraryUsageBytes(lib.id) : Promise.resolve(null),
     getRecentSpendUsd(
       session.isAnonymous ? null : userId,
       session.isAnonymous ? userId : null,
+      session.isAnonymous ? 7 : 30,
     ),
+    session.isAnonymous
+      ? Promise.resolve(null)
+      : db
+          .select({ hash: userOpenrouterKeys.orKeyHash })
+          .from(userOpenrouterKeys)
+          .where(eq(userOpenrouterKeys.userId, userId))
+          .limit(1)
+          .then((rows) => rows[0]?.hash ?? null)
+          .catch(() => null),
   ]);
+
+  let orReportedTotal: number | null = null;
+  let orReportedLimit: number | null = null;
+  if (!session.isAnonymous && orHashRow) {
+    try {
+      const r = await getUserBucketUsage(orHashRow);
+      orReportedTotal = r.usageUsd;
+      orReportedLimit = r.limitUsd;
+    } catch {
+      // OR provisioning hiccup must not break the settings page. Fall
+      // through to local sum + soft limit.
+    }
+  }
+
   const orLimitUsd = session.isAnonymous
     ? OR_GUEST_SOFT_LIMIT_USD
-    : OR_USER_SOFT_LIMIT_USD;
+    : orReportedLimit ?? OR_USER_SOFT_LIMIT_USD;
+  const orTotalUsd = orReportedTotal ?? orSpend.totalUsd;
 
   return (
     <div className="mx-auto max-w-lg px-6 py-10">
@@ -55,7 +89,7 @@ export default async function DataSettingsPage() {
             <div className="text-sm font-medium mb-3">AI usage</div>
             <OrUsage
               usage={{
-                totalUsd: orSpend.totalUsd,
+                totalUsd: orTotalUsd,
                 byModel: orSpend.byModel,
                 isGuest: session.isAnonymous,
                 limitUsd: orLimitUsd,

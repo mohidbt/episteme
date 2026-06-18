@@ -10,6 +10,18 @@ vi.mock("@/lib/internal-auth", async () => {
 vi.mock("@episteme/auth/byok", () => ({
   getDecryptedApiKey: vi.fn(),
 }));
+// GSD-126: the resolver now consults a managed-bucket store + provisioning
+// API after BYOK. Mock both so this route-level test doesn't reach into
+// the DB / OR sandbox.
+vi.mock("@/lib/user-bucket-store", () => ({
+  loadUserBucket: vi.fn(),
+  insertUserBucketIfMissing: vi.fn(),
+}));
+vi.mock("@/lib/openrouter-provisioning", () => ({
+  createUserBucket: vi.fn(),
+  getUserBucketUsage: vi.fn(),
+  patchUserBucket: vi.fn(),
+}));
 vi.mock("@/lib/db", () => ({
   db: { select: vi.fn() },
 }));
@@ -23,6 +35,8 @@ import { getDecryptedApiKey } from "@episteme/auth/byok";
 import { db } from "@/lib/db";
 import { extractPdfPages } from "@/lib/ai/pdf-text";
 import { extractAnnotationMarkers } from "@/lib/citations/annotation-extractor";
+import { loadUserBucket, insertUserBucketIfMissing } from "@/lib/user-bucket-store";
+import { createUserBucket } from "@/lib/openrouter-provisioning";
 import { POST } from "./route";
 
 const PAPER_ID = "00000000-0000-0000-0000-000000000001";
@@ -108,7 +122,19 @@ describe("POST /api/papers/[id]/citations/extract", () => {
 
   it("continues when decrypted key lookup fails", async () => {
     vi.mocked(getAuthedUserId).mockResolvedValue({ userId: "u1", viaHmac: false } as never);
-    vi.mocked(getDecryptedApiKey).mockRejectedValue(new Error("no key"));
+    // GSD-126: resolver now re-throws non-NO_LLM_KEY errors. Match the
+    // sentinel so we still exercise the "no llmKey, degrade gracefully"
+    // path that this test covers.
+    vi.mocked(getDecryptedApiKey).mockRejectedValue(new Error("NO_LLM_KEY"));
+    // BYOK absent → managed-bucket lazy-provision lane. Simulate the OR
+    // provisioning call itself failing (e.g. no provisioning key in this
+    // env) so the resolver throws — citations/extract swallows that and
+    // proceeds with llmKey = "".
+    vi.mocked(loadUserBucket).mockResolvedValue(null);
+    vi.mocked(createUserBucket).mockRejectedValue(
+      new Error("OPENROUTER_PROVISIONING_KEY not set"),
+    );
+    vi.mocked(insertUserBucketIfMissing).mockResolvedValue(false);
     vi.mocked(db.select).mockReturnValueOnce({
       from: () => ({
         where: () => ({

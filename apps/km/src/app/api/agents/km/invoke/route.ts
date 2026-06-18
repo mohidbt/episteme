@@ -26,10 +26,11 @@ export async function POST(req: Request) {
   const session = await getSessionInfo(req);
   if (!session) return Response.json({ error: "unauthorized" }, { status: 401 });
 
-  // Round C: BYOK first, then server env fallback (also covers anonymous).
+  // GSD-126 P0: signed-in users → BYOK → managed bucket; guests → env.
+  // Pass null for guests so the resolver skips the managed-bucket path.
   let llmKey: string;
   try {
-    llmKey = await getOrApiKey(session.userId);
+    llmKey = await getOrApiKey(session.isAnonymous ? null : session.userId);
   } catch (err) {
     if (err instanceof OpenRouterKeyMissing) {
       return Response.json({ error: OPENROUTER_KEY_MISSING }, { status: 400 });
@@ -151,6 +152,12 @@ export async function POST(req: Request) {
 
   if (!upstream.ok || !upstream.body) {
     setStatus("error");
+    // GSD-126 P0: surface bucket exhaustion as a stable trial_exhausted
+    // code so the agent UI can render an upgrade prompt instead of a
+    // generic upstream error toast.
+    if (upstream.status === 402) {
+      return Response.json({ error: "trial_exhausted" }, { status: 402 });
+    }
     return new Response(upstream.body, { status: upstream.status });
   }
 

@@ -91,13 +91,24 @@ describe("POST /api/ai-fill", () => {
     expect(res.status).toBe(502);
   });
 
-  it("returns OPENROUTER_KEY_MISSING when user has no key", async () => {
-    vi.mocked(getSessionInfo).mockResolvedValue({ userId: "u1", isAnonymous: false });
-    vi.mocked(getDecryptedApiKey).mockRejectedValue(new Error("no key"));
+  it("returns OPENROUTER_KEY_MISSING when guest has no env key", async () => {
+    // GSD-126: signed-in users now flow through the managed-bucket lazy
+    // provisioner, so OPENROUTER_KEY_MISSING only fires for a guest with
+    // no OPENROUTER_API_KEY env fallback set. Force the env to undefined
+    // and use a guest session to hit that branch.
+    vi.mocked(getSessionInfo).mockResolvedValue({ userId: "guest_u1", isAnonymous: true });
+    const orig = process.env.OPENROUTER_API_KEY;
+    delete process.env.OPENROUTER_API_KEY;
 
-    const res = await POST(makeReq({ kind: "paper", known: {}, missing: ["title"] }));
-    expect(res.status).toBe(400);
-    expect((await res.json()).error).toBe("OPENROUTER_KEY_MISSING");
+    try {
+      const res = await POST(
+        makeReq({ kind: "paper", known: {}, missing: ["title"] }),
+      );
+      expect(res.status).toBe(400);
+      expect((await res.json()).error).toBe("OPENROUTER_KEY_MISSING");
+    } finally {
+      if (orig !== undefined) process.env.OPENROUTER_API_KEY = orig;
+    }
   });
 
   it("maps upstream 401 to OPENROUTER_KEY_INVALID", async () => {
@@ -108,5 +119,21 @@ describe("POST /api/ai-fill", () => {
     const res = await POST(makeReq({ kind: "paper", known: {}, missing: ["title"] }));
     expect(res.status).toBe(401);
     expect((await res.json()).error).toBe("OPENROUTER_KEY_INVALID");
+  });
+
+  it("maps upstream 402 (managed bucket exhausted) to 402 trial_exhausted", async () => {
+    // GSD-126 P0: when the user's $5 managed bucket is drained, OR returns
+    // 402. KM surfaces a stable error code the client can switch on.
+    vi.mocked(getSessionInfo).mockResolvedValue({ userId: "u1", isAnonymous: false });
+    vi.mocked(getDecryptedApiKey).mockResolvedValue("sk-key");
+    fetchMock.mockResolvedValue(
+      new Response("payment required", { status: 402 }),
+    );
+
+    const res = await POST(
+      makeReq({ kind: "paper", known: {}, missing: ["title"] }),
+    );
+    expect(res.status).toBe(402);
+    expect((await res.json()).error).toBe("trial_exhausted");
   });
 });
