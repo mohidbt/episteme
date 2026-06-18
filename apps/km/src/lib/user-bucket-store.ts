@@ -9,7 +9,9 @@ import { userOpenrouterKeys } from "@episteme/db/schema";
 import { eq } from "drizzle-orm";
 // `encrypt`/`decrypt` are AES-256-GCM helpers that secure BYOK rows too;
 // reusing them keeps the storage format consistent with user_api_keys.
-import { decrypt, encrypt } from "@episteme/auth";
+// Pulled from the encryption module directly (not the barrel) so we don't
+// drag the client-side better-auth bundle into a server module.
+import { decrypt, encrypt } from "@episteme/auth/encryption";
 
 export interface LoadedBucket {
   runtimeKey: string;

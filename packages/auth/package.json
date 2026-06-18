@@ -9,7 +9,9 @@
     ".": "./src/index.ts",
     "./server": "./src/server.ts",
     "./client": "./src/client.ts",
-    "./internal": "./src/internal.ts"
+    "./internal": "./src/internal.ts",
+    "./byok": "./src/byok.ts",
+    "./encryption": "./src/encryption.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
