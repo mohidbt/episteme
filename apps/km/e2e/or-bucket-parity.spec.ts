@@ -2,7 +2,7 @@
 //
 // Runs against a Vercel preview URL (NOT the local worktree). Steps:
 //   1. Log in as the seeded test account.
-//   2. Reset the user's managed bucket via /api/internal/_debug/or-bucket
+//   2. Reset the user's managed bucket via /api/internal/debug/or-bucket
 //      so the next AI call lazy-provisions a fresh one.
 //   3. Trigger 3 small AI calls (ai-fill on a metadata gap).
 //   4. Wait for OR to settle.
@@ -34,7 +34,7 @@ test.describe("OR bucket parity (preview only)", () => {
 
     // Reset: nuke any pre-existing managed bucket row + the OR-side key so
     // the next ai-fill call lazy-provisions a fresh one.
-    const resetRes = await page.request.post("/api/internal/_debug/or-bucket", {
+    const resetRes = await page.request.post("/api/internal/debug/or-bucket", {
       data: { action: "reset" },
     });
     expect(resetRes.status()).toBe(200);
@@ -54,7 +54,7 @@ test.describe("OR bucket parity (preview only)", () => {
     // Let OR's accounting settle (it lags ~10-30s behind completions).
     await page.waitForTimeout(30_000);
 
-    const parityRes = await page.request.get("/api/internal/_debug/or-bucket");
+    const parityRes = await page.request.get("/api/internal/debug/or-bucket");
     expect(parityRes.status()).toBe(200);
     const parity = await parityRes.json();
     expect(parity.hash, "lazy-provisioning should have created a bucket").not.toBeNull();
