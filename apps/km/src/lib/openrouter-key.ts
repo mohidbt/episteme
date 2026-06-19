@@ -19,6 +19,7 @@
 // server-only helper.
 
 import { getDecryptedApiKey } from "@episteme/auth/byok";
+import { hasUserBYOK } from "./byok-presence";
 import {
   createUserBucket,
 } from "./openrouter-provisioning";
@@ -82,14 +83,19 @@ async function resolveManagedBucket(userId: string): Promise<string | null> {
 
 export async function getOrApiKey(userId: string | null): Promise<string> {
   if (userId) {
-    // Step 1: BYOK.
-    try {
-      return await getDecryptedApiKey(userId);
-    } catch (err) {
-      // Only the "no BYOK row" case falls through to managed bucket. DB
-      // connectivity / decrypt errors surface to the caller (Codex Round C).
-      const msg = err instanceof Error ? err.message : String(err);
-      if (msg !== "NO_LLM_KEY") throw err;
+    // Step 1: BYOK — only if the user actually has a per-user BYOK row.
+    // We bypass getDecryptedApiKey when there's no row so its
+    // EPISTEME_SHARED_LLM_KEY fallback doesn't shadow Step 2 for every
+    // signed-in user.
+    if (await hasUserBYOK(userId)) {
+      try {
+        return await getDecryptedApiKey(userId);
+      } catch (err) {
+        // Real-row case: NO_LLM_KEY shouldn't happen (we just confirmed
+        // the row), so any error here is a DB/decrypt failure — surface it.
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg !== "NO_LLM_KEY") throw err;
+      }
     }
 
     // Step 2: managed bucket (lazy-provision on miss).

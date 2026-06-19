@@ -6,6 +6,13 @@ vi.mock("@episteme/auth/byok", () => ({
   getDecryptedApiKey: vi.fn(),
 }));
 
+// Mock the BYOK presence check (queries user_api_keys). Used by the
+// resolver to skip getDecryptedApiKey when the user has no row, so the
+// helper's EPISTEME_SHARED_LLM_KEY env fallback doesn't shadow Step 2.
+vi.mock("../byok-presence", () => ({
+  hasUserBYOK: vi.fn(),
+}));
+
 // Mock the managed-bucket helpers so we can simulate row-present /
 // row-missing / lazy-provision flows without DB.
 vi.mock("../user-bucket-store", () => ({
@@ -20,6 +27,7 @@ vi.mock("../openrouter-provisioning", () => ({
 }));
 
 import { getDecryptedApiKey } from "@episteme/auth/byok";
+import { hasUserBYOK } from "../byok-presence";
 import {
   loadUserBucket,
   insertUserBucketIfMissing,
@@ -36,9 +44,13 @@ const ORIGINAL_PROV = process.env.OPENROUTER_PROVISIONING_KEY;
 
 beforeEach(() => {
   vi.mocked(getDecryptedApiKey).mockReset();
+  vi.mocked(hasUserBYOK).mockReset();
   vi.mocked(loadUserBucket).mockReset();
   vi.mocked(insertUserBucketIfMissing).mockReset();
   vi.mocked(createUserBucket).mockReset();
+  // Default: no real BYOK row. Tests that exercise the BYOK path opt-in
+  // by mocking hasUserBYOK → true.
+  vi.mocked(hasUserBYOK).mockResolvedValue(false);
 });
 
 afterEach(() => {
@@ -50,6 +62,7 @@ afterEach(() => {
 
 describe("getOrApiKey — resolver order", () => {
   it("returns the user's decrypted BYOK key when present (BYOK wins)", async () => {
+    vi.mocked(hasUserBYOK).mockResolvedValue(true);
     vi.mocked(getDecryptedApiKey).mockResolvedValue("user-byok-key");
     vi.mocked(loadUserBucket).mockResolvedValue({
       runtimeKey: "managed-key",
@@ -166,6 +179,7 @@ describe("getOrApiKey — resolver order", () => {
   });
 
   it("re-throws non-NO_LLM_KEY BYOK errors instead of silently degrading", async () => {
+    vi.mocked(hasUserBYOK).mockResolvedValue(true);
     vi.mocked(getDecryptedApiKey).mockRejectedValue(
       new Error("ECONNREFUSED postgres"),
     );
@@ -174,6 +188,25 @@ describe("getOrApiKey — resolver order", () => {
     await expect(getOrApiKey("user_123")).rejects.toThrow(
       "ECONNREFUSED postgres",
     );
+  });
+
+  it("skips BYOK entirely when user has no BYOK row (managed-bucket wins over env shared key)", async () => {
+    // Regression for the EPISTEME_SHARED_LLM_KEY shadowing bug found by
+    // the GSD-126 P0 E2E parity check. Even if getDecryptedApiKey would
+    // resolve via env fallback, the resolver must skip the BYOK call
+    // when there's no real per-user row.
+    vi.mocked(hasUserBYOK).mockResolvedValue(false);
+    vi.mocked(loadUserBucket).mockResolvedValue({
+      runtimeKey: "managed-key",
+      hash: "h_user_123",
+    });
+    process.env.OPENROUTER_PROVISIONING_KEY = "prov-key";
+    process.env.OPENROUTER_API_KEY = "env-fallback";
+
+    const key = await getOrApiKey("user_123");
+
+    expect(key).toBe("managed-key");
+    expect(getDecryptedApiKey).not.toHaveBeenCalled();
   });
 });
 

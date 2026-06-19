@@ -158,6 +158,8 @@ export async function POST(req: Request): Promise<Response> {
       provisioningKeyPresent: !!provKey,
       provisioningKeyLen: provKey?.length ?? 0,
       vercelEnv: process.env.VERCEL_ENV ?? null,
+      sharedLlmKeyPresent: !!process.env.EPISTEME_SHARED_LLM_KEY,
+      openrouterApiKeyPresent: !!process.env.OPENROUTER_API_KEY,
     };
     try {
       const minted = await createUserBucket(session.userId);

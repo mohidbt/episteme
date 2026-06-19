@@ -7,16 +7,25 @@ vi.mock("@episteme/auth/byok", () => ({
 vi.mock("@/lib/auth", () => ({
   getSessionInfo: vi.fn(),
 }));
+// GSD-126 P0: the resolver short-circuits BYOK on no-row to avoid
+// EPISTEME_SHARED_LLM_KEY shadowing the managed-bucket path. These tests
+// pre-date that change and assume BYOK is always present for signed-in
+// callers, so default the mock to true and individual tests override.
+vi.mock("@/lib/byok-presence", () => ({
+  hasUserBYOK: vi.fn(),
+}));
 
 import { POST } from "./route";
 import { getDecryptedApiKey } from "@episteme/auth/byok";
 import { getSessionInfo } from "@/lib/auth";
+import { hasUserBYOK } from "@/lib/byok-presence";
 
 const fetchMock = vi.fn();
 
 beforeEach(() => {
   vi.resetAllMocks();
   globalThis.fetch = fetchMock as unknown as typeof fetch;
+  vi.mocked(hasUserBYOK).mockResolvedValue(true);
 });
 
 function makeReq(body: unknown): Request {
