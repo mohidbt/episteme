@@ -19,9 +19,11 @@ import { and, eq, gte } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { getSessionInfo } from "@/lib/auth";
 import {
+  createUserBucket,
   getUserBucketUsage,
   patchUserBucket,
 } from "@/lib/openrouter-provisioning";
+import { insertUserBucketIfMissing } from "@/lib/user-bucket-store";
 import { openrouterUsage, userOpenrouterKeys } from "@episteme/db/schema";
 
 export const runtime = "nodejs";
@@ -145,6 +147,35 @@ export async function POST(req: Request): Promise<Response> {
         .where(eq(userOpenrouterKeys.userId, session.userId));
     }
     return Response.json({ ok: true, deleted: !!row });
+  }
+
+  if (body.action === "diagnostic") {
+    // Surface the provisioning env state + attempt a real createUserBucket
+    // call. Anything we discover lands in the response so the E2E subagent
+    // can see WHY lazy-provisioning silently fell through to env fallback.
+    const provKey = process.env.OPENROUTER_PROVISIONING_KEY;
+    const result: Record<string, unknown> = {
+      provisioningKeyPresent: !!provKey,
+      provisioningKeyLen: provKey?.length ?? 0,
+      vercelEnv: process.env.VERCEL_ENV ?? null,
+    };
+    try {
+      const minted = await createUserBucket(session.userId);
+      result.createOk = true;
+      result.hashPreview = minted.hash.slice(0, 12) + "…";
+      // Also insert + persist so the parity check has something to inspect.
+      const inserted = await insertUserBucketIfMissing({
+        userId: session.userId,
+        runtimeKey: minted.key,
+        hash: minted.hash,
+      });
+      result.inserted = inserted;
+    } catch (err) {
+      result.createOk = false;
+      result.createError =
+        err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+    }
+    return Response.json(result);
   }
 
   if (body.action === "patch-limit") {
