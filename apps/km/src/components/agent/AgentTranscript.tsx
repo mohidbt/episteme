@@ -27,6 +27,7 @@ import {
 import type { AgentEvent, Citation } from "@/lib/agent-events";
 import type { PageContext } from "@/lib/page-context";
 import { useAgentBallOptional } from "./agent-ball-context";
+import { surfaceTrialExhaustedToast } from "@/lib/trial-exhausted";
 
 import {
   Conversation,
@@ -388,6 +389,20 @@ export function AgentTranscript({
           signal: controller.signal,
         });
         if (!res.ok || !res.body) {
+          // GSD-126 P1a: 402 trial_exhausted is a non-streaming JSON close
+          // (see lib/agents/stream-passthrough.ts); surface a single
+          // upgrade-prompt toast instead of the generic agent-failed one.
+          if (res.status === 402) {
+            const body = (await res
+              .clone()
+              .json()
+              .catch(() => null)) as { error?: string } | null;
+            if (body?.error === "trial_exhausted") {
+              surfaceTrialExhaustedToast();
+              setStreaming(false);
+              return;
+            }
+          }
           toast.error(
             `Agent request failed (${res.status}). Please try again.`,
           );
@@ -594,6 +609,16 @@ export function AgentTranscript({
           signal: controller.signal,
         });
         if (!res.ok || !res.body) {
+          // GSD-126 P1a: resume can 402 if the bucket drained mid-thread.
+          if (res.status === 402) {
+            const body = (await res
+              .clone()
+              .json()
+              .catch(() => null)) as { error?: string } | null;
+            if (body?.error === "trial_exhausted") {
+              surfaceTrialExhaustedToast();
+            }
+          }
           setStreaming(false);
           return false;
         }

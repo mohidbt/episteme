@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback } from "react";
+import { fetchOrThrowTrialExhausted } from "../lib/trial-exhausted";
 
 export type UseExplainPassageOptions = {
   paperId: string;
@@ -21,6 +22,11 @@ export type ExplainPassageArgs = {
  *
  * The caller is responsible for ensuring `threadId` is non-null before
  * invocation — calling `explain` without an active thread throws.
+ *
+ * GSD-126 P1a: the underlying invoke route returns HTTP 402 + JSON
+ * `{ error: "trial_exhausted" }` when the user's managed OpenRouter
+ * bucket is drained. We surface that as `TrialExhaustedError` so the
+ * caller can render the upgrade-prompt toast without reading the body.
  */
 export function useExplainPassage({
   paperId,
@@ -33,7 +39,7 @@ export function useExplainPassage({
         throw new Error("useExplainPassage: threadId is required");
       }
       onOpenPanel?.();
-      return fetch("/api/agents/km/invoke", {
+      return fetchOrThrowTrialExhausted("/api/agents/km/invoke", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

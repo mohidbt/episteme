@@ -5,6 +5,11 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Loader2, Hexagon, BookPlus } from "lucide-react";
 import { citationsRefreshEvent } from "./PaperCitationsList";
+import {
+  TrialExhaustedError,
+  fetchOrThrowTrialExhausted,
+  surfaceTrialExhaustedToast,
+} from "@/lib/trial-exhausted";
 
 interface Paper {
   id: string;
@@ -33,10 +38,13 @@ export function PaperActionsButtons({
     if (extracting || hasCitations) return;
     setExtracting(true);
     try {
-      const res = await fetch(`/api/papers/${paper.id}/citations/extract`, {
-        method: "POST",
-        credentials: "include",
-      });
+      const res = await fetchOrThrowTrialExhausted(
+        `/api/papers/${paper.id}/citations/extract`,
+        {
+          method: "POST",
+          credentials: "include",
+        },
+      );
       if (!res.ok) {
         toast.error("Citation extraction failed", { description: `HTTP ${res.status}` });
         return;
@@ -54,7 +62,11 @@ export function PaperActionsButtons({
       if (typeof window !== "undefined") {
         window.dispatchEvent(new Event(citationsRefreshEvent(paper.id)));
       }
-    } catch {
+    } catch (err) {
+      if (err instanceof TrialExhaustedError) {
+        surfaceTrialExhaustedToast();
+        return;
+      }
       toast.error("Citation extraction failed");
     } finally {
       setExtracting(false);

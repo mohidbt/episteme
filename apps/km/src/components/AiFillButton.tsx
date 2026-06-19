@@ -12,6 +12,11 @@ import { cn } from "@/lib/utils";
 import { isOpenRouterKeyError } from "@/lib/openrouter-errors";
 import { renderOpenRouterKeyToastDescription } from "@/components/OpenRouterKeyErrorToast";
 import { suggestionsToCslPatch } from "@/lib/csl";
+import {
+  TrialExhaustedError,
+  fetchOrThrowTrialExhausted,
+  surfaceTrialExhaustedToast,
+} from "@/lib/trial-exhausted";
 
 interface Props {
   /** Endpoint that PATCHes accepted suggestions (e.g. `/api/papers/ID`). */
@@ -55,7 +60,7 @@ export function AiFillButton({
     setBusy(true);
     onFillStart?.();
     try {
-      const res = await fetch("/api/ai-fill", {
+      const res = await fetchOrThrowTrialExhausted("/api/ai-fill", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ kind, known, missing }),
@@ -101,8 +106,12 @@ export function AiFillButton({
       }
       toast.success("Filled");
       router.refresh();
-    } catch {
-      toast.error("AI fill failed");
+    } catch (err) {
+      if (err instanceof TrialExhaustedError) {
+        surfaceTrialExhaustedToast();
+      } else {
+        toast.error("AI fill failed");
+      }
     } finally {
       setBusy(false);
       onFillEnd?.();

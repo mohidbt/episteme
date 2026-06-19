@@ -9,6 +9,11 @@ import {
   type FolderOption,
 } from "@episteme/reader/citation-card";
 import { Button } from "@/components/ui/button";
+import {
+  TrialExhaustedError,
+  fetchOrThrowTrialExhausted,
+  surfaceTrialExhaustedToast,
+} from "@/lib/trial-exhausted";
 
 interface PaperCitationsListProps {
   paperId: string;
@@ -234,10 +239,13 @@ export function PaperCitationsList({ paperId }: PaperCitationsListProps) {
     if (manualEnrichPending) return;
     setManualEnrichPending(true);
     try {
-      const res = await fetch(`/api/papers/${paperId}/citations/enrich`, {
-        method: "POST",
-        credentials: "include",
-      });
+      const res = await fetchOrThrowTrialExhausted(
+        `/api/papers/${paperId}/citations/enrich`,
+        {
+          method: "POST",
+          credentials: "include",
+        },
+      );
       if (!res.ok) {
         toast.error("Failed to enrich citations");
         return;
@@ -249,6 +257,16 @@ export function PaperCitationsList({ paperId }: PaperCitationsListProps) {
         setEnriching(true);
         scheduleNextPoll();
       }
+    } catch (err) {
+      if (err instanceof TrialExhaustedError) {
+        surfaceTrialExhaustedToast();
+        return;
+      }
+      // Match prior behaviour: any other thrown error was previously
+      // uncaught (the original handler had no try/catch around the
+      // fetch). Preserve that by re-throwing so an upstream boundary
+      // can decide what to do.
+      throw err;
     } finally {
       setManualEnrichPending(false);
     }

@@ -13,6 +13,11 @@ import { Button } from "@/components/ui/button";
 import { isOpenRouterKeyError } from "@/lib/openrouter-errors";
 import { renderOpenRouterKeyToastDescription } from "@/components/OpenRouterKeyErrorToast";
 import { suggestionsToCslPatch } from "@/lib/csl";
+import {
+  TrialExhaustedError,
+  fetchOrThrowTrialExhausted,
+  surfaceTrialExhaustedToast,
+} from "@/lib/trial-exhausted";
 
 export interface BatchRow {
   id: string;
@@ -52,10 +57,11 @@ export function AiFillBatchButton({ kind, rows, onFillStart, onFillEnd }: Props)
     let filled = 0;
     let failed = 0;
     let keyErrorSeen = false;
+    let trialExhausted = false;
     for (const row of candidates) {
       onFillStart?.(row.id);
       try {
-        const res = await fetch("/api/ai-fill", {
+        const res = await fetchOrThrowTrialExhausted("/api/ai-fill", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ kind, known: row.known, missing: row.missing }),
@@ -89,20 +95,26 @@ export function AiFillBatchButton({ kind, rows, onFillStart, onFillEnd }: Props)
         });
         if (patch.ok) filled++;
         else failed++;
-      } catch {
+      } catch (err) {
+        if (err instanceof TrialExhaustedError) {
+          trialExhausted = true;
+          break;
+        }
         failed++;
       } finally {
         onFillEnd?.(row.id);
       }
     }
     setBusy(false);
-    if (keyErrorSeen) {
+    if (trialExhausted) {
+      surfaceTrialExhaustedToast();
+    } else if (keyErrorSeen) {
       toast.error("OpenRouter API key missing or invalid", {
         description: renderOpenRouterKeyToastDescription(),
       });
     }
     if (filled > 0) toast.success(`Filled ${filled} row${filled === 1 ? "" : "s"}`);
-    if (failed > 0 && !keyErrorSeen)
+    if (failed > 0 && !keyErrorSeen && !trialExhausted)
       toast.error(`Failed on ${failed} row${failed === 1 ? "" : "s"}`);
     router.refresh();
   }

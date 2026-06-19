@@ -7,6 +7,11 @@ import { Skeleton } from "./ui/skeleton";
 import { BookOpen, FileSearch, Loader2, Sparkles } from "lucide-react";
 import { CitationCard, type CitationWithStatus, type FolderOption } from "./CitationCard";
 import { toast } from "sonner";
+import {
+  TrialExhaustedError,
+  fetchOrThrowTrialExhausted,
+  surfaceTrialExhaustedToast,
+} from "../lib/trial-exhausted";
 
 // GSD-125: same predicate as PaperCitationsList.isUnenriched — a ref is
 // "enrichable" only when it has a DOI to resolve against Semantic Scholar
@@ -55,16 +60,23 @@ export function CitationsSidebar({
     if (enrichPending) return;
     setEnrichPending(true);
     try {
-      const res = await fetch(`/api/papers/${paperId}/citations/enrich`, {
-        method: "POST",
-        credentials: "include",
-      });
+      const res = await fetchOrThrowTrialExhausted(
+        `/api/papers/${paperId}/citations/enrich`,
+        {
+          method: "POST",
+          credentials: "include",
+        },
+      );
       if (!res.ok) {
         toast.error("Failed to enrich citations");
         return;
       }
       onExtracted?.();
     } catch (err) {
+      if (err instanceof TrialExhaustedError) {
+        surfaceTrialExhaustedToast();
+        return;
+      }
       console.error("[citations-sidebar] enrich error", err);
       toast.error("Failed to enrich citations");
     } finally {
@@ -75,10 +87,13 @@ export function CitationsSidebar({
   const handleExtract = useCallback(async () => {
     setExtracting(true);
     try {
-      const res = await fetch(`/api/papers/${paperId}/citations/extract`, {
-        method: "POST",
-        credentials: "include",
-      });
+      const res = await fetchOrThrowTrialExhausted(
+        `/api/papers/${paperId}/citations/extract`,
+        {
+          method: "POST",
+          credentials: "include",
+        },
+      );
       // GSD-124: align messaging with the /p/[id] "Find citations" button
       // (PaperActionsButtons) so the same backend response produces the same
       // user-visible outcome regardless of entry point.
@@ -101,6 +116,10 @@ export function CitationsSidebar({
       toast.success(n > 0 ? `Found ${n} citation${n === 1 ? "" : "s"}` : "No citations detected");
       onExtracted?.();
     } catch (err) {
+      if (err instanceof TrialExhaustedError) {
+        surfaceTrialExhaustedToast();
+        return;
+      }
       console.error("[citations-sidebar] extract error", err);
       toast.error("Citation extraction failed");
     } finally {

@@ -28,6 +28,42 @@ afterEach(() => {
   cleanup();
 });
 
+describe("AiFillButton — trial-exhausted (GSD-126 P1a)", () => {
+  it("shows the trial-exhausted upgrade toast on 402 + trial_exhausted body", async () => {
+    // Reset dedup window so toast actually fires regardless of test order.
+    try {
+      sessionStorage.removeItem("episteme:trial-exhausted-last-shown");
+    } catch {
+      // sessionStorage may not exist in this run — ignore.
+    }
+
+    globalThis.fetch = vi.fn(async () =>
+      new Response(JSON.stringify({ error: "trial_exhausted" }), {
+        status: 402,
+        headers: { "Content-Type": "application/json" },
+      }),
+    ) as unknown as typeof fetch;
+
+    render(
+      <AiFillButton
+        patchUrl="/api/papers/1"
+        kind="paper"
+        known={{}}
+        missing={["title"]}
+      />,
+    );
+    fireEvent.click(screen.getByTestId("ai-fill-button"));
+
+    await waitFor(() => {
+      const errMock = toast.error as unknown as ReturnType<typeof vi.fn>;
+      expect(errMock).toHaveBeenCalled();
+      const args = errMock.mock.calls[0]!;
+      expect(String(args[0])).toMatch(/\$5 AI trial/);
+      expect(String(args[0])).toMatch(/founders@episteme\.app/);
+    });
+  });
+});
+
 describe("AiFillButton — OpenRouter key error", () => {
   it("shows friendly message + settings link when API returns OPENROUTER_KEY_MISSING", async () => {
     globalThis.fetch = vi.fn(async () =>
