@@ -701,6 +701,7 @@ CREATE TABLE public.signup_waitlist (
     attempted_invite_code text,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    university text,
     CONSTRAINT signup_waitlist_pokemon_check CHECK ((pokemon = ANY (ARRAY['charmander'::text, 'squirtle'::text, 'bulbasaur'::text]))),
     CONSTRAINT signup_waitlist_student_level_check CHECK (((student_level IS NULL) OR (student_level = ANY (ARRAY['Bachelor'::text, 'Master'::text, 'PhD'::text])))),
     CONSTRAINT signup_waitlist_user_type_check CHECK ((user_type = ANY (ARRAY['student'::text, 'researcher'::text, 'industry'::text, 'other'::text])))
@@ -794,6 +795,16 @@ CREATE TABLE public.user_library_recents (
     opened_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT user_library_recents_kind_check CHECK ((kind = ANY (ARRAY['paper'::text, 'note'::text, 'reference'::text, 'paperset'::text])))
 );
+CREATE TABLE public.user_openrouter_keys (
+    user_id text NOT NULL,
+    or_key_hash text NOT NULL,
+    or_key_encrypted text NOT NULL,
+    limit_usd numeric(10,4) DEFAULT 5 NOT NULL,
+    limit_reset text,
+    tier text DEFAULT 'trial'::text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
 CREATE TABLE public.user_preferences (
     user_id text NOT NULL,
     font public.font_pref DEFAULT 'sans'::public.font_pref NOT NULL,
@@ -808,6 +819,7 @@ CREATE TABLE public.user_signup_profiles (
     persona_other text,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    university text,
     CONSTRAINT user_signup_profiles_student_level_check CHECK (((student_level IS NULL) OR (student_level = ANY (ARRAY['Bachelor'::text, 'Master'::text, 'PhD'::text]))))
 );
 CREATE TABLE public.verification (
@@ -953,6 +965,8 @@ ALTER TABLE ONLY public.user_invite_codes
     ADD CONSTRAINT user_invite_codes_pkey PRIMARY KEY (code);
 ALTER TABLE ONLY public.user_library_recents
     ADD CONSTRAINT user_library_recents_pkey PRIMARY KEY (user_id, kind, item_id);
+ALTER TABLE ONLY public.user_openrouter_keys
+    ADD CONSTRAINT user_openrouter_keys_pkey PRIMARY KEY (user_id);
 ALTER TABLE ONLY public."user"
     ADD CONSTRAINT user_pkey PRIMARY KEY (id);
 ALTER TABLE ONLY public.user_preferences
@@ -1174,6 +1188,8 @@ ALTER TABLE ONLY public.user_invite_codes
     ADD CONSTRAINT user_invite_codes_owner_user_id_fk FOREIGN KEY (owner_user_id) REFERENCES public."user"(id) ON DELETE CASCADE;
 ALTER TABLE ONLY public.user_library_recents
     ADD CONSTRAINT user_library_recents_user_id_user_id_fk FOREIGN KEY (user_id) REFERENCES public."user"(id) ON DELETE CASCADE;
+ALTER TABLE ONLY public.user_openrouter_keys
+    ADD CONSTRAINT user_openrouter_keys_user_id_fk FOREIGN KEY (user_id) REFERENCES public."user"(id) ON DELETE CASCADE;
 ALTER TABLE ONLY public.user_preferences
     ADD CONSTRAINT user_preferences_user_id_user_id_fk FOREIGN KEY (user_id) REFERENCES public."user"(id) ON DELETE CASCADE;
 ALTER TABLE ONLY public.user_signup_profiles
