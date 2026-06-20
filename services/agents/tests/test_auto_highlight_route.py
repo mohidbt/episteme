@@ -132,7 +132,10 @@ def test_auto_highlight_selects_storage_url_not_file_path():
     fake.astream = astream
 
     try:
-        with patch("routers.auto_highlight.create_agent", return_value=fake):
+        with (
+            patch("routers.auto_highlight.create_agent", return_value=fake),
+            patch("routers.auto_highlight.object_exists", AsyncMock(return_value=True)),
+        ):
             body = json.dumps({"instruction": "x"}).encode()
             r = client.post(PATH, content=body, headers=_signed_headers("POST", PATH, body))
             assert r.status_code == 200
@@ -184,6 +187,31 @@ def test_paper_not_found():
         body = json.dumps({"instruction": "highlight losses"}).encode()
         r = client.post(PATH, content=body, headers=_signed_headers("POST", PATH, body))
         assert r.status_code == 404
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_source_pdf_missing_returns_404():
+    """GSD-135: DB row exists, but S3 source.pdf object is gone.
+
+    Auto-highlight must short-circuit with 404 detail=source_pdf_missing
+    BEFORE opening the SSE stream / langchain agent (which would crash
+    inside pypdf with `[Errno 2] No such file or directory`).
+    """
+    mock_conn = _mock_conn(paper_exists=True)
+
+    async def override():
+        yield mock_conn
+
+    app.dependency_overrides[deps.db.get_conn] = override
+    try:
+        with patch(
+            "routers.auto_highlight.object_exists", AsyncMock(return_value=False)
+        ):
+            body = json.dumps({"instruction": "highlight losses"}).encode()
+            r = client.post(PATH, content=body, headers=_signed_headers("POST", PATH, body))
+            assert r.status_code == 404, r.text
+            assert r.json() == {"detail": "source_pdf_missing"}
     finally:
         app.dependency_overrides.clear()
 
@@ -273,7 +301,10 @@ def test_happy_path_streams_run_progress_done():
     fake_agent = _make_fake_agent(updates)
 
     try:
-        with patch("routers.auto_highlight.create_agent", return_value=fake_agent):
+        with (
+            patch("routers.auto_highlight.create_agent", return_value=fake_agent),
+            patch("routers.auto_highlight.object_exists", AsyncMock(return_value=True)),
+        ):
             mock_conn.fetchval.return_value = 2
 
             body = json.dumps({"instruction": "highlight losses"}).encode()
@@ -334,7 +365,10 @@ def test_failure_path_marks_run_failed():
     fake.astream = astream
 
     try:
-        with patch("routers.auto_highlight.create_agent", return_value=fake):
+        with (
+            patch("routers.auto_highlight.create_agent", return_value=fake),
+            patch("routers.auto_highlight.object_exists", AsyncMock(return_value=True)),
+        ):
             body = json.dumps({"instruction": "highlight losses"}).encode()
             r = client.post(
                 PATH, content=body, headers=_signed_headers("POST", PATH, body)
@@ -384,7 +418,10 @@ def test_cancelled_run_marks_failed():
         body = type(
             "B", (), {"instruction": "highlight losses", "conversationId": None}
         )()
-        with patch("routers.auto_highlight.create_agent", return_value=fake):
+        with (
+            patch("routers.auto_highlight.create_agent", return_value=fake),
+            patch("routers.auto_highlight.object_exists", AsyncMock(return_value=True)),
+        ):
             resp = await auto_highlight(body, auth, mock_conn)
             cancelled = False
             try:

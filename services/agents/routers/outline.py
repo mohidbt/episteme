@@ -9,6 +9,7 @@ from deps.db import ConnDep
 from lib.openrouter_client import call_model
 from lib.pdf_text import extract_pages
 from lib.models import SectionOut
+from lib.storage import object_exists, paperSourceKey
 
 router = APIRouter(prefix="/agents", tags=["outline"])
 
@@ -44,8 +45,15 @@ async def outline(
     if not paper:
         raise HTTPException(status_code=404, detail="Paper not found")
 
+    # GSD-135: Source PDF may be missing in R2 (ingest dropped or lifecycle
+    # reaped). Pre-check before opening the file so callers get a structured
+    # 404 instead of `[Errno 2] No such file or directory` bubbling up as 500.
+    storage_key = paper["storage_url"] or paperSourceKey(paperId)
+    if not await object_exists(storage_key):
+        raise HTTPException(status_code=404, detail="source_pdf_missing")
+
     # 3. Extract PDF text (first 30 pages) — blocking I/O in thread
-    pages = await anyio.to_thread.run_sync(lambda: extract_pages(paper["storage_url"]))
+    pages = await anyio.to_thread.run_sync(lambda: extract_pages(storage_key))
     sample = "\n\n".join(
         f"[Page {p['page_number']}]\n{p['text']}"
         for p in pages[:30]

@@ -15,6 +15,7 @@ from deps.db import ConnDep
 from lib.auto_highlight_tools import TOOLBELT_SYSTEM_HINT, build_tools
 from lib.chat import CHAT_MODEL, OPENROUTER_BASE
 from lib.conversations import bump_updated_at, insert_message
+from lib.storage import object_exists, paperSourceKey
 
 logger = logging.getLogger(__name__)
 
@@ -76,8 +77,15 @@ async def auto_highlight(body: AutoHighlightBody, auth: InternalAuthDep, conn: C
     if not paper:
         raise HTTPException(status_code=404, detail="Not found")
 
+    # GSD-135: Source PDF may be missing in R2 (ingest dropped or lifecycle
+    # reaped). Pre-check before opening the SSE stream / langchain agent so
+    # callers get a structured 404 instead of `[Errno 2] No such file or
+    # directory` bubbling up as 500 mid-stream.
+    pdf_path = paper["storage_url"] or paperSourceKey(paper_id)
+    if not await object_exists(pdf_path):
+        raise HTTPException(status_code=404, detail="source_pdf_missing")
+
     instruction = body.instruction.strip()
-    pdf_path = paper["storage_url"]
 
     conv_id = await _upsert_auto_highlight_conv(
         conn,

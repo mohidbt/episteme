@@ -97,6 +97,7 @@ def test_outline_generates_via_llm():
         with (
             patch("routers.outline.call_model", return_value=llm_response) as mock_call,
             patch("routers.outline.extract_pages", return_value=fake_pages),
+            patch("routers.outline.object_exists", AsyncMock(return_value=True)),
         ):
             path = f"/agents/outline?paperId={PAPER_ID}"
             r = client.get(path, headers=_signed_headers("GET", path))
@@ -106,6 +107,33 @@ def test_outline_generates_via_llm():
             mock_call.assert_called_once()
             # Verify INSERT was called twice (one per valid section)
             assert mock_conn.fetchrow.call_count == 3  # 1 paper lookup + 2 inserts
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_outline_404_when_source_pdf_missing():
+    """GSD-135: paper row exists but R2 source.pdf is gone.
+
+    Outline must short-circuit with 404 detail=source_pdf_missing instead of
+    crashing inside pypdf with `[Errno 2] No such file or directory`.
+    """
+    mock_conn = AsyncMock()
+    mock_conn.fetch.return_value = []
+    # paper exists in DB, but storage_url object is missing in S3.
+    mock_conn.fetchrow.return_value = {"storage_url": f"{PAPER_ID}/source.pdf"}
+
+    async def override():
+        yield mock_conn
+
+    app.dependency_overrides[deps.db.get_conn] = override
+    try:
+        with patch(
+            "routers.outline.object_exists", AsyncMock(return_value=False)
+        ):
+            path = f"/agents/outline?paperId={PAPER_ID}"
+            r = client.get(path, headers=_signed_headers("GET", path))
+            assert r.status_code == 404, r.text
+            assert r.json() == {"detail": "source_pdf_missing"}
     finally:
         app.dependency_overrides.clear()
 
