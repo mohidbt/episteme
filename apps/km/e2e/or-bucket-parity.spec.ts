@@ -117,4 +117,61 @@ test.describe("OR bucket parity (preview only)", () => {
       });
     }
   });
+
+  // GSD-132: mass-swap audit — every AI surface should emit 402
+  // trial_exhausted when the user's managed bucket is drained. Routes
+  // that lazy-provision get a fresh bucket on first call, then bucket-limit
+  // patch to $0.001 makes the next billed call 402.
+  //
+  // We don't drive the full app UI for each surface (would 10x the spec
+  // budget). We hit each route directly via page.request from the logged-in
+  // session and assert the 402 body shape. Client wiring for each surface
+  // (toast render) is unit-tested at the component level.
+  test("all swapped AI routes emit 402 trial_exhausted on bucket drain", async ({ page }) => {
+    await page.goto("/sign-in");
+    await page.getByLabel(/email/i).fill(TEST_EMAIL);
+    await page.getByLabel(/password/i).fill(TEST_PASSWORD);
+    await page.getByRole("button", { name: /sign in/i }).click();
+    await page.waitForURL(/\/drive|\/papers|\/settings|\/$/, { timeout: 30_000 });
+
+    // Ensure a bucket exists (lazy-provision via one ai-fill call).
+    await page.request.post("/api/ai-fill", {
+      data: { kind: "paper", known: { filename: "warm-up.pdf" }, missing: ["title"] },
+    });
+    const patchRes = await page.request.post("/api/internal/debug/or-bucket", {
+      data: { action: "patch-limit", limit: 0.001 },
+    });
+    expect(patchRes.status()).toBe(200);
+
+    try {
+      // ai/complete — POST {prompt} → 402 once OR bills.
+      const complete = await page.request.post("/api/ai/complete", {
+        data: { prompt: "complete this sentence: the quick brown fox" },
+      });
+      expect(complete.status(), "ai/complete should emit 402").toBe(402);
+      expect(await complete.text()).toContain("trial_exhausted");
+
+      // ai/chat — POST {question, history} → 402.
+      const chat = await page.request.post("/api/ai/chat", {
+        data: { question: "what is 2+2?", history: [] },
+      });
+      expect(chat.status(), "ai/chat should emit 402").toBe(402);
+      expect(await chat.text()).toContain("trial_exhausted");
+
+      // ai-fill — POST → 402 (regression guard for P0; should already work).
+      const aiFill = await page.request.post("/api/ai-fill", {
+        data: {
+          kind: "paper",
+          known: { filename: "402-probe.pdf" },
+          missing: ["title"],
+        },
+      });
+      expect(aiFill.status(), "ai-fill should emit 402").toBe(402);
+      expect(await aiFill.text()).toContain("trial_exhausted");
+    } finally {
+      await page.request.post("/api/internal/debug/or-bucket", {
+        data: { action: "patch-limit", limit: 5 },
+      });
+    }
+  });
 });

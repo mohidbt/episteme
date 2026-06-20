@@ -3,7 +3,11 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { papersets } from "@episteme/db/schema";
 import { getAuthedUserId, MissingInternalSecretError } from "@/lib/internal-auth";
-import { getDecryptedApiKey } from "@episteme/auth/byok";
+import {
+  getOrApiKey,
+  OpenRouterKeyMissing,
+  OpenRouterTrialExhausted,
+} from "@/lib/openrouter-key";
 import { signRequest } from "@/lib/agents/sign-request";
 import { jsonError, requireOwned } from "@/lib/crud";
 import { OPENROUTER_KEY_MISSING } from "@/lib/openrouter-errors";
@@ -97,11 +101,19 @@ export async function POST(req: Request, { params }: Ctx) {
     return jsonError(409, "already_running");
   }
 
+  // GSD-132: HMAC-only route (no anon path). userId from getAuthedUserId is
+  // a real signed-in user; pass directly. 402 trial_exhausted on bucket drain.
   let llmKey: string;
   try {
-    llmKey = await getDecryptedApiKey(userId);
-  } catch {
-    return jsonError(400, OPENROUTER_KEY_MISSING);
+    llmKey = await getOrApiKey(userId);
+  } catch (err) {
+    if (err instanceof OpenRouterTrialExhausted) {
+      return Response.json({ error: "trial_exhausted" }, { status: 402 });
+    }
+    if (err instanceof OpenRouterKeyMissing) {
+      return jsonError(400, OPENROUTER_KEY_MISSING);
+    }
+    throw err;
   }
 
   const newRunning: RunningCell[] = parsedBody.data.cells.map((c) => ({

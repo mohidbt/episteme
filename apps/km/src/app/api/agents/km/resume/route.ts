@@ -1,5 +1,9 @@
 import { eq } from "drizzle-orm";
-import { getDecryptedApiKey } from "@episteme/auth/byok";
+import {
+  getOrApiKey,
+  OpenRouterKeyMissing,
+  OpenRouterTrialExhausted,
+} from "@/lib/openrouter-key";
 import { getSessionInfo } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { agentConfigs } from "@episteme/db/schema";
@@ -13,11 +17,21 @@ export async function POST(req: Request) {
   const session = await getSessionInfo(req);
   if (!session) return Response.json({ error: "unauthorized" }, { status: 401 });
 
+  // GSD-132: BYOK → managed bucket → env. Anonymous sessions skip the
+  // managed lookup (no FK). Pre-stream 402 emit if the resolver itself
+  // throws TrialExhausted; the upstream 402 mapping below covers mid-stream
+  // bucket drain via streamPassthrough.
   let llmKey: string;
   try {
-    llmKey = await getDecryptedApiKey(session.userId);
-  } catch {
-    return Response.json({ error: OPENROUTER_KEY_MISSING }, { status: 400 });
+    llmKey = await getOrApiKey(session.isAnonymous ? null : session.userId);
+  } catch (err) {
+    if (err instanceof OpenRouterTrialExhausted) {
+      return Response.json({ error: "trial_exhausted" }, { status: 402 });
+    }
+    if (err instanceof OpenRouterKeyMissing) {
+      return Response.json({ error: OPENROUTER_KEY_MISSING }, { status: 400 });
+    }
+    throw err;
   }
   const bodyText = await req.text();
 

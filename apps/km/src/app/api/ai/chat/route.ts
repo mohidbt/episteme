@@ -1,4 +1,8 @@
-import { getDecryptedApiKey } from "@episteme/auth/byok";
+import {
+  getOrApiKey,
+  OpenRouterKeyMissing,
+  OpenRouterTrialExhausted,
+} from "@/lib/openrouter-key";
 import { getSessionInfo } from "@/lib/auth";
 import { signRequest } from "@/lib/agents/sign-request";
 import { streamPassthrough } from "@/lib/agents/stream-passthrough";
@@ -16,6 +20,9 @@ export async function POST(req: Request) {
     return Response.json({ error: "payload_too_large" }, { status: 413 });
   }
 
+  // GSD-132: signed-in users resolve through BYOK → managed bucket → env.
+  // Anonymous users retain the rate-limited EPISTEME_SHARED_LLM_KEY lane;
+  // managed buckets have a FK to user_id so anon sessions can't lazy-provision.
   let llmKey: string;
   if (session.isAnonymous) {
     const ip = getClientIp(req);
@@ -34,9 +41,15 @@ export async function POST(req: Request) {
     llmKey = sharedKey;
   } else {
     try {
-      llmKey = await getDecryptedApiKey(session.userId);
-    } catch {
-      return Response.json({ error: OPENROUTER_KEY_MISSING }, { status: 400 });
+      llmKey = await getOrApiKey(session.userId);
+    } catch (err) {
+      if (err instanceof OpenRouterTrialExhausted) {
+        return Response.json({ error: "trial_exhausted" }, { status: 402 });
+      }
+      if (err instanceof OpenRouterKeyMissing) {
+        return Response.json({ error: OPENROUTER_KEY_MISSING }, { status: 400 });
+      }
+      throw err;
     }
   }
 
