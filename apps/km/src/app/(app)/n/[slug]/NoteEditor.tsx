@@ -9,9 +9,6 @@ import {
   type SlashCommandSuggestion,
   type TiptapEditor,
   type CitationMeta,
-  insertCitation,
-  insertWikiLink,
-  invokeAgent,
   hydrateCitations,
 } from "@episteme/editor";
 import { useRouter } from "next/navigation";
@@ -24,6 +21,7 @@ import { computeSlashMenuPlacement } from "@/lib/popover-placement";
 import { AiBubbleMenu } from "@/components/AiBubbleMenu";
 import { LinkBubbleMenu } from "@/components/LinkBubbleMenu";
 import { TableBubbleMenu } from "@/components/TableBubbleMenu";
+import { handleSlashCommand, type SlashCommandPayload } from "./slash-command-handler";
 
 export function NoteEditor({
   id,
@@ -517,37 +515,10 @@ export function NoteEditor({
   const slashCommandSuggestion = useMemo<SlashCommandSuggestion>(
     () => ({
       command: ({ editor, range, props }) => {
-        // Delete the `/` trigger and any typed query characters
-        editor.chain().focus().deleteRange(range).run();
-
-        const p = props as {
-          title: string;
-          citation?: { citekey: string; title: string; authors: string[]; year: string | null };
-          wikiLink?: { title: string; targetKind: "note" | "reference" | "paper"; targetId: string | null };
-          agent?: { skill: string };
-        };
-        if (p.title === "AI") {
-          // Trigger the AI Rephrase portal — increment counter to force re-render
-          setAiTriggerCount((c) => c + 1);
-        } else if (p.title === "Cite" && p.citation) {
-          insertCitation(editor, p.citation);
-        } else if (p.title === "Link" && p.wikiLink) {
-          insertWikiLink(editor, p.wikiLink);
-        } else if (p.title === "Agent" && p.agent) {
-          invokeAgent(editor, p.agent);
-        } else if (p.title === "Table") {
-          editor
-            .chain()
-            .focus()
-            .insertTable({ rows: 3, cols: 3, withHeaderRow: true })
-            .run();
-        } else if (p.title === "Code Block") {
-          editor
-            .chain()
-            .focus()
-            .toggleCodeBlock({ language: "ts" })
-            .run();
-        }
+        handleSlashCommand(
+          { editor, range, props: props as SlashCommandPayload },
+          { onAiTrigger: () => setAiTriggerCount((c) => c + 1) },
+        );
       },
       render: () => {
         let root: Root | null = null;
