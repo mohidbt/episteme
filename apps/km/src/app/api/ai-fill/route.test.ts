@@ -145,4 +145,31 @@ describe("POST /api/ai-fill", () => {
     expect(res.status).toBe(402);
     expect((await res.json()).error).toBe("trial_exhausted");
   });
+
+  it("maps upstream 401 with credit-limit body to 402 trial_exhausted (GSD-136)", async () => {
+    // GSD-136: empirically, OR returns HTTP 401 (NOT 402) when a
+    // provisioning-API-minted key has its `limit` exceeded. The body
+    // contains a "more credits" / "credit limit" quota hint. The classifier
+    // must disambiguate this from a real key-invalid 401.
+    vi.mocked(getSessionInfo).mockResolvedValue({ userId: "u1", isAnonymous: false });
+    vi.mocked(getDecryptedApiKey).mockResolvedValue("sk-managed");
+    fetchMock.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          error: {
+            code: 401,
+            message:
+              "This request requires more credits, or fewer max_tokens. You requested up to 1000 tokens, but can only afford 0.",
+          },
+        }),
+        { status: 401 },
+      ),
+    );
+
+    const res = await POST(
+      makeReq({ kind: "paper", known: {}, missing: ["title"] }),
+    );
+    expect(res.status).toBe(402);
+    expect((await res.json()).error).toBe("trial_exhausted");
+  });
 });

@@ -10,6 +10,7 @@ from langchain_openai import ChatOpenAI
 
 from deps.auth import InternalAuthDep
 from lib.chat import OPENROUTER_BASE, CHAT_MODEL
+from lib.openrouter_client import _maybe_raise_trial_exhausted
 
 logger = logging.getLogger(__name__)
 
@@ -60,9 +61,31 @@ async def complete(body: CompleteBody, auth: InternalAuthDep):
     )
     system = REPHRASE_SYSTEM if body.mode == "rephrase" else GENERATE_SYSTEM
 
+    # GSD-136: prime the OR call by reading the first chunk BEFORE opening
+    # the SSE response. If OR's bucket is exhausted (401 with quota hint, or
+    # 402), this raises OpenRouterTrialExhausted; the global app handler
+    # converts that to HTTP 402 so KM-side stream-passthrough emits the
+    # stable trial_exhausted code. Without this priming, the exception
+    # would fire inside event_stream after headers are already flushed.
+    iterator = _stream_tokens(api_key, system, user_msg).__aiter__()
+    try:
+        first_tok = await iterator.__anext__()
+        primed_value: str | None = first_tok
+    except StopAsyncIteration:
+        primed_value = None
+    except Exception as exc:  # noqa: BLE001
+        status = getattr(exc, "status_code", None) or getattr(
+            getattr(exc, "response", None), "status_code", None
+        )
+        if isinstance(status, int):
+            _maybe_raise_trial_exhausted(status, str(exc))
+        raise
+
     async def event_stream():
         try:
-            async for tok in _stream_tokens(api_key, system, user_msg):
+            if primed_value is not None:
+                yield _sse({"type": "token", "content": primed_value})
+            async for tok in iterator:
                 yield _sse({"type": "token", "content": tok})
         except Exception as e:  # noqa: BLE001
             logger.exception("km_complete upstream failed")

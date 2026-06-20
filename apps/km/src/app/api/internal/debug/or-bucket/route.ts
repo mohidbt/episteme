@@ -180,6 +180,53 @@ export async function POST(req: Request): Promise<Response> {
     return Response.json(result);
   }
 
+  if (body.action === "probe-completion") {
+    // GSD-136: capture the RAW OpenRouter /chat/completions response shape
+    // (status, headers, body) when called with the signed-in user's
+    // managed-bucket runtime key. Run this immediately after a PATCH to a
+    // tiny limit to ground-truth the bucket-exhausted error shape, which
+    // GSD-126 historically assumed was HTTP 402.
+    const row = await loadHashAndCreatedAt(session.userId);
+    if (!row) {
+      return Response.json({ error: "no bucket" }, { status: 404 });
+    }
+    // Look up the runtime key for THIS user by reading from the resolver
+    // (which fetches the encrypted row + decrypts it). We can't use
+    // getOrApiKey here directly because it might fall through to BYOK if
+    // present; instead we go through the bucket store directly.
+    const { loadUserBucket } = await import("@/lib/user-bucket-store");
+    const bucket = await loadUserBucket(session.userId);
+    if (!bucket) {
+      return Response.json({ error: "bucket row vanished" }, { status: 404 });
+    }
+    const resp = await fetch(
+      "https://openrouter.ai/api/v1/chat/completions",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${bucket.runtimeKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "openai/gpt-5.4-nano",
+          messages: [{ role: "user", content: "say 'hi'" }],
+        }),
+      },
+    );
+    const bodyText = await resp.text().catch(() => "<unreadable>");
+    const headerObj: Record<string, string> = {};
+    resp.headers.forEach((v, k) => {
+      headerObj[k] = v;
+    });
+    return Response.json({
+      status: resp.status,
+      statusText: resp.statusText,
+      headers: headerObj,
+      bodyText,
+      hash: row.hash,
+    });
+  }
+
   if (body.action === "patch-limit") {
     if (typeof body.limit !== "number" || body.limit <= 0) {
       return Response.json({ error: "invalid limit" }, { status: 400 });

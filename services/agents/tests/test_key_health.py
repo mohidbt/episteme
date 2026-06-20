@@ -56,6 +56,45 @@ def test_classify_200_returns_none():
     assert kh.classify_provider_error(200, "") is None
 
 
+# GSD-136 — OR returns HTTP 401 (NOT 402) when a Provisioning-API-created
+# key has its `limit` exceeded. The body carries a quota hint.
+
+
+def test_classify_401_with_credit_limit_body_is_exhausted():
+    body = (
+        '{"error":{"code":401,"message":"This request requires more credits, '
+        'or fewer max_tokens. You requested up to 1000 tokens, but can only '
+        'afford 0."}}'
+    )
+    assert kh.classify_provider_error(401, body) == "key_exhausted"
+
+
+def test_classify_401_with_quota_exceeded_body_is_exhausted():
+    assert (
+        kh.classify_provider_error(401, '{"error":{"message":"quota exceeded"}}')
+        == "key_exhausted"
+    )
+
+
+def test_classify_401_with_insufficient_credits_body_is_exhausted():
+    assert (
+        kh.classify_provider_error(
+            401, '{"error":{"message":"Account has insufficient credits"}}'
+        )
+        == "key_exhausted"
+    )
+
+
+def test_classify_401_without_quota_hint_remains_key_invalid():
+    # Real auth failure — no quota hint in body.
+    assert (
+        kh.classify_provider_error(401, '{"error":{"message":"No auth credentials found"}}')
+        == "key_invalid"
+    )
+    assert kh.classify_provider_error(401, "") == "key_invalid"
+    assert kh.classify_provider_error(401, "invalid api key") == "key_invalid"
+
+
 # ---------- record_and_maybe_alert ----------
 
 

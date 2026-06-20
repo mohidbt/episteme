@@ -9,8 +9,9 @@ import {
   MissingInternalSecretError,
 } from "@/lib/internal-auth";
 import {
+  OPENROUTER_KEY_INVALID,
   OPENROUTER_KEY_MISSING,
-  mapOpenRouterStatus,
+  classifyOrError,
 } from "@/lib/openrouter-errors";
 import { getOrApiKey, OpenRouterKeyMissing } from "@/lib/openrouter-key";
 import { recordUsage } from "@/lib/openrouter-usage";
@@ -114,15 +115,16 @@ export async function POST(req: Request): Promise<Response> {
       apiKey: llmKey,
       response: upstream,
     });
-    // GSD-126 P0: 402 means the user's managed bucket (or BYOK quota) is
-    // exhausted. Surface a stable code so the client can render the
-    // upgrade-required state instead of a generic 502.
-    if (upstream.status === 402) {
+    // GSD-136: OR returns HTTP 401 (NOT 402) when a provisioning-API key
+    // has its `limit` exhausted. Clone before reading body — checkOpenRouter
+    // also reads from a clone, so we cannot consume the original.
+    const bodyText = await upstream.clone().text().catch(() => "");
+    const classification = classifyOrError(upstream.status, bodyText);
+    if (classification === "trial_exhausted") {
       return Response.json({ error: "trial_exhausted" }, { status: 402 });
     }
-    const keyErr = mapOpenRouterStatus(upstream.status);
-    if (keyErr) {
-      return Response.json({ error: keyErr }, { status: 401 });
+    if (classification === "key_invalid") {
+      return Response.json({ error: OPENROUTER_KEY_INVALID }, { status: 401 });
     }
     return Response.json({ error: "upstream_error" }, { status: 502 });
   }

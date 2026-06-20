@@ -12,7 +12,7 @@ from langchain_openai import ChatOpenAI
 from deps.auth import InternalAuthDep
 from deps.db import ConnDep
 from lib.chat import OPENROUTER_BASE, CHAT_MODEL
-from lib.openrouter_client import embed_texts
+from lib.openrouter_client import embed_texts, _maybe_raise_trial_exhausted
 
 logger = logging.getLogger(__name__)
 
@@ -125,10 +125,29 @@ async def chat(body: KmChatBody, auth: InternalAuthDep, conn: ConnDep):
     messages.extend(body.history[-10:])
     messages.append({"role": "user", "content": body.question})
 
+    # GSD-136: prime the first chat token BEFORE the StreamingResponse so a
+    # bucket-exhausted OR response (401 quota / 402) raises
+    # OpenRouterTrialExhausted up to the global app handler (→ HTTP 402)
+    # instead of getting buried as an in-band `error` SSE event.
+    iterator = _stream_tokens(api_key, messages).__aiter__()
+    try:
+        first_tok: str | None = await iterator.__anext__()
+    except StopAsyncIteration:
+        first_tok = None
+    except Exception as exc:  # noqa: BLE001
+        status = getattr(exc, "status_code", None) or getattr(
+            getattr(exc, "response", None), "status_code", None
+        )
+        if isinstance(status, int):
+            _maybe_raise_trial_exhausted(status, str(exc))
+        raise
+
     async def event_stream():
         yield _sse({"type": "sources", "notes": sources_payload})
         try:
-            async for tok in _stream_tokens(api_key, messages):
+            if first_tok is not None:
+                yield _sse({"type": "token", "content": first_tok})
+            async for tok in iterator:
                 yield _sse({"type": "token", "content": tok})
         except Exception as e:  # noqa: BLE001
             logger.exception("km_chat upstream failed")

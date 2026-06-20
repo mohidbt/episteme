@@ -2,9 +2,11 @@ import logging
 import os
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from deps import db as db_module
 from deps.db import init_pool, close_pool
+from lib.openrouter_client import OpenRouterTrialExhausted
 from routers import (
     health,
     embeddings,
@@ -94,6 +96,22 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
+
+
+@app.exception_handler(OpenRouterTrialExhausted)
+async def _trial_exhausted_handler(_req: Request, _exc: OpenRouterTrialExhausted):
+    """GSD-136 — global mapping for OR limit-exhausted (status 401 with
+    quota hint, or status 402). Returns HTTP 402 so the KM-side
+    stream-passthrough recognizes the bucket-drained case and emits the
+    stable `trial_exhausted` JSON code to the client.
+
+    Note: this only fires when the exception escapes BEFORE the first SSE
+    chunk is written. For mid-stream drains (rare — the bucket check
+    happens upfront per request), the SSE generator still yields an
+    `error` event and closes; KM's transcript renders that as a generic
+    error toast. Improving mid-stream handling is follow-up work.
+    """
+    return JSONResponse({"error": "trial_exhausted"}, status_code=402)
 
 
 @app.get("/health", tags=["health"])

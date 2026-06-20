@@ -10,6 +10,24 @@ OPENROUTER_BASE = "https://openrouter.ai/api/v1"
 CHAT_MODEL = "openai/gpt-5.4-nano"
 
 
+class OpenRouterTrialExhausted(Exception):
+    """Raised when an OR call returns 401/402/403 with a quota hint.
+
+    GSD-136: OR returns HTTP 401 (NOT 402) when a Provisioning-API key has
+    its `limit` exhausted. Routers must catch this BEFORE the first SSE
+    yield and convert to `HTTPException(status_code=402)` so the KM-side
+    stream-passthrough maps it to the stable `trial_exhausted` JSON code.
+    """
+
+
+def _maybe_raise_trial_exhausted(status_code: int, body_text: str) -> None:
+    # Import locally so this module stays import-cycle-free.
+    from lib.key_health import classify_provider_error  # noqa: PLC0415
+
+    if classify_provider_error(status_code, body_text) == "key_exhausted":
+        raise OpenRouterTrialExhausted()
+
+
 def _fallback_env_var(api_key: str) -> str | None:
     """Return the env var name iff `api_key` came from one of the known
     OpenRouter fallback envs. Used to scope key-exhaustion alerts to global
@@ -70,7 +88,13 @@ async def call_model(
             getattr(exc, "response", None), "status_code", None
         )
         if isinstance(status, int):
-            await _notify_if_fallback(api_key, status, str(exc))
+            body_text = str(exc)
+            await _notify_if_fallback(api_key, status, body_text)
+            # GSD-136: classify upstream OR errors so callers can render the
+            # trial-exhausted UX. str(exc) carries the JSON body for
+            # langchain/openai exceptions, which is what the classifier needs
+            # to match the quota-hint strings.
+            _maybe_raise_trial_exhausted(status, body_text)
         raise
     return response.content
 
@@ -88,6 +112,10 @@ async def embed_texts(api_key: str, inputs: list[str]) -> list[list[float]]:
         )
         if r.status_code >= 400:
             await _notify_if_fallback(api_key, r.status_code, r.text)
+            # GSD-136: surface trial-exhausted before httpx raises so the
+            # caller's HTTPException(402) wrapper has a typed exception to
+            # bind on (rather than an opaque HTTPStatusError).
+            _maybe_raise_trial_exhausted(r.status_code, r.text)
         r.raise_for_status()
         data = r.json()["data"]
         return [d["embedding"] for d in data]

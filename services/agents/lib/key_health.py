@@ -33,17 +33,27 @@ _QUOTA_HINTS = (
     "out of credit",
     "balance",
     "quota exceeded",
+    "credit limit",
+    "more credits",
+    "fewer max_tokens",
 )
 
 
 def classify_provider_error(status_code: int, body_text: str) -> Reason | None:
-    """Map an HTTP status + response body to an alert reason, or None."""
+    """Map an HTTP status + response body to an alert reason, or None.
+
+    GSD-136: OR returns HTTP 401 (NOT 402) when a Provisioning-API key has
+    its `limit` exhausted. The body carries a "more credits" / "credit
+    limit" quota hint. We disambiguate by body content: hint present →
+    key_exhausted, hint absent → key_invalid (real auth failure).
+    """
     body = (body_text or "").lower()
+    has_quota_hint = any(h in body for h in _QUOTA_HINTS)
     if status_code == 401:
-        return "key_invalid"
+        return "key_exhausted" if has_quota_hint else "key_invalid"
     if status_code == 402:
         return "key_exhausted"
-    if status_code == 403 and any(h in body for h in _QUOTA_HINTS):
+    if status_code == 403 and has_quota_hint:
         return "key_exhausted"
     if status_code == 429:
         return "key_rate_limited"
