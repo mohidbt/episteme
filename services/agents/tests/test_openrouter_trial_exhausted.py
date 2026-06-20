@@ -66,6 +66,10 @@ async def test_embed_texts_raises_trial_exhausted_on_401_quota(monkeypatch):
     when OR's embeddings endpoint returns 401-with-quota-hint, so the caller
     can map to HTTP 402."""
 
+    # Defensive: other test modules set INHALE_STUB_EMBEDDINGS=1 at import
+    # time which would short-circuit embed_texts before it ever hits httpx.
+    monkeypatch.delenv("INHALE_STUB_EMBEDDINGS", raising=False)
+
     body = (
         '{"error":{"code":401,"message":"This request requires more credits"}}'
     )
@@ -93,6 +97,8 @@ async def test_embed_texts_raises_trial_exhausted_on_401_quota(monkeypatch):
 async def test_embed_texts_passes_through_real_401(monkeypatch):
     """A real auth failure (no quota hint) must NOT raise TrialExhausted;
     httpx's HTTPStatusError surfaces instead so the key-invalid path runs."""
+
+    monkeypatch.delenv("INHALE_STUB_EMBEDDINGS", raising=False)
 
     body = '{"error":{"message":"No auth credentials"}}'
 

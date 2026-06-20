@@ -10,7 +10,10 @@ from langchain_openai import ChatOpenAI
 
 from deps.auth import InternalAuthDep
 from lib.chat import OPENROUTER_BASE, CHAT_MODEL
-from lib.openrouter_client import _maybe_raise_trial_exhausted
+from lib.openrouter_client import (
+    OpenRouterTrialExhausted,
+    _maybe_raise_trial_exhausted,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -67,22 +70,33 @@ async def complete(body: CompleteBody, auth: InternalAuthDep):
     # converts that to HTTP 402 so KM-side stream-passthrough emits the
     # stable trial_exhausted code. Without this priming, the exception
     # would fire inside event_stream after headers are already flushed.
+    #
+    # IMPORTANT: only the trial-exhausted exception escapes pre-stream;
+    # every other failure (network blip, provider 5xx, malformed body) is
+    # deferred into the SSE error path so the existing contract
+    # (test_complete_emits_error_event_on_upstream_failure) holds.
     iterator = _stream_tokens(api_key, system, user_msg).__aiter__()
+    primed_value: str | None = None
+    primed_exc: BaseException | None = None
     try:
-        first_tok = await iterator.__anext__()
-        primed_value: str | None = first_tok
+        primed_value = await iterator.__anext__()
     except StopAsyncIteration:
         primed_value = None
+    except OpenRouterTrialExhausted:
+        raise
     except Exception as exc:  # noqa: BLE001
         status = getattr(exc, "status_code", None) or getattr(
             getattr(exc, "response", None), "status_code", None
         )
         if isinstance(status, int):
             _maybe_raise_trial_exhausted(status, str(exc))
-        raise
+        # Not trial-exhausted — keep legacy SSE error contract.
+        primed_exc = exc
 
     async def event_stream():
         try:
+            if primed_exc is not None:
+                raise primed_exc
             if primed_value is not None:
                 yield _sse({"type": "token", "content": primed_value})
             async for tok in iterator:

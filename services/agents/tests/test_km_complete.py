@@ -120,3 +120,25 @@ def test_complete_emits_error_event_on_upstream_failure():
         assert len(error_events) == 1
         assert "upstream blew up" in error_events[0]["message"]
         assert events[-1] == ("done", None)
+
+
+def test_complete_returns_402_when_or_trial_exhausted():
+    """GSD-136: when OR drains the bucket on the first chunk, the sidecar
+    must respond with HTTP 402 trial_exhausted (via the global handler),
+    NOT a 200 SSE stream containing an in-band error event. This is what
+    the KM-side stream-passthrough relies on to surface the trial UX."""
+    from lib.openrouter_client import OpenRouterTrialExhausted
+
+    async def trial_drained(api_key, system, user):
+        raise OpenRouterTrialExhausted()
+        yield  # pragma: no cover
+
+    with patch("routers.km_complete._stream_tokens", trial_drained):
+        body = json.dumps({"prompt": "hi"}).encode()
+        r = client.post(
+            "/agents/km/complete",
+            content=body,
+            headers=_signed_headers("POST", "/agents/km/complete", body),
+        )
+        assert r.status_code == 402
+        assert r.json() == {"error": "trial_exhausted"}

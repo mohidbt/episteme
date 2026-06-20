@@ -218,3 +218,80 @@ def test_km_chat_unauthenticated():
         assert r.status_code == 401
     finally:
         app.dependency_overrides.clear()
+
+
+def test_km_chat_returns_402_when_or_trial_exhausted():
+    """GSD-136: when OR drains on the first chat token, sidecar must return
+    HTTP 402 trial_exhausted (via global handler) instead of a 200 SSE
+    stream with an in-band error event. Otherwise KM stream-passthrough
+    sees `upstream.ok === true` and the GSD-126 trial UX never fires."""
+    from lib.openrouter_client import OpenRouterTrialExhausted
+
+    mock_conn = AsyncMock()
+    mock_conn.fetch.return_value = [
+        {
+            "note_id": NOTE_A,
+            "content": "Some content",
+            "score": 0.9,
+            "title": "Note",
+            "slug": "note",
+        },
+    ]
+    _override_conn(mock_conn)
+
+    async def trial_drained(api_key, messages):
+        raise OpenRouterTrialExhausted()
+        yield  # pragma: no cover
+
+    try:
+        with patch("routers.km_chat._stream_tokens", trial_drained):
+            body = json.dumps({"question": "anything?"}).encode()
+            r = client.post(
+                "/agents/km/chat",
+                content=body,
+                headers=_signed_headers("POST", "/agents/km/chat", body),
+            )
+            assert r.status_code == 402
+            assert r.json() == {"error": "trial_exhausted"}
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_km_chat_emits_error_event_on_non_quota_failure():
+    """Regression guard for the codex review feedback: a non-quota model
+    failure (network/5xx/runtime) must STILL be emitted as an in-band
+    `error` SSE event with HTTP 200 — the existing client/test contract."""
+    mock_conn = AsyncMock()
+    mock_conn.fetch.return_value = [
+        {
+            "note_id": NOTE_A,
+            "content": "Some content",
+            "score": 0.9,
+            "title": "Note",
+            "slug": "note",
+        },
+    ]
+    _override_conn(mock_conn)
+
+    async def boom(api_key, messages):
+        raise RuntimeError("upstream blew up")
+        yield  # pragma: no cover
+
+    try:
+        with patch("routers.km_chat._stream_tokens", boom):
+            body = json.dumps({"question": "anything?"}).encode()
+            r = client.post(
+                "/agents/km/chat",
+                content=body,
+                headers=_signed_headers("POST", "/agents/km/chat", body),
+            )
+            assert r.status_code == 200
+            events = _parse_sse_events(r.text)
+            error_events = [
+                e[1] for e in events if e[0] == "data" and e[1].get("type") == "error"
+            ]
+            assert len(error_events) == 1
+            assert "upstream blew up" in error_events[0]["message"]
+            assert events[-1] == ("done", None)
+    finally:
+        app.dependency_overrides.clear()

@@ -12,7 +12,11 @@ from langchain_openai import ChatOpenAI
 from deps.auth import InternalAuthDep
 from deps.db import ConnDep
 from lib.chat import OPENROUTER_BASE, CHAT_MODEL
-from lib.openrouter_client import embed_texts, _maybe_raise_trial_exhausted
+from lib.openrouter_client import (
+    OpenRouterTrialExhausted,
+    _maybe_raise_trial_exhausted,
+    embed_texts,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -129,22 +133,33 @@ async def chat(body: KmChatBody, auth: InternalAuthDep, conn: ConnDep):
     # bucket-exhausted OR response (401 quota / 402) raises
     # OpenRouterTrialExhausted up to the global app handler (→ HTTP 402)
     # instead of getting buried as an in-band `error` SSE event.
+    #
+    # IMPORTANT: only the trial-exhausted exception escapes pre-stream;
+    # every other failure stays in the legacy SSE error path so existing
+    # client behaviour (sources event followed by error event) is intact.
     iterator = _stream_tokens(api_key, messages).__aiter__()
+    first_tok: str | None = None
+    primed_exc: BaseException | None = None
     try:
-        first_tok: str | None = await iterator.__anext__()
+        first_tok = await iterator.__anext__()
     except StopAsyncIteration:
         first_tok = None
+    except OpenRouterTrialExhausted:
+        raise
     except Exception as exc:  # noqa: BLE001
         status = getattr(exc, "status_code", None) or getattr(
             getattr(exc, "response", None), "status_code", None
         )
         if isinstance(status, int):
             _maybe_raise_trial_exhausted(status, str(exc))
-        raise
+        # Non-quota failure — keep legacy SSE error contract.
+        primed_exc = exc
 
     async def event_stream():
         yield _sse({"type": "sources", "notes": sources_payload})
         try:
+            if primed_exc is not None:
+                raise primed_exc
             if first_tok is not None:
                 yield _sse({"type": "token", "content": first_tok})
             async for tok in iterator:
