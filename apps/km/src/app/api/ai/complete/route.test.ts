@@ -17,7 +17,18 @@ vi.mock("@/lib/openrouter-key", () => ({
   },
 }));
 
+vi.mock("@/lib/guest-cap", () => ({
+  assertGuestNotExhausted: vi.fn(),
+  GuestTrialExhausted: class GuestTrialExhausted extends Error {
+    constructor() {
+      super("GuestTrialExhausted");
+      this.name = "GuestTrialExhausted";
+    }
+  },
+}));
+
 import { getOrApiKey, OpenRouterTrialExhausted } from "@/lib/openrouter-key";
+import { assertGuestNotExhausted, GuestTrialExhausted } from "@/lib/guest-cap";
 import { POST } from "./route";
 import { __resetRateLimitForTests } from "@/lib/ai-rate-limit";
 import {
@@ -49,6 +60,7 @@ beforeEach(() => {
   process.env.INHALE_INTERNAL_SECRET = "test-secret-abc";
   process.env.AGENTS_URL = "http://test-agents:8000";
   vi.mocked(getOrApiKey).mockResolvedValue("sk-test-key");
+  vi.mocked(assertGuestNotExhausted).mockResolvedValue(undefined);
   __resetRateLimitForTests();
 });
 
@@ -265,6 +277,29 @@ describe("POST /api/ai/complete", () => {
       expect(j.error).toBe("rate_limited");
       expect(typeof j.retryAfter).toBe("number");
       expect(j.retryAfter).toBeGreaterThan(0);
+    });
+
+    // GSD-130: server-enforced $1 cap on guest spend. assertGuestNotExhausted
+    // throws → route returns 402 trial_exhausted (same envelope the signed-in
+    // path uses) so the existing toast/CTA plumbing fires.
+    it("402 trial_exhausted when guest cap reached (assertGuestNotExhausted throws)", async () => {
+      process.env.EPISTEME_SHARED_LLM_KEY = "shared-anon-key";
+      vi.mocked(assertGuestNotExhausted).mockRejectedValue(
+        new GuestTrialExhausted(),
+      );
+      const fetchMock = vi.fn();
+      global.fetch = fetchMock as unknown as typeof fetch;
+      const r = await POST(
+        req("/api/ai/complete", {
+          method: "POST",
+          cookie: anon.cookie,
+          body: JSON.stringify({ prompt: "hi" }),
+        }),
+      );
+      expect(r.status).toBe(402);
+      expect(await r.json()).toEqual({ error: "trial_exhausted" });
+      // Critical: no upstream call when cap is hit.
+      expect(fetchMock).not.toHaveBeenCalled();
     });
 
     it("masks upstream errors so leaked secrets do not reach the client", async () => {

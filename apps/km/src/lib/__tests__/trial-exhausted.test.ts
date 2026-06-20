@@ -23,6 +23,12 @@ vi.mock("sonner", () => ({
   },
 }));
 
+import {
+  TRIAL_EXHAUSTED_GUEST_TOAST_COPY,
+  TRIAL_EXHAUSTED_GUEST_CTA_LABEL,
+  TRIAL_EXHAUSTED_GUEST_CTA_HREF,
+} from "../trial-exhausted";
+
 // sessionStorage is not provided by vitest's node env. Install a minimal
 // shim before each test so the dedup window is testable without jsdom.
 function installSessionStorage() {
@@ -175,6 +181,37 @@ describe("surfaceTrialExhaustedToast", () => {
     expect(raw).not.toBeNull();
     const parsed = Number(raw);
     expect(Number.isFinite(parsed)).toBe(true);
+  });
+
+  // GSD-130: guest-variant branch. Different copy + a Sign-up CTA so the
+  // exhausted guest has an obvious next step (vs. the signed-in copy
+  // which points at email-the-founders).
+  describe("guest variant (GSD-130)", () => {
+    it("fires guest copy + a Sign up CTA when called with 'guest'", () => {
+      surfaceTrialExhaustedToast("guest");
+      expect(toast.error).toHaveBeenCalledTimes(1);
+      const [copy, opts] = vi.mocked(toast.error).mock.calls[0] as [
+        string,
+        { action?: { label: string; onClick: () => void } } | undefined,
+      ];
+      expect(copy).toBe(TRIAL_EXHAUSTED_GUEST_TOAST_COPY);
+      expect(opts?.action?.label).toBe(TRIAL_EXHAUSTED_GUEST_CTA_LABEL);
+      expect(typeof opts?.action?.onClick).toBe("function");
+    });
+
+    it("default (no arg) keeps the signed-in copy with no CTA", () => {
+      surfaceTrialExhaustedToast();
+      const [copy, opts] = vi.mocked(toast.error).mock.calls[0] as [
+        string,
+        { action?: unknown } | undefined,
+      ];
+      expect(copy).toBe(TRIAL_EXHAUSTED_TOAST_COPY);
+      expect(opts?.action).toBeUndefined();
+    });
+
+    it("guest CTA href points to /sign-up", () => {
+      expect(TRIAL_EXHAUSTED_GUEST_CTA_HREF).toBe("/sign-up");
+    });
   });
 
   it("is a no-op (and does not throw) when sessionStorage is unavailable", () => {
