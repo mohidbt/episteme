@@ -1,6 +1,10 @@
 import { NextRequest } from "next/server";
 import { auth } from "@episteme/auth/server";
-import { getDecryptedApiKey } from "@episteme/auth/byok";
+import {
+  getOrApiKey,
+  OpenRouterKeyMissing,
+  OpenRouterTrialExhausted,
+} from "@/lib/openrouter-key";
 import { papers } from "@episteme/db/schema";
 import { jsonError, requireOwned } from "@/lib/crud";
 import { signRequest } from "@/lib/agents/sign-request";
@@ -18,9 +22,25 @@ export async function GET(request: NextRequest, { params }: Ctx) {
   const owned = await requireOwned<PaperRow>(papers, id, session.user.id);
   if (!owned.ok) return jsonError(owned.status, owned.status === 404 ? "not_found" : "forbidden");
 
+  // GSD-132: BYOK → managed bucket → env. Pre-fetch 402 emit if the
+  // resolver itself throws TrialExhausted; the upstream-402 path below
+  // remains so the agents service can also surface bucket exhaustion
+  // mid-call (parity with P0).
+  const isAnon = Boolean(
+    (session.user as { isAnonymous?: boolean }).isAnonymous,
+  );
   let llmKey: string;
-  try { llmKey = await getDecryptedApiKey(session.user.id); }
-  catch { return jsonError(400, "Add an OpenRouter key in Settings"); }
+  try {
+    llmKey = await getOrApiKey(isAnon ? null : session.user.id);
+  } catch (err) {
+    if (err instanceof OpenRouterTrialExhausted) {
+      return Response.json({ error: "trial_exhausted" }, { status: 402 });
+    }
+    if (err instanceof OpenRouterKeyMissing) {
+      return jsonError(400, "Add an OpenRouter key in Settings");
+    }
+    throw err;
+  }
 
   const path = `/agents/outline?paperId=${id}`;
   const { headers } = signRequest({

@@ -3,7 +3,7 @@ import { auth } from "@episteme/auth/server";
 import { db } from "@/lib/db";
 import { aiHighlightRuns, papers } from "@episteme/db/schema";
 import { and, eq } from "drizzle-orm";
-import { getDecryptedApiKey } from "@episteme/auth/byok";
+import { getOrApiKey } from "@/lib/openrouter-key";
 import { jsonError, requireOwned } from "@/lib/crud";
 import { signRequest } from "@/lib/agents/sign-request";
 
@@ -40,13 +40,17 @@ export async function POST(request: NextRequest, { params }: Ctx) {
     .limit(1);
   if (!run) return jsonError(404, "not_found");
 
+  // GSD-132: swap to managed-bucket resolver for audit consistency. Rebuild
+  // doesn't actually hit the LLM — the signed-request envelope just needs a
+  // key slot — so we keep the legacy "swallow on failure, send empty key"
+  // semantics. Any thrown error (Missing or TrialExhausted) → "".
+  const isAnon = Boolean(
+    (session.user as { isAnonymous?: boolean }).isAnonymous,
+  );
   let llmKey: string;
   try {
-    llmKey = await getDecryptedApiKey(session.user.id);
+    llmKey = await getOrApiKey(isAnon ? null : session.user.id);
   } catch {
-    // Rebuild doesn't hit the LLM, but the signed-request envelope requires a
-    // key slot. Empty string keeps the signature valid and the Python side
-    // never reads it for this route.
     llmKey = "";
   }
 
