@@ -38,6 +38,7 @@ export const OR_QUOTA_HINTS = [
   "balance",
   "quota exceeded",
   "credit limit",
+  "key limit",
   "more credits",
   "fewer max_tokens",
 ] as const;
