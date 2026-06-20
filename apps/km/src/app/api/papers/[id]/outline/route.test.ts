@@ -3,8 +3,20 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 vi.mock("@episteme/auth/server", () => ({
   auth: { api: { getSession: vi.fn() } },
 }));
-vi.mock("@episteme/auth/byok", () => ({
-  getDecryptedApiKey: vi.fn(),
+vi.mock("@/lib/openrouter-key", () => ({
+  getOrApiKey: vi.fn(),
+  OpenRouterKeyMissing: class OpenRouterKeyMissing extends Error {
+    constructor() {
+      super("OpenRouterKeyMissing");
+      this.name = "OpenRouterKeyMissing";
+    }
+  },
+  OpenRouterTrialExhausted: class OpenRouterTrialExhausted extends Error {
+    constructor() {
+      super("OpenRouterTrialExhausted");
+      this.name = "OpenRouterTrialExhausted";
+    }
+  },
 }));
 vi.mock("@/lib/db", () => ({
   db: { select: vi.fn() },
@@ -15,6 +27,7 @@ vi.mock("@/lib/agents/sign-request", () => ({
 
 import { auth } from "@episteme/auth/server";
 import { db } from "@/lib/db";
+import { getOrApiKey, OpenRouterTrialExhausted } from "@/lib/openrouter-key";
 import { GET } from "./route";
 
 const PAPER_ID = "00000000-0000-0000-0000-000000000001";
@@ -38,5 +51,21 @@ describe("GET /api/papers/[id]/outline", () => {
     } as never);
     const res = await GET(buildReq(), routeParams);
     expect(res.status).toBe(404);
+  });
+
+  // GSD-132: bucket exhausted → 402 trial_exhausted before upstream fetch.
+  it("402 trial_exhausted when getOrApiKey throws OpenRouterTrialExhausted", async () => {
+    vi.mocked(auth.api.getSession).mockResolvedValue({ user: { id: "u1" } } as never);
+    vi.mocked(db.select).mockReturnValueOnce({
+      from: () => ({
+        where: () => ({
+          limit: async () => [{ id: PAPER_ID, userId: "u1" }],
+        }),
+      }),
+    } as never);
+    vi.mocked(getOrApiKey).mockRejectedValue(new OpenRouterTrialExhausted());
+    const res = await GET(buildReq(), routeParams);
+    expect(res.status).toBe(402);
+    expect(await res.json()).toEqual({ error: "trial_exhausted" });
   });
 });

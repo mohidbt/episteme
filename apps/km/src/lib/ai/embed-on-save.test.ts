@@ -1,10 +1,22 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@episteme/auth/byok", () => ({
-  getDecryptedApiKey: vi.fn(),
+vi.mock("@/lib/openrouter-key", () => ({
+  getOrApiKey: vi.fn(),
+  OpenRouterKeyMissing: class OpenRouterKeyMissing extends Error {
+    constructor() {
+      super("OpenRouterKeyMissing");
+      this.name = "OpenRouterKeyMissing";
+    }
+  },
+  OpenRouterTrialExhausted: class OpenRouterTrialExhausted extends Error {
+    constructor() {
+      super("OpenRouterTrialExhausted");
+      this.name = "OpenRouterTrialExhausted";
+    }
+  },
 }));
 
-import { getDecryptedApiKey } from "@episteme/auth/byok";
+import { getOrApiKey, OpenRouterTrialExhausted } from "@/lib/openrouter-key";
 import { embedOnSave } from "./embed-on-save";
 
 const originalFetch = global.fetch;
@@ -14,7 +26,7 @@ const originalSecret = process.env.INHALE_INTERNAL_SECRET;
 beforeEach(() => {
   process.env.INHALE_INTERNAL_SECRET = "test-secret-abc";
   process.env.AGENTS_URL = "http://test-agents:8000";
-  vi.mocked(getDecryptedApiKey).mockResolvedValue("sk-test-key");
+  vi.mocked(getOrApiKey).mockResolvedValue("sk-test-key");
 });
 
 afterEach(() => {
@@ -62,11 +74,28 @@ describe("embedOnSave", () => {
   });
 
   it("swallows missing BYOK key — no throw, no fetch", async () => {
-    vi.mocked(getDecryptedApiKey).mockRejectedValueOnce(new Error("no key"));
+    vi.mocked(getOrApiKey).mockRejectedValueOnce(new Error("no key"));
     const fetchMock = vi.fn();
     global.fetch = fetchMock as unknown as typeof fetch;
 
     await expect(embedOnSave("note-1", "hello", "user-1")).resolves.toBeUndefined();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  // GSD-132: bucket exhausted → graceful skip. Save flow is fire-and-forget;
+  // embedding is best-effort and must not throw upward (would crash the note
+  // save path). User still saves the note; embeddings just lag this turn.
+  //
+  // Asserts the route consults the new managed-bucket resolver (getOrApiKey),
+  // not the legacy getDecryptedApiKey. Distinguishes from a generic throw by
+  // checking the resolver was invoked exactly once with the userId.
+  it("swallows OpenRouterTrialExhausted — calls getOrApiKey, no fetch", async () => {
+    vi.mocked(getOrApiKey).mockRejectedValueOnce(new OpenRouterTrialExhausted());
+    const fetchMock = vi.fn();
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    await expect(embedOnSave("note-1", "hello", "user-1")).resolves.toBeUndefined();
+    expect(getOrApiKey).toHaveBeenCalledWith("user-1");
     expect(fetchMock).not.toHaveBeenCalled();
   });
 

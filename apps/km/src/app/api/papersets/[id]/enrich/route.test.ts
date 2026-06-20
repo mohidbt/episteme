@@ -1,11 +1,23 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 
-vi.mock("@episteme/auth/byok", () => ({
-  getDecryptedApiKey: vi.fn(),
+vi.mock("@/lib/openrouter-key", () => ({
+  getOrApiKey: vi.fn(),
+  OpenRouterKeyMissing: class OpenRouterKeyMissing extends Error {
+    constructor() {
+      super("OpenRouterKeyMissing");
+      this.name = "OpenRouterKeyMissing";
+    }
+  },
+  OpenRouterTrialExhausted: class OpenRouterTrialExhausted extends Error {
+    constructor() {
+      super("OpenRouterTrialExhausted");
+      this.name = "OpenRouterTrialExhausted";
+    }
+  },
 }));
 
-import { getDecryptedApiKey } from "@episteme/auth/byok";
+import { getOrApiKey, OpenRouterTrialExhausted } from "@/lib/openrouter-key";
 import { db } from "@/lib/db";
 import { papers, papersets, libraries } from "@episteme/db/schema";
 import { POST } from "./route";
@@ -41,7 +53,7 @@ afterAll(async () => {
 beforeEach(() => {
   process.env.INHALE_INTERNAL_SECRET = "test-secret-abc";
   process.env.AGENTS_URL = "http://test-agents:8000";
-  vi.mocked(getDecryptedApiKey).mockResolvedValue("sk-test-key");
+  vi.mocked(getOrApiKey).mockResolvedValue("sk-test-key");
 });
 
 afterEach(() => {
@@ -200,7 +212,8 @@ describe("POST /api/papersets/:id/enrich", () => {
     const id = await seedPaperset();
     const paper = await seedPaper();
     await addRow(id, paper);
-    vi.mocked(getDecryptedApiKey).mockRejectedValueOnce(new Error("no key"));
+    const { OpenRouterKeyMissing } = await import("@/lib/openrouter-key");
+    vi.mocked(getOrApiKey).mockRejectedValueOnce(new OpenRouterKeyMissing());
     const res = await POST(
       req(`/api/papersets/${id}/enrich`, {
         method: "POST",
@@ -211,6 +224,24 @@ describe("POST /api/papersets/:id/enrich", () => {
     );
     expect(res.status).toBe(400);
     expect((await res.json()).error).toBe("OPENROUTER_KEY_MISSING");
+  });
+
+  // GSD-132: trial-exhausted bucket → 402 trial_exhausted.
+  it("402 trial_exhausted when getOrApiKey throws OpenRouterTrialExhausted", async () => {
+    const id = await seedPaperset();
+    const paper = await seedPaper();
+    await addRow(id, paper);
+    vi.mocked(getOrApiKey).mockRejectedValueOnce(new OpenRouterTrialExhausted());
+    const res = await POST(
+      req(`/api/papersets/${id}/enrich`, {
+        method: "POST",
+        cookie: u.cookie,
+        body: JSON.stringify({ cells: [{ row_idx: 0, col_name: "x" }] }),
+      }),
+      params({ id }),
+    );
+    expect(res.status).toBe(402);
+    expect((await res.json()).error).toBe("trial_exhausted");
   });
 
   it("sets running_cells, calls upstream with signed request, proxies SSE chunks", async () => {

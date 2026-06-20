@@ -1,11 +1,23 @@
 // @vitest-environment node
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@episteme/auth/byok", () => ({
-  getDecryptedApiKey: vi.fn(),
+vi.mock("@/lib/openrouter-key", () => ({
+  getOrApiKey: vi.fn(),
+  OpenRouterKeyMissing: class OpenRouterKeyMissing extends Error {
+    constructor() {
+      super("OpenRouterKeyMissing");
+      this.name = "OpenRouterKeyMissing";
+    }
+  },
+  OpenRouterTrialExhausted: class OpenRouterTrialExhausted extends Error {
+    constructor() {
+      super("OpenRouterTrialExhausted");
+      this.name = "OpenRouterTrialExhausted";
+    }
+  },
 }));
 
-import { getDecryptedApiKey } from "@episteme/auth/byok";
+import { getOrApiKey, OpenRouterTrialExhausted } from "@/lib/openrouter-key";
 import { POST } from "./route";
 import { __resetRateLimitForTests } from "@/lib/ai-rate-limit";
 import {
@@ -36,7 +48,7 @@ afterAll(async () => {
 beforeEach(() => {
   process.env.INHALE_INTERNAL_SECRET = "test-secret-abc";
   process.env.AGENTS_URL = "http://test-agents:8000";
-  vi.mocked(getDecryptedApiKey).mockResolvedValue("sk-test-key");
+  vi.mocked(getOrApiKey).mockResolvedValue("sk-test-key");
   __resetRateLimitForTests();
 });
 
@@ -63,7 +75,8 @@ describe("POST /api/ai/chat", () => {
   });
 
   it("400 when user has no BYOK key configured", async () => {
-    vi.mocked(getDecryptedApiKey).mockRejectedValue(new Error("no key"));
+    const { OpenRouterKeyMissing } = await import("@/lib/openrouter-key");
+    vi.mocked(getOrApiKey).mockRejectedValue(new OpenRouterKeyMissing());
     const r = await POST(
       req("/api/ai/chat", {
         method: "POST",
@@ -73,6 +86,37 @@ describe("POST /api/ai/chat", () => {
     );
     expect(r.status).toBe(400);
     expect(await r.json()).toEqual({ error: "OPENROUTER_KEY_MISSING" });
+  });
+
+  // GSD-132: upstream 402 → trial_exhausted via streamPassthrough.
+  it("402 trial_exhausted when upstream returns 402", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response("payment required", { status: 402 }),
+    );
+    global.fetch = fetchMock as unknown as typeof fetch;
+    const r = await POST(
+      req("/api/ai/chat", {
+        method: "POST",
+        cookie: u.cookie,
+        body: JSON.stringify({ question: "hi", history: [] }),
+      }),
+    );
+    expect(r.status).toBe(402);
+    expect(await r.json()).toEqual({ error: "trial_exhausted" });
+  });
+
+  // GSD-132: getOrApiKey itself throws OpenRouterTrialExhausted → 402.
+  it("402 trial_exhausted when getOrApiKey throws OpenRouterTrialExhausted", async () => {
+    vi.mocked(getOrApiKey).mockRejectedValue(new OpenRouterTrialExhausted());
+    const r = await POST(
+      req("/api/ai/chat", {
+        method: "POST",
+        cookie: u.cookie,
+        body: JSON.stringify({ question: "hi", history: [] }),
+      }),
+    );
+    expect(r.status).toBe(402);
+    expect(await r.json()).toEqual({ error: "trial_exhausted" });
   });
 
   it("proxies body to AGENTS_URL/agents/km/chat with signed headers", async () => {

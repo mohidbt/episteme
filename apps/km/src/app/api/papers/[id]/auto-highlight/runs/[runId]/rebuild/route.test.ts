@@ -3,8 +3,20 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 vi.mock("@episteme/auth/server", () => ({
   auth: { api: { getSession: vi.fn() } },
 }));
-vi.mock("@episteme/auth/byok", () => ({
-  getDecryptedApiKey: vi.fn(),
+vi.mock("@/lib/openrouter-key", () => ({
+  getOrApiKey: vi.fn(),
+  OpenRouterKeyMissing: class OpenRouterKeyMissing extends Error {
+    constructor() {
+      super("OpenRouterKeyMissing");
+      this.name = "OpenRouterKeyMissing";
+    }
+  },
+  OpenRouterTrialExhausted: class OpenRouterTrialExhausted extends Error {
+    constructor() {
+      super("OpenRouterTrialExhausted");
+      this.name = "OpenRouterTrialExhausted";
+    }
+  },
 }));
 vi.mock("@/lib/db", () => ({
   db: { select: vi.fn() },

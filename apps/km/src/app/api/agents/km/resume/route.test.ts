@@ -5,8 +5,20 @@ vi.mock("@/lib/auth", () => ({
   getSessionInfo: vi.fn(),
 }));
 
-vi.mock("@episteme/auth/byok", () => ({
-  getDecryptedApiKey: vi.fn(),
+vi.mock("@/lib/openrouter-key", () => ({
+  getOrApiKey: vi.fn(),
+  OpenRouterKeyMissing: class OpenRouterKeyMissing extends Error {
+    constructor() {
+      super("OpenRouterKeyMissing");
+      this.name = "OpenRouterKeyMissing";
+    }
+  },
+  OpenRouterTrialExhausted: class OpenRouterTrialExhausted extends Error {
+    constructor() {
+      super("OpenRouterTrialExhausted");
+      this.name = "OpenRouterTrialExhausted";
+    }
+  },
 }));
 
 vi.mock("@/lib/agents/sign-request", () => ({
@@ -45,7 +57,7 @@ vi.mock("@/lib/db", () => ({
 }));
 
 import { getSessionInfo } from "@/lib/auth";
-import { getDecryptedApiKey } from "@episteme/auth/byok";
+import { getOrApiKey, OpenRouterTrialExhausted } from "@/lib/openrouter-key";
 import { signRequest } from "@/lib/agents/sign-request";
 import { POST } from "./route";
 import { req } from "../../../_test-utils";
@@ -58,7 +70,7 @@ beforeEach(() => {
   process.env.INHALE_INTERNAL_SECRET = "test-secret-abc";
   process.env.AGENTS_URL = "http://test-agents:8000";
   vi.mocked(getSessionInfo).mockResolvedValue({ userId: "u1", isAnonymous: false });
-  vi.mocked(getDecryptedApiKey).mockResolvedValue("sk-test-key");
+  vi.mocked(getOrApiKey).mockResolvedValue("sk-test-key");
 });
 
 afterEach(() => {
@@ -83,7 +95,8 @@ describe("POST /api/agents/km/resume", () => {
   });
 
   it("400 when user has no API key", async () => {
-    vi.mocked(getDecryptedApiKey).mockRejectedValue(new Error("NO_LLM_KEY"));
+    const { OpenRouterKeyMissing } = await import("@/lib/openrouter-key");
+    vi.mocked(getOrApiKey).mockRejectedValue(new OpenRouterKeyMissing());
     const r = await POST(
       req("/api/agents/km/resume", {
         method: "POST",
@@ -93,6 +106,40 @@ describe("POST /api/agents/km/resume", () => {
     );
     expect(r.status).toBe(400);
     expect(await r.json()).toEqual({ error: "OPENROUTER_KEY_MISSING" });
+  });
+
+  // GSD-132: managed bucket drained mid-resume → 402 trial_exhausted from
+  // upstream agents service is mapped via streamPassthrough.
+  it("402 trial_exhausted when upstream returns 402", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response("payment required", { status: 402 }),
+    );
+    global.fetch = fetchMock as unknown as typeof fetch;
+    const r = await POST(
+      req("/api/agents/km/resume", {
+        method: "POST",
+        cookie: "session=x",
+        body: JSON.stringify({ thread_id: "t1", decisions: [] }),
+      }),
+    );
+    expect(r.status).toBe(402);
+    expect(await r.json()).toEqual({ error: "trial_exhausted" });
+  });
+
+  // GSD-132: resolver may also throw OpenRouterTrialExhausted in theory
+  // (defensive — current resolver only throws OpenRouterKeyMissing, but
+  // the contract is shared with other AI routes).
+  it("402 trial_exhausted when getOrApiKey throws OpenRouterTrialExhausted", async () => {
+    vi.mocked(getOrApiKey).mockRejectedValue(new OpenRouterTrialExhausted());
+    const r = await POST(
+      req("/api/agents/km/resume", {
+        method: "POST",
+        cookie: "session=x",
+        body: JSON.stringify({ thread_id: "t1", decisions: [] }),
+      }),
+    );
+    expect(r.status).toBe(402);
+    expect(await r.json()).toEqual({ error: "trial_exhausted" });
   });
 
   it("pipes SSE stream through with correct Content-Type", async () => {
