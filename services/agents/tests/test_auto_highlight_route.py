@@ -3,6 +3,7 @@ import hmac
 import json
 import os
 import time
+from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
 
 SECRET = "test-secret-abc"
@@ -36,6 +37,13 @@ def _signed_headers(method: str, path: str, body: bytes, paper_id: str | None = 
     if paper_id is not None:
         h["X-Inhale-Paper-Id"] = paper_id
     return h
+
+
+@asynccontextmanager
+async def _fake_download(key, suffix=".pdf"):
+    """Stand-in for lib.storage.download_to_tempfile: yields a local path
+    without hitting S3 (route now downloads source.pdf before reading)."""
+    yield "/tmp/fake.pdf"
 
 
 def _parse_sse(text: str) -> list:
@@ -135,6 +143,7 @@ def test_auto_highlight_selects_storage_url_not_file_path():
         with (
             patch("routers.auto_highlight.create_agent", return_value=fake),
             patch("routers.auto_highlight.object_exists", AsyncMock(return_value=True)),
+            patch("routers.auto_highlight.download_to_tempfile", _fake_download),
         ):
             body = json.dumps({"instruction": "x"}).encode()
             r = client.post(PATH, content=body, headers=_signed_headers("POST", PATH, body))
@@ -212,6 +221,84 @@ def test_source_pdf_missing_returns_404():
             r = client.post(PATH, content=body, headers=_signed_headers("POST", PATH, body))
             assert r.status_code == 404, r.text
             assert r.json() == {"detail": "source_pdf_missing"}
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_auto_highlight_downloads_to_tempfile_for_tools():
+    """GSD-135 deeper fix: auto-highlight must DOWNLOAD source.pdf to a local
+    tempfile and pass that LOCAL path into build_tools (the tools open it with
+    pypdf/pdfplumber). It must NOT hand the raw R2 key to the tools.
+    """
+    storage_key = f"{PAPER_ID}/source.pdf"
+    conn = AsyncMock()
+
+    async def fetchrow(query, *args):
+        q = query.strip().upper()
+        if "FROM PAPERS" in q:
+            return {"id": PAPER_ID, "storage_url": storage_key}
+        if "AGENT_CONVERSATIONS" in q and "INSERT" in q:
+            return {"id": 42}
+        if "AI_HIGHLIGHT_RUNS" in q and "INSERT" in q:
+            return {"id": "11111111-1111-1111-1111-111111111111"}
+        return None
+
+    conn.fetchrow.side_effect = fetchrow
+    conn.execute.return_value = None
+    conn.fetchval.return_value = 0
+
+    async def override():
+        yield conn
+
+    app.dependency_overrides[deps.db.get_conn] = override
+
+    local_tmp = "/tmp/downloaded-autohl.pdf"
+    captured: dict = {}
+
+    @asynccontextmanager
+    async def fake_download(key, suffix=".pdf"):
+        assert key == storage_key
+        yield local_tmp
+
+    def fake_build_tools(conn_, user_id, paper_id, get_run_id, api_key, pdf_path, **kw):
+        captured["pdf_path"] = pdf_path
+        return []
+
+    fake = MagicMock()
+
+    async def astream(_input, _config=None, *, stream_mode=None, **kwargs):
+        from langchain_core.messages import AIMessage
+
+        yield {
+            "model": {
+                "messages": [
+                    AIMessage(
+                        content="",
+                        tool_calls=[
+                            {"name": "finish", "args": {"summary": "done"},
+                             "id": "c1", "type": "tool_call"}
+                        ],
+                    )
+                ]
+            }
+        }
+
+    fake.astream = astream
+
+    try:
+        with (
+            patch("routers.auto_highlight.create_agent", return_value=fake),
+            patch("routers.auto_highlight.object_exists", AsyncMock(return_value=True)),
+            patch("routers.auto_highlight.download_to_tempfile", fake_download),
+            patch("routers.auto_highlight.build_tools", fake_build_tools),
+        ):
+            body = json.dumps({"instruction": "x"}).encode()
+            r = client.post(PATH, content=body, headers=_signed_headers("POST", PATH, body))
+            assert r.status_code == 200
+            _ = r.text  # drain stream so the download CM stays open through it
+        assert captured["pdf_path"] == local_tmp, (
+            f"build_tools must get the local tempfile, got {captured.get('pdf_path')!r}"
+        )
     finally:
         app.dependency_overrides.clear()
 
@@ -304,6 +391,7 @@ def test_happy_path_streams_run_progress_done():
         with (
             patch("routers.auto_highlight.create_agent", return_value=fake_agent),
             patch("routers.auto_highlight.object_exists", AsyncMock(return_value=True)),
+            patch("routers.auto_highlight.download_to_tempfile", _fake_download),
         ):
             mock_conn.fetchval.return_value = 2
 
@@ -368,6 +456,7 @@ def test_failure_path_marks_run_failed():
         with (
             patch("routers.auto_highlight.create_agent", return_value=fake),
             patch("routers.auto_highlight.object_exists", AsyncMock(return_value=True)),
+            patch("routers.auto_highlight.download_to_tempfile", _fake_download),
         ):
             body = json.dumps({"instruction": "highlight losses"}).encode()
             r = client.post(
@@ -421,6 +510,7 @@ def test_cancelled_run_marks_failed():
         with (
             patch("routers.auto_highlight.create_agent", return_value=fake),
             patch("routers.auto_highlight.object_exists", AsyncMock(return_value=True)),
+            patch("routers.auto_highlight.download_to_tempfile", _fake_download),
         ):
             resp = await auto_highlight(body, auth, mock_conn)
             cancelled = False
