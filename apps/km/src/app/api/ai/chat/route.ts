@@ -8,6 +8,7 @@ import { signRequest } from "@/lib/agents/sign-request";
 import { streamPassthrough } from "@/lib/agents/stream-passthrough";
 import { rateLimit, getClientIp } from "@/lib/ai-rate-limit";
 import { OPENROUTER_KEY_MISSING } from "@/lib/openrouter-errors";
+import { assertGuestNotExhausted, GuestTrialExhausted } from "@/lib/guest-cap";
 
 const MAX_BODY_BYTES = 16 * 1024;
 
@@ -32,6 +33,15 @@ export async function POST(req: Request) {
         { error: "rate_limited", retryAfter: rl.retryAfter },
         { status: 429 },
       );
+    }
+    // GSD-130: server-side $1 cap on guest spend. See ai/complete route.ts.
+    try {
+      await assertGuestNotExhausted(session);
+    } catch (err) {
+      if (err instanceof GuestTrialExhausted) {
+        return Response.json({ error: "trial_exhausted" }, { status: 402 });
+      }
+      throw err;
     }
     const sharedKey = process.env.EPISTEME_SHARED_LLM_KEY;
     if (!sharedKey) {

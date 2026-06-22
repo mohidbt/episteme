@@ -36,6 +36,10 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
               className="flex-1 min-w-0 overflow-y-auto bg-background rounded-tl-xl border-l border-[var(--roof-border)]"
               data-prose-font={prefs.font}
               data-prose-ruled={prefs.ruledLines ? "true" : "false"}
+              // GSD-130: surface guest status to client-only helpers
+              // (e.g. surfaceTrialExhaustedToast) without prop-drilling
+              // through the dozen AI call sites that fire the toast.
+              data-anon={session.isAnonymous ? "true" : "false"}
             >
               {children}
             </main>

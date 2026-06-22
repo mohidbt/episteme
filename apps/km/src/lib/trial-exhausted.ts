@@ -24,8 +24,34 @@ export class TrialExhaustedError extends Error {
 export const TRIAL_EXHAUSTED_TOAST_COPY =
   "You've used your $5 AI trial. Email founders@episteme.app to extend — full subscriptions coming soon.";
 
+// GSD-130: guests get a different copy + a Sign-up CTA pointing at the
+// signup wizard. Keep the dedup window shared with the signed-in path so
+// a guest who burns through the $1 bucket via N rapid tool calls only
+// sees one toast.
+export const TRIAL_EXHAUSTED_GUEST_TOAST_COPY =
+  "You've used your free $1 of AI. Sign up to keep going.";
+export const TRIAL_EXHAUSTED_GUEST_CTA_LABEL = "Sign up";
+export const TRIAL_EXHAUSTED_GUEST_CTA_HREF = "/sign-up";
+
 export const TRIAL_EXHAUSTED_DEDUP_KEY = "episteme:trial-exhausted-last-shown";
 export const TRIAL_EXHAUSTED_DEDUP_MS = 5 * 60 * 1000;
+
+export type TrialExhaustedVariant = "user" | "guest";
+
+/**
+ * Look up the guest-vs-signed-in flag the (app) layout pinned on the
+ * `<main data-anon="...">` element. Lets the toast helper pick the right
+ * copy without prop-drilling session through every AI call site.
+ * Falls back to "user" when:
+ *   - we're outside the browser (SSR, vitest node env), OR
+ *   - the data attribute is missing (e.g. /sign-in, /sign-up, settings
+ *     layout — none of which fire the toast anyway).
+ */
+function detectVariantFromDom(): TrialExhaustedVariant {
+  if (typeof document === "undefined") return "user";
+  const el = document.querySelector("[data-anon]") as HTMLElement | null;
+  return el?.dataset.anon === "true" ? "guest" : "user";
+}
 
 /**
  * Drop-in replacement for `fetch` that converts the 402 trial_exhausted
@@ -71,7 +97,10 @@ export async function fetchOrThrowTrialExhausted(
  * anyway", which is the right default — better one extra toast than a
  * silent failure.
  */
-export function surfaceTrialExhaustedToast(): void {
+export function surfaceTrialExhaustedToast(
+  variant?: TrialExhaustedVariant,
+): void {
+  const resolved: TrialExhaustedVariant = variant ?? detectVariantFromDom();
   const now = Date.now();
   let lastShown = 0;
   try {
@@ -88,6 +117,23 @@ export function surfaceTrialExhaustedToast(): void {
     sessionStorage.setItem(TRIAL_EXHAUSTED_DEDUP_KEY, String(now));
   } catch {
     // Same as above — degrade silently.
+  }
+  if (resolved === "guest") {
+    toast.error(TRIAL_EXHAUSTED_GUEST_TOAST_COPY, {
+      action: {
+        label: TRIAL_EXHAUSTED_GUEST_CTA_LABEL,
+        onClick: () => {
+          // Full nav (not router.push) — the toast lives outside the
+          // Next.js router context, and a hard nav is the safest cross-
+          // surface jump from any AI-using page (notes editor, reader,
+          // settings, etc.).
+          if (typeof window !== "undefined") {
+            window.location.href = TRIAL_EXHAUSTED_GUEST_CTA_HREF;
+          }
+        },
+      },
+    });
+    return;
   }
   toast.error(TRIAL_EXHAUSTED_TOAST_COPY);
 }

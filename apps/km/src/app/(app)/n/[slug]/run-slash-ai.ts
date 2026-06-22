@@ -1,3 +1,9 @@
+import {
+  TrialExhaustedError,
+  fetchOrThrowTrialExhausted,
+  surfaceTrialExhaustedToast,
+} from "@/lib/trial-exhausted";
+
 // Regex: a paragraph whose text is exactly `/ai <prompt>`.
 // Slash must be at line start (no leading whitespace). Prompt must be non-empty.
 export const SLASH_AI_REGEX = /^\/ai\s+(.+)$/;
@@ -30,15 +36,26 @@ export async function runSlashAi(args: RunSlashAiArgs): Promise<void> {
 
   let res: Response;
   try {
-    res = await doFetch("/api/ai/complete", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(payload),
-      signal,
-    });
+    res = await fetchOrThrowTrialExhausted(
+      "/api/ai/complete",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload),
+        signal,
+      },
+      doFetch,
+    );
   } catch (err) {
     // Abort is a silent cancellation — not a user-facing error.
     if ((err as Error)?.name === "AbortError") return;
+    // GSD-130: a 402 trial_exhausted surfaces the shared upgrade/sign-up
+    // toast (guest vs signed-in copy auto-detected from <main data-anon>),
+    // not the inline `[ai error: …]` string.
+    if (err instanceof TrialExhaustedError) {
+      surfaceTrialExhaustedToast();
+      return;
+    }
     onError((err as Error)?.message ?? "network error");
     return;
   }

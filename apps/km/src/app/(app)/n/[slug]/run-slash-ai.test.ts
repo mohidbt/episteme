@@ -1,5 +1,26 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { runSlashAi, SLASH_AI_REGEX } from "./run-slash-ai";
+import { surfaceTrialExhaustedToast } from "@/lib/trial-exhausted";
+
+// GSD-130 Path A: the note-editor slash-AI surface must route 402
+// trial_exhausted through the shared toast helper, NOT the inline
+// `[ai error: …]` onError handler. Spy on the helpers.
+vi.mock("@/lib/trial-exhausted", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/trial-exhausted")>(
+    "@/lib/trial-exhausted",
+  );
+  return {
+    ...actual,
+    surfaceTrialExhaustedToast: vi.fn(),
+  };
+});
+
+function makeTrialExhausted402(): Response {
+  return new Response(JSON.stringify({ error: "trial_exhausted" }), {
+    status: 402,
+    headers: { "content-type": "application/json" },
+  });
+}
 
 function makeStreamResponse(chunks: string[]): Response {
   const encoder = new TextEncoder();
@@ -23,6 +44,36 @@ describe("runSlashAi", () => {
   afterEach(() => {
     globalThis.fetch = originalFetch;
     vi.restoreAllMocks();
+    vi.mocked(surfaceTrialExhaustedToast).mockReset();
+  });
+
+  it("surfaces the trial-exhausted toast on 402 and does NOT call onError", async () => {
+    globalThis.fetch = vi.fn(async () =>
+      makeTrialExhausted402(),
+    ) as unknown as typeof fetch;
+
+    const onError = vi.fn();
+    const onToken = vi.fn();
+
+    await runSlashAi({ prompt: "rephrase this", onToken, onError });
+
+    expect(surfaceTrialExhaustedToast).toHaveBeenCalledTimes(1);
+    expect(onError).not.toHaveBeenCalled();
+    expect(onToken).not.toHaveBeenCalled();
+  });
+
+  it("keeps inline onError for non-trial errors (e.g. 500)", async () => {
+    globalThis.fetch = vi.fn(async () =>
+      new Response("boom", { status: 500 }),
+    ) as unknown as typeof fetch;
+
+    const onError = vi.fn();
+
+    await runSlashAi({ prompt: "p", onToken: () => {}, onError });
+
+    expect(surfaceTrialExhaustedToast).not.toHaveBeenCalled();
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(onError).toHaveBeenCalledWith("http 500");
   });
 
   it("parses token events and calls onToken in order", async () => {

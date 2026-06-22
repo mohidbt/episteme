@@ -18,8 +18,29 @@ export class TrialExhaustedError extends Error {
 export const TRIAL_EXHAUSTED_TOAST_COPY =
   "You've used your $5 AI trial. Email founders@episteme.app to extend — full subscriptions coming soon.";
 
+// GSD-130: guest variant — mirror of apps/km/src/lib/trial-exhausted.ts.
+// Keep the copy + CTA href identical across the two so the reader and the
+// rest of the app present one consistent exhaustion story.
+export const TRIAL_EXHAUSTED_GUEST_TOAST_COPY =
+  "You've used your free $1 of AI. Sign up to keep going.";
+export const TRIAL_EXHAUSTED_GUEST_CTA_LABEL = "Sign up";
+export const TRIAL_EXHAUSTED_GUEST_CTA_HREF = "/sign-up";
+
 export const TRIAL_EXHAUSTED_DEDUP_KEY = "episteme:trial-exhausted-last-shown";
 export const TRIAL_EXHAUSTED_DEDUP_MS = 5 * 60 * 1000;
+
+export type TrialExhaustedVariant = "user" | "guest";
+
+/**
+ * Mirror of apps/km/src/lib/trial-exhausted.ts#detectVariantFromDom.
+ * The (app) layout in km sets `data-anon` on the `<main>` element; the
+ * reader package runs inside that layout so the lookup works the same.
+ */
+function detectVariantFromDom(): TrialExhaustedVariant {
+  if (typeof document === "undefined") return "user";
+  const el = document.querySelector("[data-anon]") as HTMLElement | null;
+  return el?.dataset.anon === "true" ? "guest" : "user";
+}
 
 export async function fetchOrThrowTrialExhausted(
   input: RequestInfo | URL,
@@ -44,7 +65,10 @@ export async function fetchOrThrowTrialExhausted(
   return res;
 }
 
-export function surfaceTrialExhaustedToast(): void {
+export function surfaceTrialExhaustedToast(
+  variant?: TrialExhaustedVariant,
+): void {
+  const resolved: TrialExhaustedVariant = variant ?? detectVariantFromDom();
   const now = Date.now();
   let lastShown = 0;
   try {
@@ -61,6 +85,19 @@ export function surfaceTrialExhaustedToast(): void {
     sessionStorage.setItem(TRIAL_EXHAUSTED_DEDUP_KEY, String(now));
   } catch {
     // Same as above.
+  }
+  if (resolved === "guest") {
+    toast.error(TRIAL_EXHAUSTED_GUEST_TOAST_COPY, {
+      action: {
+        label: TRIAL_EXHAUSTED_GUEST_CTA_LABEL,
+        onClick: () => {
+          if (typeof window !== "undefined") {
+            window.location.href = TRIAL_EXHAUSTED_GUEST_CTA_HREF;
+          }
+        },
+      },
+    });
+    return;
   }
   toast.error(TRIAL_EXHAUSTED_TOAST_COPY);
 }

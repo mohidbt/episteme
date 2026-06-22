@@ -8,6 +8,7 @@ import { signRequest } from "@/lib/agents/sign-request";
 import { tapAgentEvents } from "@/lib/agents/thread-lifecycle";
 import { OPENROUTER_KEY_MISSING } from "@/lib/openrouter-errors";
 import { recordUsage } from "@/lib/openrouter-usage";
+import { assertGuestNotExhausted, GuestTrialExhausted } from "@/lib/guest-cap";
 import {
   updateThread,
   upsertThreadOnInvoke,
@@ -25,6 +26,19 @@ const InvokeBody = z.object({
 export async function POST(req: Request) {
   const session = await getSessionInfo(req);
   if (!session) return Response.json({ error: "unauthorized" }, { status: 401 });
+
+  // GSD-130: server-side $1 cap on guest spend. Block before key resolve
+  // so guests over the cap never reach the upstream call. Same 402
+  // envelope as the signed-in trial-exhausted path so the existing client
+  // toast/CTA fires (with a guest-branch sign-up CTA copy).
+  try {
+    await assertGuestNotExhausted(session);
+  } catch (err) {
+    if (err instanceof GuestTrialExhausted) {
+      return Response.json({ error: "trial_exhausted" }, { status: 402 });
+    }
+    throw err;
+  }
 
   // GSD-126 P0: signed-in users → BYOK → managed bucket; guests → env.
   // Pass null for guests so the resolver skips the managed-bucket path.
