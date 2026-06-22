@@ -15,6 +15,12 @@ from deps.db import ConnDep
 from lib.auto_highlight_tools import TOOLBELT_SYSTEM_HINT, build_tools
 from lib.chat import CHAT_MODEL, OPENROUTER_BASE
 from lib.conversations import bump_updated_at, insert_message
+from lib.storage import (
+    SourcePdfMissing,
+    download_to_tempfile,
+    object_exists,
+    paperSourceKey,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -76,8 +82,15 @@ async def auto_highlight(body: AutoHighlightBody, auth: InternalAuthDep, conn: C
     if not paper:
         raise HTTPException(status_code=404, detail="Not found")
 
+    # GSD-135: Source PDF may be missing in R2 (ingest dropped or lifecycle
+    # reaped). Pre-check before opening the SSE stream / langchain agent so
+    # callers get a structured 404 instead of `[Errno 2] No such file or
+    # directory` bubbling up as 500 mid-stream.
+    pdf_path = paper["storage_url"] or paperSourceKey(paper_id)
+    if not await object_exists(pdf_path):
+        raise HTTPException(status_code=404, detail="source_pdf_missing")
+
     instruction = body.instruction.strip()
-    pdf_path = paper["storage_url"]
 
     conv_id = await _upsert_auto_highlight_conv(
         conn,
@@ -111,149 +124,186 @@ async def auto_highlight(body: AutoHighlightBody, auth: InternalAuthDep, conn: C
         return run_id
 
     conn_lock = asyncio.Lock()
-    tools = build_tools(
-        conn, user_id, paper_id, _get_run_id, api_key, pdf_path,
-        conn_lock=conn_lock,
-    )
-    agent = create_agent(model=model, tools=tools, system_prompt=SYSTEM_PROMPT)
 
     async def event_stream():
         yield _sse({"type": "run", "runId": run_id, "conversationId": conv_id})
 
-        summary = ""
-        error_msg: str | None = None
-        iterator = agent.astream(
-            {"messages": [{"role": "user", "content": instruction}]},
-            config={"recursion_limit": AGENT_RECURSION_LIMIT},
-            stream_mode="updates",
-        ).__aiter__()
-        start = time.monotonic()
+        # GSD-135: download source.pdf from R2 to a local tempfile and keep it
+        # alive for the whole stream — the highlight tools open it lazily with
+        # pypdf/pdfplumber, which require a real local path (the R2 key is not a
+        # file on disk in serverless). object_exists() above already returned a
+        # pre-stream 404 for the common missing case; a download failure here is
+        # the rare TOCTOU race, surfaced as an SSE error.
         try:
-            while True:
-                remaining = TOTAL_TIMEOUT_S - (time.monotonic() - start)
-                if remaining <= 0:
-                    error_msg = (
-                        f"agent exceeded {TOTAL_TIMEOUT_S}s wall-clock limit"
-                    )
-                    break
-                step_timeout = min(IDLE_TIMEOUT_S, remaining)
-                try:
-                    update = await asyncio.wait_for(
-                        iterator.__anext__(), timeout=step_timeout
-                    )
-                except StopAsyncIteration:
-                    break
-                except asyncio.TimeoutError:
-                    if time.monotonic() - start >= TOTAL_TIMEOUT_S:
-                        error_msg = (
-                            f"agent exceeded {TOTAL_TIMEOUT_S}s wall-clock limit"
-                        )
-                    else:
-                        error_msg = "timed out waiting for agent"
-                    break
-
-                # update shape: {"<node_name>": {"messages": [...], ...}}
-                for node_name, node_state in update.items():
-                    if node_name != "model":
-                        continue
-                    msgs = (node_state or {}).get("messages", []) or []
-                    for m in msgs:
-                        if not isinstance(m, AIMessage):
-                            continue
-                        for tc in m.tool_calls or []:
-                            name = tc.get("name", "tool")
-                            args = tc.get("args") or {}
-                            detail = progress_detail(name, args)
-                            yield _sse(
-                                {"type": "progress", "step": name, "detail": detail}
-                            )
-                            if name == "finish":
-                                summary = str(args.get("summary", "")) or summary
-        except asyncio.CancelledError:
-            # Browser disconnect: cancel the underlying agent generator, mark row
-            # failed (best-effort), then re-raise so FastAPI tears down cleanly.
-            try:
-                await iterator.aclose()
-            except Exception:
-                logger.exception("failed to close agent iterator on cancel")
-            try:
-                async with conn_lock:
-                    await conn.execute(
-                        "UPDATE ai_highlight_runs SET status = 'failed', completed_at = now() "
-                        "WHERE id = $1::uuid",
-                        run_id,
-                    )
-            except Exception:
-                logger.exception("failed to mark highlight run failed (best-effort)")
-            raise
-        except Exception as e:  # noqa: BLE001
-            error_msg = str(e)
-
-        # Timeout path: ensure the agent coroutine is actually cancelled, not
-        # left pinning a worker. aclose() drives CancelledError into the
-        # generator's current await point.
-        if error_msg is not None:
-            try:
-                await iterator.aclose()
-            except Exception:
-                logger.exception("failed to close agent iterator after timeout")
-
-        async with conn_lock:
-            highlights_count = int(
-                await conn.fetchval(
-                    "SELECT COUNT(*) FROM user_highlights WHERE layer_id = $1::uuid",
-                    run_id,
-                )
-                or 0
-            )
-
-        if error_msg is not None:
-            yield _sse({"type": "error", "message": error_msg})
+            download_cm = download_to_tempfile(pdf_path)
+            local_path = await download_cm.__aenter__()
+        except SourcePdfMissing:
+            yield _sse({"type": "error", "message": "source_pdf_missing"})
             async with conn_lock:
                 await conn.execute(
                     "UPDATE ai_highlight_runs SET status = 'failed', completed_at = now() "
                     "WHERE id = $1::uuid",
                     run_id,
                 )
-        else:
-            async with conn_lock:
-                await conn.execute(
-                    "UPDATE ai_highlight_runs "
-                    "SET status = 'completed', completed_at = now(), "
-                    "summary = $2, model_used = $3 "
-                    "WHERE id = $1::uuid",
-                    run_id,
-                    summary or None,
-                    CHAT_MODEL,
-                )
-            yield _sse(
-                {
-                    "type": "done",
-                    "summary": summary,
-                    "highlightsCount": highlights_count,
-                }
-            )
+            yield _sse_done()
+            return
 
-        # Persist assistant message + bump conversation
-        assistant_content = summary if error_msg is None else f"Error: {error_msg}"
         try:
-            await insert_message(
-                conn,
-                conversation_id=conv_id,
-                role="assistant",
-                content=assistant_content,
+            tools = build_tools(
+                conn, user_id, paper_id, _get_run_id, api_key, local_path,
+                conn_lock=conn_lock,
             )
-            await bump_updated_at(conn, conv_id)
-        except Exception:
-            pass
-
-        yield _sse_done()
+            agent = create_agent(
+                model=model, tools=tools, system_prompt=SYSTEM_PROMPT
+            )
+            async for chunk in _run_agent_stream(
+                agent, conn, conn_lock, run_id, conv_id, instruction
+            ):
+                yield chunk
+        finally:
+            await download_cm.__aexit__(None, None, None)
 
     return StreamingResponse(
         event_stream(),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
     )
+
+
+async def _run_agent_stream(agent, conn, conn_lock, run_id, conv_id, instruction):
+    """Drive the langchain agent, yielding SSE chunks for progress/done/error.
+
+    Extracted from auto_highlight so the source.pdf tempfile (held open by the
+    caller's download_to_tempfile context) stays alive for the whole run.
+    """
+    summary = ""
+    error_msg: str | None = None
+    iterator = agent.astream(
+        {"messages": [{"role": "user", "content": instruction}]},
+        config={"recursion_limit": AGENT_RECURSION_LIMIT},
+        stream_mode="updates",
+    ).__aiter__()
+    start = time.monotonic()
+    try:
+        while True:
+            remaining = TOTAL_TIMEOUT_S - (time.monotonic() - start)
+            if remaining <= 0:
+                error_msg = (
+                    f"agent exceeded {TOTAL_TIMEOUT_S}s wall-clock limit"
+                )
+                break
+            step_timeout = min(IDLE_TIMEOUT_S, remaining)
+            try:
+                update = await asyncio.wait_for(
+                    iterator.__anext__(), timeout=step_timeout
+                )
+            except StopAsyncIteration:
+                break
+            except asyncio.TimeoutError:
+                if time.monotonic() - start >= TOTAL_TIMEOUT_S:
+                    error_msg = (
+                        f"agent exceeded {TOTAL_TIMEOUT_S}s wall-clock limit"
+                    )
+                else:
+                    error_msg = "timed out waiting for agent"
+                break
+
+            # update shape: {"<node_name>": {"messages": [...], ...}}
+            for node_name, node_state in update.items():
+                if node_name != "model":
+                    continue
+                msgs = (node_state or {}).get("messages", []) or []
+                for m in msgs:
+                    if not isinstance(m, AIMessage):
+                        continue
+                    for tc in m.tool_calls or []:
+                        name = tc.get("name", "tool")
+                        args = tc.get("args") or {}
+                        detail = progress_detail(name, args)
+                        yield _sse(
+                            {"type": "progress", "step": name, "detail": detail}
+                        )
+                        if name == "finish":
+                            summary = str(args.get("summary", "")) or summary
+    except asyncio.CancelledError:
+        # Browser disconnect: cancel the underlying agent generator, mark row
+        # failed (best-effort), then re-raise so FastAPI tears down cleanly.
+        try:
+            await iterator.aclose()
+        except Exception:
+            logger.exception("failed to close agent iterator on cancel")
+        try:
+            async with conn_lock:
+                await conn.execute(
+                    "UPDATE ai_highlight_runs SET status = 'failed', completed_at = now() "
+                    "WHERE id = $1::uuid",
+                    run_id,
+                )
+        except Exception:
+            logger.exception("failed to mark highlight run failed (best-effort)")
+        raise
+    except Exception as e:  # noqa: BLE001
+        error_msg = str(e)
+
+    # Timeout path: ensure the agent coroutine is actually cancelled, not
+    # left pinning a worker. aclose() drives CancelledError into the
+    # generator's current await point.
+    if error_msg is not None:
+        try:
+            await iterator.aclose()
+        except Exception:
+            logger.exception("failed to close agent iterator after timeout")
+
+    async with conn_lock:
+        highlights_count = int(
+            await conn.fetchval(
+                "SELECT COUNT(*) FROM user_highlights WHERE layer_id = $1::uuid",
+                run_id,
+            )
+            or 0
+        )
+
+    if error_msg is not None:
+        yield _sse({"type": "error", "message": error_msg})
+        async with conn_lock:
+            await conn.execute(
+                "UPDATE ai_highlight_runs SET status = 'failed', completed_at = now() "
+                "WHERE id = $1::uuid",
+                run_id,
+            )
+    else:
+        async with conn_lock:
+            await conn.execute(
+                "UPDATE ai_highlight_runs "
+                "SET status = 'completed', completed_at = now(), "
+                "summary = $2, model_used = $3 "
+                "WHERE id = $1::uuid",
+                run_id,
+                summary or None,
+                CHAT_MODEL,
+            )
+        yield _sse(
+            {
+                "type": "done",
+                "summary": summary,
+                "highlightsCount": highlights_count,
+            }
+        )
+
+    # Persist assistant message + bump conversation
+    assistant_content = summary if error_msg is None else f"Error: {error_msg}"
+    try:
+        await insert_message(
+            conn,
+            conversation_id=conv_id,
+            role="assistant",
+            content=assistant_content,
+        )
+        await bump_updated_at(conn, conv_id)
+    except Exception:
+        pass
+
+    yield _sse_done()
 
 
 def progress_detail(name: str, args: dict) -> str:

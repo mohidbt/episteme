@@ -6,7 +6,16 @@ export function streamPassthrough(upstream: Response): Response {
     if (upstream.status === 402) {
       return Response.json({ error: "trial_exhausted" }, { status: 402 });
     }
-    return new Response(upstream.body, { status: upstream.status });
+    // Preserve upstream Content-Type when present (agents-side structured
+    // errors like 404 {"detail": "source_pdf_missing"} from GSD-135 send
+    // JSON; without the header the browser may treat the body as text).
+    const upstreamContentType = upstream.headers.get("content-type");
+    return new Response(upstream.body, {
+      status: upstream.status,
+      headers: upstreamContentType
+        ? { "Content-Type": upstreamContentType }
+        : undefined,
+    });
   }
   return new Response(upstream.body, {
     status: upstream.status,

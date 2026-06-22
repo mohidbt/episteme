@@ -1,4 +1,5 @@
 import hmac, hashlib, json, os, time
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, patch
 
@@ -93,10 +94,16 @@ def test_outline_generates_via_llm():
     ])
     fake_pages = [{"page_number": 1, "text": "Hello world"}]
 
+    @asynccontextmanager
+    async def fake_download(key, suffix=".pdf"):
+        yield "/tmp/x.pdf"
+
     try:
         with (
             patch("routers.outline.call_model", return_value=llm_response) as mock_call,
             patch("routers.outline.extract_pages", return_value=fake_pages),
+            patch("routers.outline.download_to_tempfile", fake_download),
+            patch("routers.outline.object_exists", AsyncMock(return_value=True)),
         ):
             path = f"/agents/outline?paperId={PAPER_ID}"
             r = client.get(path, headers=_signed_headers("GET", path))
@@ -106,6 +113,125 @@ def test_outline_generates_via_llm():
             mock_call.assert_called_once()
             # Verify INSERT was called twice (one per valid section)
             assert mock_conn.fetchrow.call_count == 3  # 1 paper lookup + 2 inserts
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_outline_downloads_to_tempfile_then_extracts():
+    """GSD-135 deeper fix: outline must DOWNLOAD source.pdf from R2 to a local
+    tempfile and pass that LOCAL path to extract_pages — never the raw R2 key.
+
+    In serverless there is no local `<id>/source.pdf` on disk, so passing the
+    key straight to pypdf raised FileNotFoundError -> 500 for EVERY paper.
+    """
+    mock_conn = AsyncMock()
+    mock_conn.fetch.return_value = []
+    storage_key = f"{PAPER_ID}/source.pdf"
+    paper_row = {"storage_url": storage_key}
+    insert_row = _make_row()
+
+    async def fetchrow_side_effect(query, *args):
+        if "FROM papers" in query:
+            return paper_row
+        if "INSERT INTO document_sections" in query:
+            return insert_row
+        return None
+
+    mock_conn.fetchrow.side_effect = fetchrow_side_effect
+
+    async def override():
+        yield mock_conn
+
+    app.dependency_overrides[deps.db.get_conn] = override
+
+    llm_response = json.dumps([{"title": "Introduction", "page": 1, "preview": "x"}])
+    extract_calls: list[str] = []
+
+    def fake_extract(path):
+        extract_calls.append(path)
+        return [{"page_number": 1, "text": "Hello world"}]
+
+    local_tmp = "/tmp/downloaded-outline.pdf"
+
+    @asynccontextmanager
+    async def fake_download(key, suffix=".pdf"):
+        # Prove the route handed the R2 key to the downloader, not pypdf.
+        assert key == storage_key
+        yield local_tmp
+
+    try:
+        with (
+            patch("routers.outline.call_model", return_value=llm_response),
+            patch("routers.outline.extract_pages", side_effect=fake_extract),
+            patch("routers.outline.download_to_tempfile", fake_download),
+            patch("routers.outline.object_exists", AsyncMock(return_value=True)),
+        ):
+            path = f"/agents/outline?paperId={PAPER_ID}"
+            r = client.get(path, headers=_signed_headers("GET", path))
+            assert r.status_code == 200, r.text
+            assert len(r.json()["sections"]) == 1
+            # extract_pages received the LOCAL tempfile path, NOT the R2 key.
+            assert extract_calls == [local_tmp]
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_outline_404_when_download_raises_source_missing():
+    """TOCTOU: object reaped between precheck and download. The download path
+    raising SourcePdfMissing must map to 404 source_pdf_missing, not 500.
+    """
+    from lib.storage import SourcePdfMissing
+
+    mock_conn = AsyncMock()
+    mock_conn.fetch.return_value = []
+    mock_conn.fetchrow.return_value = {"storage_url": f"{PAPER_ID}/source.pdf"}
+
+    async def override():
+        yield mock_conn
+
+    app.dependency_overrides[deps.db.get_conn] = override
+
+    @asynccontextmanager
+    async def fake_download(key, suffix=".pdf"):
+        raise SourcePdfMissing(key)
+        yield  # pragma: no cover
+
+    try:
+        with (
+            patch("routers.outline.download_to_tempfile", fake_download),
+            patch("routers.outline.object_exists", AsyncMock(return_value=True)),
+        ):
+            path = f"/agents/outline?paperId={PAPER_ID}"
+            r = client.get(path, headers=_signed_headers("GET", path))
+            assert r.status_code == 404, r.text
+            assert r.json() == {"detail": "source_pdf_missing"}
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_outline_404_when_source_pdf_missing():
+    """GSD-135: paper row exists but R2 source.pdf is gone.
+
+    Outline must short-circuit with 404 detail=source_pdf_missing instead of
+    crashing inside pypdf with `[Errno 2] No such file or directory`.
+    """
+    mock_conn = AsyncMock()
+    mock_conn.fetch.return_value = []
+    # paper exists in DB, but storage_url object is missing in S3.
+    mock_conn.fetchrow.return_value = {"storage_url": f"{PAPER_ID}/source.pdf"}
+
+    async def override():
+        yield mock_conn
+
+    app.dependency_overrides[deps.db.get_conn] = override
+    try:
+        with patch(
+            "routers.outline.object_exists", AsyncMock(return_value=False)
+        ):
+            path = f"/agents/outline?paperId={PAPER_ID}"
+            r = client.get(path, headers=_signed_headers("GET", path))
+            assert r.status_code == 404, r.text
+            assert r.json() == {"detail": "source_pdf_missing"}
     finally:
         app.dependency_overrides.clear()
 

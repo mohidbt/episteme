@@ -1,8 +1,8 @@
-"""S3/MinIO download helper for Chandra OCR.
+"""S3/MinIO download helpers for the agents service.
 
-Datalab SDK requires a local file path (`Path(file_path).exists()` check).
-Papers in KM live in S3-compatible object storage, so we download to a
-tempfile before invoking Chandra and clean up afterwards.
+PDF readers (pypdf/pdfplumber via Chandra OCR, outline, and auto-highlight)
+require a local file path. Papers in KM live in S3-compatible object storage,
+so we download to a tempfile before reading and clean up afterwards.
 
 Env vars (mirror apps/km/.env):
   S3_ENDPOINT, S3_BUCKET, S3_ACCESS_KEY, S3_SECRET_KEY
@@ -20,6 +20,14 @@ from botocore.client import Config
 from botocore.exceptions import ClientError
 
 
+class SourcePdfMissing(Exception):
+    """Raised when an object key cannot be downloaded because it is absent.
+
+    Lets routers map a genuinely-missing source.pdf to a structured 404
+    (`source_pdf_missing`) instead of leaking a raw boto3 ClientError as a 500.
+    """
+
+
 def _client():
     return boto3.client(
         "s3",
@@ -32,7 +40,13 @@ def _client():
 
 
 def _download_sync(key: str, dest: str) -> None:
-    _client().download_file(os.environ["S3_BUCKET"], key, dest)
+    try:
+        _client().download_file(os.environ["S3_BUCKET"], key, dest)
+    except ClientError as exc:
+        code = str(exc.response.get("Error", {}).get("Code", ""))
+        if code in {"404", "NoSuchKey", "NotFound"}:
+            raise SourcePdfMissing(key) from exc
+        raise
 
 
 def _exists_sync(key: str) -> bool:

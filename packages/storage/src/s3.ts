@@ -30,6 +30,13 @@ export interface Storage {
   getPresignedGet(key: string, expiresInSec: number): Promise<string>;
   getPresignedHead(key: string, expiresInSec: number): Promise<string>;
   deleteObject(key: string): Promise<void>;
+  /**
+   * GSD-135: HEAD probe for orphan-source-pdf inventory + defensive
+   * prechecks. Returns false on 404/NotFound/NoSuchKey, true on 200.
+   * Re-throws other ClientErrors (auth, network) so the caller doesn't
+   * silently treat permission failures as missing objects.
+   */
+  objectExists(key: string): Promise<boolean>;
 }
 
 export function createStorage(cfg: StorageConfig): Storage {
@@ -87,6 +94,28 @@ export function createStorage(cfg: StorageConfig): Storage {
       await client.send(
         new DeleteObjectCommand({ Bucket: cfg.bucket, Key: key }),
       );
+    },
+
+    async objectExists(key) {
+      try {
+        await client.send(
+          new HeadObjectCommand({ Bucket: cfg.bucket, Key: key }),
+        );
+        return true;
+      } catch (err: unknown) {
+        const e = err as {
+          name?: string;
+          $metadata?: { httpStatusCode?: number };
+        };
+        if (
+          e?.$metadata?.httpStatusCode === 404 ||
+          e?.name === "NotFound" ||
+          e?.name === "NoSuchKey"
+        ) {
+          return false;
+        }
+        throw err;
+      }
     },
   };
 }
