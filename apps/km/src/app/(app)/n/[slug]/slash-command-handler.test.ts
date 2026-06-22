@@ -3,16 +3,20 @@
  *
  * The crash (`NotFoundError: Failed to execute 'insertBefore' on 'Node'`) is a
  * DOM mutation race between the Tiptap Suggestion plugin's view-update and a
- * React re-render triggered synchronously from inside the suggestion's
- * `command` callback. We cannot fully reproduce the jsdom DOM race in a unit
- * test, but we can lock down the contract that prevents it: the AI trigger
- * MUST be deferred until after the editor's current dispatch completes.
+ * React re-render triggered from inside the suggestion's `command` callback.
+ * We cannot fully reproduce the jsdom DOM race in a unit test, but we can lock
+ * down the contract that prevents it: the AI trigger MUST be deferred until
+ * after the editor's current view-settle completes.
  *
- * Before the fix, `handleSlashCommand` fired `onAiTrigger` synchronously and
- * this test fails. After the fix, the call is queued via `defer` (e.g.
- * `queueMicrotask`) and the test passes.
+ * Iteration 2: a `queueMicrotask` deferral was proven INSUFFICIENT on preview —
+ * a microtask still runs within the same microtask checkpoint as ProseMirror's
+ * MutationObserver flush + React reconciliation, before the browser commits a
+ * stable layout. The accepted contract is now a `requestAnimationFrame`-based
+ * deferral (fires past the next paint, after the view settles). This test
+ * locks that contract: the default defer must NOT fire on microtask drain,
+ * only after a RAF tick.
  */
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { handleSlashCommand } from "./slash-command-handler";
 
 type StubEditor = {
@@ -82,25 +86,72 @@ describe("handleSlashCommand — AI item", () => {
     expect(onAiTrigger).toHaveBeenCalledTimes(1);
   });
 
-  it("uses queueMicrotask by default when no defer override is provided", async () => {
-    const editor = makeEditor();
-    const onAiTrigger = vi.fn();
+  describe("default defer = requestAnimationFrame (iteration 2)", () => {
+    let rafQueue: FrameRequestCallback[];
+    let originalRaf: typeof globalThis.requestAnimationFrame | undefined;
 
-    handleSlashCommand(
-      {
-        editor: editor as unknown as HandlerEditorArg,
-        range: { from: 1, to: 2 },
-        props: { title: "AI" },
-      },
-      { onAiTrigger },
-    );
+    beforeEach(() => {
+      rafQueue = [];
+      originalRaf = globalThis.requestAnimationFrame;
+      globalThis.requestAnimationFrame = ((cb: FrameRequestCallback) => {
+        rafQueue.push(cb);
+        return rafQueue.length;
+      }) as typeof globalThis.requestAnimationFrame;
+    });
 
-    // Not synchronous.
-    expect(onAiTrigger).not.toHaveBeenCalled();
-    // queueMicrotask flushes before the next macrotask — awaiting a resolved
-    // promise yields after the microtask queue drains.
-    await Promise.resolve();
-    expect(onAiTrigger).toHaveBeenCalledTimes(1);
+    afterEach(() => {
+      if (originalRaf) globalThis.requestAnimationFrame = originalRaf;
+      else delete (globalThis as { requestAnimationFrame?: unknown })
+        .requestAnimationFrame;
+    });
+
+    const flushFrame = () => {
+      const batch = rafQueue;
+      rafQueue = [];
+      batch.forEach((cb) => cb(performance.now()));
+    };
+
+    it("does NOT fire onAiTrigger on microtask drain (microtask defer was insufficient)", async () => {
+      const editor = makeEditor();
+      const onAiTrigger = vi.fn();
+
+      handleSlashCommand(
+        {
+          editor: editor as unknown as HandlerEditorArg,
+          range: { from: 1, to: 2 },
+          props: { title: "AI" },
+        },
+        { onAiTrigger },
+      );
+
+      expect(onAiTrigger).not.toHaveBeenCalled();
+      // A microtask drain must NOT be enough — this is exactly what failed on
+      // preview. requestAnimationFrame fires on a later macrotask, not here.
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(onAiTrigger).not.toHaveBeenCalled();
+    });
+
+    it("fires onAiTrigger after a requestAnimationFrame tick", () => {
+      const editor = makeEditor();
+      const onAiTrigger = vi.fn();
+
+      handleSlashCommand(
+        {
+          editor: editor as unknown as HandlerEditorArg,
+          range: { from: 1, to: 2 },
+          props: { title: "AI" },
+        },
+        { onAiTrigger },
+      );
+
+      // The handler schedules a RAF; until frames flush, nothing fires.
+      expect(onAiTrigger).not.toHaveBeenCalled();
+      // Double-RAF (defer past the next paint) — flush twice.
+      flushFrame();
+      flushFrame();
+      expect(onAiTrigger).toHaveBeenCalledTimes(1);
+    });
   });
 });
 

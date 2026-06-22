@@ -284,9 +284,25 @@ export function AiBubbleMenu({
     setTurns([]);
   }, []);
 
-  // When slash command selects "AI", open generate mode as portal
+  // When slash command selects "AI", open generate mode as portal.
+  //
+  // GSD-134: the slash dispatch deletes the `/…` range immediately before this
+  // effect's trigger fires, so ProseMirror's view is still settling when React
+  // commits this render. Reading `coordsAtPos` / calling `editor.commands.focus`
+  // synchronously here races that settle and crashes with `insertBefore`. Defer
+  // the editor DOM reads to a requestAnimationFrame (past the next paint) so the
+  // view is stable. The state flags that mount the portal are also set inside
+  // the frame so the portal never renders against a mid-flux editor DOM.
+  //
+  // `lastTriggerRef` is advanced INSIDE the frame (not before scheduling): under
+  // React Strict Mode the effect runs setup → cleanup → setup on mount, and the
+  // cleanup cancels the first frame. Advancing the ref before scheduling would
+  // make the second setup early-return and the trigger would be dropped (portal
+  // never opens). Marking "done" only when the work actually runs keeps the
+  // re-run able to reschedule.
   useEffect(() => {
-    if (aiTriggerCount > lastTriggerRef.current) {
+    if (aiTriggerCount <= lastTriggerRef.current) return;
+    const raf = requestAnimationFrame(() => {
       lastTriggerRef.current = aiTriggerCount;
       const { from, to } = editor.state.selection;
       // Position anchored to the start of the line where `/` was typed
@@ -311,7 +327,8 @@ export function AiBubbleMenu({
       setSource("portal");
       setMode("rephrase-prompt");
       editor.commands.focus();
-    }
+    });
+    return () => cancelAnimationFrame(raf);
   }, [aiTriggerCount, editor]);
 
   // Click-away dismissal for portal mode
