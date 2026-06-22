@@ -5,29 +5,20 @@
  * its side-effects (in particular the AI portal trigger) can be tested in
  * isolation.
  *
- * Crash background: clicking the "AI" slash item used to dispatch the
- * editor's `deleteRange` transaction and the React `setAiTriggerCount` state
- * update **synchronously** inside the suggestion plugin's command callback.
- * That fired a parent re-render mid-dispatch — the `AiBubbleMenu` effect
- * then called `editor.view.coordsAtPos(...)` and `editor.commands.focus()`
- * while ProseMirror's view was still applying the suggestion plugin's
- * decoration update. The DOM mutation race surfaced as
- * `NotFoundError: Failed to execute 'insertBefore' on 'Node'`.
+ * Crash background: clicking the "AI" slash item crashed with
+ * `NotFoundError: Failed to execute 'insertBefore' on 'Node'`. The STRUCTURAL
+ * root cause (iteration 3) was that the AI-rephrase panel rendered as a React
+ * sibling of `<BubbleMenu>`, whose underlying div is `.remove()`'d and reparented
+ * into a tippy popper by `@tiptap/extension-bubble-menu`. React's commit-phase
+ * placement then tried to `insertBefore` the panel against that relocated div,
+ * which is no longer a child of the expected parent. The fix lives in
+ * `AiBubbleMenu.tsx`: the panel is now `createPortal`'d into `document.body`.
  *
- * Iteration 1 deferred via `queueMicrotask` — this was proven INSUFFICIENT on
- * preview: the crash still reproduced. A microtask runs inside the SAME
- * microtask checkpoint as ProseMirror's MutationObserver flush + the
- * suggestion plugin's async `onExit` teardown + React reconciliation, all
- * before the browser commits a stable layout. The editor DOM is still in flux
- * when the deferred state update lands.
- *
- * Iteration 2 fix: defer via a double `requestAnimationFrame`. The first RAF
- * fires just before the next paint — after the current microtask checkpoint
- * fully drains (ProseMirror's view + MutationObserver settled, the slash
- * typeahead root unmounted). The nested second RAF pushes the React state
- * update past that paint so the `AiBubbleMenu` effect's `coordsAtPos` / focus
- * reads run against a fully settled editor DOM. `defer` stays overridable for
- * tests.
+ * Two earlier iterations deferred this `onAiTrigger` state update — first via
+ * `queueMicrotask` (iteration 1), then via a double `requestAnimationFrame`
+ * (iteration 2). Both still crashed on preview, because the broken sibling
+ * relationship is invalid regardless of WHEN the state update lands. With the
+ * panel body-portaled, the trigger fires synchronously — no defer needed.
  */
 
 import type { TiptapEditor } from "@episteme/editor";
@@ -52,27 +43,6 @@ export interface SlashCommandPayload {
 export interface SlashCommandHandlerDeps {
   /** Increments the AI portal trigger counter on the parent component. */
   onAiTrigger: () => void;
-  /**
-   * Schedules a callback to run after the editor's view has fully settled.
-   * Defaults to a double `requestAnimationFrame` (fires past the next paint);
-   * overridable for tests. A microtask is NOT enough — see file header.
-   */
-  defer?: (fn: () => void) => void;
-}
-
-/**
- * Defer past the next browser paint via nested `requestAnimationFrame`. The
- * outer frame fires after the current microtask checkpoint drains; the inner
- * frame fires after that paint, by which point ProseMirror's view + React's
- * reconciliation have settled. Falls back to `queueMicrotask` in non-DOM
- * environments (e.g. SSR) where `requestAnimationFrame` is unavailable.
- */
-function rafDefer(fn: () => void): void {
-  if (typeof requestAnimationFrame !== "function") {
-    queueMicrotask(fn);
-    return;
-  }
-  requestAnimationFrame(() => requestAnimationFrame(fn));
 }
 
 export interface SlashCommandHandlerArgs {
@@ -86,7 +56,6 @@ export function handleSlashCommand(
   deps: SlashCommandHandlerDeps,
 ): void {
   const { editor, range, props } = args;
-  const defer = deps.defer ?? rafDefer;
 
   // Delete the `/` trigger and any typed query characters first so the
   // Suggestion plugin sees the trigger char is gone and finishes its
@@ -94,14 +63,10 @@ export function handleSlashCommand(
   editor.chain().focus().deleteRange(range).run();
 
   if (props.title === "AI") {
-    // Defer the React state update past the next paint (double RAF) so the
-    // suggestion plugin's async teardown + ProseMirror's view reconciliation
-    // fully settle before the parent re-renders. A microtask was insufficient
-    // (iteration 1 still crashed on preview) — it runs inside the same
-    // microtask checkpoint as ProseMirror's MutationObserver flush, so the
-    // editor DOM is still in flux. Surfaced as a
-    // `Failed to execute 'insertBefore' on 'Node'` crash.
-    defer(() => deps.onAiTrigger());
+    // Fire synchronously: the AI-rephrase panel is body-portaled (see
+    // AiBubbleMenu.tsx), so this state update no longer races a sibling DOM
+    // insertion against the tippy-relocated BubbleMenu div. No defer needed.
+    deps.onAiTrigger();
     return;
   }
 

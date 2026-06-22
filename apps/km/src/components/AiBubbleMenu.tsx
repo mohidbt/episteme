@@ -284,51 +284,48 @@ export function AiBubbleMenu({
     setTurns([]);
   }, []);
 
-  // When slash command selects "AI", open generate mode as portal.
+  // When slash command selects "AI", open generate mode as a body-portaled
+  // panel.
   //
-  // GSD-134: the slash dispatch deletes the `/…` range immediately before this
-  // effect's trigger fires, so ProseMirror's view is still settling when React
-  // commits this render. Reading `coordsAtPos` / calling `editor.commands.focus`
-  // synchronously here races that settle and crashes with `insertBefore`. Defer
-  // the editor DOM reads to a requestAnimationFrame (past the next paint) so the
-  // view is stable. The state flags that mount the portal are also set inside
-  // the frame so the portal never renders against a mid-flux editor DOM.
-  //
-  // `lastTriggerRef` is advanced INSIDE the frame (not before scheduling): under
-  // React Strict Mode the effect runs setup → cleanup → setup on mount, and the
-  // cleanup cancels the first frame. Advancing the ref before scheduling would
-  // make the second setup early-return and the trigger would be dropped (portal
-  // never opens). Marking "done" only when the work actually runs keeps the
-  // re-run able to reschedule.
+  // GSD-134 (structural root cause): the rephrase panel must be a `createPortal`
+  // into `document.body`, NOT a React sibling of <BubbleMenu>. `@tiptap/react`'s
+  // BubbleMenu renders its children into a div that `@tiptap/extension-bubble-
+  // menu` then `.remove()`s and reparents into a tippy popper — while React's
+  // fiber tree still tracks that div where <BubbleMenu> was declared. If the
+  // panel renders as a sibling of <BubbleMenu>, React's commit-phase placement
+  // resolves the panel's host sibling to that relocated div and calls
+  // `parent.insertBefore(panel, bubbleMenuDiv)`, which throws
+  // `NotFoundError: ... not a child of this node` because the div is no longer a
+  // child of `parent`. Body-portaling the panel removes it from that host-parent
+  // sibling chain entirely. (Two prior timing fixes — queueMicrotask, double-RAF
+  // — failed because the sibling relationship is invalid regardless of WHEN the
+  // state update lands.)
   useEffect(() => {
     if (aiTriggerCount <= lastTriggerRef.current) return;
-    const raf = requestAnimationFrame(() => {
-      lastTriggerRef.current = aiTriggerCount;
-      const { from, to } = editor.state.selection;
-      // Position anchored to the start of the line where `/` was typed
-      const $pos = editor.state.doc.resolve(from);
-      const lineStart = $pos.start();
-      lineStartRef.current = lineStart;
-      const coords = editor.view.coordsAtPos(lineStart);
-      const editorEl = editor.view.dom as HTMLElement;
-      const editorRect = editorEl.getBoundingClientRect();
-      setPortalPos({
-        top: coords.bottom + 4,
-        left: Math.max(editorRect.left, coords.left),
-      });
-      setPortalMaxWidth(`${editorRect.width}px`);
-      const { $from } = editor.state.selection;
-      const paraText = $from.parent.textContent.trim();
-      selRef.current = { from, to };
-      setSelectedText(paraText);
-      setAiOutput("");
-      setPrompt("");
-      setTurns([]);
-      setSource("portal");
-      setMode("rephrase-prompt");
-      editor.commands.focus();
+    lastTriggerRef.current = aiTriggerCount;
+    const { from, to } = editor.state.selection;
+    // Position anchored to the start of the line where `/` was typed
+    const $pos = editor.state.doc.resolve(from);
+    const lineStart = $pos.start();
+    lineStartRef.current = lineStart;
+    const coords = editor.view.coordsAtPos(lineStart);
+    const editorEl = editor.view.dom as HTMLElement;
+    const editorRect = editorEl.getBoundingClientRect();
+    setPortalPos({
+      top: coords.bottom + 4,
+      left: Math.max(editorRect.left, coords.left),
     });
-    return () => cancelAnimationFrame(raf);
+    setPortalMaxWidth(`${editorRect.width}px`);
+    const { $from } = editor.state.selection;
+    const paraText = $from.parent.textContent.trim();
+    selRef.current = { from, to };
+    setSelectedText(paraText);
+    setAiOutput("");
+    setPrompt("");
+    setTurns([]);
+    setSource("portal");
+    setMode("rephrase-prompt");
+    editor.commands.focus();
   }, [aiTriggerCount, editor]);
 
   // Click-away dismissal for portal mode
@@ -610,7 +607,7 @@ export function AiBubbleMenu({
         document.body,
       )}
 
-      {inPortalRephrase && (
+      {inPortalRephrase && typeof document !== "undefined" && createPortal(
         <div
           ref={panelRef}
           style={{
@@ -634,7 +631,8 @@ export function AiBubbleMenu({
             source={source}
             maxWidth={portalMaxWidth}
           />
-        </div>
+        </div>,
+        document.body,
       )}
     </>
   );

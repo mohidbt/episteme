@@ -1,22 +1,23 @@
 /**
- * GSD-134 — RED test reproducing the AI slash crash root cause.
+ * GSD-134 — slash command dispatch contract.
  *
- * The crash (`NotFoundError: Failed to execute 'insertBefore' on 'Node'`) is a
- * DOM mutation race between the Tiptap Suggestion plugin's view-update and a
- * React re-render triggered from inside the suggestion's `command` callback.
- * We cannot fully reproduce the jsdom DOM race in a unit test, but we can lock
- * down the contract that prevents it: the AI trigger MUST be deferred until
- * after the editor's current view-settle completes.
+ * The AI slash crash (`NotFoundError: Failed to execute 'insertBefore' on
+ * 'Node'`) was a STRUCTURAL React/Tiptap bug, NOT a timing race: the AI-rephrase
+ * panel rendered as a React sibling of the tippy-relocated <BubbleMenu> div, so
+ * React's commit-phase placement anchored the new panel on a node tippy had
+ * already removed from the parent. The fix (iteration 3) body-portals the panel
+ * (see AiBubbleMenu.tsx + AiBubbleMenu.portalStructure.test.tsx).
  *
- * Iteration 2: a `queueMicrotask` deferral was proven INSUFFICIENT on preview —
- * a microtask still runs within the same microtask checkpoint as ProseMirror's
- * MutationObserver flush + React reconciliation, before the browser commits a
- * stable layout. The accepted contract is now a `requestAnimationFrame`-based
- * deferral (fires past the next paint, after the view settles). This test
- * locks that contract: the default defer must NOT fire on microtask drain,
- * only after a RAF tick.
+ * With the panel decoupled from the bubble-menu host-parent chain, the AI
+ * trigger fires synchronously — the earlier `queueMicrotask` (iteration 1) and
+ * double-`requestAnimationFrame` (iteration 2) deferrals were band-aids that
+ * never addressed the invalid sibling relationship and both still crashed on
+ * preview. They have been removed.
+ *
+ * This test locks the post-fix contract: deleteRange runs first, then
+ * onAiTrigger fires synchronously (no deferral).
  */
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { handleSlashCommand } from "./slash-command-handler";
 
 type StubEditor = {
@@ -47,7 +48,7 @@ function makeEditor(): StubEditor {
 type HandlerEditorArg = Parameters<typeof handleSlashCommand>[0]["editor"];
 
 describe("handleSlashCommand — AI item", () => {
-  it("deletes the slash trigger range synchronously", () => {
+  it("deletes the slash trigger range", () => {
     const editor = makeEditor();
     const deleteRange = vi.spyOn(editor, "deleteRange");
     handleSlashCommand(
@@ -56,18 +57,14 @@ describe("handleSlashCommand — AI item", () => {
         range: { from: 1, to: 2 },
         props: { title: "AI" },
       },
-      { onAiTrigger: () => {}, defer: () => {} },
+      { onAiTrigger: () => {} },
     );
     expect(deleteRange).toHaveBeenCalledWith({ from: 1, to: 2 });
   });
 
-  it("defers onAiTrigger so it does NOT fire synchronously", () => {
+  it("fires onAiTrigger synchronously (no deferral — panel is body-portaled)", () => {
     const editor = makeEditor();
     const onAiTrigger = vi.fn();
-    const captured: Array<() => void> = [];
-    const defer = (fn: () => void) => {
-      captured.push(fn);
-    };
 
     handleSlashCommand(
       {
@@ -75,88 +72,35 @@ describe("handleSlashCommand — AI item", () => {
         range: { from: 1, to: 2 },
         props: { title: "AI" },
       },
-      { onAiTrigger, defer },
+      { onAiTrigger },
     );
 
-    // RED: before the fix, onAiTrigger ran inline and this assertion fails.
-    expect(onAiTrigger).not.toHaveBeenCalled();
-    expect(captured).toHaveLength(1);
-
-    captured[0]!();
     expect(onAiTrigger).toHaveBeenCalledTimes(1);
   });
 
-  describe("default defer = requestAnimationFrame (iteration 2)", () => {
-    let rafQueue: FrameRequestCallback[];
-    let originalRaf: typeof globalThis.requestAnimationFrame | undefined;
-
-    beforeEach(() => {
-      rafQueue = [];
-      originalRaf = globalThis.requestAnimationFrame;
-      globalThis.requestAnimationFrame = ((cb: FrameRequestCallback) => {
-        rafQueue.push(cb);
-        return rafQueue.length;
-      }) as typeof globalThis.requestAnimationFrame;
+  it("deletes the range BEFORE firing the trigger", () => {
+    const editor = makeEditor();
+    const order: string[] = [];
+    vi.spyOn(editor, "deleteRange").mockImplementation(() => {
+      order.push("deleteRange");
+      return editor;
     });
 
-    afterEach(() => {
-      if (originalRaf) globalThis.requestAnimationFrame = originalRaf;
-      else delete (globalThis as { requestAnimationFrame?: unknown })
-        .requestAnimationFrame;
-    });
+    handleSlashCommand(
+      {
+        editor: editor as unknown as HandlerEditorArg,
+        range: { from: 1, to: 2 },
+        props: { title: "AI" },
+      },
+      { onAiTrigger: () => order.push("onAiTrigger") },
+    );
 
-    const flushFrame = () => {
-      const batch = rafQueue;
-      rafQueue = [];
-      batch.forEach((cb) => cb(performance.now()));
-    };
-
-    it("does NOT fire onAiTrigger on microtask drain (microtask defer was insufficient)", async () => {
-      const editor = makeEditor();
-      const onAiTrigger = vi.fn();
-
-      handleSlashCommand(
-        {
-          editor: editor as unknown as HandlerEditorArg,
-          range: { from: 1, to: 2 },
-          props: { title: "AI" },
-        },
-        { onAiTrigger },
-      );
-
-      expect(onAiTrigger).not.toHaveBeenCalled();
-      // A microtask drain must NOT be enough — this is exactly what failed on
-      // preview. requestAnimationFrame fires on a later macrotask, not here.
-      await Promise.resolve();
-      await Promise.resolve();
-      expect(onAiTrigger).not.toHaveBeenCalled();
-    });
-
-    it("fires onAiTrigger after a requestAnimationFrame tick", () => {
-      const editor = makeEditor();
-      const onAiTrigger = vi.fn();
-
-      handleSlashCommand(
-        {
-          editor: editor as unknown as HandlerEditorArg,
-          range: { from: 1, to: 2 },
-          props: { title: "AI" },
-        },
-        { onAiTrigger },
-      );
-
-      // The handler schedules a RAF; until frames flush, nothing fires.
-      expect(onAiTrigger).not.toHaveBeenCalled();
-      // Double-RAF (defer past the next paint) — flush twice.
-      flushFrame();
-      flushFrame();
-      expect(onAiTrigger).toHaveBeenCalledTimes(1);
-    });
+    expect(order).toEqual(["deleteRange", "onAiTrigger"]);
   });
 });
 
 describe("handleSlashCommand — non-AI items run synchronously", () => {
-  it("Table inserts inline (no deferral)", () => {
+  it("Table inserts inline", () => {
     const editor = makeEditor();
     const insertTable = vi.spyOn(editor, "insertTable");
     handleSlashCommand(
@@ -165,7 +109,7 @@ describe("handleSlashCommand — non-AI items run synchronously", () => {
         range: { from: 0, to: 0 },
         props: { title: "Table" },
       },
-      { onAiTrigger: () => {}, defer: () => {} },
+      { onAiTrigger: () => {} },
     );
     expect(insertTable).toHaveBeenCalledWith({
       rows: 3,
@@ -174,7 +118,7 @@ describe("handleSlashCommand — non-AI items run synchronously", () => {
     });
   });
 
-  it("Code Block inserts inline (no deferral)", () => {
+  it("Code Block inserts inline", () => {
     const editor = makeEditor();
     const toggleCodeBlock = vi.spyOn(editor, "toggleCodeBlock");
     handleSlashCommand(
@@ -183,7 +127,7 @@ describe("handleSlashCommand — non-AI items run synchronously", () => {
         range: { from: 0, to: 0 },
         props: { title: "Code Block" },
       },
-      { onAiTrigger: () => {}, defer: () => {} },
+      { onAiTrigger: () => {} },
     );
     expect(toggleCodeBlock).toHaveBeenCalledWith({ language: "ts" });
   });
