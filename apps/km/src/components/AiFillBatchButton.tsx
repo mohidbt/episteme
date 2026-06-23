@@ -17,6 +17,7 @@ import {
   TrialExhaustedError,
   fetchOrThrowTrialExhausted,
   surfaceTrialExhaustedToast,
+  maybeNotifyUsageThreshold,
 } from "@/lib/trial-exhausted";
 
 export interface BatchRow {
@@ -106,6 +107,9 @@ export function AiFillBatchButton({ kind, rows, onFillStart, onFillEnd }: Props)
       }
     }
     setBusy(false);
+    // GSD-139: after a batch of AI calls, opportunistically check spend
+    // thresholds (skipped when already exhausted — the 402 toast covers that).
+    if (filled > 0 && !trialExhausted) void maybeNotifyUsageThreshold();
     if (trialExhausted) {
       surfaceTrialExhaustedToast();
     } else if (keyErrorSeen) {

@@ -27,7 +27,10 @@ import {
 import type { AgentEvent, Citation } from "@/lib/agent-events";
 import type { PageContext } from "@/lib/page-context";
 import { useAgentBallOptional } from "./agent-ball-context";
-import { surfaceTrialExhaustedToast } from "@/lib/trial-exhausted";
+import {
+  surfaceTrialExhaustedToast,
+  maybeNotifyUsageThreshold,
+} from "@/lib/trial-exhausted";
 
 import {
   Conversation,
@@ -465,6 +468,10 @@ export function AgentTranscript({
           }
         }
         if (mutated) router.refresh();
+        // GSD-139: a completed agent turn (saw a `done` frame) just billed the
+        // managed bucket — opportunistically nudge the signed-in user toward
+        // subscribing if they crossed 70% / 90%. Fire-and-forget; never blocks.
+        if (sawDone) void maybeNotifyUsageThreshold();
       } catch {
         // Aborted or network — silent for MVP.
       } finally {

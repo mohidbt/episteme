@@ -13,6 +13,7 @@ import {
   TrialExhaustedError,
   fetchOrThrowTrialExhausted,
   surfaceTrialExhaustedToast,
+  maybeNotifyUsageThreshold,
 } from "@/lib/trial-exhausted";
 
 interface PaperCitationsListProps {
@@ -250,6 +251,13 @@ export function PaperCitationsList({ paperId }: PaperCitationsListProps) {
         toast.error("Failed to enrich citations");
         return;
       }
+      // GSD-139: enrichment burns S2 only when there were pending DOIs to
+      // enrich (total > 0). A no-op (total: 0) bills nothing, so skip the
+      // spend check there.
+      const enrichResult = (await res.json().catch(() => null)) as {
+        total?: number;
+      } | null;
+      if ((enrichResult?.total ?? 0) > 0) void maybeNotifyUsageThreshold();
       const next = await load();
       if (next && next.some(isUnenriched)) {
         clearPoll();

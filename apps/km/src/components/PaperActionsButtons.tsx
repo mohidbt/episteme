@@ -9,6 +9,7 @@ import {
   TrialExhaustedError,
   fetchOrThrowTrialExhausted,
   surfaceTrialExhaustedToast,
+  maybeNotifyUsageThreshold,
 } from "@/lib/trial-exhausted";
 
 interface Paper {
@@ -51,11 +52,17 @@ export function PaperActionsButtons({
       }
       const data = (await res.json().catch(() => ({}))) as {
         unavailable?: boolean;
-        stats?: { referencesInserted?: number };
+        alreadyExtracted?: boolean;
+        stats?: { referencesInserted?: number; extractionMethod?: string };
       };
       if (data?.unavailable) {
         toast.error("Citation extraction service is unavailable. Please try again later.");
         return;
+      }
+      // GSD-139: only nudge on a real LLM/S2 burn. The cached branch
+      // (alreadyExtracted) bills nothing, so skip the spend check there.
+      if (!data.alreadyExtracted && data.stats?.extractionMethod !== "cached") {
+        void maybeNotifyUsageThreshold();
       }
       const n = data.stats?.referencesInserted ?? 0;
       toast.success(n > 0 ? `Found ${n} citation${n === 1 ? "" : "s"}` : "No citations detected");

@@ -2,6 +2,7 @@ import {
   TrialExhaustedError,
   fetchOrThrowTrialExhausted,
   surfaceTrialExhaustedToast,
+  maybeNotifyUsageThreshold,
 } from "@/lib/trial-exhausted";
 
 // Regex: a paragraph whose text is exactly `/ai <prompt>`.
@@ -69,6 +70,7 @@ export async function runSlashAi(args: RunSlashAiArgs): Promise<void> {
   const decoder = new TextDecoder();
   let buf = "";
   let halted = false;
+  let sawError = false;
 
   while (!halted) {
     let readResult: ReadableStreamReadResult<Uint8Array>;
@@ -119,6 +121,7 @@ export async function runSlashAi(args: RunSlashAiArgs): Promise<void> {
         onToken(evt.content);
       } else if (evt.type === "error") {
         onError(evt.message);
+        sawError = true;
         halted = true;
         break;
       }
@@ -130,4 +133,10 @@ export async function runSlashAi(args: RunSlashAiArgs): Promise<void> {
   } catch {
     /* noop */
   }
+
+  // GSD-139: a cleanly-completed AI stream (no error frame) just billed the
+  // managed bucket — opportunistically check whether the signed-in user
+  // crossed a spend threshold (70% / 90%) and nudge them to subscribe before
+  // the hard 402 at 100%. Fire-and-forget; never blocks.
+  if (!sawError) void maybeNotifyUsageThreshold();
 }

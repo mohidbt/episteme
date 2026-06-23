@@ -137,3 +137,131 @@ export function surfaceTrialExhaustedToast(
   }
   toast.error(TRIAL_EXHAUSTED_TOAST_COPY);
 }
+
+// ---------------------------------------------------------------------------
+// GSD-139 — usage-threshold notifier (70% / 90% → subscribe-soon).
+//
+// A signed-in user crossing 70% then 90% of their OpenRouter managed-bucket
+// soft limit gets a single non-blocking nudge BEFORE the hard 402 at 100%.
+// Reuses the same data path as /settings/data — GET /api/openrouter/usage,
+// which returns { totalUsd, limitUsd, isGuest } from the cached local spend
+// sum (no new live OR call). Guests are out of scope (GSD-130 handles their
+// $1 cap + sign-up CTA), and the endpoint's own isGuest flag is the gate.
+// ---------------------------------------------------------------------------
+
+export const USAGE_THRESHOLD_70_KEY = "episteme:usage-threshold-70-shown";
+export const USAGE_THRESHOLD_90_KEY = "episteme:usage-threshold-90-shown";
+
+export const USAGE_THRESHOLD_70_COPY =
+  "Heads up — you've used 70% of your AI trial. Subscribe soon to keep things running.";
+export const USAGE_THRESHOLD_90_COPY =
+  "Almost out of AI credit — subscribe to keep AI on.";
+export const USAGE_THRESHOLD_CTA_LABEL = "Subscribe";
+// TODO(GSD-141/P2): point at /settings/billing once the subscribe flow lands.
+export const USAGE_THRESHOLD_CTA_HREF = "/sign-up";
+
+// Throttle the usage GET so token-by-token streams / rapid tool calls don't
+// hammer /api/openrouter/usage. Once 90% has fired we skip the network entirely.
+const USAGE_THRESHOLD_FETCH_THROTTLE_MS = 60 * 1000;
+let lastUsageFetchAt = 0;
+
+/** Test-only: reset the in-process fetch throttle between cases. */
+export function __resetUsageThrottleForTest(): void {
+  lastUsageFetchAt = 0;
+}
+
+function alreadyShown(key: string): boolean {
+  try {
+    return sessionStorage.getItem(key) != null;
+  } catch {
+    // sessionStorage unavailable (SSR / private mode) — treat as not-shown so
+    // the warn still has a chance to fire; the throttle below caps spam per tab.
+    return false;
+  }
+}
+
+function markShown(key: string): void {
+  try {
+    sessionStorage.setItem(key, String(Date.now()));
+  } catch {
+    // Degrade silently — best-effort dedup only.
+  }
+}
+
+function navigateToSubscribe(): void {
+  if (typeof window !== "undefined") {
+    window.location.href = USAGE_THRESHOLD_CTA_HREF;
+  }
+}
+
+interface UsageSnapshot {
+  totalUsd?: unknown;
+  limitUsd?: unknown;
+  isGuest?: unknown;
+}
+
+/**
+ * Opportunistic post-AI-call check: fetch current managed-bucket spend and,
+ * if a signed-in user just crossed 70% or 90% of their soft limit, fire a
+ * single subscribe-soon toast. Never throws and never blocks the AI UX —
+ * any failure (network, parse, divide-by-zero, sessionStorage) is swallowed.
+ *
+ * The `fetchImpl` arg is for unit tests only — production callsites pass none.
+ */
+export async function maybeNotifyUsageThreshold(
+  fetchImpl: typeof fetch = globalThis.fetch,
+): Promise<void> {
+  // Cheap exits before any network: 90% already shown, or we fetched within
+  // the throttle window.
+  if (alreadyShown(USAGE_THRESHOLD_90_KEY)) return;
+  const now = Date.now();
+  if (now - lastUsageFetchAt < USAGE_THRESHOLD_FETCH_THROTTLE_MS) return;
+  lastUsageFetchAt = now;
+
+  let snapshot: UsageSnapshot | null = null;
+  try {
+    const res = await fetchImpl("/api/openrouter/usage");
+    if (!res.ok) return;
+    snapshot = (await res.json()) as UsageSnapshot;
+  } catch {
+    return;
+  }
+  if (!snapshot || snapshot.isGuest === true) return;
+
+  const totalUsd = Number(snapshot.totalUsd);
+  const limitUsd = Number(snapshot.limitUsd);
+  if (!Number.isFinite(totalUsd) || !Number.isFinite(limitUsd) || limitUsd <= 0) {
+    return;
+  }
+  const pct = totalUsd / limitUsd;
+
+  if (pct >= 0.9) {
+    if (alreadyShown(USAGE_THRESHOLD_90_KEY)) return;
+    // Mark 70 too so a later sub-90 call can't retroactively fire the gentler
+    // toast after we've already escalated.
+    markShown(USAGE_THRESHOLD_70_KEY);
+    markShown(USAGE_THRESHOLD_90_KEY);
+    toast.warning(USAGE_THRESHOLD_90_COPY, {
+      action: {
+        label: USAGE_THRESHOLD_CTA_LABEL,
+        onClick: navigateToSubscribe,
+      },
+    });
+    return;
+  }
+
+  if (pct >= 0.7) {
+    if (alreadyShown(USAGE_THRESHOLD_70_KEY)) return;
+    markShown(USAGE_THRESHOLD_70_KEY);
+    // Clear the fetch throttle so a rapid 70→90 crossing in the same minute
+    // can still re-fetch and fire the 90% escalation on the next AI call
+    // (the 90 key gates re-firing, so this can't double-toast).
+    lastUsageFetchAt = 0;
+    toast.warning(USAGE_THRESHOLD_70_COPY, {
+      action: {
+        label: USAGE_THRESHOLD_CTA_LABEL,
+        onClick: navigateToSubscribe,
+      },
+    });
+  }
+}

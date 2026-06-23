@@ -16,6 +16,7 @@ import {
   TrialExhaustedError,
   fetchOrThrowTrialExhausted,
   surfaceTrialExhaustedToast,
+  maybeNotifyUsageThreshold,
 } from "@/lib/trial-exhausted";
 
 interface Props {
@@ -76,6 +77,8 @@ export function AiFillButton({
         toast.error("AI fill failed", { description: `HTTP ${res.status}` });
         return;
       }
+      // GSD-139: AI call succeeded — opportunistically check spend thresholds.
+      void maybeNotifyUsageThreshold();
       const data = (await res.json()) as { suggestions: Record<string, unknown> };
       const suggestions = data.suggestions ?? {};
       const keys = Object.keys(suggestions);
