@@ -1,11 +1,12 @@
-// GSD-126 P0 — bar-only AI usage panel.
+// GSD-126 P0 / GSD-140 P1 — bar-only AI usage panel.
 //
 // Numeric "$X / $5 — 30-day spend" readout removed across the board. We
 // keep only the bar + an "Over budget" badge. Label is conditional:
-//   • guest      → "AI usage"     (no time qualifier)
-//   • signed-in  → "Weekly usage" (cosmetic; the trial bucket is one-time
-//                                   $5, but P1 subscriptions will be weekly
-//                                   so the label leads with the future)
+//   • guest          → "AI usage"      (no time qualifier)
+//   • trial signed-in→ "Weekly usage"  (cosmetic; trial bucket is one-time $5,
+//                                        label leads with the future — P0)
+//   • paying (weekly)→ "Weekly usage"  (GSD-140: now genuinely a weekly window;
+//                                        the OR bucket resets weekly Mon-Sun UTC)
 //
 // Signed-in `totalUsd` is sourced upstream from OR's `/api/v1/keys/{hash}`
 // (truth source), not the local catalog estimate. Guests stay on local
@@ -16,10 +17,12 @@ export interface OrUsageData {
   byModel: Array<{ model: string; usd: number }>;
   isGuest: boolean;
   limitUsd: number;
+  /** GSD-140: true when the OR bucket resets weekly (paying tier). */
+  isWeekly?: boolean;
 }
 
 export function OrUsage({ usage }: { usage: OrUsageData }) {
-  const { totalUsd, limitUsd, isGuest } = usage;
+  const { totalUsd, limitUsd, isGuest, isWeekly } = usage;
   const overLimit = totalUsd > limitUsd;
   const pctRaw = limitUsd > 0 ? (totalUsd / limitUsd) * 100 : 0;
   // Clamp the visible bar to [0,100]; the badge communicates over-limit.
@@ -28,7 +31,10 @@ export function OrUsage({ usage }: { usage: OrUsageData }) {
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center justify-between gap-2">
-        <span className="text-sm text-muted-foreground">
+        <span
+          className="text-sm text-muted-foreground"
+          data-or-usage-weekly={isWeekly ? "true" : "false"}
+        >
           {isGuest ? "AI usage" : "Weekly usage"}
         </span>
         {overLimit && (

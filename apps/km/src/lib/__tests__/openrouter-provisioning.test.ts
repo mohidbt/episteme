@@ -101,6 +101,60 @@ describe("openrouter-provisioning", () => {
     });
   });
 
+  describe("createUserBucketWithConfig (GSD-140)", () => {
+    it("POSTs with the supplied limit/label/limit_reset", async () => {
+      fetchMock.mockResolvedValue(
+        new Response(JSON.stringify({ key: "sk-new", hash: "h_new" }), {
+          status: 200,
+        }),
+      );
+      const { createUserBucketWithConfig } = await import(
+        "../openrouter-provisioning"
+      );
+
+      const result = await createUserBucketWithConfig("user_9", {
+        limit: 2,
+        label: "high",
+        limitReset: "weekly",
+      });
+
+      expect(result).toEqual({ key: "sk-new", hash: "h_new" });
+      const [url, init] = fetchMock.mock.calls[0]!;
+      expect(String(url)).toBe("https://openrouter.ai/api/v1/keys");
+      expect((init as RequestInit).method).toBe("POST");
+      const body = JSON.parse((init as RequestInit).body as string);
+      expect(body).toMatchObject({
+        name: "episteme-user_9",
+        label: "high",
+        limit: 2,
+        limit_reset: "weekly",
+        include_byok_in_limit: false,
+      });
+    });
+  });
+
+  describe("deleteUserBucket (GSD-140)", () => {
+    it("DELETEs /api/v1/keys/{hash}", async () => {
+      fetchMock.mockResolvedValue(new Response("{}", { status: 200 }));
+      const { deleteUserBucket } = await import("../openrouter-provisioning");
+
+      await deleteUserBucket("h_old");
+
+      const [url, init] = fetchMock.mock.calls[0]!;
+      expect(String(url)).toBe("https://openrouter.ai/api/v1/keys/h_old");
+      expect((init as RequestInit).method).toBe("DELETE");
+      expect((init as RequestInit).headers).toMatchObject({
+        Authorization: "Bearer prov-test-key",
+      });
+    });
+
+    it("throws on non-OK", async () => {
+      fetchMock.mockResolvedValue(new Response("nope", { status: 404 }));
+      const { deleteUserBucket } = await import("../openrouter-provisioning");
+      await expect(deleteUserBucket("h_x")).rejects.toThrow();
+    });
+  });
+
   describe("patchUserBucket", () => {
     it("sends PATCH to /api/v1/keys/{hash} with the provided fields", async () => {
       fetchMock.mockResolvedValue(new Response("{}", { status: 200 }));
