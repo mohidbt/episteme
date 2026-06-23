@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 import { PaperclipIcon, XIcon } from "lucide-react";
 import { toast } from "sonner";
 
@@ -179,34 +179,22 @@ export function AttachmentChips({ attachments, onRemove }: AttachmentChipsProps)
 }
 
 export interface PaperclipButtonProps {
-  onFiles: (files: FileList | File[]) => void;
+  /** GSD-129: clicking the paper-clip inserts "@" into the composer to open
+   *  the library mention picker, instead of opening the OS file dialog. The
+   *  prior click-to-upload hidden <input> is removed — drag-drop file
+   *  attachment still works via the dropzone's addFiles in AgentTranscript. */
+  onInsertAtMention: () => void;
 }
 
-export function PaperclipButton({ onFiles }: PaperclipButtonProps) {
-  const inputRef = useRef<HTMLInputElement | null>(null);
+export function PaperclipButton({ onInsertAtMention }: PaperclipButtonProps) {
   return (
-    <>
-      <button
-        type="button"
-        aria-label="Attach file"
-        onClick={() => inputRef.current?.click()}
-        className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
-      >
-        <PaperclipIcon className="size-4" />
-      </button>
-      <input
-        ref={inputRef}
-        type="file"
-        data-testid="chat-file-input"
-        multiple
-        accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml,application/pdf"
-        className="hidden"
-        onChange={(e) => {
-          const files = e.target.files;
-          if (files && files.length) onFiles(files);
-          e.target.value = "";
-        }}
-      />
-    </>
+    <button
+      type="button"
+      aria-label="Attach file"
+      onClick={onInsertAtMention}
+      className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+    >
+      <PaperclipIcon className="size-4" />
+    </button>
   );
 }

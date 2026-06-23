@@ -52,12 +52,14 @@ function makeFile(name: string, type: string, size = 100): File {
 }
 
 describe("AgentTranscript — file upload (GSD-27)", () => {
-  it("renders a paperclip attach button with hidden file input", () => {
+  it("renders a paperclip attach button (GSD-129: opens @-mention, no file input)", () => {
     render(<AgentTranscript threadId="t1" />);
     const attach = screen.getByRole("button", { name: /attach file/i });
     expect(attach).toBeTruthy();
-    const input = screen.getByTestId("chat-file-input") as HTMLInputElement;
-    expect(input.type).toBe("file");
+    // GSD-129 removed the hidden OS file-import input; the paper-clip now
+    // inserts "@" to open the library mention picker. Drag-drop upload still
+    // works via the dropzone (covered by the tests below).
+    expect(screen.queryByTestId("chat-file-input")).toBeNull();
   });
 
   it("drops a supported image file onto chat input and renders a chip", async () => {

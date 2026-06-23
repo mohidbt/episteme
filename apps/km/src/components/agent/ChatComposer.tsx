@@ -65,6 +65,10 @@ export interface ChatComposerProps {
 export interface ChatComposerHandle {
   /** Insert a library handle from a drop or external picker. */
   insertHandle: (handle: LibraryHandle) => void;
+  /** Insert a "@" at the cursor to open the library mention picker (GSD-129).
+   *  Used by the paper-clip button so it triggers the SAME @-mention flow as
+   *  typing "@" by hand. */
+  insertAtMention: () => void;
   /** Get current text (with library tokens interleaved). */
   getText: () => string;
   /** Fire the same submit path Enter triggers (external Send button). */
@@ -361,6 +365,26 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
                 displayTitle: null,
               },
             })
+            .run();
+        },
+        insertAtMention: () => {
+          const e = editorRef.current;
+          if (!e) return;
+          // The @-trigger Suggestion plugin only matches when "@" sits at a
+          // valid boundary: start-of-line, or after whitespace inside a single
+          // text node (default `allowedPrefixes`). findSuggestionMatch reads
+          // `$from.nodeBefore`, so a bare "@" only triggers when nodeBefore is
+          // null (block start) or a text node ending in whitespace. Prepend a
+          // space in every other case — covers cursor-after-word AND
+          // cursor-after-chip (a wikiLink atom, where nodeBefore.isText is
+          // false and a bare "@" would never open the picker).
+          const before = e.state.selection.$from.nodeBefore;
+          const endsInSpace =
+            !!before && before.isText && /\s$/.test(before.text ?? "");
+          const needsSpace = !!before && !endsInSpace;
+          e.chain()
+            .focus()
+            .insertContent(needsSpace ? " @" : "@")
             .run();
         },
         getText: () => {

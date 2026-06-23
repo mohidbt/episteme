@@ -813,7 +813,9 @@ export function AgentTranscript({
         ) : null}
         <AttachmentChips attachments={attachments} onRemove={removeAttachment} />
         <div className="p-2 flex items-center gap-2">
-          <PaperclipButton onFiles={addFiles} />
+          <PaperclipButton
+            onInsertAtMention={() => composerRef.current?.insertAtMention()}
+          />
           <div className="flex-1 min-w-0">
             <ChatComposer
               ref={composerRef}
