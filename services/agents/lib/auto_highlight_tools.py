@@ -66,7 +66,7 @@ def build_tools(
     paper_id: str,
     get_run_id: Callable[[], Awaitable[str]],
     api_key: str,
-    pdf_path: str,
+    pdf_path: str | Callable[[], Awaitable[str]],
     conn_lock: asyncio.Lock | None = None,
 ) -> list:
     """Build the auto-highlight tool set with context closed over by each @tool.
@@ -74,6 +74,14 @@ def build_tools(
     `get_run_id` is an async callable that returns the run_id. It is only
     awaited lazily on the first `create_highlights` call, and its result is
     cached for the remainder of the run.
+
+    `pdf_path` is either a local file path (str) or an async provider
+    `() -> Awaitable[str]` that resolves to one. The provider is awaited
+    lazily — only when a PDF-reading tool (`page_text`/`locate_phrase`)
+    actually fires — and its result is cached for the rest of the run. This
+    keeps the common no-highlight chat path from downloading source.pdf
+    (GSD-135 twin): chat passes a provider that downloads to a tempfile on
+    first call; eager callers (auto-highlight) pass an already-local path.
 
     `conn_lock` serializes access to the shared asyncpg `conn` across
     concurrent tool calls (OpenRouter/OpenAI can emit parallel tool calls
@@ -91,6 +99,20 @@ def build_tools(
         if cached is None:
             cached = await get_run_id()
         return cached
+
+    pdf_lock = asyncio.Lock()
+    resolved_pdf: str | None = None
+
+    async def _pdf_path() -> str:
+        """Resolve the local PDF path, awaiting (and caching) a provider once."""
+        nonlocal resolved_pdf
+        if not callable(pdf_path):
+            return pdf_path
+        if resolved_pdf is None:
+            async with pdf_lock:
+                if resolved_pdf is None:
+                    resolved_pdf = await pdf_path()
+        return resolved_pdf
 
     @tool
     async def semantic_search(query: str, top_k: int = 8) -> list[dict]:
@@ -143,8 +165,10 @@ def build_tools(
         context around a candidate passage before calling `locate_phrase`.
         """
 
+        local_pdf = await _pdf_path()
+
         def _load():
-            reader = PdfReader(pdf_path)
+            reader = PdfReader(local_pdf)
             if page_number < 1 or page_number > len(reader.pages):
                 return None
             return reader.pages[page_number - 1].extract_text() or ""
@@ -164,8 +188,9 @@ def build_tools(
         matching. Caps at 20 results. Returns
         `[{start_offset, end_offset, text, rects: [{page, x0, y0, x1, y1}]}]`.
         """
+        local_pdf = await _pdf_path()
         text, fragments = await anyio.to_thread.run_sync(
-            lambda: _extract_with_positions(pdf_path, page_number)
+            lambda: _extract_with_positions(local_pdf, page_number)
         )
         if text is None:
             return []
@@ -174,7 +199,7 @@ def build_tools(
         if not hits and os.environ.get("AUTO_HIGHLIGHT_FUZZY") == "1":
             hits = _find_fuzzy(text, phrase)
 
-        reader = PdfReader(pdf_path)
+        reader = PdfReader(local_pdf)
         mb = reader.pages[page_number - 1].mediabox
         page_x_max = float(mb.right)
         results = []
