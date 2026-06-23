@@ -20,6 +20,7 @@ from lib.auto_highlight_tools import (
     _find_exact,
     _rect_for_span,
 )
+from lib.storage import SourcePdfMissing, download_to_tempfile
 from pypdf import PdfReader
 
 logger = logging.getLogger(__name__)
@@ -44,7 +45,10 @@ async def rebuild_run(run_id: str, auth: InternalAuthDep, conn: ConnDep) -> dict
     )
     if not run:
         raise HTTPException(status_code=404, detail="Not found")
-    pdf_path = run["storage_url"]
+    # storage_url is an R2 object key, not a local path. In serverless there is
+    # no shared filesystem, so download source.pdf to a tempfile and read the
+    # LOCAL path (GSD-135 pattern). The tempfile lives for the whole page loop.
+    storage_key = run["storage_url"]
 
     rows = await conn.fetch(
         "SELECT id, page_number, text_content, start_offset "
@@ -60,47 +64,51 @@ async def rebuild_run(run_id: str, auth: InternalAuthDep, conn: ConnDep) -> dict
 
     updated = 0
     skipped = 0
-    reader = await anyio.to_thread.run_sync(lambda: PdfReader(pdf_path))
+    try:
+        async with download_to_tempfile(storage_key) as pdf_path:
+            reader = await anyio.to_thread.run_sync(lambda: PdfReader(pdf_path))
 
-    for page_number, page_rows in by_page.items():
-        try:
-            text, fragments = await anyio.to_thread.run_sync(
-                lambda: _extract_with_positions(pdf_path, page_number)
-            )
-        except Exception:
-            logger.exception("extraction failed for page %d", page_number)
-            skipped += len(page_rows)
-            continue
-        if text is None:
-            skipped += len(page_rows)
-            continue
-        if page_number < 1 or page_number > len(reader.pages):
-            skipped += len(page_rows)
-            continue
-        page_x_max = float(reader.pages[page_number - 1].mediabox.right)
+            for page_number, page_rows in by_page.items():
+                try:
+                    text, fragments = await anyio.to_thread.run_sync(
+                        lambda pn=page_number: _extract_with_positions(pdf_path, pn)
+                    )
+                except Exception:
+                    logger.exception("extraction failed for page %d", page_number)
+                    skipped += len(page_rows)
+                    continue
+                if text is None:
+                    skipped += len(page_rows)
+                    continue
+                if page_number < 1 or page_number > len(reader.pages):
+                    skipped += len(page_rows)
+                    continue
+                page_x_max = float(reader.pages[page_number - 1].mediabox.right)
 
-        for row in page_rows:
-            phrase = row["text_content"]
-            hits = _find_exact(text, phrase)
-            if not hits:
-                skipped += 1
-                continue
-            # Prefer the hit nearest the originally stored start_offset — the
-            # phrase may appear multiple times on a page.
-            target_start = int(row["start_offset"])
-            s, e = min(hits, key=lambda h: abs(h[0] - target_start))
-            rects = _rect_for_span(fragments, s, e, page_number, page_x_max)
-            if not rects:
-                skipped += 1
-                continue
-            await conn.execute(
-                "UPDATE user_highlights SET rects = $1::jsonb, start_offset = $2, "
-                "end_offset = $3 WHERE id = $4",
-                json.dumps(rects),
-                s,
-                e,
-                row["id"],
-            )
-            updated += 1
+                for row in page_rows:
+                    phrase = row["text_content"]
+                    hits = _find_exact(text, phrase)
+                    if not hits:
+                        skipped += 1
+                        continue
+                    # Prefer the hit nearest the originally stored start_offset —
+                    # the phrase may appear multiple times on a page.
+                    target_start = int(row["start_offset"])
+                    s, e = min(hits, key=lambda h: abs(h[0] - target_start))
+                    rects = _rect_for_span(fragments, s, e, page_number, page_x_max)
+                    if not rects:
+                        skipped += 1
+                        continue
+                    await conn.execute(
+                        "UPDATE user_highlights SET rects = $1::jsonb, start_offset = $2, "
+                        "end_offset = $3 WHERE id = $4",
+                        json.dumps(rects),
+                        s,
+                        e,
+                        row["id"],
+                    )
+                    updated += 1
+    except SourcePdfMissing:
+        raise HTTPException(status_code=404, detail="source_pdf_missing") from None
 
     return {"updated": updated, "skipped": skipped, "total": len(rows)}

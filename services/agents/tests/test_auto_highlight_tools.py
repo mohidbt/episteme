@@ -105,6 +105,55 @@ async def test_page_text_returns_text_and_count():
 
 
 @pytest.mark.asyncio
+async def test_pdf_path_accepts_async_provider_resolved_once():
+    """GSD-135 twin: chat passes a LAZY async provider for the PDF path so the
+    source.pdf is only downloaded when a highlight tool actually fires. The
+    provider must be awaited at most once even across multiple tool calls,
+    and the resolved local path must reach pypdf.
+    """
+    conn = AsyncMock()
+    calls = {"n": 0}
+
+    async def provider():
+        calls["n"] += 1
+        return PDF_PATH
+
+    tools = build_tools(conn, USER_ID, PAPER_ID, _async_run_id(RUN_ID), "sk-test", provider)
+
+    page_text = _get_tool(tools, "page_text")
+    r1 = await page_text.ainvoke({"page_number": 1})
+    assert r1["page"] == 1
+    assert "Test PDF Document" in r1["text"]
+
+    # Second tool call must reuse the cached resolution — provider not re-called.
+    locate = _get_tool(tools, "locate_phrase")
+    await locate.ainvoke({"phrase": "Test", "page_number": 1})
+
+    assert calls["n"] == 1, f"provider should resolve once, got {calls['n']}"
+
+
+@pytest.mark.asyncio
+async def test_pdf_provider_not_called_until_pdf_tool_invoked():
+    """The lazy seam's whole point: building tools must NOT trigger a download.
+    The provider stays untouched until a PDF-reading tool is actually called.
+    """
+    conn = AsyncMock()
+    conn.fetch.return_value = []
+    calls = {"n": 0}
+
+    async def provider():
+        calls["n"] += 1
+        return PDF_PATH
+
+    with patch("lib.auto_highlight_tools.embed_texts", new=AsyncMock(return_value=[[0.0] * 1536])):
+        tools = build_tools(conn, USER_ID, PAPER_ID, _async_run_id(RUN_ID), "sk-test", provider)
+        # semantic_search does NOT read the PDF — provider must stay at 0.
+        await _get_tool(tools, "semantic_search").ainvoke({"query": "x"})
+
+    assert calls["n"] == 0, "provider must not fire for non-PDF tools"
+
+
+@pytest.mark.asyncio
 async def test_page_text_out_of_range_returns_error():
     conn = AsyncMock()
     tools = build_tools(conn, USER_ID, PAPER_ID, _async_run_id(RUN_ID), "sk-test", PDF_PATH)

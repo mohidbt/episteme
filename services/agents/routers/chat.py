@@ -7,6 +7,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from deps.auth import InternalAuthDep
 from deps.db import ConnDep
+import lib.storage as storage
 from lib.auto_highlight_tools import TOOLBELT_SYSTEM_HINT, build_tools
 from lib.conversations import upsert_conversation, insert_message, bump_updated_at
 from lib.rag import retrieve
@@ -133,7 +134,19 @@ async def chat(body: ChatBody, auth: InternalAuthDep, conn: ConnDep):
     # Lazy highlight-run context: populated only if the agent calls create_highlights.
     hl_ctx: dict = {"run_id": None, "highlights_inserted": 0, "summary": None}
 
-    pdf_path = paper["storage_url"]
+    # storage_url is an R2 object key, not a local path (no shared filesystem in
+    # serverless). The highlight tools open the PDF with pypdf/pdfplumber, which
+    # need a real local file. Download LAZILY — only if a highlight tool fires —
+    # so the common no-highlight chat turn never touches R2. `pdf_state` holds
+    # the open download_to_tempfile context manager for cleanup at stream end.
+    storage_key = paper["storage_url"]
+    pdf_state: dict = {"cm": None}
+
+    async def pdf_provider() -> str:
+        download_cm = storage.download_to_tempfile(storage_key)
+        local_path = await download_cm.__aenter__()
+        pdf_state["cm"] = download_cm
+        return local_path
 
     # Shared lock serializes all conn usage across tools + router paths, since
     # OpenRouter may still emit parallel tool calls despite the kwarg hint and
@@ -154,7 +167,7 @@ async def chat(body: ChatBody, auth: InternalAuthDep, conn: ConnDep):
         return hl_ctx["run_id"]
 
     highlight_tools = build_tools(
-        conn, user_id, paper_id, ensure_run_id, api_key, pdf_path,
+        conn, user_id, paper_id, ensure_run_id, api_key, pdf_provider,
         conn_lock=chat_conn_lock,
     )
 
@@ -185,6 +198,16 @@ async def chat(body: ChatBody, auth: InternalAuthDep, conn: ConnDep):
                 )
         except Exception:
             logger.exception("failed to finalize highlight run (best-effort)")
+
+    async def _close_pdf():
+        cm = pdf_state["cm"]
+        if cm is None:
+            return
+        pdf_state["cm"] = None
+        try:
+            await cm.__aexit__(None, None, None)
+        except Exception:
+            logger.exception("failed to clean up source.pdf tempfile (best-effort)")
 
     async def event_stream():
         yield _sse({"type": "sources", "sources": retrieval.sources, "conversationId": conv_id})
@@ -238,6 +261,11 @@ async def chat(body: ChatBody, auth: InternalAuthDep, conn: ConnDep):
             yield _sse({"type": "error", "message": str(e)})
             yield _sse_done()
             return
+        finally:
+            # Tools can only fire while run_chat is streaming; once it's done
+            # (success, error-return, or cancel) the source.pdf tempfile — if it
+            # was ever downloaded — is no longer needed.
+            await _close_pdf()
 
         await _finalize_run_completed()
 
