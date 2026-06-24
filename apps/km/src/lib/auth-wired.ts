@@ -10,9 +10,13 @@ import { createAuth } from "@episteme/auth";
 import { seedAnonymousUser } from "@/lib/seed-anonymous-user";
 import { seedRealUser } from "@/lib/seed-real-user";
 import { cleanupAnonymousR2 } from "@/lib/cleanup-anonymous-r2";
+import { sendVerificationEmailCallback } from "@/lib/verification-callback";
 
 export const auth = createAuth({
   onAnonymousUserCreate: seedAnonymousUser,
   onRealUserCreate: seedRealUser,
   onAnonymousLink: cleanupAnonymousR2,
+  // Soft email verification: sent on signup, non-fatal if Resend is down.
+  // No `requireEmailVerification` — guests/anon have no real email.
+  sendVerificationEmail: sendVerificationEmailCallback,
 });
