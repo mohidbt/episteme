@@ -822,6 +822,15 @@ CREATE TABLE public.user_signup_profiles (
     university text,
     CONSTRAINT user_signup_profiles_student_level_check CHECK (((student_level IS NULL) OR (student_level = ANY (ARRAY['Bachelor'::text, 'Master'::text, 'PhD'::text]))))
 );
+CREATE TABLE public.user_subscriptions (
+    user_id text NOT NULL,
+    tier text NOT NULL,
+    status text DEFAULT 'active'::text NOT NULL,
+    current_period_start timestamp with time zone,
+    current_period_end timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
 CREATE TABLE public.verification (
     id text NOT NULL,
     identifier text NOT NULL,
@@ -973,6 +982,8 @@ ALTER TABLE ONLY public.user_preferences
     ADD CONSTRAINT user_preferences_pkey PRIMARY KEY (user_id);
 ALTER TABLE ONLY public.user_signup_profiles
     ADD CONSTRAINT user_signup_profiles_pkey PRIMARY KEY (user_id);
+ALTER TABLE ONLY public.user_subscriptions
+    ADD CONSTRAINT user_subscriptions_pkey PRIMARY KEY (user_id);
 ALTER TABLE ONLY public."user"
     ADD CONSTRAINT user_username_unique UNIQUE (username);
 ALTER TABLE ONLY public.verification
@@ -1194,3 +1205,5 @@ ALTER TABLE ONLY public.user_preferences
     ADD CONSTRAINT user_preferences_user_id_user_id_fk FOREIGN KEY (user_id) REFERENCES public."user"(id) ON DELETE CASCADE;
 ALTER TABLE ONLY public.user_signup_profiles
     ADD CONSTRAINT user_signup_profiles_user_id_fkey FOREIGN KEY (user_id) REFERENCES public."user"(id) ON DELETE CASCADE;
+ALTER TABLE ONLY public.user_subscriptions
+    ADD CONSTRAINT user_subscriptions_user_id_fk FOREIGN KEY (user_id) REFERENCES public."user"(id) ON DELETE CASCADE;
