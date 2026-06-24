@@ -1,6 +1,12 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { render, screen, cleanup, fireEvent } from "@testing-library/react";
+import {
+  render,
+  screen,
+  cleanup,
+  fireEvent,
+  waitFor,
+} from "@testing-library/react";
 
 const push = vi.fn();
 vi.mock("next/navigation", () => ({
@@ -50,5 +56,29 @@ describe("VerifyEmailClient", () => {
     expect(sendVerificationEmail).toHaveBeenCalledWith(
       expect.objectContaining({ email: "ada@example.com", callbackURL: "/verify-email" }),
     );
+  });
+
+  it("shows an error message when resend rejects", async () => {
+    sendVerificationEmail.mockRejectedValue(new Error("boom"));
+    render(<VerifyEmailClient error="invalid_token" />);
+    fireEvent.change(screen.getByLabelText(/email/i), {
+      target: { value: "ada@example.com" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /resend/i }));
+    await waitFor(() => {
+      expect(screen.getByText(/couldn.t send/i)).toBeTruthy();
+    });
+  });
+
+  it("shows a sent confirmation when resend succeeds", async () => {
+    sendVerificationEmail.mockResolvedValue({ error: null });
+    render(<VerifyEmailClient error="invalid_token" />);
+    fireEvent.change(screen.getByLabelText(/email/i), {
+      target: { value: "ada@example.com" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /resend/i }));
+    await waitFor(() => {
+      expect(screen.getByText(/check your inbox/i)).toBeTruthy();
+    });
   });
 });
