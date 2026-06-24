@@ -1,8 +1,13 @@
 // @vitest-environment jsdom
 // GSD-11 — mobile-gate viewport detection + render.
-import { describe, it, expect, afterEach, beforeEach } from "vitest";
+import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 import { render, screen, cleanup, act } from "@testing-library/react";
 import { MobileGate, isMobileViewport } from "./MobileGate";
+
+let mockPathname = "/";
+vi.mock("next/navigation", () => ({
+  usePathname: () => mockPathname,
+}));
 
 const DESKTOP_UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36";
@@ -50,6 +55,7 @@ function installMatchMedia() {
 beforeEach(() => {
   listeners.clear();
   installMatchMedia();
+  mockPathname = "/";
 });
 
 afterEach(() => cleanup());
@@ -82,6 +88,16 @@ describe("MobileGate", () => {
     const gate = screen.getByTestId("mobile-gate");
     expect(gate).toBeTruthy();
     expect(gate.textContent).toMatch(/desktop/i);
+  });
+
+  it("renders nothing on the /landing route even on a narrow viewport", () => {
+    mockPathname = "/landing";
+    setViewport(390);
+    setUserAgent(IPHONE_UA);
+    act(() => {
+      render(<MobileGate />);
+    });
+    expect(screen.queryByTestId("mobile-gate")).toBeNull();
   });
 
   it("renders nothing on a desktop viewport", () => {

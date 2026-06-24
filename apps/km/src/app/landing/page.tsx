@@ -8,6 +8,7 @@ import { Quote } from "./_components/Quote";
 import { ClosingCta } from "./_components/ClosingCta";
 import { Footer } from "./_components/Footer";
 import { StickyCta } from "./_components/StickyCta";
+import { HideAppChrome } from "./_components/HideAppChrome";
 
 // Marketing fonts, scoped to this route via CSS variables consumed by landing.css.
 const mkSans = Outfit({ variable: "--font-mk-sans", subsets: ["latin"] });
@@ -30,6 +31,7 @@ export default function LandingPage() {
     <main
       className={`mk-root ${mkSans.variable} ${mkMono.variable} ${mkDisplay.variable}`}
     >
+      <HideAppChrome />
       <StickyCta />
       <Hero />
       <Features />

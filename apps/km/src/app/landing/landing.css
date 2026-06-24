@@ -5,6 +5,15 @@
    never leaks into the app theme. Pricing/Nav blocks are intentionally omitted.
    ============================================================ */
 
+/* Hide the globally auto-injected Sentry "Report a Bug" widget on the landing
+   route only (data-landing is set by HideAppChrome while mounted). The widget
+   lives in <body>, outside .mk-root, so this rule is intentionally unscoped. */
+html[data-landing] #sentry-feedback,
+html[data-landing] [id^="sentry-feedback"],
+html[data-landing] [aria-label="Report a Bug"] {
+  display: none !important;
+}
+
 .mk-root {
   /* Marketing-only pastels (not present in globals.css) */
   --papyrus: oklch(0.985 0.006 85);

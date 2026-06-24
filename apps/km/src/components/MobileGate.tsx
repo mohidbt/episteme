@@ -14,6 +14,7 @@
 // hydration (the prior `resize`-listener version sometimes missed CDP-driven
 // viewport changes on preview deploys).
 import { useSyncExternalStore } from "react";
+import { usePathname } from "next/navigation";
 
 const BREAKPOINT_PX = 768;
 const QUERY = `(max-width: ${BREAKPOINT_PX - 1}px)`;
@@ -57,8 +58,11 @@ function getServerSnapshot(): boolean {
 }
 
 export function MobileGate() {
+  const pathname = usePathname();
   const isMobile = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 
+  // The public marketing landing is fully mobile-responsive; never gate it.
+  if (pathname === "/landing") return null;
   if (!isMobile) return null;
 
   return (
