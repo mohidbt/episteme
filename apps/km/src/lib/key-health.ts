@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "@/lib/db";
+import { sendEmail } from "@/lib/send-email";
 
 /**
  * Post-fetch hook for KM routes that call OpenRouter directly with a key
@@ -119,16 +120,7 @@ async function sendResendEmail(opts: {
   row: AlertRow;
   sampleError: string | null;
 }): Promise<boolean> {
-  const apiKey = (process.env.RESEND_API_KEY ?? "").trim();
-  if (!apiKey) {
-    console.warn(
-      "[key-health] alert suppressed — RESEND_API_KEY unset",
-      { provider: opts.provider, envVar: opts.envVar, reason: opts.reason },
-    );
-    return false;
-  }
   const to = (process.env.ALERT_EMAIL_TO ?? "mohidfbutt@gmail.com").trim();
-  const from = (process.env.ALERT_EMAIL_FROM ?? "alerts@tryepisteme.com").trim();
   const subject = `[episteme] ${opts.provider} key ${opts.reason} — ${opts.envVar}`;
   const text = [
     `Provider: ${opts.provider}`,
@@ -143,27 +135,7 @@ async function sendResendEmail(opts: {
     (opts.sampleError ?? "").trim().slice(0, 1000),
   ].join("\n");
 
-  try {
-    const res = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ from, to: [to], subject, text }),
-    });
-    if (!res.ok) {
-      console.error(
-        "[key-health] resend POST failed",
-        { status: res.status, provider: opts.provider, envVar: opts.envVar },
-      );
-      return false;
-    }
-    return true;
-  } catch (err) {
-    console.error("[key-health] resend POST threw", err);
-    return false;
-  }
+  return sendEmail({ to, subject, text });
 }
 
 export async function recordAndMaybeAlert(opts: {

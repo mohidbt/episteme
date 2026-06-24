@@ -26,6 +26,24 @@ export interface CreateAuthOpts {
    * automatically — DO NOT mutate `user_id` here. Pure cleanup hook.
    */
   onAnonymousLink?: (anonUserId: string, newUserId: string) => Promise<void>;
+  /**
+   * Sends the signup email-verification message. When provided, better-auth's
+   * native email-verification flow is enabled: the message is dispatched on
+   * sign-up (`sendOnSignUp`) and the user is auto-signed-in after they verify
+   * (`autoSignInAfterVerification`). The callback receives the full verify
+   * `url` better-auth generates. MUST be non-throwing — a failed send must not
+   * fail signup (the user can resend later). Lives KM-side because it depends
+   * on the Resend helper in apps/km.
+   *
+   * Verification is intentionally SOFT: we do NOT set `requireEmailVerification`
+   * because anonymous (guest) users have no real email and would be locked out
+   * of sign-in / the anon→signup link flow.
+   */
+  sendVerificationEmail?: (args: {
+    user: { id: string; email: string; name?: string };
+    url: string;
+    token: string;
+  }) => Promise<void>;
 }
 
 function resolveTrustedOrigins(): string[] {
@@ -70,6 +88,26 @@ export function createAuth(opts: CreateAuthOpts = {}) {
     emailAndPassword: {
       enabled: true,
     },
+    ...(opts.sendVerificationEmail
+      ? {
+          emailVerification: {
+            sendVerificationEmail: async ({ user, url, token }) => {
+              await opts.sendVerificationEmail!({
+                user: {
+                  id: user.id,
+                  email: user.email,
+                  name: (user as { name?: string }).name,
+                },
+                url,
+                token,
+              });
+            },
+            sendOnSignUp: true,
+            autoSignInAfterVerification: true,
+            expiresIn: 3600,
+          },
+        }
+      : {}),
     plugins: [
       anonymous({
         onLinkAccount: opts.onAnonymousLink
