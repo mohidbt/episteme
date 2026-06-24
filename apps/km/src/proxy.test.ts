@@ -42,6 +42,25 @@ describe("proxy() default publish domain", () => {
     expect(String(rewrittenTo)).toContain("/pub/bob/foo");
   });
 
+  it("rewrites bare tryepisteme.com/ → /landing", async () => {
+    const { proxy } = await import("./proxy");
+    const req = buildRequest("tryepisteme.com", "/");
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const res: any = proxy(req as any);
+    const rewrittenTo = res?.headers?.get?.("x-middleware-rewrite");
+    expect(rewrittenTo).toBeTruthy();
+    expect(String(rewrittenTo)).toContain("/landing");
+  });
+
+  it("passes through bare tryepisteme.com/sign-up (app route)", async () => {
+    const { proxy } = await import("./proxy");
+    const req = buildRequest("tryepisteme.com", "/sign-up");
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const res: any = proxy(req as any);
+    const rewrittenTo = res?.headers?.get?.("x-middleware-rewrite");
+    expect(rewrittenTo).toBeFalsy();
+  });
+
   it("passes through non-publish hosts (e.g. app.tryepisteme.com)", async () => {
     const { proxy } = await import("./proxy");
     const req = buildRequest("app.tryepisteme.com", "/n/abc");

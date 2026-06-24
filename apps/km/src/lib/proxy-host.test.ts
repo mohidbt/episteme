@@ -16,14 +16,7 @@ describe("decideHostRewrite", () => {
     });
   });
 
-  it("passes through apex (no subdomain)", () => {
-    expect(
-      decideHostRewrite({
-        host: "epistaime.com",
-        pathname: "/",
-        publishDomain: "epistaime.com",
-      }),
-    ).toEqual({ kind: "passthrough" });
+  it("passes through apex non-root paths (no subdomain)", () => {
     expect(
       decideHostRewrite({
         host: "epistaime.com",
@@ -33,7 +26,7 @@ describe("decideHostRewrite", () => {
     ).toEqual({ kind: "passthrough" });
   });
 
-  it("passes through www", () => {
+  it("passes through www non-root paths", () => {
     expect(
       decideHostRewrite({
         host: "www.epistaime.com",
@@ -108,6 +101,74 @@ describe("decideHostRewrite", () => {
       decideHostRewrite({
         host: "mohid.epistaime.com",
         pathname: "/pub/mohid/hello",
+        publishDomain: "epistaime.com",
+      }),
+    ).toEqual({ kind: "passthrough" });
+  });
+
+  // ── GSD-137: marketing landing host-split ──────────────────────
+  it("rewrites bare publish domain '/' → /landing", () => {
+    expect(
+      decideHostRewrite({
+        host: "epistaime.com",
+        pathname: "/",
+        publishDomain: "epistaime.com",
+      }),
+    ).toEqual({ kind: "rewrite", subdomain: null, targetPath: "/landing" });
+  });
+
+  it("rewrites www '/' → /landing", () => {
+    expect(
+      decideHostRewrite({
+        host: "www.epistaime.com",
+        pathname: "/",
+        publishDomain: "epistaime.com",
+      }),
+    ).toEqual({ kind: "rewrite", subdomain: null, targetPath: "/landing" });
+  });
+
+  it("passes through bare domain paths other than '/' (e.g. /sign-up)", () => {
+    expect(
+      decideHostRewrite({
+        host: "epistaime.com",
+        pathname: "/sign-up",
+        publishDomain: "epistaime.com",
+      }),
+    ).toEqual({ kind: "passthrough" });
+    expect(
+      decideHostRewrite({
+        host: "epistaime.com",
+        pathname: "/sign-in",
+        publishDomain: "epistaime.com",
+      }),
+    ).toEqual({ kind: "passthrough" });
+  });
+
+  it("passes through www paths other than '/'", () => {
+    expect(
+      decideHostRewrite({
+        host: "www.epistaime.com",
+        pathname: "/sign-up",
+        publishDomain: "epistaime.com",
+      }),
+    ).toEqual({ kind: "passthrough" });
+  });
+
+  it("passes through app host '/' (app stays at Drive root)", () => {
+    expect(
+      decideHostRewrite({
+        host: "app.epistaime.com",
+        pathname: "/",
+        publishDomain: "epistaime.com",
+      }),
+    ).toEqual({ kind: "passthrough" });
+  });
+
+  it("does not rewrite bare domain '/landing' to itself (passthrough avoids loop)", () => {
+    expect(
+      decideHostRewrite({
+        host: "epistaime.com",
+        pathname: "/landing",
         publishDomain: "epistaime.com",
       }),
     ).toEqual({ kind: "passthrough" });

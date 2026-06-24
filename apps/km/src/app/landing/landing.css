@@ -1,0 +1,646 @@
+/* ============================================================
+   GSD-137 Marketing landing: route-scoped styles.
+   Ported VERBATIM from the claude_design Marketing UI kit (mk-* classes).
+   Scoped under .mk-root so the marketing surface (pastels + font mapping)
+   never leaks into the app theme. Pricing/Nav blocks are intentionally omitted.
+   ============================================================ */
+
+.mk-root {
+  /* Marketing-only pastels (not present in globals.css) */
+  --papyrus: oklch(0.985 0.006 85);
+  --parchment: oklch(0.975 0.01 75);
+  --ochre-wash: oklch(0.965 0.014 60);
+  --olive-wash: oklch(0.97 0.01 110);
+  --slate-wash: oklch(0.975 0.005 230);
+
+  /* Foreground/border tokens the kit references (light, neutral) */
+  --bg: oklch(1 0 0);
+  --bg-muted: oklch(0.97 0 0);
+  --bg-sidebar: oklch(0.985 0 0);
+  --fg: oklch(0.145 0 0);
+  --fg-2: oklch(0.371 0 0);
+  --fg-muted: oklch(0.556 0 0);
+  --fg-faint: oklch(0.708 0 0);
+  --border: oklch(0.922 0 0);
+  --border-strong: oklch(0.85 0 0);
+  --radius: 0.625rem;
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+
+  /* Marketing type families, fed by next/font CSS variables (see page.tsx). */
+  --font-display: var(--font-mk-display), ui-serif, Georgia, serif;
+  --font-sans: var(--font-mk-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-mk-mono), ui-monospace, monospace;
+
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  min-height: 100%;
+  -webkit-font-smoothing: antialiased;
+}
+
+.mk-root * {
+  box-sizing: border-box;
+}
+
+.mk-root a {
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+/* ── Layout containers ─────────────────────────── */
+.mk-root .mk-wrap {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 32px;
+}
+
+/* ── Buttons ───────────────────────────────────── */
+.mk-root .mk-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 16px;
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  font-weight: 500;
+  font-size: 14px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.mk-root .mk-btn-primary {
+  background: var(--fg);
+  color: var(--bg);
+  border-color: var(--fg);
+}
+.mk-root .mk-btn-primary:hover {
+  opacity: 0.9;
+}
+.mk-root .mk-btn-ghost {
+  background: var(--bg);
+  color: var(--fg);
+  border-color: var(--border-strong);
+}
+.mk-root .mk-btn-ghost:hover {
+  background: var(--bg-muted);
+}
+.mk-root .mk-btn-lg {
+  height: 44px;
+  padding: 0 22px;
+  font-size: 15px;
+  border-radius: var(--radius-lg);
+}
+.mk-root .mk-btn-block {
+  width: 100%;
+}
+
+.mk-root .mk-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  background: var(--fg);
+  color: var(--bg);
+  border-radius: 6px;
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 18px;
+  padding-bottom: 2px;
+}
+
+/* ── Hero ──────────────────────────────────────── */
+.mk-root .mk-hero {
+  text-align: center;
+  padding: 80px 32px 40px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+.mk-root .mk-hero-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--border);
+  padding: 4px 12px 4px 4px;
+  border-radius: 999px;
+  font-size: 12px;
+  color: var(--fg-2);
+  margin-bottom: 32px;
+}
+.mk-root .mk-tag {
+  background: var(--bg-muted);
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+.mk-root .mk-h1 {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: clamp(56px, 8vw, 104px);
+  line-height: 0.95;
+  letter-spacing: -0.035em;
+  margin: 0 0 24px;
+}
+.mk-root .mk-h1-italic {
+  font-style: italic;
+  color: var(--fg-2);
+}
+.mk-root .mk-sub {
+  max-width: 620px;
+  margin: 0 auto 36px;
+  font-size: 18px;
+  line-height: 1.55;
+  color: var(--fg-2);
+}
+.mk-root .mk-agent-line {
+  max-width: 620px;
+  margin: -20px auto 36px;
+  font-size: 16px;
+  line-height: 1.55;
+  color: var(--fg-muted);
+}
+.mk-root .mk-cta-row {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  margin-bottom: 18px;
+}
+.mk-root .mk-hero-meta {
+  font-size: 13px;
+  color: var(--fg-muted);
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+}
+.mk-root .mk-hero-meta .dot {
+  color: var(--fg-faint);
+}
+
+/* ── Hero shot (cleaned, simplified app preview) ── */
+.mk-root .mk-hero-shot {
+  margin: 56px auto 0;
+  max-width: 1100px;
+  background: var(--bg);
+  border: 1px solid var(--fg);
+  border-radius: 16px;
+  box-shadow: 8px 8px 32px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+  text-align: left;
+}
+.mk-root .mk-shot-chrome {
+  display: flex;
+  gap: 6px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-sidebar);
+}
+.mk-root .mk-shot-chrome span {
+  width: 11px;
+  height: 11px;
+  border-radius: 999px;
+  background: oklch(0.85 0 0);
+}
+.mk-root .mk-shot-body {
+  display: grid;
+  grid-template-columns: 200px 1fr 280px;
+  min-height: 380px;
+}
+.mk-root .mk-shot-side {
+  border-right: 1px solid var(--border);
+  padding: 14px 12px;
+  font-size: 12px;
+  background: var(--bg-sidebar);
+}
+.mk-root .mk-shot-side .row {
+  padding: 5px 8px;
+  border-radius: 5px;
+  color: var(--fg-2);
+}
+.mk-root .mk-shot-side .row.hd {
+  font-family: var(--font-display);
+  font-size: 16px;
+  color: var(--fg);
+  padding: 4px 8px 10px;
+}
+.mk-root .mk-shot-side .row.a {
+  background: var(--bg-muted);
+  color: var(--fg);
+  font-weight: 500;
+}
+.mk-root .mk-shot-side .row.faint {
+  color: var(--fg-muted);
+  padding-left: 16px;
+}
+.mk-root .mk-shot-main {
+  padding: 28px 32px;
+  border-right: 1px solid var(--border);
+}
+.mk-root .mk-shot-doc .t-micro {
+  font-size: 11px;
+  color: var(--fg-muted);
+}
+.mk-root .mk-shot-doc .title {
+  font-family: var(--font-display);
+  font-size: 26px;
+  line-height: 1.15;
+  margin: 6px 0 8px;
+}
+.mk-root .mk-shot-doc .meta {
+  font-size: 11px;
+  color: var(--fg-muted);
+  margin-bottom: 18px;
+}
+.mk-root .mk-shot-doc .p {
+  font-size: 13px;
+  line-height: 1.55;
+  margin: 0 0 8px;
+}
+.mk-root .mk-shot-doc .link {
+  background: var(--bg-muted);
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+.mk-root .mk-shot-doc .cite {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  vertical-align: super;
+  color: var(--fg-2);
+}
+.mk-root .mk-shot-agent {
+  padding: 14px;
+  background: var(--bg-sidebar);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 12px;
+}
+.mk-root .mk-shot-agent .row.hd {
+  font-family: var(--font-display);
+  font-size: 14px;
+  color: var(--fg);
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+}
+.mk-root .mk-shot-agent .bub {
+  background: var(--bg-muted);
+  padding: 7px 10px;
+  border-radius: 8px;
+  line-height: 1.4;
+}
+.mk-root .mk-shot-agent .bub.a {
+  background: var(--papyrus);
+}
+.mk-root .mk-shot-agent .tool {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--fg-2);
+}
+
+/* ── Features ──────────────────────────────────── */
+.mk-root .mk-features {
+  max-width: 1200px;
+  margin: 120px auto 0;
+  padding: 0 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 120px;
+}
+.mk-root .mk-feat {
+  display: grid;
+  grid-template-columns: 1.1fr 1fr;
+  gap: 80px;
+  align-items: center;
+}
+.mk-root .mk-feat.rev .mk-feat-text {
+  order: 2;
+}
+.mk-root .mk-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  letter-spacing: 0.12em;
+  color: var(--fg-muted);
+  text-transform: uppercase;
+  margin-bottom: 16px;
+}
+.mk-root .mk-h2 {
+  font-family: var(--font-display);
+  font-size: 56px;
+  font-weight: 400;
+  line-height: 1.05;
+  letter-spacing: -0.025em;
+  margin: 0 0 20px;
+}
+.mk-root .mk-h2-italic {
+  font-style: italic;
+  color: var(--fg-2);
+}
+.mk-root .mk-feat-body {
+  font-size: 17px;
+  line-height: 1.6;
+  color: var(--fg-2);
+  margin: 0 0 20px;
+  max-width: 480px;
+}
+.mk-root .mk-feat-points {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--fg-muted);
+  letter-spacing: 0.02em;
+}
+
+.mk-root .mk-feat-art {
+  background: var(--papyrus);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 48px 36px;
+  min-height: 380px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mk-root .mk-tool-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+}
+.mk-root .mk-tool-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: center;
+  max-width: 420px;
+}
+.mk-root .mk-tool-chip {
+  background: var(--bg);
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 13px;
+  text-decoration: line-through;
+  color: var(--fg-muted);
+}
+.mk-root .mk-tool-arrow {
+  font-size: 26px;
+  color: var(--fg-muted);
+}
+.mk-root .mk-tool-after {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--font-display);
+  font-size: 28px;
+  background: var(--bg);
+  border: 1px solid var(--fg);
+  padding: 10px 22px;
+  border-radius: 12px;
+  box-shadow: 4px 4px 0 var(--fg);
+}
+
+/* Card style with the 4px hard-offset shadow */
+.mk-root .mk-skill {
+  width: 100%;
+  max-width: 460px;
+  background: var(--bg);
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 4px 4px 0 var(--fg);
+}
+.mk-root .mk-skill-head,
+.mk-root .mk-skill-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 14px;
+  background: var(--bg-sidebar);
+  border-bottom: 1px solid var(--border);
+}
+.mk-root .mk-skill-foot {
+  border-bottom: none;
+  border-top: 1px solid var(--border);
+}
+.mk-root .mk-pill {
+  font-size: 10.5px;
+  font-family: var(--font-mono);
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--bg-muted);
+  color: var(--fg-2);
+  border: 1px solid var(--border);
+}
+.mk-root .mk-pill.on {
+  background: var(--ochre-wash);
+  color: var(--fg);
+  border-color: oklch(0.83 0.06 60);
+}
+
+/* Non-technical agentic visual: two chat bubbles inside the offset card. */
+.mk-root .mk-chat {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px 16px;
+}
+.mk-root .mk-chat-bub {
+  padding: 10px 14px;
+  border-radius: 12px;
+  font-size: 14px;
+  line-height: 1.45;
+  max-width: 88%;
+}
+.mk-root .mk-chat-bub.user {
+  align-self: flex-end;
+  background: var(--bg-muted);
+  color: var(--fg);
+  border-bottom-right-radius: 4px;
+}
+.mk-root .mk-chat-bub.agent {
+  align-self: flex-start;
+  background: var(--papyrus);
+  color: var(--fg);
+  border: 1px solid oklch(0.9 0.02 85);
+  border-bottom-left-radius: 4px;
+}
+.mk-root .mk-chat-who {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg-muted);
+  margin-bottom: 4px;
+}
+
+/* ── Use-case cards (2x2 grid, offset-shadow frame) ── */
+.mk-root .mk-usecases {
+  max-width: 1200px;
+  margin: 120px auto 0;
+  padding: 0 32px;
+}
+.mk-root .mk-usecases-head {
+  text-align: center;
+  margin-bottom: 56px;
+}
+.mk-root .mk-usecase-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 28px;
+}
+.mk-root .mk-usecase {
+  background: var(--bg);
+  border: 1px solid var(--fg);
+  border-radius: 12px;
+  padding: 28px 26px;
+  box-shadow: 4px 4px 0 var(--fg);
+}
+.mk-root .mk-usecase-lead {
+  font-family: var(--font-display);
+  font-size: 22px;
+  line-height: 1.2;
+  margin: 0 0 12px;
+}
+.mk-root .mk-usecase-body {
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--fg-2);
+  margin: 0;
+}
+
+/* ── Quote / pull ──────────────────────────────── */
+.mk-root .mk-quote {
+  max-width: 920px;
+  margin: 160px auto;
+  padding: 0 32px;
+  text-align: center;
+  position: relative;
+}
+.mk-root .mk-quote-mark {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 200px;
+  line-height: 1;
+  color: var(--fg-faint);
+  position: absolute;
+  top: -60px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+.mk-root .mk-quote-text {
+  margin: 0;
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: clamp(28px, 4vw, 48px);
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+  font-weight: 400;
+}
+.mk-root .mk-quote-text .italic {
+  font-style: normal;
+}
+.mk-root .mk-quote-attr {
+  margin-top: 28px;
+  font-size: 13px;
+  color: var(--fg-muted);
+  font-family: var(--font-mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* ── Closing CTA band ──────────────────────────── */
+.mk-root .mk-cta-band {
+  max-width: 920px;
+  margin: 160px auto 0;
+  padding: 64px 32px;
+  text-align: center;
+}
+.mk-root .mk-cta-band-h {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: clamp(40px, 6vw, 64px);
+  line-height: 1.05;
+  letter-spacing: -0.025em;
+  margin: 0 0 20px;
+}
+.mk-root .mk-cta-band-sub {
+  font-size: 17px;
+  color: var(--fg-2);
+  margin: 0 auto 32px;
+  max-width: 460px;
+}
+
+/* ── Footer ────────────────────────────────────── */
+.mk-root .mk-footer {
+  max-width: 1200px;
+  margin: 80px auto 0;
+  padding: 56px 32px 40px;
+  border-top: 1px solid var(--border);
+}
+.mk-root .mk-foot-logo {
+  font-family: var(--font-display);
+  font-size: 22px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.mk-root .mk-foot-tagline {
+  font-style: italic;
+  color: var(--fg-muted);
+  margin-top: 8px;
+  font-family: var(--font-display);
+  font-size: 16px;
+}
+.mk-root .mk-foot-fine {
+  display: flex;
+  justify-content: space-between;
+  padding-top: 24px;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--fg-muted);
+  font-family: var(--font-mono);
+  margin-top: 32px;
+}
+
+/* ── Sticky CTA (fades in on scroll past hero) ──── */
+.mk-root .mk-sticky-cta {
+  position: fixed;
+  top: 18px;
+  right: 24px;
+  z-index: 50;
+  opacity: 0;
+  transform: translateY(-8px);
+  pointer-events: none;
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+.mk-root .mk-sticky-cta.show {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+@media (max-width: 900px) {
+  .mk-root .mk-feat,
+  .mk-root .mk-usecase-grid {
+    grid-template-columns: 1fr;
+  }
+  .mk-root .mk-feat.rev .mk-feat-text {
+    order: 0;
+  }
+  .mk-root .mk-shot-body {
+    grid-template-columns: 1fr;
+  }
+  .mk-root .mk-cta-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
