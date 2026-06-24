@@ -7,9 +7,12 @@ afterEach(() => cleanup());
 // next/font/google is unavailable in the vitest (node) environment; stub it so
 // the landing page module (which loads fonts) can import cleanly.
 vi.mock("next/font/google", () => ({
-  Philosopher: () => ({ variable: "--font-display", className: "philosopher" }),
-  Outfit: () => ({ variable: "--font-sans", className: "outfit" }),
-  Geist_Mono: () => ({ variable: "--font-mono", className: "geist-mono" }),
+  Philosopher: () => ({
+    variable: "--font-mk-display",
+    className: "philosopher",
+  }),
+  Outfit: () => ({ variable: "--font-mk-sans", className: "outfit" }),
+  Geist_Mono: () => ({ variable: "--font-mk-mono", className: "geist-mono" }),
 }));
 
 // Route-scoped CSS import is a side effect; stub it out for the unit test.

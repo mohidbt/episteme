@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { SIGN_UP_HREF } from "./cta";
 
 /**
  * The only client JS on the landing page. A "Sign up free" button that fades in
@@ -18,7 +19,7 @@ export function StickyCta() {
 
   return (
     <a
-      href="/sign-up"
+      href={SIGN_UP_HREF}
       className={`mk-sticky-cta mk-btn mk-btn-primary${show ? " show" : ""}`}
       aria-hidden={!show}
       tabIndex={show ? 0 : -1}
