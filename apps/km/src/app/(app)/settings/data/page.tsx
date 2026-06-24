@@ -40,11 +40,14 @@ export default async function DataSettingsPage() {
     session.isAnonymous
       ? Promise.resolve(null)
       : db
-          .select({ hash: userOpenrouterKeys.orKeyHash })
+          .select({
+            hash: userOpenrouterKeys.orKeyHash,
+            limitReset: userOpenrouterKeys.limitReset,
+          })
           .from(userOpenrouterKeys)
           .where(eq(userOpenrouterKeys.userId, userId))
           .limit(1)
-          .then((rows) => rows[0]?.hash ?? null)
+          .then((rows) => rows[0] ?? null)
           .catch(() => null),
   ]);
 
@@ -52,7 +55,7 @@ export default async function DataSettingsPage() {
   let orReportedLimit: number | null = null;
   if (!session.isAnonymous && orHashRow) {
     try {
-      const r = await getUserBucketUsage(orHashRow);
+      const r = await getUserBucketUsage(orHashRow.hash);
       orReportedTotal = r.usageUsd;
       orReportedLimit = r.limitUsd;
     } catch {
@@ -65,6 +68,9 @@ export default async function DataSettingsPage() {
     ? OR_GUEST_SOFT_LIMIT_USD
     : orReportedLimit ?? OR_USER_SOFT_LIMIT_USD;
   const orTotalUsd = orReportedTotal ?? orSpend.totalUsd;
+  // GSD-140: paying users (weekly OR bucket) get a genuinely-weekly label;
+  // trial users keep the cosmetic-weekly label (P0 behavior).
+  const orIsWeekly = orHashRow?.limitReset === "weekly";
 
   return (
     <div className="mx-auto max-w-lg px-6 py-10">
@@ -93,6 +99,7 @@ export default async function DataSettingsPage() {
                 byModel: orSpend.byModel,
                 isGuest: session.isAnonymous,
                 limitUsd: orLimitUsd,
+                isWeekly: orIsWeekly,
               }}
             />
           </div>

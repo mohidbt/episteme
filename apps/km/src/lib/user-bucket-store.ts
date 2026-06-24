@@ -38,6 +38,37 @@ export async function loadUserBucket(
   };
 }
 
+export interface UpdateBucketInput {
+  userId: string;
+  /** Fresh runtime key (will be encrypted before write). */
+  runtimeKey: string;
+  hash: string;
+  tier: string;
+  limitUsd: number;
+  limitReset: "weekly" | null;
+}
+
+/**
+ * Overwrite a user's bucket row with a freshly-minted key (GSD-140 tier
+ * swap). Encrypts the runtime key with the same AES-256-GCM helper P0 uses.
+ * Bumps updated_at so the change is auditable.
+ */
+export async function updateUserBucket(
+  input: UpdateBucketInput,
+): Promise<void> {
+  await db
+    .update(userOpenrouterKeys)
+    .set({
+      orKeyHash: input.hash,
+      orKeyEncrypted: encrypt(input.runtimeKey),
+      tier: input.tier,
+      limitUsd: String(input.limitUsd),
+      limitReset: input.limitReset,
+      updatedAt: new Date(),
+    })
+    .where(eq(userOpenrouterKeys.userId, input.userId));
+}
+
 export interface InsertBucketInput {
   userId: string;
   runtimeKey: string;

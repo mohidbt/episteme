@@ -1,9 +1,10 @@
 // GSD-126 P0 — OpenRouter Provisioning API wrapper.
 //
-// Three operations against https://openrouter.ai/api/v1/keys:
+// Operations against https://openrouter.ai/api/v1/keys:
 //   • createUserBucket(userId) → POST  : mint a $5 one-time runtime key
 //   • getUserBucketUsage(hash) → GET   : OR-reported usage + limit
 //   • patchUserBucket(hash, ...) → PATCH: raise/lower limit, change cadence
+//   • deleteUserBucket(hash) → DELETE  : revoke a runtime key (GSD-140 tier swap)
 //
 // Auth = process.env.OPENROUTER_PROVISIONING_KEY (org-level, NEVER used for
 // completions — only /api/v1/keys/* operations). Direct `fetch` so we don't
@@ -53,8 +54,18 @@ async function readErrorText(resp: Response): Promise<string> {
   }
 }
 
-export async function createUserBucket(
+export interface NewBucketConfig {
+  /** USD spend cap (OR `limit`). */
+  limit: number;
+  /** OR `label` for the key. */
+  label: string;
+  /** OR `limit_reset` cadence; null = one-time bucket. */
+  limitReset: "daily" | "weekly" | "monthly" | null;
+}
+
+async function postBucket(
   userId: string,
+  config: NewBucketConfig,
 ): Promise<CreateUserBucketResult> {
   const provKey = getProvisioningKey();
   const resp = await fetch(OR_BASE, {
@@ -65,9 +76,9 @@ export async function createUserBucket(
     },
     body: JSON.stringify({
       name: `episteme-${userId}`,
-      label: "trial",
-      limit: 5,
-      limit_reset: null,
+      label: config.label,
+      limit: config.limit,
+      limit_reset: config.limitReset,
       include_byok_in_limit: false,
     }),
   });
@@ -93,6 +104,36 @@ export async function createUserBucket(
     throw new Error("OpenRouter createUserBucket: missing key/hash in response");
   }
   return { key, hash };
+}
+
+export async function createUserBucket(
+  userId: string,
+): Promise<CreateUserBucketResult> {
+  // P0 trial bucket: one-time $5, no reset.
+  return postBucket(userId, { limit: 5, label: "trial", limitReset: null });
+}
+
+/** Mint a fresh bucket with an explicit limit/label/reset (GSD-140 tier swap). */
+export async function createUserBucketWithConfig(
+  userId: string,
+  config: NewBucketConfig,
+): Promise<CreateUserBucketResult> {
+  return postBucket(userId, config);
+}
+
+/** Revoke a runtime key. DELETE /api/v1/keys/{hash}. Throws on non-OK. */
+export async function deleteUserBucket(hash: string): Promise<void> {
+  const provKey = getProvisioningKey();
+  const resp = await fetch(`${OR_BASE}/${hash}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${provKey}` },
+  });
+  if (!resp.ok) {
+    const detail = await readErrorText(resp);
+    throw new Error(
+      `OpenRouter deleteUserBucket failed: ${resp.status} ${detail}`,
+    );
+  }
 }
 
 export async function getUserBucketUsage(
