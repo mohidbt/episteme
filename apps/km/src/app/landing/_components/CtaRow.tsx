@@ -7,7 +7,7 @@ export function CtaRow() {
         Sign up free
       </a>
       <a href={OPEN_APP_HREF} className="mk-btn mk-btn-ghost mk-btn-lg">
-        Open the app →
+        Launch App
       </a>
     </div>
   );

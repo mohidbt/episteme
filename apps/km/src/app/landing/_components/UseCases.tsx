@@ -5,7 +5,7 @@ const USE_CASES = [
   },
   {
     lead: "Reading becomes a diff against your worldview.",
-    body: "Add a new paper, and it highlights every line touching what you already believe. See what is new, what conflicts, instantly.",
+    body: "Add a new paper, ask the agents to highlight every line pink that touches what you already believe. See what is new, what conflicts, instantly.",
   },
   {
     lead: "Skim 50 papers at once.",

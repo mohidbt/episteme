@@ -3,11 +3,6 @@ import { CtaRow } from "./CtaRow";
 export function Hero() {
   return (
     <section className="mk-hero">
-      <div className="mk-hero-eyebrow">
-        <span className="mk-tag">Limited beta · invite only</span>
-        <span aria-hidden="true">→</span>
-      </div>
-
       <h1 className="mk-h1">
         Replace Obsidian, Zotero, Acrobat, and ChatGPT with{" "}
         <span className="mk-h1-italic">one workspace.</span>
@@ -23,11 +18,7 @@ export function Hero() {
 
       <CtaRow />
 
-      <div className="mk-hero-meta">
-        <span>Invite only</span>
-        <span className="dot">·</span>
-        <span>Web</span>
-      </div>
+      <p className="mk-hero-badge">Limited beta - Invite only</p>
 
       <div className="mk-hero-shot">
         <div className="mk-shot-chrome">

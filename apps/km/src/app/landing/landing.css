@@ -128,29 +128,18 @@ html[data-landing] [aria-label="Report a Bug"] {
   max-width: 1200px;
   margin: 0 auto;
 }
-.mk-root .mk-hero-eyebrow {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  border: 1px solid var(--border);
-  padding: 4px 12px 4px 4px;
-  border-radius: 999px;
-  font-size: 12px;
-  color: var(--fg-2);
-  margin-bottom: 32px;
-}
-.mk-root .mk-tag {
-  background: var(--bg-muted);
-  padding: 2px 10px;
-  border-radius: 999px;
-  font-family: var(--font-mono);
-  font-size: 11px;
+.mk-root .mk-hero-badge {
+  margin: 16px 0 0;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--fg-muted);
 }
 .mk-root .mk-h1 {
   font-family: var(--font-display);
   font-weight: 400;
-  font-size: clamp(56px, 8vw, 104px);
-  line-height: 0.95;
+  font-size: clamp(34px, 7vw, 104px);
+  line-height: 1;
   letter-spacing: -0.035em;
   margin: 0 0 24px;
 }
@@ -177,16 +166,6 @@ html[data-landing] [aria-label="Report a Bug"] {
   gap: 12px;
   justify-content: center;
   margin-bottom: 18px;
-}
-.mk-root .mk-hero-meta {
-  font-size: 13px;
-  color: var(--fg-muted);
-  display: flex;
-  gap: 8px;
-  justify-content: center;
-}
-.mk-root .mk-hero-meta .dot {
-  color: var(--fg-faint);
 }
 
 /* ── Hero shot (cleaned, simplified app preview) ── */
@@ -334,9 +313,10 @@ html[data-landing] [aria-label="Report a Bug"] {
   order: 2;
 }
 .mk-root .mk-eyebrow {
-  font-family: var(--font-mono);
-  font-size: 11.5px;
-  letter-spacing: 0.12em;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
   color: var(--fg-muted);
   text-transform: uppercase;
   margin-bottom: 16px;
@@ -361,10 +341,10 @@ html[data-landing] [aria-label="Report a Bug"] {
   max-width: 480px;
 }
 .mk-root .mk-feat-points {
-  font-family: var(--font-mono);
-  font-size: 13px;
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.6;
   color: var(--fg-muted);
-  letter-spacing: 0.02em;
 }
 
 .mk-root .mk-feat-art {
@@ -378,34 +358,67 @@ html[data-landing] [aria-label="Report a Bug"] {
   justify-content: center;
 }
 
-.mk-root .mk-tool-stack {
+/* File storm: scattered file chips drifting into the Episteme banner. */
+.mk-root .mk-storm {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 18px;
+  gap: 6px;
+  width: 100%;
 }
-.mk-root .mk-tool-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  justify-content: center;
-  max-width: 420px;
+.mk-root .mk-storm-cloud {
+  position: relative;
+  width: 100%;
+  height: 230px;
 }
-.mk-root .mk-tool-chip {
+.mk-root .mk-file {
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
   background: var(--bg);
   border: 1px solid var(--border-strong);
-  border-radius: 999px;
-  padding: 6px 14px;
-  font-size: 13px;
-  text-decoration: line-through;
+  border-radius: 8px;
+  font-size: 12px;
+  color: var(--fg-2);
+  white-space: nowrap;
+  box-shadow: 2px 2px 0 var(--fg);
+  animation: mk-float 6s ease-in-out infinite;
+}
+.mk-root .mk-file-ic {
+  flex: none;
   color: var(--fg-muted);
 }
-.mk-root .mk-tool-arrow {
+.mk-root .mk-file-paper {
+  background: var(--papyrus);
+}
+.mk-root .mk-file-note {
+  background: var(--olive-wash);
+}
+.mk-root .mk-file-reference {
+  background: var(--slate-wash);
+}
+/* Scatter + rotate each file for the "thunderstorm mess" look. */
+.mk-root .mk-file-0 { top: 2%;  left: 4%;  transform: rotate(-9deg); animation-delay: 0s; }
+.mk-root .mk-file-1 { top: 0%;  left: 44%; transform: rotate(6deg);  animation-delay: -0.8s; }
+.mk-root .mk-file-2 { top: 8%;  left: 72%; transform: rotate(-5deg); animation-delay: -1.6s; }
+.mk-root .mk-file-3 { top: 30%; left: 16%; transform: rotate(8deg);  animation-delay: -2.4s; }
+.mk-root .mk-file-4 { top: 34%; left: 50%; transform: rotate(-11deg);animation-delay: -3.2s; }
+.mk-root .mk-file-5 { top: 28%; left: 78%; transform: rotate(7deg);  animation-delay: -4s; }
+.mk-root .mk-file-6 { top: 60%; left: 30%; transform: rotate(-6deg); animation-delay: -4.8s; }
+.mk-root .mk-file-7 { top: 58%; left: 60%; transform: rotate(10deg); animation-delay: -5.6s; }
+@keyframes mk-float {
+  0%, 100% { translate: 0 0; }
+  50% { translate: 0 -6px; }
+}
+.mk-root .mk-storm-arrow {
   font-size: 26px;
-  color: var(--fg-muted);
+  line-height: 1;
+  color: var(--fg-faint);
 }
-.mk-root .mk-tool-after {
-  display: flex;
+.mk-root .mk-storm-banner {
+  display: inline-flex;
   align-items: center;
   gap: 10px;
   font-family: var(--font-display);
@@ -415,6 +428,11 @@ html[data-landing] [aria-label="Report a Bug"] {
   padding: 10px 22px;
   border-radius: 12px;
   box-shadow: 4px 4px 0 var(--fg);
+}
+@media (prefers-reduced-motion: reduce) {
+  .mk-root .mk-file {
+    animation: none;
+  }
 }
 
 /* Card style with the 4px hard-offset shadow */
@@ -441,9 +459,10 @@ html[data-landing] [aria-label="Report a Bug"] {
   border-top: 1px solid var(--border);
 }
 .mk-root .mk-pill {
-  font-size: 10.5px;
-  font-family: var(--font-mono);
-  padding: 2px 8px;
+  font-size: 12px;
+  font-weight: 500;
+  font-family: var(--font-sans);
+  padding: 3px 10px;
   border-radius: 999px;
   background: var(--bg-muted);
   color: var(--fg-2);
@@ -534,17 +553,6 @@ html[data-landing] [aria-label="Report a Bug"] {
   text-align: center;
   position: relative;
 }
-.mk-root .mk-quote-mark {
-  font-family: var(--font-display);
-  font-style: italic;
-  font-size: 200px;
-  line-height: 1;
-  color: var(--fg-faint);
-  position: absolute;
-  top: -60px;
-  left: 50%;
-  transform: translateX(-50%);
-}
 .mk-root .mk-quote-text {
   margin: 0;
   font-family: var(--font-display);
@@ -559,11 +567,10 @@ html[data-landing] [aria-label="Report a Bug"] {
 }
 .mk-root .mk-quote-attr {
   margin-top: 28px;
-  font-size: 13px;
+  font-size: 14px;
+  font-weight: 500;
   color: var(--fg-muted);
-  font-family: var(--font-mono);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  font-family: var(--font-sans);
 }
 
 /* ── Closing CTA band ──────────────────────────── */
@@ -614,9 +621,9 @@ html[data-landing] [aria-label="Report a Bug"] {
   justify-content: space-between;
   padding-top: 24px;
   border-top: 1px solid var(--border);
-  font-size: 12px;
+  font-size: 13px;
   color: var(--fg-muted);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   margin-top: 32px;
 }
 
@@ -651,5 +658,42 @@ html[data-landing] [aria-label="Report a Bug"] {
   .mk-root .mk-cta-row {
     flex-direction: column;
     align-items: stretch;
+  }
+}
+
+@media (max-width: 600px) {
+  .mk-root .mk-hero {
+    padding: 48px 20px 24px;
+  }
+  .mk-root .mk-h2 {
+    font-size: 32px;
+  }
+  .mk-root .mk-features {
+    margin-top: 72px;
+    gap: 72px;
+  }
+  .mk-root .mk-usecases {
+    margin-top: 72px;
+  }
+  .mk-root .mk-sub {
+    font-size: 16px;
+  }
+  .mk-root .mk-feat-art {
+    padding: 32px 20px;
+    min-height: 300px;
+  }
+  .mk-root .mk-storm-cloud {
+    height: 200px;
+  }
+  .mk-root .mk-file {
+    font-size: 11px;
+    padding: 4px 8px;
+  }
+  .mk-root .mk-quote {
+    margin: 100px auto;
+  }
+  .mk-root .mk-cta-band {
+    margin-top: 100px;
+    padding: 40px 20px;
   }
 }

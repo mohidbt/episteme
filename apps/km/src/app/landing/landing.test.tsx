@@ -35,7 +35,7 @@ describe("Landing page", () => {
         name: /Replace Obsidian, Zotero, Acrobat, and ChatGPT with one workspace\./i,
       }),
     ).toBeTruthy();
-    expect(screen.getByText(/^Limited beta · invite only$/i)).toBeTruthy();
+    expect(screen.getByText(/^Limited beta - Invite only$/i)).toBeTruthy();
   });
 
   it("renders both primary CTAs with correct hrefs", () => {
@@ -45,7 +45,7 @@ describe("Landing page", () => {
     for (const link of signupLinks) {
       expect(link.getAttribute("href")).toBe("/sign-up");
     }
-    const openLinks = screen.getAllByRole("link", { name: /open the app/i });
+    const openLinks = screen.getAllByRole("link", { name: /launch app/i });
     expect(openLinks.length).toBeGreaterThanOrEqual(1);
     for (const link of openLinks) {
       expect(link.getAttribute("href")).toBe("https://app.tryepisteme.com");
@@ -64,15 +64,14 @@ describe("Landing page", () => {
     ).toBeTruthy();
   });
 
-  it("renders the tool chips struck through and the episteme mark", () => {
+  it("renders the file-storm illustration and the episteme banner", () => {
     renderLanding();
-    for (const tool of ["Obsidian", "Zotero", "Acrobat", "ChatGPT"]) {
-      // Chips carry .mk-tool-chip, which the route stylesheet strikes through.
-      const chip = screen.getByText(tool, { selector: ".mk-tool-chip" });
-      expect(chip.classList.contains("mk-tool-chip")).toBe(true);
+    // File chips for the three episteme file types (paper, note, reference).
+    for (const file of ["attention.pdf", "ideas.note", "kaplan2020.ref"]) {
+      expect(screen.getByText(file, { selector: ".mk-file span" })).toBeTruthy();
     }
     expect(
-      screen.getByText("Episteme", { selector: ".mk-tool-after span" }),
+      screen.getByText("Episteme", { selector: ".mk-storm-banner span" }),
     ).toBeTruthy();
   });
 
@@ -95,13 +94,12 @@ describe("Landing page", () => {
     expect(screen.getByText(/A story you can trace, and hand over\./i)).toBeTruthy();
   });
 
-  it("renders the Aristotle quote without an em-dash", () => {
+  it("renders the Hassabis quote and attribution without an em-dash", () => {
     renderLanding();
-    const quote = screen.getByText(
-      /knowledge that is grasped, reasoned, and held against the world/i,
-    );
+    const quote = screen.getByText(/the great scientist is more creative/i);
     expect(quote).toBeTruthy();
     expect(quote.textContent).not.toContain(EM_DASH);
+    expect(screen.getByText(/Demis Hassabis/i)).toBeTruthy();
   });
 
   it("renders the closing CTA band copy", () => {
@@ -117,8 +115,10 @@ describe("Landing page", () => {
   it("renders the minimal footer with tagline and copyright", () => {
     renderLanding();
     const footer = screen.getByRole("contentinfo");
-    expect(within(footer).getByText(/Knowledge, grasped\./i)).toBeTruthy();
-    expect(within(footer).getByText(/© 2026 Episteme Labs/i)).toBeTruthy();
+    expect(
+      within(footer).getByText(/Artists don't belong to the assembly line\./i),
+    ).toBeTruthy();
+    expect(within(footer).getByText(/^© 2026 Episteme$/i)).toBeTruthy();
   });
 
   it("contains NO em-dash anywhere in the rendered text", () => {
