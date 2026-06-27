@@ -72,7 +72,10 @@ export function resolveTrustedOrigins(): string[] {
   // users there (GSD-137). bare + www serve marketing, app.<domain> serves the
   // app, and all three run the auth flow, so all must be trusted origins.
   // The env URLs above only yield bare + www, so add `app.` explicitly.
-  const publishDomain = process.env.EPISTEME_PUBLISH_DOMAIN ?? "tryepisteme.com";
+  // `||` (not `??`) so an empty-string env value falls back too — `.env.production`
+  // ships EPISTEME_PUBLISH_DOMAIN="" and `??` would let it through, yielding the
+  // garbage origin `https://app.` and never trusting the real app host.
+  const publishDomain = process.env.EPISTEME_PUBLISH_DOMAIN || "tryepisteme.com";
   add(publishDomain);
   add(`app.${publishDomain}`);
   origins.add("http://localhost:3000");

@@ -22,6 +22,14 @@ describe("resolveTrustedOrigins", () => {
     expect(origins).toContain("https://example.org");
   });
 
+  it("falls back to tryepisteme.com when EPISTEME_PUBLISH_DOMAIN is empty string", () => {
+    // .env.production ships EPISTEME_PUBLISH_DOMAIN="" — `||` must catch it.
+    vi.stubEnv("EPISTEME_PUBLISH_DOMAIN", "");
+    const origins = resolveTrustedOrigins();
+    expect(origins).toContain("https://app.tryepisteme.com");
+    expect(origins).not.toContain("https://app.");
+  });
+
   it("always trusts localhost dev ports", () => {
     const origins = resolveTrustedOrigins();
     expect(origins).toContain("http://localhost:3000");
