@@ -46,7 +46,7 @@ export interface CreateAuthOpts {
   }) => Promise<void>;
 }
 
-function resolveTrustedOrigins(): string[] {
+export function resolveTrustedOrigins(): string[] {
   const origins = new Set<string>();
   const add = (url: string | undefined) => {
     if (!url) return;
@@ -68,6 +68,16 @@ function resolveTrustedOrigins(): string[] {
   add(process.env.VERCEL_URL);
   add(process.env.VERCEL_BRANCH_URL);
   add(process.env.VERCEL_PROJECT_PRODUCTION_URL);
+  // The canonical app host is the `app.` subdomain — the landing page CTA links
+  // users there (GSD-137). bare + www serve marketing, app.<domain> serves the
+  // app, and all three run the auth flow, so all must be trusted origins.
+  // The env URLs above only yield bare + www, so add `app.` explicitly.
+  // `||` (not `??`) so an empty-string env value falls back too — `.env.production`
+  // ships EPISTEME_PUBLISH_DOMAIN="" and `??` would let it through, yielding the
+  // garbage origin `https://app.` and never trusting the real app host.
+  const publishDomain = process.env.EPISTEME_PUBLISH_DOMAIN || "tryepisteme.com";
+  add(publishDomain);
+  add(`app.${publishDomain}`);
   origins.add("http://localhost:3000");
   origins.add("http://localhost:3001");
   return Array.from(origins);
