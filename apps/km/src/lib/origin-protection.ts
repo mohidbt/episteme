@@ -13,6 +13,7 @@ export function isAllowedOrigin(origin: string | null, host: string | null): boo
   const allowed = [
     "tryepisteme.com",
     "www.tryepisteme.com",
+    "app.tryepisteme.com",
     "localhost:3000",
     "127.0.0.1:3000",
   ];
