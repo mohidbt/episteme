@@ -144,7 +144,6 @@ html[data-landing] [aria-label="Report a Bug"] {
   margin: 0 0 24px;
 }
 .mk-root .mk-h1-italic {
-  font-style: italic;
   color: var(--fg-2);
 }
 .mk-root .mk-sub {
