@@ -305,3 +305,27 @@
     animation: ai-filling 1.6s ease-in-out infinite;
   }
 }
+
+/* Sentry "Report a Bug" feedback widget — align to our design system. GSD-143.
+   Sentry pins --background/--foreground directly ON the widget host, shadowing
+   the inherited app tokens, so referencing var(--background) at the host gets
+   Sentry's white default (not our token). Fix: alias the live tokens on <body>
+   (an ancestor Sentry doesn't touch, so the alias resolves to the real token
+   and flips with .dark), then re-assert them on the host with !important to
+   beat Sentry's host-level pin. This themes the actor + dialog and follows
+   light/dark automatically. The actor is shrunk to an icon-only circle by a
+   stylesheet injected into the widget's shadow root (instrumentation-client.ts). */
+body {
+  --feedback-surface: var(--background);
+  --feedback-on-surface: var(--foreground);
+}
+#sentry-feedback {
+  --background: var(--feedback-surface) !important;
+  --foreground: var(--feedback-on-surface) !important;
+  --font-family: var(--font-sans);
+  --font-size: 13px;
+  --border-radius: var(--radius-md);
+  --accent-background: var(--primary);
+  --accent-foreground: var(--primary-foreground);
+  --box-shadow: 0 2px 12px oklch(0 0 0 / 0.12);
+}
