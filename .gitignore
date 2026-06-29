@@ -37,3 +37,5 @@ test-results
 *.tmp
 apps/*/.tmp/
 services/*/.tmp/
+.env.production
+.env.*.production
