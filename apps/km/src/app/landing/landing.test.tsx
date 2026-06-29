@@ -32,7 +32,7 @@ describe("Landing page", () => {
     expect(
       screen.getByRole("heading", {
         level: 1,
-        name: /Replace Obsidian, Zotero, Acrobat, and ChatGPT with one workspace\./i,
+        name: /Replace Obsidi\*n, Z\*tero, Acrob\*t, and Ch\*tGPT with one workspace\./i,
       }),
     ).toBeTruthy();
     expect(screen.getByText(/^Limited beta - Invite only$/i)).toBeTruthy();
@@ -43,7 +43,7 @@ describe("Landing page", () => {
     const signupLinks = screen.getAllByRole("link", { name: /sign up free/i });
     expect(signupLinks.length).toBeGreaterThanOrEqual(1);
     for (const link of signupLinks) {
-      expect(link.getAttribute("href")).toBe("/sign-up");
+      expect(link.getAttribute("href")).toBe("https://app.tryepisteme.com/sign-up");
     }
     const openLinks = screen.getAllByRole("link", { name: /launch app/i });
     expect(openLinks.length).toBeGreaterThanOrEqual(1);
@@ -60,7 +60,7 @@ describe("Landing page", () => {
       }),
     ).toBeTruthy();
     expect(
-      screen.getByText(/Obsidian for notes\. Zotero for references\./i),
+      screen.getByText(/Obsidi\*n for notes\. Z\*tero for references\./i),
     ).toBeTruthy();
   });
 

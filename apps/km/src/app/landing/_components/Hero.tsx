@@ -4,7 +4,7 @@ export function Hero() {
   return (
     <section className="mk-hero">
       <h1 className="mk-h1">
-        Replace Obsidian, Zotero, Acrobat, and ChatGPT with{" "}
+        Replace Obsidi*n, Z*tero, Acrob*t, and Ch*tGPT with{" "}
         <span className="mk-h1-italic">one workspace.</span>
       </h1>
 

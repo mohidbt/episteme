@@ -1,6 +1,7 @@
 import "./globals.css";
 import type { ReactNode } from "react";
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { Geist_Mono, Outfit, Philosopher } from "next/font/google";
 import { fraunces, jetbrainsMono } from "./fonts";
 import { Toaster } from "@/components/ui/sonner";
@@ -35,7 +36,8 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({ children }: { children: ReactNode }) {
+export default async function RootLayout({ children }: { children: ReactNode }) {
+  const isLanding = (await headers()).get("x-mk-landing") === "1";
   return (
     <html
       lang="en"
@@ -43,7 +45,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     >
       <body className="min-h-full">
         {children}
-        <MobileGate />
+        {!isLanding && <MobileGate />}
         <Toaster position="bottom-right" />
         <SpeedInsights />
         <Analytics />
