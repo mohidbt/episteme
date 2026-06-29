@@ -1,0 +1,18 @@
+# gitleaks config — extends the default ruleset.
+# Guards every PR + push to main against committed secrets (GSD-150).
+title = "episteme gitleaks"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = """
+apps/km/.env.production was briefly git-tracked and then removed + gitignored
+(GSD-149). Its only real secret — the Neon owner DB password — was rotated, so
+the value left in old history is dead. The file cannot recur (gitignored), so
+we allowlist historical hits on that exact path to keep full-history scans
+green without re-introducing the secret string into this config.
+"""
+paths = [
+  '''apps/km/\.env\.production''',
+]

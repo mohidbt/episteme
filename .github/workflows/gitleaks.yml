@@ -1,0 +1,23 @@
+name: gitleaks
+
+# Secret-scanning gate (GSD-150). Runs on every PR and on pushes to main.
+# Backs up GitHub's native secret scanning + push protection with an explicit,
+# repo-owned ruleset (.gitleaks.toml) so leaks fail CI before merge.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history so the scan covers the whole tree, not just the diff.
+          fetch-depth: 0
+      - name: gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_CONFIG: .gitleaks.toml
