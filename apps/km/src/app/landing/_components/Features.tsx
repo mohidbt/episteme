@@ -70,7 +70,7 @@ export function Features() {
             <span className="mk-h2-italic">five tools.</span>
           </h2>
           <p className="mk-feat-body">
-            Obsidian for notes. Zotero for references. Acrobat for PDFs. ChatGPT
+            Obsidi*n for notes. Z*tero for references. Acrob*t for PDFs. Ch*tGPT
             for questions. Plus folders, tabs, bookmarks, screenshots, and
             citation chains held together by hand. Nothing knows about anything
             else.

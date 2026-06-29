@@ -16,24 +16,24 @@ describe("decideHostRewrite", () => {
     });
   });
 
-  it("passes through apex non-root paths (no subdomain)", () => {
+  it("redirects apex non-root paths to the app subdomain", () => {
     expect(
       decideHostRewrite({
         host: "epistaime.com",
         pathname: "/n/abc",
         publishDomain: "epistaime.com",
       }),
-    ).toEqual({ kind: "passthrough" });
+    ).toEqual({ kind: "redirect", targetHost: "app.epistaime.com" });
   });
 
-  it("passes through www non-root paths", () => {
+  it("redirects www non-root paths to the app subdomain", () => {
     expect(
       decideHostRewrite({
         host: "www.epistaime.com",
         pathname: "/hello",
         publishDomain: "epistaime.com",
       }),
-    ).toEqual({ kind: "passthrough" });
+    ).toEqual({ kind: "redirect", targetHost: "app.epistaime.com" });
   });
 
   it("passes through app", () => {
@@ -48,6 +48,9 @@ describe("decideHostRewrite", () => {
 
   it("passes through reserved subdomains", () => {
     for (const name of RESERVED) {
+      // www is the bare-domain alias (serves landing at "/" and redirects
+      // every other path to the app subdomain); it has dedicated coverage.
+      if (name === "www") continue;
       expect(
         decideHostRewrite({
           host: `${name}.epistaime.com`,
@@ -127,28 +130,70 @@ describe("decideHostRewrite", () => {
     ).toEqual({ kind: "rewrite", subdomain: null, targetPath: "/landing" });
   });
 
-  it("passes through bare domain paths other than '/' (e.g. /sign-up)", () => {
+  it("redirects bare domain paths other than '/' to app subdomain (e.g. /sign-up)", () => {
     expect(
       decideHostRewrite({
         host: "epistaime.com",
         pathname: "/sign-up",
         publishDomain: "epistaime.com",
       }),
-    ).toEqual({ kind: "passthrough" });
+    ).toEqual({ kind: "redirect", targetHost: "app.epistaime.com" });
     expect(
       decideHostRewrite({
         host: "epistaime.com",
         pathname: "/sign-in",
         publishDomain: "epistaime.com",
       }),
-    ).toEqual({ kind: "passthrough" });
+    ).toEqual({ kind: "redirect", targetHost: "app.epistaime.com" });
   });
 
-  it("passes through www paths other than '/'", () => {
+  it("redirects deep bare domain paths to app subdomain", () => {
+    expect(
+      decideHostRewrite({
+        host: "epistaime.com",
+        pathname: "/anything/deep",
+        publishDomain: "epistaime.com",
+      }),
+    ).toEqual({ kind: "redirect", targetHost: "app.epistaime.com" });
+  });
+
+  it("redirects www paths other than '/' to app subdomain", () => {
     expect(
       decideHostRewrite({
         host: "www.epistaime.com",
         pathname: "/sign-up",
+        publishDomain: "epistaime.com",
+      }),
+    ).toEqual({ kind: "redirect", targetHost: "app.epistaime.com" });
+  });
+
+  it("passes through bare domain /pub/* (does not redirect)", () => {
+    expect(
+      decideHostRewrite({
+        host: "epistaime.com",
+        pathname: "/pub/alice/note",
+        publishDomain: "epistaime.com",
+      }),
+    ).toEqual({ kind: "passthrough" });
+  });
+
+  it("passes through bare domain SEO/metadata files (does not redirect)", () => {
+    for (const pathname of ["/robots.txt", "/sitemap.xml", "/icon.svg", "/favicon.ico"]) {
+      expect(
+        decideHostRewrite({
+          host: "epistaime.com",
+          pathname,
+          publishDomain: "epistaime.com",
+        }),
+      ).toEqual({ kind: "passthrough" });
+    }
+  });
+
+  it("passes through www SEO/metadata files (does not redirect)", () => {
+    expect(
+      decideHostRewrite({
+        host: "www.epistaime.com",
+        pathname: "/robots.txt",
         publishDomain: "epistaime.com",
       }),
     ).toEqual({ kind: "passthrough" });
@@ -164,13 +209,13 @@ describe("decideHostRewrite", () => {
     ).toEqual({ kind: "passthrough" });
   });
 
-  it("does not rewrite bare domain '/landing' to itself (passthrough avoids loop)", () => {
+  it("redirects bare domain '/landing' to the app subdomain", () => {
     expect(
       decideHostRewrite({
         host: "epistaime.com",
         pathname: "/landing",
         publishDomain: "epistaime.com",
       }),
-    ).toEqual({ kind: "passthrough" });
+    ).toEqual({ kind: "redirect", targetHost: "app.epistaime.com" });
   });
 });
