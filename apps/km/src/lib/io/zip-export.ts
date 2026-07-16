@@ -4,13 +4,14 @@ import { db } from "@/lib/db";
 import { libraries, notes, references_, papers } from "@episteme/db/schema";
 import { storage, paperSourceKey } from "@/lib/storage";
 import { getSkillStore } from "@/lib/skills-store";
+import { archiveRelativePath, sanitizeArchiveSegment } from "@/lib/filename";
 
 export type Section = "notes" | "papers" | "references" | "all";
 
 const PRESIGN_TTL_SEC = 600;
 
 function sanitizeLibName(name: string): string {
-  return name.replace(/[\/\\]/g, "-");
+  return sanitizeArchiveSegment(name, "library");
 }
 
 /**
@@ -28,7 +29,11 @@ export async function appendPersonalSkills(
     const manifests = await store.list(userId);
     for (const m of manifests) {
       const content = await store.read(userId, m.slug);
-      archive.append(content, { name: `skills/${m.slug}/SKILL.json` });
+      const skillPath = archiveRelativePath(
+        `skills/${sanitizeArchiveSegment(m.slug, "skill")}`,
+        "SKILL.json",
+      );
+      if (skillPath) archive.append(content, { name: skillPath });
     }
   } catch (err) {
     console.warn("[zip-export] personal skills append failed", err);
@@ -80,8 +85,14 @@ export function exportLibraryZip(opts: {
         for (const n of rows) {
           const body =
             notesFrontmatter(n.title, n.slug, n.folderPath) + n.contentMd;
+          const relativePath = archiveRelativePath(
+            n.folderPath,
+            `${n.slug}.md`,
+            "note.md",
+          );
+          if (!relativePath) continue;
           archive.append(body, {
-            name: `${safeLib}/notes/${n.folderPath}${n.slug}.md`,
+            name: `${safeLib}/notes/${relativePath}`,
           });
         }
       }
@@ -93,8 +104,14 @@ export function exportLibraryZip(opts: {
           .where(eq(references_.libraryId, opts.libraryId));
         for (const r of rows) {
           const json = JSON.stringify(r.cslJson ?? {}, null, 2);
+          const relativePath = archiveRelativePath(
+            r.folderPath,
+            `${r.citationKey}.json`,
+            "reference.json",
+          );
+          if (!relativePath) continue;
           archive.append(json, {
-            name: `${safeLib}/references/${r.folderPath}${r.citationKey}.json`,
+            name: `${safeLib}/references/${relativePath}`,
           });
         }
       }
@@ -105,6 +122,12 @@ export function exportLibraryZip(opts: {
           .from(papers)
           .where(eq(papers.libraryId, opts.libraryId));
         for (const p of rows) {
+          const relativePath = archiveRelativePath(
+            p.folderPath,
+            p.filename,
+            "paper.pdf",
+          );
+          if (!relativePath) continue;
           const url = await storage.getPresignedGet(
             paperSourceKey(p.id),
             PRESIGN_TTL_SEC,
@@ -113,7 +136,7 @@ export function exportLibraryZip(opts: {
           if (!resp.ok) continue;
           const bytes = Buffer.from(await resp.arrayBuffer());
           archive.append(bytes, {
-            name: `${safeLib}/papers/${p.folderPath}${p.filename}`,
+            name: `${safeLib}/papers/${relativePath}`,
           });
         }
       }
