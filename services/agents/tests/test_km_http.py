@@ -14,8 +14,14 @@ os.environ.setdefault("INHALE_INTERNAL_SECRET", "test-secret-abc")
 # ---------------------------------------------------------------------------
 
 
-def _expected_sig(secret: str, ts: str, method: str, path: str, body: bytes) -> str:
-    msg = ts.encode() + method.encode() + path.encode() + body
+def _expected_sig(
+    secret: str, ts: str, method: str, path: str, body: bytes, user_id: str
+) -> str:
+    from deps.auth import canonical_signature_message
+
+    msg = canonical_signature_message(
+        ts=ts, method=method, path=path, user_id=user_id, body=body
+    )
     return hmac.new(secret.encode(), msg, hashlib.sha256).hexdigest()
 
 
@@ -56,7 +62,7 @@ async def test_km_post_sends_correct_hmac_headers():
     body_bytes = captured["body"]
     secret = "test-secret-abc"
     ts = hdrs["X-Inhale-Ts"]
-    expected = _expected_sig(secret, ts, "POST", "/api/notes", body_bytes)
+    expected = _expected_sig(secret, ts, "POST", "/api/notes", body_bytes, "u1")
     assert hdrs["X-Inhale-Sig"] == expected
 
 
@@ -112,7 +118,7 @@ async def test_km_get_sends_correct_hmac_headers():
     hdrs = captured["headers"]
     assert hdrs["X-Inhale-User-Id"] == "u2"
     ts = hdrs["X-Inhale-Ts"]
-    expected = _expected_sig("test-secret-abc", ts, "GET", "/api/notes", b"")
+    expected = _expected_sig("test-secret-abc", ts, "GET", "/api/notes", b"", "u2")
     assert hdrs["X-Inhale-Sig"] == expected
 
 
@@ -140,7 +146,9 @@ async def test_km_patch_sends_correct_hmac_headers():
     assert result == {"updated": True}
     hdrs = captured["headers"]
     ts = hdrs["X-Inhale-Ts"]
-    expected = _expected_sig("test-secret-abc", ts, "PATCH", "/api/notes/abc", captured["body"])
+    expected = _expected_sig(
+        "test-secret-abc", ts, "PATCH", "/api/notes/abc", captured["body"], "u3"
+    )
     assert hdrs["X-Inhale-Sig"] == expected
 
 

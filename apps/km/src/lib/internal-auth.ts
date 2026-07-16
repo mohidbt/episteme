@@ -7,7 +7,10 @@
 export {
   verifyInternalAuth,
   getAuthedUserId,
+  canonicalInternalAuthPayload,
+  INTERNAL_AUTH_SIGNATURE_VERSION,
   MissingInternalSecretError,
+  type InternalAuthEnvelope,
   type InternalAuthResult,
   type AuthedUser,
 } from "@episteme/auth/internal";

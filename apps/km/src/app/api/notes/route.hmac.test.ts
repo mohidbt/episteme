@@ -3,7 +3,7 @@
  * for HMAC-authed agent calls (decision 2 in Task 0).
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { createHmac } from "crypto";
+import { internalAuthTestHeaders } from "@/__tests__/internal-auth-headers";
 
 vi.mock("@/lib/db", () => ({
   db: { select: vi.fn(), insert: vi.fn() },
@@ -20,6 +20,13 @@ vi.mock("@episteme/notes-core", () => ({
   resolveUnresolvedNoteLinks: vi.fn().mockResolvedValue(undefined),
   createRevisionIfNeeded: vi.fn().mockResolvedValue(undefined),
 }));
+vi.mock("@/lib/library-usage", () => ({
+  assertWithinLibraryLimit: vi.fn().mockResolvedValue({
+    ok: true,
+    usedBytes: 0,
+    limitBytes: 100_000_000,
+  }),
+}));
 
 import { db } from "@/lib/db";
 import { requireOwned } from "@/lib/crud";
@@ -27,21 +34,19 @@ import { POST } from "./route";
 
 const SECRET = "test-secret-abc";
 
-function sign(ts: string, method: string, path: string, body: string): string {
-  return createHmac("sha256", SECRET).update(ts + method + path + body).digest("hex");
-}
-
 function hmacReq(path: string, bodyObj: Record<string, unknown>): Request {
-  const ts = String(Math.floor(Date.now() / 1000));
   const body = JSON.stringify(bodyObj);
-  const sig = sign(ts, "POST", path, body);
   return new Request(`http://localhost:3001${path}`, {
     method: "POST",
     body,
     headers: {
-      "X-Inhale-User-Id": "user-1",
-      "X-Inhale-Ts": ts,
-      "X-Inhale-Sig": sig,
+      ...internalAuthTestHeaders({
+        secret: SECRET,
+        userId: "user-1",
+        method: "POST",
+        path,
+        body,
+      }),
       "content-type": "application/json",
     },
   });
@@ -90,6 +95,7 @@ describe("POST /api/notes [HMAC]", () => {
         "X-Inhale-User-Id": "u",
         "X-Inhale-Ts": String(Math.floor(Date.now() / 1000)),
         "X-Inhale-Sig": "bad".repeat(20),
+        "X-Inhale-Sig-Version": "2",
       },
     });
     const res = await POST(req);
