@@ -20,7 +20,7 @@
   },
   "dependencies": {
     "@episteme/db": "workspace:*",
-    "better-auth": "^1.6.0",
+    "better-auth": "^1.6.11",
     "drizzle-orm": "^0.45.2"
   },
   "devDependencies": {
