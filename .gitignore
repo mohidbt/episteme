@@ -30,6 +30,9 @@ test-results
 .worktrees/
 .claude/worktrees/
 .claude/scheduled_tasks.lock
+.claude/skills/*-working-style/
+.neon
+.scratch-*
 .playwright-mcp/
 .tmp/tour-record/
 .tmp/
