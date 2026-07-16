@@ -147,6 +147,45 @@ describe("buildBundleFromSnapshot + parseBundle — round trip", () => {
     expect(parsed.memories).toEqual([]);
   });
 
+  it("rejects traversal and non-canonical bundle entries", async () => {
+    const zip = new JSZip();
+    zip.file("agent_config.json", "{}");
+    zip.file("settings.json", "{}");
+    zip.file("memory.md", "");
+    zip.file("../escape.json", "{}");
+    await expect(
+      parseBundle(await zip.generateAsync({ type: "uint8array" })),
+    ).rejects.toThrow(/unsafe path|unsupported entry/);
+  });
+
+  it("rejects highly-compressible oversized entries before expansion", async () => {
+    const zip = new JSZip();
+    zip.file("agent_config.json", "{}");
+    zip.file("settings.json", "{}");
+    zip.file("memory.md", "a".repeat(1024 * 1024 + 1));
+    const bytes = await zip.generateAsync({
+      type: "uint8array",
+      compression: "DEFLATE",
+      compressionOptions: { level: 9 },
+    });
+    expect(bytes.byteLength).toBeLessThan(20_000);
+    await expect(parseBundle(bytes)).rejects.toThrow(/entry too large/);
+  });
+
+  it("rejects unsafe personal-skill slugs", async () => {
+    const zip = new JSZip();
+    zip.file("agent_config.json", "{}");
+    zip.file("settings.json", "{}");
+    zip.file("memory.md", "");
+    zip.file(
+      ".episteme/agents/skills-personal/not/one-slug/SKILL.json",
+      "{}",
+    );
+    await expect(
+      parseBundle(await zip.generateAsync({ type: "uint8array" })),
+    ).rejects.toThrow(/unsupported entry/);
+  });
+
   it("strips system skills even when multiple are present (B13)", async () => {
     const zip = await buildBundleFromSnapshot(
       snap({
