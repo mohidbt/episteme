@@ -189,16 +189,27 @@ function signRequest(
   method: string,
   path: string,
   body: Buffer | string,
+  userId: string,
+  llmKey: string,
+  paperId = "",
+  ocrKey = "",
 ): { ts: string; sig: string } {
   const ts = String(Math.floor(Date.now() / 1000));
   const bodyBuf = typeof body === "string" ? Buffer.from(body) : body;
-  const msg = Buffer.concat([
-    Buffer.from(ts),
-    Buffer.from(method),
-    Buffer.from(path),
-    bodyBuf,
-  ]);
-  const sig = createHmac("sha256", SECRET).update(msg).digest("hex");
+  const sha256 = (value: Buffer | string) =>
+    createHash("sha256").update(value).digest("hex");
+  const canonical = [
+    "v2",
+    ts,
+    method.toUpperCase(),
+    path,
+    userId,
+    paperId,
+    sha256(llmKey),
+    sha256(ocrKey),
+    sha256(bodyBuf),
+  ].join("\n");
+  const sig = createHmac("sha256", SECRET).update(canonical).digest("hex");
   return { ts, sig };
 }
 
@@ -207,12 +218,20 @@ function authHeaders(
   path: string,
   body: Buffer | string,
 ): Record<string, string> {
-  const { ts, sig } = signRequest(method, path, body);
+  const llmKey = process.env.INHALE_LLM_KEY || "sk-fake-for-build-only";
+  const { ts, sig } = signRequest(
+    method,
+    path,
+    body,
+    TEST_USER_ID,
+    llmKey,
+  );
   return {
     "X-Inhale-User-Id": TEST_USER_ID,
-    "X-Inhale-LLM-Key": process.env.INHALE_LLM_KEY || "sk-fake-for-build-only",
+    "X-Inhale-LLM-Key": llmKey,
     "X-Inhale-Ts": ts,
     "X-Inhale-Sig": sig,
+    "X-Inhale-Sig-Version": "2",
     "Content-Type": "application/json",
   };
 }

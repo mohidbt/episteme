@@ -3,8 +3,6 @@ import {
   extractRiskyDDL,
   findViolations,
   hasMatchingCheck,
-  parseSkipReason,
-  shouldSkipLint,
 } from "../../scripts/lint-schema-drift";
 
 describe("extractRiskyDDL", () => {
@@ -208,46 +206,5 @@ describe("findViolations", () => {
       { path: "0031.sql", sql: `ALTER TABLE beta DROP COLUMN col_y;` },
     ];
     expect(findViolations(files, schemaSrc)).toHaveLength(2);
-  });
-});
-
-describe("shouldSkipLint", () => {
-  it("returns true when PR body contains token + reason", () => {
-    expect(shouldSkipLint("predeploy-lint:skip rolling back broken migration")).toBe(true);
-  });
-
-  it("returns false when bare token has no reason", () => {
-    expect(shouldSkipLint("predeploy-lint:skip")).toBe(false);
-    expect(shouldSkipLint("predeploy-lint:skip   ")).toBe(false);
-    expect(shouldSkipLint("predeploy-lint:skip\nnext line")).toBe(false);
-  });
-
-  it("returns false when PR body is undefined or lacks token", () => {
-    expect(shouldSkipLint(undefined)).toBe(false);
-    expect(shouldSkipLint("")).toBe(false);
-    expect(shouldSkipLint("some unrelated PR description")).toBe(false);
-  });
-});
-
-describe("parseSkipReason", () => {
-  it("returns the reason text when token + reason present", () => {
-    expect(parseSkipReason("predeploy-lint:skip migrating legacy table")).toBe(
-      "migrating legacy table",
-    );
-  });
-
-  it("returns null for bare token", () => {
-    expect(parseSkipReason("predeploy-lint:skip")).toBeNull();
-  });
-
-  it("returns null when no token at all", () => {
-    expect(parseSkipReason("no skip here")).toBeNull();
-    expect(parseSkipReason(undefined)).toBeNull();
-  });
-
-  it("stops at newline (reason is single-line)", () => {
-    expect(parseSkipReason("predeploy-lint:skip first reason\nsecond line")).toBe(
-      "first reason",
-    );
   });
 });
