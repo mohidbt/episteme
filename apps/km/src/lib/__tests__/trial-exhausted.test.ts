@@ -13,6 +13,8 @@ import {
   fetchOrThrowTrialExhausted,
   surfaceTrialExhaustedToast,
   TRIAL_EXHAUSTED_TOAST_COPY,
+  TRIAL_EXHAUSTED_CTA_LABEL,
+  TRIAL_EXHAUSTED_CTA_HREF,
   TRIAL_EXHAUSTED_DEDUP_KEY,
   TRIAL_EXHAUSTED_DEDUP_MS,
 } from "../trial-exhausted";
@@ -153,7 +155,12 @@ describe("surfaceTrialExhaustedToast", () => {
   it("calls toast.error with the canonical copy on first invocation", () => {
     surfaceTrialExhaustedToast();
     expect(toast.error).toHaveBeenCalledTimes(1);
-    expect(toast.error).toHaveBeenCalledWith(TRIAL_EXHAUSTED_TOAST_COPY);
+    expect(toast.error).toHaveBeenCalledWith(
+      TRIAL_EXHAUSTED_TOAST_COPY,
+      expect.objectContaining({
+        action: expect.objectContaining({ label: TRIAL_EXHAUSTED_CTA_LABEL }),
+      }),
+    );
   });
 
   it("does not re-toast inside the dedup window", () => {
@@ -199,14 +206,20 @@ describe("surfaceTrialExhaustedToast", () => {
       expect(typeof opts?.action?.onClick).toBe("function");
     });
 
-    it("default (no arg) keeps the signed-in copy with no CTA", () => {
+    // GSD-141: signed-in exhaustion now carries a Subscribe CTA → billing.
+    it("default (no arg) uses signed-in copy with a Subscribe CTA", () => {
       surfaceTrialExhaustedToast();
       const [copy, opts] = vi.mocked(toast.error).mock.calls[0] as [
         string,
-        { action?: unknown } | undefined,
+        { action?: { label: string; onClick: () => void } } | undefined,
       ];
       expect(copy).toBe(TRIAL_EXHAUSTED_TOAST_COPY);
-      expect(opts?.action).toBeUndefined();
+      expect(opts?.action?.label).toBe(TRIAL_EXHAUSTED_CTA_LABEL);
+      expect(typeof opts?.action?.onClick).toBe("function");
+    });
+
+    it("signed-in CTA href points to /settings/billing", () => {
+      expect(TRIAL_EXHAUSTED_CTA_HREF).toBe("/settings/billing");
     });
 
     it("guest CTA href points to /sign-up", () => {

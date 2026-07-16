@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Cog,
+  CreditCard,
   Database as DataIcon,
   Gift,
   Palette,
@@ -21,6 +22,7 @@ import { cn } from "@/lib/utils";
 const LINKS = [
   { label: "Account", href: "/settings/account", Icon: UserCog },
   { label: "Data", href: "/settings/data", Icon: DataIcon },
+  { label: "Billing", href: "/settings/billing", Icon: CreditCard },
   { label: "Editor", href: "/settings/appearance", Icon: Palette },
   { label: "Agent settings", href: "/settings/agents", Icon: ShieldCheck },
   { label: "Referrals", href: "/settings/referrals", Icon: Gift },

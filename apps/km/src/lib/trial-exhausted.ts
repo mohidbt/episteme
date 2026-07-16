@@ -22,7 +22,10 @@ export class TrialExhaustedError extends Error {
 }
 
 export const TRIAL_EXHAUSTED_TOAST_COPY =
-  "You've used your $5 AI trial. Email founders@episteme.app to extend — full subscriptions coming soon.";
+  "You've used your $5 AI trial. Subscribe to keep AI on.";
+// GSD-141: signed-in exhaustion now routes to the live subscribe flow.
+export const TRIAL_EXHAUSTED_CTA_LABEL = "Subscribe";
+export const TRIAL_EXHAUSTED_CTA_HREF = "/settings/billing";
 
 // GSD-130: guests get a different copy + a Sign-up CTA pointing at the
 // signup wizard. Keep the dedup window shared with the signed-in path so
@@ -135,7 +138,17 @@ export function surfaceTrialExhaustedToast(
     });
     return;
   }
-  toast.error(TRIAL_EXHAUSTED_TOAST_COPY);
+  toast.error(TRIAL_EXHAUSTED_TOAST_COPY, {
+    action: {
+      label: TRIAL_EXHAUSTED_CTA_LABEL,
+      onClick: () => {
+        // Full nav (see guest branch above) — toast lives outside the router.
+        if (typeof window !== "undefined") {
+          window.location.href = TRIAL_EXHAUSTED_CTA_HREF;
+        }
+      },
+    },
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -157,8 +170,8 @@ export const USAGE_THRESHOLD_70_COPY =
 export const USAGE_THRESHOLD_90_COPY =
   "Almost out of AI credit — subscribe to keep AI on.";
 export const USAGE_THRESHOLD_CTA_LABEL = "Subscribe";
-// TODO(GSD-141/P2): point at /settings/billing once the subscribe flow lands.
-export const USAGE_THRESHOLD_CTA_HREF = "/sign-up";
+// GSD-141: subscribe flow is live — point signed-in nudges at the billing page.
+export const USAGE_THRESHOLD_CTA_HREF = "/settings/billing";
 
 // Throttle the usage GET so token-by-token streams / rapid tool calls don't
 // hammer /api/openrouter/usage. Once 90% has fired we skip the network entirely.

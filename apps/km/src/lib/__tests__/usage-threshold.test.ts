@@ -201,7 +201,7 @@ describe("maybeNotifyUsageThreshold", () => {
     expect(toast.warning).not.toHaveBeenCalled();
   });
 
-  it("CTA href points to /sign-up (TODO: /settings/billing post-GSD-141)", () => {
-    expect(USAGE_THRESHOLD_CTA_HREF).toBe("/sign-up");
+  it("CTA href points to /settings/billing (GSD-141)", () => {
+    expect(USAGE_THRESHOLD_CTA_HREF).toBe("/settings/billing");
   });
 });

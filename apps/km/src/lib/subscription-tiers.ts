@@ -1,9 +1,10 @@
 // GSD-140 — paid subscription tiers → OpenRouter managed-bucket config.
 //
-// The € figure is the price; the OR bucket limit is the lower USD number
-// passed to the Provisioning API (margin lives in the gap).
-//   High  €2.50/wk → bucket limit $2/wk
-//   Max   €5.00/wk → bucket limit $4/wk
+// The € figure is the price; the OR bucket limit is the same number in USD.
+// Margin comes solely from the EUR→USD conversion rate (minus Stripe fees),
+// not from a price/cap gap.
+//   High  €2.50/wk → bucket limit $2.50/wk
+//   Max   €5.00/wk → bucket limit $5/wk
 // Both reset weekly (Mon–Sun UTC, OR-native), no rollover.
 
 export type SubscriptionTier = "high" | "max";
@@ -18,8 +19,8 @@ export interface BucketConfig {
 }
 
 const TIER_BUCKETS: Record<SubscriptionTier, BucketConfig> = {
-  high: { limit: 2, limitReset: "weekly", label: "high" },
-  max: { limit: 4, limitReset: "weekly", label: "max" },
+  high: { limit: 2.5, limitReset: "weekly", label: "high" },
+  max: { limit: 5, limitReset: "weekly", label: "max" },
 };
 
 export function bucketConfigForTier(tier: SubscriptionTier): BucketConfig {
