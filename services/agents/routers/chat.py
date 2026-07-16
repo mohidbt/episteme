@@ -73,7 +73,7 @@ async def chat(body: ChatBody, auth: InternalAuthDep, conn: ConnDep):
 
     # Verify document exists + belongs to user
     paper = await conn.fetchrow(
-        "SELECT id, processing_status, storage_url FROM papers WHERE id = $1 AND user_id = $2",
+        "SELECT id, chandra_status, storage_url FROM papers WHERE id = $1 AND user_id = $2",
         paper_id, user_id,
     )
     if not paper:
@@ -96,9 +96,9 @@ async def chat(body: ChatBody, auth: InternalAuthDep, conn: ConnDep):
     selection_text = (body.selectionText or "").strip() or None
 
     # Processing status guard
-    if paper["processing_status"] != "ready":
-        status = paper["processing_status"]
-        if status in ("pending", "processing"):
+    if paper["chandra_status"] != "done":
+        status = paper["chandra_status"]
+        if status in ("pending", "running"):
             msg = "This document is still being processed. Refresh in a minute and try again."
         elif status == "failed":
             msg = "This document failed to process. Please re-upload it."

@@ -65,7 +65,7 @@ def _mock_conn():
     conn = AsyncMock()
     conn.fetchrow.return_value = {
         "id": 1,
-        "processing_status": "ready",
+        "chandra_status": "done",
         "storage_url": STORAGE_KEY,
     }
     conn.execute.return_value = None
