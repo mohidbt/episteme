@@ -333,6 +333,9 @@ async def test_highlight_calls_km_post():
     assert isinstance(highlight, BaseTool)
 
     class _Conn:
+        async def fetchrow(self, *_args, **_kwargs):
+            return {"id": "pdf1", "title": "t", "storage_url": "s", "processing_status": "done"}
+
         async def fetch(self, *_args, **_kwargs):
             return [{"page": 0, "bbox": {"x0": 10, "y0": 20, "x1": 30, "y1": 40}, "order_index": 7}]
 
@@ -383,6 +386,9 @@ async def test_highlight_attaches_run_id_per_invocation():
     from deps import db as db_module  # noqa: PLC0415
 
     class _Conn:
+        async def fetchrow(self, *_args, **_kwargs):
+            return {"id": "pdf1", "title": "t", "storage_url": "s", "processing_status": "done"}
+
         async def fetch(self, *_args, **_kwargs):
             return [{"page": 0, "bbox": {"x0": 1, "y0": 2, "x1": 3, "y1": 4}, "order_index": 7}]
 
@@ -425,6 +431,9 @@ async def test_highlight_returns_1based_page_in_result():
     from deps import db as db_module  # noqa: PLC0415
 
     class _Conn:
+        async def fetchrow(self, *_args, **_kwargs):
+            return {"id": "pdf1", "title": "t", "storage_url": "s", "processing_status": "done"}
+
         async def fetch(self, *_args, **_kwargs):
             return [{"page": 2, "bbox": {"x0": 0, "y0": 0, "x1": 10, "y1": 10}, "order_index": 41}]
 
