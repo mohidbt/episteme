@@ -136,6 +136,7 @@ def test_state_surfaces_citations_from_metadata_table() -> None:
     msgs = [HumanMessage(content="why?", id="u-1"), ai]
     mock_tuple = MagicMock()
     mock_tuple.checkpoint = {"channel_values": {"todos": [], "messages": msgs}}
+    mock_tuple.config = {"configurable": {"user_id": "user_1"}}
     mock_saver = MagicMock()
     mock_saver.aget_tuple = AsyncMock(return_value=mock_tuple)
 
@@ -183,6 +184,7 @@ def test_state_strips_lc_run_prefix_when_merging_metadata() -> None:
     msgs = [HumanMessage(content="q", id="u-1"), ai]
     mock_tuple = MagicMock()
     mock_tuple.checkpoint = {"channel_values": {"todos": [], "messages": msgs}}
+    mock_tuple.config = {"configurable": {"user_id": "user_1"}}
     mock_saver = MagicMock()
     mock_saver.aget_tuple = AsyncMock(return_value=mock_tuple)
 
@@ -241,8 +243,8 @@ def test_state_allows_caller_when_thread_owner_matches() -> None:
     assert r.status_code == 200, r.text
 
 
-def test_state_allows_caller_when_thread_has_no_owner_stamp() -> None:
-    """BG1#7 ACCEPTED RISK: older threads w/o user_id stamping remain readable."""
+def test_state_rejects_caller_when_thread_has_no_owner_stamp() -> None:
+    """Ownerless legacy checkpoints fail closed instead of leaking cross-tenant."""
     from langchain_core.messages import AIMessage  # noqa: PLC0415
 
     path = "/agents/km/state/thread-no-owner"
@@ -255,7 +257,7 @@ def test_state_allows_caller_when_thread_has_no_owner_stamp() -> None:
     with patch("routers.km_agent.get_saver", return_value=mock_saver):
         r = client.get(path, headers=_signed_headers("GET", path, b""))
 
-    assert r.status_code == 200, r.text
+    assert r.status_code == 403, r.text
 
 
 def test_persist_metadata_called_during_invoke_source() -> None:
@@ -284,6 +286,7 @@ def test_state_omits_citations_when_metadata_empty() -> None:
     msgs = [AIMessage(content="hi", id="a-x")]
     mock_tuple = MagicMock()
     mock_tuple.checkpoint = {"channel_values": {"todos": [], "messages": msgs}}
+    mock_tuple.config = {"configurable": {"user_id": "user_1"}}
     mock_saver = MagicMock()
     mock_saver.aget_tuple = AsyncMock(return_value=mock_tuple)
 

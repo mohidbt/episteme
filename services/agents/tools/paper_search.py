@@ -6,7 +6,11 @@ Fetch downloads the PDF, stores it via KM, and links it to the reference.
 from __future__ import annotations
 
 import logging
+import asyncio
+import ipaddress
 import re
+import socket
+from urllib.parse import urljoin, urlsplit
 
 import httpx
 from langchain_core.runnables import RunnableConfig
@@ -21,6 +25,97 @@ logger = logging.getLogger(__name__)
 
 
 _ARXIV_DOI_RE = re.compile(r"^10\.48550/arXiv\.(?P<id>[\w./-]+)$", re.IGNORECASE)
+_MAX_PDF_BYTES = 32 * 1024 * 1024
+_MAX_REDIRECTS = 4
+
+
+class UnsafePaperURL(ValueError):
+    """Raised when a paper URL could reach a non-public network destination."""
+
+
+def _is_public_ip(address: str) -> bool:
+    ip = ipaddress.ip_address(address)
+    return ip.is_global
+
+
+async def _validate_public_url(url: str) -> None:
+    """Reject credentials, local names, and DNS results outside public IP space."""
+    parsed = urlsplit(url)
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+        raise UnsafePaperURL("paper URL must be an absolute HTTP(S) URL")
+    if parsed.username is not None or parsed.password is not None:
+        raise UnsafePaperURL("paper URL must not contain credentials")
+    if parsed.fragment:
+        raise UnsafePaperURL("paper URL must not contain a fragment")
+
+    hostname = parsed.hostname.rstrip(".").lower()
+    if hostname == "localhost" or hostname.endswith(".localhost"):
+        raise UnsafePaperURL("paper URL resolves to a local host")
+    try:
+        addresses = [hostname] if ipaddress.ip_address(hostname) else []
+    except ValueError:
+        try:
+            infos = await asyncio.to_thread(
+                socket.getaddrinfo,
+                hostname,
+                parsed.port or (443 if parsed.scheme == "https" else 80),
+                type=socket.SOCK_STREAM,
+            )
+        except socket.gaierror as exc:
+            raise UnsafePaperURL("paper URL host could not be resolved") from exc
+        addresses = list({info[4][0] for info in infos})
+
+    if not addresses or any(not _is_public_ip(address) for address in addresses):
+        raise UnsafePaperURL("paper URL resolves to a non-public network address")
+
+
+async def _download_public_pdf(url: str) -> bytes:
+    """Download a bounded PDF while validating every redirect destination."""
+    timeout = httpx.Timeout(20.0, connect=5.0)
+    async with httpx.AsyncClient(follow_redirects=False, timeout=timeout) as client:
+        current_url = url
+        for redirect_count in range(_MAX_REDIRECTS + 1):
+            await _validate_public_url(current_url)
+            request = client.build_request("GET", current_url, headers={"Accept": "application/pdf"})
+            response = await client.send(request, stream=True)
+            try:
+                if response.status_code in {301, 302, 303, 307, 308}:
+                    location = response.headers.get("location")
+                    if not location:
+                        raise httpx.HTTPStatusError(
+                            "redirect response omitted Location",
+                            request=request,
+                            response=response,
+                        )
+                    if redirect_count >= _MAX_REDIRECTS:
+                        raise UnsafePaperURL("paper URL exceeded the redirect limit")
+                    current_url = urljoin(str(response.url), location)
+                    continue
+
+                response.raise_for_status()
+                content_length = response.headers.get("content-length")
+                if content_length:
+                    try:
+                        if int(content_length) > _MAX_PDF_BYTES:
+                            raise ValueError("PDF exceeds the 32 MiB download limit")
+                    except ValueError as exc:
+                        if "exceeds" in str(exc):
+                            raise
+                        raise ValueError("invalid PDF Content-Length") from exc
+
+                data = bytearray()
+                async for chunk in response.aiter_bytes():
+                    data.extend(chunk)
+                    if len(data) > _MAX_PDF_BYTES:
+                        raise ValueError("PDF exceeds the 32 MiB download limit")
+                result = bytes(data)
+                if not result.lstrip().startswith(b"%PDF-"):
+                    raise ValueError("downloaded content is not a PDF")
+                return result
+            finally:
+                await response.aclose()
+
+    raise UnsafePaperURL("paper URL redirect could not be resolved")
 
 
 def _arxiv_id_from_doi(doi: str) -> str | None:
@@ -267,21 +362,16 @@ async def agentic_fetch_papers(
             "title": csl.get("title"),
             "doi": csl.get("DOI"),
         }
-    doi = paper_metadata.get("doi") or csl.get("DOI")
-
     # Download PDF
     pdf_bytes: bytes | None = None
-    async with httpx.AsyncClient(follow_redirects=True) as client:
-        for attempt in range(2):
-            try:
-                resp = await client.get(paper_url)
-                resp.raise_for_status()
-                pdf_bytes = resp.content
-                break
-            except Exception as exc:
-                logger.warning("PDF download attempt %d failed: %s", attempt + 1, exc)
-                if attempt == 1:
-                    return {"success": False, "error": f"PDF download failed: {exc}"}
+    for attempt in range(2):
+        try:
+            pdf_bytes = await _download_public_pdf(paper_url)
+            break
+        except (httpx.HTTPError, OSError, UnsafePaperURL, ValueError) as exc:
+            logger.warning("PDF download attempt %d failed: %s", attempt + 1, exc)
+            if attempt == 1:
+                return {"success": False, "error": f"PDF download failed: {exc}"}
 
     title = paper_metadata.get("title") or csl.get("title") or "Untitled"
     slug = "".join(c if c.isalnum() or c in " -" else "" for c in title).strip()

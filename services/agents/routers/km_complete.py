@@ -25,8 +25,8 @@ REPHRASE_SYSTEM = "You rephrase text. Output only the rewritten version."
 
 
 class CompleteBody(BaseModel):
-    prompt: str = Field(min_length=1)
-    context: str | None = None
+    prompt: str = Field(min_length=1, max_length=20_000)
+    context: str | None = Field(default=None, max_length=100_000)
     mode: str | None = None  # "rephrase" | "generate"
 
 

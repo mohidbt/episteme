@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createHmac } from "crypto";
+import { internalAuthTestHeaders } from "@/__tests__/internal-auth-headers";
 import { GET, POST, DELETE } from "./route";
 import { PATCH as PATCH_ID, DELETE as DEL_ID } from "./[highlightId]/route";
 import { POST as POST_LIB } from "../libraries/route";
@@ -165,18 +165,18 @@ describe("user-highlights", () => {
     try {
       const path = "/api/user-highlights";
       const body = JSON.stringify(defaultBody(paperId, { textContent: "hmac" }));
-      const ts = String(Math.floor(Date.now() / 1000));
-      const sig = createHmac("sha256", HMAC_SECRET)
-        .update(ts + "POST" + path + body)
-        .digest("hex");
       const r = await POST(
         new Request(`http://localhost${path}`, {
           method: "POST",
           headers: {
             "content-type": "application/json",
-            "X-Inhale-User-Id": u.id,
-            "X-Inhale-Ts": ts,
-            "X-Inhale-Sig": sig,
+            ...internalAuthTestHeaders({
+              secret: HMAC_SECRET,
+              userId: u.id,
+              method: "POST",
+              path,
+              body,
+            }),
           },
           body,
         }),

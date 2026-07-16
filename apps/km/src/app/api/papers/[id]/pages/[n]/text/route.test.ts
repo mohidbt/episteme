@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { createHmac } from "crypto";
+import { internalAuthTestHeaders } from "@/__tests__/internal-auth-headers";
 
 vi.mock("@episteme/auth", () => ({
   auth: { api: { getSession: vi.fn().mockResolvedValue(null) } },
@@ -19,19 +19,14 @@ import { GET } from "./route";
 const SECRET = "test-secret-abc";
 const PAPER_ID = "00000000-0000-0000-0000-000000000001";
 
-function sign(ts: string, m: string, p: string, b: string): string {
-  return createHmac("sha256", SECRET).update(ts + m + p + b).digest("hex");
-}
-
 function hmacReq(path: string) {
-  const ts = String(Math.floor(Date.now() / 1000));
-  const sig = sign(ts, "GET", path, "");
   return new Request(`http://localhost:3000${path}`, {
-    headers: {
-      "X-Inhale-User-Id": "u1",
-      "X-Inhale-Ts": ts,
-      "X-Inhale-Sig": sig,
-    },
+    headers: internalAuthTestHeaders({
+      secret: SECRET,
+      userId: "u1",
+      method: "GET",
+      path,
+    }),
   }) as unknown as import("next/server").NextRequest;
 }
 

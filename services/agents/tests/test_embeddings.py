@@ -73,6 +73,9 @@ class _FakeConn:
 
         return _tx()
 
+    async def fetchval(self, sql: str, *args):
+        return 1
+
     async def executemany(self, sql: str, rows):
         self.last_insert_sql = sql
         on_conflict = "on conflict" in sql.lower()

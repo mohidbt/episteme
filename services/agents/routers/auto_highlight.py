@@ -14,7 +14,7 @@ from deps.auth import InternalAuthDep
 from deps.db import ConnDep
 from lib.auto_highlight_tools import TOOLBELT_SYSTEM_HINT, build_tools
 from lib.chat import CHAT_MODEL, OPENROUTER_BASE
-from lib.conversations import bump_updated_at, insert_message
+from lib.conversations import ConversationNotFound, bump_updated_at, insert_message
 from lib.storage import (
     SourcePdfMissing,
     download_to_tempfile,
@@ -37,7 +37,7 @@ SYSTEM_PROMPT = (
 
 
 class AutoHighlightBody(BaseModel):
-    instruction: str = Field(min_length=1)
+    instruction: str = Field(min_length=1, max_length=20_000)
     conversationId: int | None = None
 
 
@@ -54,6 +54,16 @@ async def _upsert_auto_highlight_conv(
 ):
     """Like upsert_conversation but forces kind='auto-highlight' on insert."""
     if conversation_id is not None:
+        owned = await conn.fetchval(
+            "SELECT 1 FROM agent_conversations "
+            "WHERE id = $1 AND user_id = $2 AND paper_id = $3 "
+            "AND kind = 'auto-highlight'",
+            conversation_id,
+            user_id,
+            paper_id,
+        )
+        if not owned:
+            raise ConversationNotFound("conversation not found")
         return conversation_id
     row = await conn.fetchrow(
         "INSERT INTO agent_conversations (user_id, paper_id, title, kind) "
@@ -92,13 +102,16 @@ async def auto_highlight(body: AutoHighlightBody, auth: InternalAuthDep, conn: C
 
     instruction = body.instruction.strip()
 
-    conv_id = await _upsert_auto_highlight_conv(
-        conn,
-        user_id=user_id,
-        paper_id=paper_id,
-        conversation_id=body.conversationId,
-        title=instruction,
-    )
+    try:
+        conv_id = await _upsert_auto_highlight_conv(
+            conn,
+            user_id=user_id,
+            paper_id=paper_id,
+            conversation_id=body.conversationId,
+            title=instruction,
+        )
+    except ConversationNotFound:
+        raise HTTPException(status_code=404, detail="Conversation not found") from None
 
     # Persist the user message up front (mirrors chat.py pattern)
     await insert_message(

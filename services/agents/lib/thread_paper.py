@@ -18,7 +18,7 @@ async def stamp_thread_paper_association(
     paper_id: str,
     user_id: str,
 ) -> None:
-    """Upsert thread→paper association. Idempotent on (thread_id, paper_id).
+    """Upsert thread→paper association. Idempotent within the tenant.
 
     Best-effort: log + swallow DB errors. paper_id must be a uuid string;
     invalid uuids surface as a logged exception, not a raised error.
@@ -35,7 +35,7 @@ async def stamp_thread_paper_association(
                 """
                 INSERT INTO agent_thread_papers (thread_id, paper_id, user_id)
                 VALUES ($1, $2::uuid, $3)
-                ON CONFLICT (thread_id, paper_id) DO NOTHING
+                ON CONFLICT (thread_id, paper_id, user_id) DO NOTHING
                 """,
                 thread_id,
                 paper_id,

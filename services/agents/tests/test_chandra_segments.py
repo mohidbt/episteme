@@ -56,6 +56,12 @@ def _signed_headers(
 
 def _mock_conn() -> AsyncMock:
     conn = AsyncMock()
+    conn.fetchrow.return_value = {
+        "id": "00000000-0000-0000-0000-000000000042",
+        "title": "Test",
+        "storage_url": "/tmp/test.pdf",
+        "processing_status": "ready",
+    }
     conn.executemany.return_value = None
     return conn
 
@@ -326,6 +332,7 @@ def test_bad_sig_returns_401():
     """Correct headers but wrong signature → 401."""
     body = json.dumps({"paper_id": "00000000-0000-0000-0000-000000000042", "file_path": "/tmp/test.pdf"}).encode()
     headers = _signed_headers("POST", PATH, body)
+    headers["X-Inhale-Sig-Version"] = "2"
     headers["X-Inhale-Sig"] = "deadbeef" * 8  # wrong sig
     r = client.post(PATH, content=body, headers=headers)
     assert r.status_code == 401

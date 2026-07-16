@@ -18,9 +18,12 @@ philosophy as ``lib/km_http.py::_safe_response``.
 from __future__ import annotations
 
 import base64
+import ipaddress
 import io
 import logging
+import os
 import re
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -42,6 +45,79 @@ MAX_INLINE_BYTES = 10 * 1024 * 1024
 # Cap inlined PDF text per attachment so a 200-page PDF doesn't dominate the
 # turn. Roughly ~20K characters ≈ ~5K tokens.
 _MAX_PDF_TEXT_CHARS = 20_000
+
+
+def _safe_download_url(value: str) -> bool:
+    """Reject URL forms that can target local services or smuggle credentials.
+
+    Asset URLs are minted by the trusted KM storage adapter, but validating
+    again here prevents a compromised/malformed metadata response from
+    turning the agents service into an SSRF primitive. Redirects remain
+    disabled on the shared httpx client.
+    """
+    try:
+        parsed = urlsplit(value)
+    except ValueError:
+        return False
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+        return False
+    if parsed.username is not None or parsed.password is not None or parsed.fragment:
+        return False
+    def origin(url: str) -> tuple[str, str, int] | None:
+        try:
+            item = urlsplit(url)
+            if not item.hostname or item.scheme not in {"http", "https"}:
+                return None
+            port = item.port or (443 if item.scheme == "https" else 80)
+            return item.scheme, item.hostname.rstrip(".").lower(), port
+        except ValueError:
+            return None
+
+    allowed_values = [os.environ.get("S3_ENDPOINT", "")]
+    allowed_values.extend(
+        item.strip()
+        for item in os.environ.get("EPISTEME_ATTACHMENT_ALLOWED_ORIGINS", "").split(",")
+        if item.strip()
+    )
+    candidate = origin(value)
+    if candidate is None or candidate not in {origin(item) for item in allowed_values if item}:
+        return False
+
+    scheme, hostname, _port = candidate
+    if scheme == "https":
+        return True
+    # Local MinIO is intentionally opt-in. Never allow cleartext downloads to
+    # a non-loopback host, even if it was accidentally placed in the allowlist.
+    try:
+        is_loopback = ipaddress.ip_address(hostname).is_loopback
+    except ValueError:
+        is_loopback = hostname == "localhost"
+    return is_loopback and os.environ.get(
+        "EPISTEME_ALLOW_INSECURE_ATTACHMENT_URLS"
+    ) == "1"
+
+
+async def _download_limited(url: str) -> bytes | None:
+    """Stream a download and stop before buffering more than the inline cap."""
+    try:
+        async with _client.stream("GET", url, follow_redirects=False) as resp:
+            if not resp.is_success:
+                return None
+            content_length = resp.headers.get("content-length")
+            if content_length:
+                try:
+                    if int(content_length) > MAX_INLINE_BYTES:
+                        return None
+                except ValueError:
+                    return None
+            chunks = bytearray()
+            async for chunk in resp.aiter_bytes():
+                if len(chunks) + len(chunk) > MAX_INLINE_BYTES:
+                    return None
+                chunks.extend(chunk)
+            return bytes(chunks)
+    except httpx.RequestError:
+        return None
 
 
 def parse_attachment_tokens(text: str) -> tuple[str, list[tuple[str, str]]]:
@@ -69,20 +145,14 @@ async def _fetch_asset(asset_id: str, *, user_id: str) -> tuple[dict, bytes] | N
         logger.warning("attachment fetch: metadata failed asset=%s resp=%r", asset_id, meta)
         return None
     download_url = meta.get("downloadUrl")
-    if not isinstance(download_url, str):
+    if not isinstance(download_url, str) or not _safe_download_url(download_url):
         logger.warning("attachment fetch: no downloadUrl asset=%s", asset_id)
         return None
-    try:
-        resp = await _client.get(download_url)
-    except httpx.RequestError as e:
-        logger.warning("attachment fetch: bytes transport failed asset=%s err=%s", asset_id, e)
+    raw = await _download_limited(download_url)
+    if raw is None:
+        logger.warning("attachment fetch: bytes failed or oversized asset=%s", asset_id)
         return None
-    if not resp.is_success:
-        logger.warning(
-            "attachment fetch: bytes non-2xx asset=%s status=%s", asset_id, resp.status_code,
-        )
-        return None
-    return meta, resp.content
+    return meta, raw
 
 
 def _extract_pdf_text(raw: bytes) -> str:

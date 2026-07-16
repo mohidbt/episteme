@@ -71,7 +71,7 @@ async def persist_message_metadata(
     kind: str,
     payload: Any,
 ) -> None:
-    """Upsert a metadata row. Idempotent on (thread_id, message_id, kind).
+    """Upsert a metadata row. Idempotent within the authenticated tenant.
 
     Best-effort: DB failures are logged and swallowed so SSE streams never
     abort on a metadata write hiccup. Citations are not billing-critical.
@@ -89,9 +89,8 @@ async def persist_message_metadata(
                 INSERT INTO agent_message_metadata
                     (thread_id, user_id, message_id, kind, payload)
                 VALUES ($1, $2, $3, $4, $5::jsonb)
-                ON CONFLICT (thread_id, message_id, kind) DO UPDATE
-                  SET payload = EXCLUDED.payload,
-                      user_id = EXCLUDED.user_id
+                ON CONFLICT (thread_id, user_id, message_id, kind) DO UPDATE
+                  SET payload = EXCLUDED.payload
                 """,
                 thread_id,
                 user_id,

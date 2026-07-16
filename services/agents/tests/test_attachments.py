@@ -22,6 +22,35 @@ import pytest
 from lib import attachments
 
 
+def test_download_url_requires_configured_storage_origin() -> None:
+    with patch.dict(
+        "os.environ", {"S3_ENDPOINT": "https://storage.example"}, clear=False
+    ):
+        assert attachments._safe_download_url(
+            "https://storage.example/bucket/object?signature=x"
+        )
+        assert not attachments._safe_download_url(
+            "https://attacker.example/internal-proxy"
+        )
+
+
+def test_loopback_minio_requires_explicit_insecure_opt_in() -> None:
+    base = {"S3_ENDPOINT": "http://127.0.0.1:9000"}
+    with patch.dict("os.environ", base, clear=False):
+        with patch.dict(
+            "os.environ", {"EPISTEME_ALLOW_INSECURE_ATTACHMENT_URLS": ""}
+        ):
+            assert not attachments._safe_download_url(
+                "http://127.0.0.1:9000/bucket/object"
+            )
+        with patch.dict(
+            "os.environ", {"EPISTEME_ALLOW_INSECURE_ATTACHMENT_URLS": "1"}
+        ):
+            assert attachments._safe_download_url(
+                "http://127.0.0.1:9000/bucket/object"
+            )
+
+
 def test_parse_extracts_tokens_and_strips_them() -> None:
     text = (
         "look at this\n\n"
@@ -110,12 +139,10 @@ async def test_fetch_asset_uses_km_get_helper_for_hmac() -> None:
     "fetch failed" placeholders)."""
     meta = {"id": "a1", "filename": "p.png", "mimeType": "image/png", "downloadUrl": "https://signed/p"}
     mock_get = AsyncMock(return_value=meta)
-    mock_resp = AsyncMock()
-    mock_resp.is_success = True
-    mock_resp.content = b"bytes"
     with (
         patch("lib.attachments.km_get", mock_get),
-        patch.object(attachments._client, "get", AsyncMock(return_value=mock_resp)),
+        patch.object(attachments, "_download_limited", AsyncMock(return_value=b"bytes")),
+        patch.dict("os.environ", {"S3_ENDPOINT": "https://signed"}, clear=False),
     ):
         result = await attachments._fetch_asset("a1", user_id="u1")
     assert result is not None

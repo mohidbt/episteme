@@ -15,6 +15,7 @@ import httpx
 from fastapi import APIRouter, HTTPException
 
 from deps.db import ConnDep
+from deps.auth import InternalAuthDep
 
 logger = logging.getLogger(__name__)
 
@@ -151,7 +152,7 @@ async def get_catalog(conn: ConnDep) -> dict[str, Any]:
 
 
 @router.post("/catalog/refresh")
-async def post_refresh(conn: ConnDep) -> dict[str, Any]:
+async def post_refresh(conn: ConnDep, _auth: InternalAuthDep) -> dict[str, Any]:
     api_key = os.environ.get("OPENROUTER_API_KEY")
     try:
         count = await refresh_catalog(conn, api_key)

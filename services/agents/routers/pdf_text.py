@@ -8,7 +8,9 @@ import pdfplumber
 from pypdf import PdfReader
 
 from deps.auth import InternalAuthDep
-from lib.storage import download_to_tempfile
+from deps.db import ConnDep
+from lib.ownership import ResourceNotOwned, require_paper_owner
+from lib.storage import download_to_tempfile, paperSourceKey
 
 router = APIRouter(prefix="/agents/pdf", tags=["pdf-text"])
 
@@ -89,11 +91,27 @@ def _extract_page_text(page) -> str:
     )
 
 
-@router.post("/text")
-async def pdf_text(body: PdfTextBody, auth: InternalAuthDep):
-    _ = auth
+async def _authorized_storage_path(body_path: str, auth: dict, conn) -> str:
+    paper_id = auth.get("paper_id")
+    if not paper_id:
+        raise HTTPException(status_code=400, detail="missing signed paper id")
     try:
-        async with download_to_tempfile(body.file_path) as local_path:
+        paper = await require_paper_owner(
+            conn, paper_id=paper_id, user_id=auth["user_id"]
+        )
+    except ResourceNotOwned as exc:
+        raise HTTPException(status_code=404, detail="paper not found") from exc
+    expected = paper["storage_url"] or paperSourceKey(paper_id)
+    if body_path != expected:
+        raise HTTPException(status_code=403, detail="file path does not match signed paper")
+    return expected
+
+
+@router.post("/text")
+async def pdf_text(body: PdfTextBody, auth: InternalAuthDep, conn: ConnDep):
+    storage_path = await _authorized_storage_path(body.file_path, auth, conn)
+    try:
+        async with download_to_tempfile(storage_path) as local_path:
             with pdfplumber.open(local_path) as pdf:
                 pages = []
                 if body.page is not None:
@@ -186,10 +204,10 @@ def _marker_from_dest(dest: object) -> tuple[int | None, str | None, dict | None
 
 
 @router.post("/annotations")
-async def pdf_annotations(body: PdfAnnotationsBody, auth: InternalAuthDep):
-    _ = auth
+async def pdf_annotations(body: PdfAnnotationsBody, auth: InternalAuthDep, conn: ConnDep):
+    storage_path = await _authorized_storage_path(body.file_path, auth, conn)
     try:
-        async with download_to_tempfile(body.file_path) as local_path:
+        async with download_to_tempfile(storage_path) as local_path:
             reader = PdfReader(local_path)
             return _extract_annotations(reader)
     except FileNotFoundError as exc:

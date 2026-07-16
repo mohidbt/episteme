@@ -6,7 +6,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from tools.paper_search import agentic_fetch_papers, agentic_search_papers
+from tools.paper_search import (
+    UnsafePaperURL,
+    _download_public_pdf,
+    _validate_public_url,
+    agentic_fetch_papers,
+    agentic_search_papers,
+)
 from tools.paper_search import search_papers_online
 
 
@@ -222,14 +228,13 @@ async def test_fetch_reference_already_linked():
 async def test_fetch_download_failure():
     with (
         patch("tools.paper_search.km_get", new_callable=AsyncMock) as mock_km_get,
-        patch("tools.paper_search.httpx.AsyncClient") as mock_client_cls,
+        patch(
+            "tools.paper_search._download_public_pdf",
+            new_callable=AsyncMock,
+            side_effect=ValueError("network error"),
+        ),
     ):
         mock_km_get.return_value = REFERENCE_NO_DOI
-        mock_client = AsyncMock()
-        mock_client.get.side_effect = Exception("network error")
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=False)
-        mock_client_cls.return_value = mock_client
 
         result = await agentic_fetch_papers.ainvoke(
             {
@@ -246,15 +251,11 @@ async def test_fetch_download_failure():
 
 @pytest.mark.asyncio
 async def test_fetch_finalize_error_payload_fails_and_does_not_patch_reference():
-    pdf_resp = MagicMock()
-    pdf_resp.content = b"%PDF-1.7"
-    pdf_resp.raise_for_status = MagicMock()
     put_resp = MagicMock()
     put_resp.raise_for_status = MagicMock()
 
-    clients = [AsyncMock(), AsyncMock()]
-    clients[0].get.return_value = pdf_resp
-    clients[1].put.return_value = put_resp
+    clients = [AsyncMock()]
+    clients[0].put.return_value = put_resp
     for c in clients:
         c.__aenter__.return_value = c
         c.__aexit__.return_value = False
@@ -270,6 +271,11 @@ async def test_fetch_finalize_error_payload_fails_and_does_not_patch_reference()
             ],
         ) as mock_km_post,
         patch("tools.paper_search.km_patch", new_callable=AsyncMock) as mock_km_patch,
+        patch(
+            "tools.paper_search._download_public_pdf",
+            new_callable=AsyncMock,
+            return_value=b"%PDF-1.7",
+        ),
         patch("tools.paper_search.httpx.AsyncClient", side_effect=clients),
     ):
         result = await agentic_fetch_papers.ainvoke(
@@ -285,15 +291,11 @@ async def test_fetch_finalize_error_payload_fails_and_does_not_patch_reference()
 
 @pytest.mark.asyncio
 async def test_fetch_finalize_exception_fails_and_does_not_patch_reference():
-    pdf_resp = MagicMock()
-    pdf_resp.content = b"%PDF-1.7"
-    pdf_resp.raise_for_status = MagicMock()
     put_resp = MagicMock()
     put_resp.raise_for_status = MagicMock()
 
-    clients = [AsyncMock(), AsyncMock()]
-    clients[0].get.return_value = pdf_resp
-    clients[1].put.return_value = put_resp
+    clients = [AsyncMock()]
+    clients[0].put.return_value = put_resp
     for c in clients:
         c.__aenter__.return_value = c
         c.__aexit__.return_value = False
@@ -309,6 +311,11 @@ async def test_fetch_finalize_exception_fails_and_does_not_patch_reference():
             ],
         ),
         patch("tools.paper_search.km_patch", new_callable=AsyncMock) as mock_km_patch,
+        patch(
+            "tools.paper_search._download_public_pdf",
+            new_callable=AsyncMock,
+            return_value=b"%PDF-1.7",
+        ),
         patch("tools.paper_search.httpx.AsyncClient", side_effect=clients),
     ):
         result = await agentic_fetch_papers.ainvoke(
@@ -319,6 +326,67 @@ async def test_fetch_finalize_exception_fails_and_does_not_patch_reference():
     assert result["success"] is False
     assert "finalize" in result["error"].lower()
     mock_km_patch.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://127.0.0.1/private.pdf",
+        "http://[::1]/private.pdf",
+        "http://169.254.169.254/latest/meta-data",
+        "file:///etc/passwd",
+        "https://user:pass@example.com/paper.pdf",
+    ],
+)
+async def test_validate_public_url_rejects_ssrf_destinations(url):
+    with pytest.raises(UnsafePaperURL):
+        await _validate_public_url(url)
+
+
+@pytest.mark.asyncio
+async def test_download_public_pdf_validates_redirect_target():
+    response = AsyncMock()
+    response.status_code = 302
+    response.headers = {"location": "http://127.0.0.1/admin"}
+    response.url = "https://papers.example/start"
+    response.aclose = AsyncMock()
+
+    client = AsyncMock()
+    client.build_request.return_value = MagicMock()
+    client.send.return_value = response
+    client.__aenter__.return_value = client
+    client.__aexit__.return_value = False
+
+    with (
+        patch("tools.paper_search._validate_public_url", new_callable=AsyncMock) as validate,
+        patch("tools.paper_search.httpx.AsyncClient", return_value=client),
+    ):
+        validate.side_effect = [None, UnsafePaperURL("private redirect")]
+        with pytest.raises(UnsafePaperURL, match="private redirect"):
+            await _download_public_pdf("https://papers.example/start")
+
+
+@pytest.mark.asyncio
+async def test_download_public_pdf_rejects_oversized_content_length():
+    response = AsyncMock()
+    response.status_code = 200
+    response.headers = {"content-length": str(33 * 1024 * 1024)}
+    response.raise_for_status = MagicMock()
+    response.aclose = AsyncMock()
+
+    client = AsyncMock()
+    client.build_request.return_value = MagicMock()
+    client.send.return_value = response
+    client.__aenter__.return_value = client
+    client.__aexit__.return_value = False
+
+    with (
+        patch("tools.paper_search._validate_public_url", new_callable=AsyncMock),
+        patch("tools.paper_search.httpx.AsyncClient", return_value=client),
+        pytest.raises(ValueError, match="32 MiB"),
+    ):
+        await _download_public_pdf("https://papers.example/huge.pdf")
 
 
 # -- Helper ------------------------------------------------------------------

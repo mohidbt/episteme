@@ -1,4 +1,5 @@
 import { eq } from "drizzle-orm";
+import { z } from "zod";
 import {
   getOrApiKey,
   OpenRouterKeyMissing,
@@ -13,9 +14,32 @@ import { tapAgentEvents } from "@/lib/agents/thread-lifecycle";
 import { OPENROUTER_KEY_MISSING } from "@/lib/openrouter-errors";
 import { recordUsage } from "@/lib/openrouter-usage";
 
+const MAX_AGENT_BODY_BYTES = 256 * 1024;
+const ResumeBody = z
+  .object({
+    thread_id: z.string().min(1).max(255),
+    decisions: z.array(z.unknown()).max(100).default([]),
+    skill: z.string().min(1).max(255).nullable().optional(),
+  })
+  .strict();
+
 export async function POST(req: Request) {
   const session = await getSessionInfo(req);
   if (!session) return Response.json({ error: "unauthorized" }, { status: 401 });
+
+  // Resume decisions are client-owned. Agent configuration and approval
+  // policy are not: reject unknown keys so a browser cannot replace the
+  // server-side permissions/approval_rules sent below.
+  const bodyText = await req.text();
+  if (Buffer.byteLength(bodyText, "utf8") > MAX_AGENT_BODY_BYTES) {
+    return Response.json({ error: "payload_too_large" }, { status: 413 });
+  }
+  let parsedBody: z.infer<typeof ResumeBody>;
+  try {
+    parsedBody = ResumeBody.parse(JSON.parse(bodyText));
+  } catch {
+    return Response.json({ error: "bad_request" }, { status: 400 });
+  }
 
   // GSD-132: BYOK → managed bucket → env. Anonymous sessions skip the
   // managed lookup (no FK). Pre-stream 402 emit if the resolver itself
@@ -33,8 +57,6 @@ export async function POST(req: Request) {
     }
     throw err;
   }
-  const bodyText = await req.text();
-
   // Mirror /invoke: pass modelPreference + enabledSkills + approvalRules +
   // permissions from Postgres so the agent-side `build_km_agent` rebuild on
   // resume re-applies the same gates the initial /invoke did. Without this,
@@ -73,7 +95,6 @@ export async function POST(req: Request) {
   // resumed turn loads the same skill workflow + tool allow-list as the
   // initial /invoke. Without this, post-approval continuation rebuilt
   // without paper-search → pruned tools → runtime mismatch.
-  const parsedBody = JSON.parse(bodyText) as { skill?: string | null };
   const skillHint: string | undefined = parsedBody.skill ?? undefined;
   let mergedSkills: string[] | null = enabledSkills ? [...enabledSkills] : null;
   if (skillHint) {
@@ -82,7 +103,9 @@ export async function POST(req: Request) {
   }
 
   const upstreamBody = JSON.stringify({
-    ...parsedBody,
+    thread_id: parsedBody.thread_id,
+    decisions: parsedBody.decisions,
+    ...(parsedBody.skill ? { skill: parsedBody.skill } : {}),
     ...(modelPreference ? { model_preference: modelPreference } : {}),
     ...(Array.isArray(mergedSkills) ? { enabled_skills: mergedSkills } : {}),
     ...(permissions ? { permissions } : {}),

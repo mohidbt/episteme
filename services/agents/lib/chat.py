@@ -1,14 +1,9 @@
-import logging
 from collections.abc import AsyncIterator
 from typing import Any
 from langchain.agents import create_agent
 from langchain_core.messages import AIMessage, AIMessageChunk, ToolMessage
 from langchain_openai import ChatOpenAI
 from lib.rag import ChunkRow
-
-logging.basicConfig(level=logging.INFO, force=False)
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
 
 OPENROUTER_BASE = "https://openrouter.ai/api/v1"
 CHAT_MODEL = "openai/gpt-5.4-nano"
@@ -76,38 +71,21 @@ async def run_chat(*, api_key: str, history: list[dict], question: str,
         agent_kwargs["system_prompt"] = system_prompt or system
     agent = create_agent(**agent_kwargs)
 
-    def _dbg(*a):
-        print("[IMPLICIT-DEBUG]", *a, flush=True)
-
-    _dbg(f"run_chat start: tools={len(tools or [])} question={question[:80]!r}")
-
     async for mode, payload in agent.astream(
         {"messages": messages},
         config={"recursion_limit": AGENT_RECURSION_LIMIT},
         stream_mode=["messages", "updates"],
     ):
-        _dbg(f"astream mode={mode} payload_type={type(payload).__name__}")
         if mode == "messages":
             chunk = payload[0] if isinstance(payload, tuple) else payload
-            _dbg(
-                f"  messages chunk_type={type(chunk).__name__} "
-                f"content_type={type(getattr(chunk, 'content', None)).__name__} "
-                f"content_preview={str(getattr(chunk, 'content', ''))[:60]!r} "
-                f"tool_call_chunks={getattr(chunk, 'tool_call_chunks', None)} "
-                f"tool_calls={getattr(chunk, 'tool_calls', None)}"
-            )
             if isinstance(chunk, AIMessageChunk) and isinstance(chunk.content, str) and chunk.content:
                 yield ("token", chunk.content)
         elif mode == "updates":
-            _dbg(f"  updates keys={list((payload or {}).keys())}")
             for node_name, node_state in (payload or {}).items():
                 msgs = (node_state or {}).get("messages", []) or []
-                _dbg(f"    node={node_name} msg_count={len(msgs)} types={[type(m).__name__ for m in msgs]}")
                 for m in msgs:
                     if isinstance(m, AIMessage):
-                        _dbg(f"      AIMessage tool_calls={m.tool_calls} content_preview={str(m.content)[:80]!r}")
                         for tc in m.tool_calls or []:
                             yield ("tool_call", tc.get("name", "tool"), tc.get("args") or {})
                     elif isinstance(m, ToolMessage):
-                        _dbg(f"      ToolMessage name={m.name} content_preview={str(m.content)[:400]!r}")
                         yield ("tool_result", m.name or "tool", m.content)

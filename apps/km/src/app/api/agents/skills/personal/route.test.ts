@@ -127,12 +127,12 @@ describe("GET/POST /api/agents/skills/personal", () => {
   });
 
   it("GET accepts HMAC-signed agent request", async () => {
-    const { createHmac } = await import("crypto");
+    const { internalAuthTestHeaders } = await import(
+      "@/__tests__/internal-auth-headers"
+    );
     const SECRET = "test-secret-abc";
     process.env.INHALE_INTERNAL_SECRET = SECRET;
-    const ts = String(Math.floor(Date.now() / 1000));
     const path = "/api/agents/skills/personal";
-    const sig = createHmac("sha256", SECRET).update(ts + "GET" + path + "").digest("hex");
 
     // HMAC path bypasses cookie session — getAuthedUserId is real for this assertion.
     vi.mocked(getAuthedUserId).mockImplementation(async (req) => {
@@ -144,11 +144,12 @@ describe("GET/POST /api/agents/skills/personal", () => {
     const { GET } = await import("./route");
     const res = await GET(
       new Request(`http://localhost${path}`, {
-        headers: {
-          "X-Inhale-User-Id": "agent-u1",
-          "X-Inhale-Ts": ts,
-          "X-Inhale-Sig": sig,
-        },
+        headers: internalAuthTestHeaders({
+          secret: SECRET,
+          userId: "agent-u1",
+          method: "GET",
+          path,
+        }),
       }),
     );
     expect(res.status).toBe(200);

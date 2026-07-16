@@ -16,16 +16,36 @@ import {
 } from "@/lib/threads";
 import { deriveThreadTitle } from "@/lib/thread-title";
 
-const InvokeBody = z.object({
-  thread_id: z.string().min(1),
-  message: z.string().optional(),
-  skill: z.string().nullable().optional(),
-  model_override: z.string().nullable().optional(),
-});
+const MAX_AGENT_BODY_BYTES = 256 * 1024;
+
+const InvokeBody = z
+  .object({
+    thread_id: z.string().min(1).max(255),
+    message: z.string().min(1).max(100_000),
+    skill: z.string().min(1).max(255).nullable().optional(),
+    model_override: z.string().min(1).max(255).nullable().optional(),
+    page_context: z.record(z.string(), z.unknown()).optional(),
+  })
+  .strict();
 
 export async function POST(req: Request) {
   const session = await getSessionInfo(req);
   if (!session) return Response.json({ error: "unauthorized" }, { status: 401 });
+
+  // Parse and strictly allowlist client-owned fields before resolving a paid
+  // API key or doing any upstream work. In particular, permissions,
+  // enabled_skills, and approval_rules are server-owned policy and must never
+  // be accepted from this browser-facing endpoint.
+  const bodyText = await req.text();
+  if (Buffer.byteLength(bodyText, "utf8") > MAX_AGENT_BODY_BYTES) {
+    return Response.json({ error: "payload_too_large" }, { status: 413 });
+  }
+  let body: z.infer<typeof InvokeBody>;
+  try {
+    body = InvokeBody.parse(JSON.parse(bodyText));
+  } catch {
+    return Response.json({ error: "bad_request" }, { status: 400 });
+  }
 
   // GSD-130: server-side $1 cap on guest spend. Block before key resolve
   // so guests over the cap never reach the upstream call. Same 402
@@ -51,14 +71,6 @@ export async function POST(req: Request) {
     }
     throw err;
   }
-  const bodyText = await req.text();
-  let body: z.infer<typeof InvokeBody>;
-  try {
-    body = InvokeBody.parse(JSON.parse(bodyText));
-  } catch {
-    return Response.json({ error: "bad_request" }, { status: 400 });
-  }
-
   // Identity split for usage accounting: signed-in users get their userId,
   // anonymous sessions get guestSessionId (the anon user id is a stable
   // per-session key). DB-owner-scoped operations below (thread upsert/read)
@@ -130,7 +142,11 @@ export async function POST(req: Request) {
   }
 
   const upstreamBody = JSON.stringify({
-    ...JSON.parse(bodyText),
+    thread_id: body.thread_id,
+    message: body.message,
+    page_context: body.page_context ?? {},
+    ...(body.skill ? { skill: body.skill } : {}),
+    ...(body.model_override ? { model_override: body.model_override } : {}),
     ...(modelPreference ? { model_preference: modelPreference } : {}),
     ...(Array.isArray(mergedSkills) ? { enabled_skills: mergedSkills } : {}),
     ...(permissions ? { permissions } : {}),

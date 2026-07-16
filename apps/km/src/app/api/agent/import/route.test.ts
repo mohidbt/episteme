@@ -72,6 +72,19 @@ describe("POST /api/agent/import", () => {
     expect(body.error).toBe("missing_file");
   });
 
+  it("413 before parsing a bundle over the compressed upload cap", async () => {
+    const fd = new FormData();
+    const file = new File(
+      [new Uint8Array(5 * 1024 * 1024 + 1)],
+      "huge.zip",
+    );
+    fd.append("file", file);
+    const { POST } = await import("./route");
+    const res = await POST(fdReq(fd));
+    expect(res.status).toBe(413);
+    expect(parseBundle).not.toHaveBeenCalled();
+  });
+
   it("400 when zip is invalid", async () => {
     vi.mocked(parseBundle).mockRejectedValue(new Error("bad zip"));
     const fd = new FormData();

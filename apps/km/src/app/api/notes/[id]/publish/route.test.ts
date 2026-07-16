@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createHmac } from "crypto";
+import { internalAuthTestHeaders } from "@/__tests__/internal-auth-headers";
 import { eq } from "drizzle-orm";
 import { POST } from "./route";
 
@@ -277,18 +277,18 @@ describe("POST /api/notes/:id/publish", () => {
     const prevSecret = process.env.INHALE_INTERNAL_SECRET;
     process.env.INHALE_INTERNAL_SECRET = HMAC_SECRET;
     try {
-      const ts = String(Math.floor(Date.now() / 1000));
-      const sig = createHmac("sha256", HMAC_SECRET)
-        .update(ts + "POST" + path + body)
-        .digest("hex");
       const r = await POST(
         new Request(`http://localhost${path}`, {
           method: "POST",
           headers: {
             "content-type": "application/json",
-            "X-Inhale-User-Id": u.id,
-            "X-Inhale-Ts": ts,
-            "X-Inhale-Sig": sig,
+            ...internalAuthTestHeaders({
+              secret: HMAC_SECRET,
+              userId: u.id,
+              method: "POST",
+              path,
+              body,
+            }),
           },
           body,
         }),

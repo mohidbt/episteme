@@ -31,7 +31,9 @@ from typing import Any, Literal, TypedDict
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
 
-from lib.chandra import ChandraParseFailed, ensure_parsed
+from lib.chandra import ensure_parsed
+from lib.ownership import require_paper_owner
+from tools._auth import user_id_from_config
 
 logger = logging.getLogger(__name__)
 
@@ -40,28 +42,33 @@ logger = logging.getLogger(__name__)
 # the life of the process. Entries carry a monotonic insert timestamp and
 # expire after ``_PAPER_TITLE_CACHE_TTL`` seconds. Capped to keep memory
 # bounded; FIFO eviction at the cap.
-_PAPER_TITLE_CACHE: dict[str, tuple[str | None, float]] = {}
+_PAPER_TITLE_CACHE: dict[tuple[str, str], tuple[str | None, float]] = {}
 _PAPER_TITLE_CACHE_MAX = 256
 _PAPER_TITLE_CACHE_TTL = 60.0  # seconds
 
 
-async def _get_paper_title(conn, paper_id: str) -> str | None:
-    entry = _PAPER_TITLE_CACHE.get(paper_id)
+async def _get_paper_title(conn, paper_id: str, user_id: str) -> str | None:
+    cache_key = (user_id, paper_id)
+    entry = _PAPER_TITLE_CACHE.get(cache_key)
     now = time.monotonic()
     if entry is not None:
         title, inserted_at = entry
         if now - inserted_at <= _PAPER_TITLE_CACHE_TTL:
             return title
         # Expired — evict and fall through to re-fetch.
-        _PAPER_TITLE_CACHE.pop(paper_id, None)
-    row = await conn.fetchrow("SELECT title FROM papers WHERE id = $1", paper_id)
+        _PAPER_TITLE_CACHE.pop(cache_key, None)
+    row = await conn.fetchrow(
+        "SELECT title FROM papers WHERE id = $1 AND user_id = $2",
+        paper_id,
+        user_id,
+    )
     title = row["title"] if row else None
     if len(_PAPER_TITLE_CACHE) >= _PAPER_TITLE_CACHE_MAX:
         try:
             _PAPER_TITLE_CACHE.pop(next(iter(_PAPER_TITLE_CACHE)))
         except StopIteration:
             pass
-    _PAPER_TITLE_CACHE[paper_id] = (title, now)
+    _PAPER_TITLE_CACHE[cache_key] = (title, now)
     return title
 
 
@@ -395,11 +402,15 @@ async def read_paper(
         scope: Scope dict (see PaperScope).
     """
     ocr_key = _ocr_key_from_config(config)
+    user_id = user_id_from_config(config)
     pool = _get_pool()
     if pool is None:
         raise RuntimeError("DB pool not initialised — call deps.db.init_pool() first")
 
     async with pool.acquire() as conn:
+        # The paper id is model-supplied. Verify ownership before parsing,
+        # cached-title lookup, or any document_segments query.
+        await require_paper_owner(conn, paper_id=paper_id, user_id=user_id)
         # Lazy Chandra parse. Raises ChandraParseFailed loudly on failure.
         await ensure_parsed(paper_id, conn, ocr_key)
 
@@ -428,7 +439,7 @@ async def read_paper(
         # can label sources without re-querying and apply a similarity floor.
         # Title is cached process-wide to amortize across multiple tool calls
         # in the same turn (Codex R2 review).
-        paper_title: str | None = await _get_paper_title(conn, paper_id)
+        paper_title: str | None = await _get_paper_title(conn, paper_id, user_id)
 
     # Normalize FTS rank to [0, 1] within the result set; non-rag rows default
     # to 1.0 so the score floor at the agent service is a no-op for them.
