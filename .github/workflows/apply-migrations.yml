@@ -1,5 +1,8 @@
 name: apply-migrations
 
+permissions:
+  contents: read
+
 on:
   workflow_dispatch:
     inputs:
@@ -7,14 +10,20 @@ on:
         description: 'Type APPLY to confirm prod migration apply'
         required: true
         default: 'NO'
+        type: choice
+        options: ['NO', 'APPLY']
       role:
         description: 'DSN: migrate (default) | owner-ro (PROD_DATABASE_URL predeploy_ro) | owner-real (OWNER_DATABASE_URL neondb_owner)'
         required: false
         default: 'migrate'
+        type: choice
+        options: ['migrate', 'owner-ro', 'owner-real']
       mode:
         description: 'apply (default) | record-only (after manual Neon-dashboard apply)'
         required: false
         default: 'apply'
+        type: choice
+        options: ['apply', 'record-only']
       tags:
         description: 'Comma-separated migration tags to apply (default: auto-detect pending)'
         required: false
@@ -24,6 +33,7 @@ jobs:
   apply:
     name: drizzle migrate (prod)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     env:
       CONFIRM: ${{ inputs.confirm }}
       ROLE: ${{ inputs.role }}
@@ -35,6 +45,7 @@ jobs:
     steps:
       - name: Guard
         run: |
+          set -euo pipefail
           if [ "$CONFIRM" != "APPLY" ]; then
             echo "::error::confirm must be APPLY (got '$CONFIRM')"; exit 1
           fi
@@ -45,19 +56,26 @@ jobs:
               echo "DSN=$OWNER_REAL_DSN" >> "$GITHUB_ENV"
               ;;
             owner-ro)
+              if [ -z "$OWNER_RO_DSN" ]; then echo "::error::PROD_DATABASE_URL secret missing"; exit 1; fi
               echo "Using PROD_DATABASE_URL (predeploy_ro — read-only, useful for probes)"
               echo "DSN=$OWNER_RO_DSN" >> "$GITHUB_ENV"
               ;;
-            *)
+            migrate)
+              if [ -z "$MIGRATE_DSN" ]; then echo "::error::MIGRATE_DATABASE_URL secret missing"; exit 1; fi
               echo "Using MIGRATE_DATABASE_URL (migrate_only — limited on legacy tables)"
               echo "DSN=$MIGRATE_DSN" >> "$GITHUB_ENV"
               ;;
+            *) echo "::error::unsupported role"; exit 1 ;;
           esac
+          case "$MODE" in apply|record-only) ;; *) echo "::error::unsupported mode"; exit 1 ;; esac
+          if [ -n "$TAGS" ] && ! [[ "$TAGS" =~ ^[0-9]{4}_[a-z0-9_]+(,[0-9]{4}_[a-z0-9_]+)*$ ]]; then
+            echo "::error::tags must be comma-separated migration tags"; exit 1
+          fi
           echo "mode=$MODE tags=$TAGS"
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
         with: { version: 9.12.0 }
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with: { node-version: 20, cache: pnpm }
       - name: Install postgres client
         run: sudo apt-get update -qq && sudo apt-get install -y postgresql-client
@@ -77,17 +95,16 @@ jobs:
             echo "from input: $TAGS"
           else
             # default to anything in journal not in __drizzle_migrations by hash
-            cd packages/db
             pending=$(node --input-type=module -e "
               import { readFileSync } from 'node:fs';
               import { createHash } from 'node:crypto';
               import postgres from 'postgres';
-              const j = JSON.parse(readFileSync('drizzle/meta/_journal.json','utf8'));
+              const j = JSON.parse(readFileSync('packages/db/drizzle/meta/_journal.json','utf8'));
               const sql = postgres(process.env.DSN, { max: 1 });
               const rows = await sql\`SELECT hash FROM drizzle.__drizzle_migrations\`;
               const have = new Set(rows.map(r => r.hash));
               const pending = j.entries.filter(e => {
-                const text = readFileSync(\`drizzle/\${e.tag}.sql\`).toString();
+                const text = readFileSync(\`packages/db/drizzle/\${e.tag}.sql\`).toString();
                 const h = createHash('sha256').update(text).digest('hex');
                 return !have.has(h);
               }).map(e => e.tag);
@@ -97,6 +114,13 @@ jobs:
             echo "list=$pending" >> "$GITHUB_OUTPUT"
             echo "auto-detected: $pending"
           fi
+          while IFS= read -r tag; do
+            [ -z "$tag" ] && continue
+            test -f "packages/db/drizzle/$tag.sql" || { echo "::error::unknown migration tag: $tag"; exit 1; }
+            jq -e --arg tag "$tag" '.entries[] | select(.tag == $tag)' packages/db/drizzle/meta/_journal.json >/dev/null || {
+              echo "::error::migration tag is not journaled: $tag"; exit 1;
+            }
+          done < <(printf '%s' "${TAGS:-${pending:-}}" | tr ',' '\n')
       - name: Apply SQL (mode=apply)
         if: env.MODE == 'apply' && steps.tags.outputs.list != ''
         run: |
@@ -108,7 +132,7 @@ jobs:
             echo "::endgroup::"
           done
       - name: Record journal rows
-        if: steps.tags.outputs.list != ''
+        if: (env.MODE == 'apply' || env.MODE == 'record-only') && steps.tags.outputs.list != ''
         env:
           DATABASE_URL: ${{ env.DSN }}
         run: |

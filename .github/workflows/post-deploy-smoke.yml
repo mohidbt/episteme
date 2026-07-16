@@ -1,5 +1,8 @@
 name: post-deploy-smoke
 
+permissions:
+  contents: read
+
 # Runs after every push to main, once Vercel has deployed. Hits a small set
 # of read-only public endpoints and asserts 200 + expected body substring.
 # Post-fact detection: deploy is already live; this alerts fast so a human
@@ -13,21 +16,22 @@ jobs:
   smoke:
     name: post deploy smoke (prod)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     concurrency:
       group: post-deploy-smoke-${{ github.ref }}
       cancel-in-progress: true
     env:
       SMOKE_BASE_URL: https://tryepisteme.com
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
         with:
           version: 9.12.0
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 20
           cache: pnpm

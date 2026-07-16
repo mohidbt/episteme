@@ -1,14 +1,15 @@
 name: role-perms-audit
 
+permissions:
+  contents: read
+
 on:
-  pull_request:
-    paths:
-      - "packages/db/ops/split-roles.sql"
-      - ".github/workflows/role-perms-audit.yml"
+  # Production role credentials are intentionally never exposed to PR jobs.
   push:
     branches: [main]
     paths:
       - "packages/db/ops/split-roles.sql"
+      - "packages/db/ops/split-roles-hardening.sql"
       - ".github/workflows/role-perms-audit.yml"
   schedule:
     - cron: "0 6 * * *"
@@ -18,8 +19,9 @@ jobs:
   perms-audit:
     name: role permissions audit
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       - name: Install postgresql-client-17
         run: |

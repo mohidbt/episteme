@@ -1,5 +1,8 @@
 name: gitleaks
 
+permissions:
+  contents: read
+
 # Secret-scanning gate (GSD-150). Runs on every PR and on pushes to main.
 # Backs up GitHub's native secret scanning + push protection with an explicit,
 # repo-owned ruleset (.gitleaks.toml) so leaks fail CI before merge.
@@ -11,13 +14,23 @@ on:
 jobs:
   scan:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           # Full history so the scan covers the whole tree, not just the diff.
           fetch-depth: 0
+      - name: Reject tracked runtime env files
+        run: |
+          set -euo pipefail
+          tracked=$(git ls-files | grep -E '(^|/)\.env($|\.)' | grep -Ev '\.env\.example$' || true)
+          if [ -n "$tracked" ]; then
+            echo "::error::runtime environment files must never be tracked"
+            echo "$tracked"
+            exit 1
+          fi
       - name: gitleaks
-        uses: gitleaks/gitleaks-action@v2
+        uses: gitleaks/gitleaks-action@dcedce43c6f43de0b836d1fe38946645c9c638dc # v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_CONFIG: .gitleaks.toml
