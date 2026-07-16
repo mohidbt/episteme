@@ -28,11 +28,21 @@ import { openrouterUsage, userOpenrouterKeys } from "@episteme/db/schema";
 
 export const runtime = "nodejs";
 
-function previewGate(): Response | null {
-  // Hard refusal in production. Preview, development, and unset (local) are OK.
-  if (process.env.VERCEL_ENV === "production") {
+export function previewGate(): Response | null {
+  // Fail closed when deployment metadata is absent or misspelled. An explicit
+  // opt-in exists for trusted local/self-hosted development only.
+  const environment = process.env.VERCEL_ENV;
+  const isProduction =
+    environment === "production" || process.env.NODE_ENV === "production";
+  const isLocal = !environment || environment === "local";
+  const enabled =
+    !isProduction &&
+    (environment === "preview" ||
+      environment === "development" ||
+      (isLocal && process.env.ENABLE_OR_BUCKET_DEBUG === "1"));
+  if (!enabled) {
     return Response.json(
-      { error: "debug endpoint disabled in production" },
+      { error: "debug endpoint disabled" },
       { status: 404 },
     );
   }
