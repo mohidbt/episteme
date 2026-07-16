@@ -98,7 +98,7 @@ export default function GraphCanvas({ payload }: { payload: GraphPayload }) {
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null)
   const [open, setOpen] = useState(false)
   const [selectedLink, setSelectedLink] = useState<CanvasLink | null>(null)
-  const [semanticDetail, setSemanticDetail] = useState<{ score?: number } | null>(null)
+  const [semanticDetail, setSemanticDetail] = useState<{ cosine?: number } | null>(null)
 
   const nodeByKey = useMemo(() => {
     return new Map(payload.nodes.map((n) => [`${n.kind}:${n.id}`, n] as const))
@@ -153,13 +153,18 @@ export default function GraphCanvas({ payload }: { payload: GraphPayload }) {
     }
 
     try {
-      const params = new URLSearchParams({ src: link.src.id, dst: link.dst.id })
+      const params = new URLSearchParams({
+        srcKind: link.src.kind,
+        dstKind: link.dst.kind,
+        srcId: link.src.id,
+        dstId: link.dst.id,
+      })
       const res = await fetch(`/api/graph/edge-detail?${params.toString()}`)
       if (!res.ok) {
         setSemanticDetail(null)
         return
       }
-      const json = (await res.json()) as { score?: number }
+      const json = (await res.json()) as { cosine?: number }
       setSemanticDetail(json)
     } catch {
       setSemanticDetail(null)
@@ -298,7 +303,7 @@ export default function GraphCanvas({ payload }: { payload: GraphPayload }) {
               {selectedLink.kind === 'semantic_sim' ? (
                 <div className="space-y-1">
                   <p>{detail.srcLabel} → {detail.dstLabel}</p>
-                  <p className="text-muted-foreground">Cosine similarity: {semanticDetail?.score ?? selectedLink.weight ?? 'N/A'}</p>
+                  <p className="text-muted-foreground">Cosine similarity: {semanticDetail?.cosine ?? selectedLink.weight ?? 'N/A'}</p>
                 </div>
               ) : null}
 
