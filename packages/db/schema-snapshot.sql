@@ -867,11 +867,11 @@ ALTER TABLE ONLY public.agent_conversations
 ALTER TABLE ONLY public.agent_memories
     ADD CONSTRAINT agent_memories_pkey PRIMARY KEY (id);
 ALTER TABLE ONLY public.agent_message_metadata
-    ADD CONSTRAINT agent_message_metadata_pkey PRIMARY KEY (thread_id, message_id, kind);
+    ADD CONSTRAINT agent_message_metadata_pkey PRIMARY KEY (user_id, thread_id, message_id, kind);
 ALTER TABLE ONLY public.agent_messages
     ADD CONSTRAINT agent_messages_pkey PRIMARY KEY (id);
 ALTER TABLE ONLY public.agent_thread_papers
-    ADD CONSTRAINT agent_thread_papers_pkey PRIMARY KEY (thread_id, paper_id);
+    ADD CONSTRAINT agent_thread_papers_pkey PRIMARY KEY (user_id, thread_id, paper_id);
 ALTER TABLE ONLY public.agent_threads
     ADD CONSTRAINT agent_threads_user_id_thread_id_pk PRIMARY KEY (user_id, thread_id);
 ALTER TABLE ONLY public.ai_highlight_runs
