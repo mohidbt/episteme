@@ -91,6 +91,61 @@ def test_rejects_future_skew_timestamp():
     assert r.status_code == 401
 
 
+def _v1_sign(ts: str, method: str, path: str, body: bytes = b"") -> str:
+    """Legacy pre-GSD-215 signer: ts + method + path + body, no header binding."""
+    msg = ts.encode() + method.encode() + path.encode() + body
+    return hmac.new(SECRET.encode(), msg, hashlib.sha256).hexdigest()
+
+
+def _v1_headers(ts: str, method: str, path: str, body: bytes = b""):
+    return {
+        "X-Inhale-User-Id": "user_1",
+        "X-Inhale-Paper-Id": "00000000-0000-0000-0000-000000000001",
+        "X-Inhale-LLM-Key": "sk-test",
+        "X-Inhale-Ts": ts,
+        "X-Inhale-Sig": _v1_sign(ts, method, path, body),
+        # No X-Inhale-Sig-Version header — legacy km signer omits it entirely.
+    }
+
+
+def test_accepts_legacy_v1_signature_during_rollout():
+    """GSD-215 dual-accept: agents deploy first and must accept the legacy v1
+    signature (no version header) so main/prod km keeps working until km is
+    upgraded to v2. Absent version header == v1."""
+    ts = str(int(time.time()))
+    r = client.get("/agents/health", headers=_v1_headers(ts, "GET", "/agents/health"))
+    assert r.status_code == 200, r.text
+    assert r.json() == {"status": "ok"}
+
+
+def test_accepts_explicit_v1_version_header():
+    """An explicit X-Inhale-Sig-Version: 1 is also honored as legacy."""
+    ts = str(int(time.time()))
+    h = {**_v1_headers(ts, "GET", "/agents/health"), "X-Inhale-Sig-Version": "1"}
+    r = client.get("/agents/health", headers=h)
+    assert r.status_code == 200, r.text
+
+
+def test_v1_rejects_tampered_body():
+    ts = str(int(time.time()))
+    h = _v1_headers(ts, "POST", "/agents/health", b'{"a":1}')
+    r = client.post("/agents/health", headers=h, content=b'{"a":2}')
+    assert r.status_code == 401
+
+
+def test_v2_still_accepted_alongside_v1():
+    ts = str(int(time.time()))
+    r = client.get("/agents/health", headers=headers(ts, "GET", "/agents/health"))
+    assert r.status_code == 200
+
+
+def test_rejects_unknown_signature_version():
+    ts = str(int(time.time()))
+    h = {**headers(ts, "GET", "/agents/health"), "X-Inhale-Sig-Version": "9"}
+    r = client.get("/agents/health", headers=h)
+    assert r.status_code == 401
+
+
 def test_golden_hmac_vector_matches_outbound_signer():
     """Cross-language golden vector. The matching assertions live in
     apps/km/src/lib/internal-auth.test.ts and

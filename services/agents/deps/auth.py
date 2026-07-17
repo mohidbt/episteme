@@ -1,15 +1,31 @@
 import hashlib
 import hmac
+import logging
 import os
 import time
 from typing import Annotated
 
 from fastapi import Depends, Header, HTTPException, Request
 
+logger = logging.getLogger(__name__)
+
 FRESHNESS_SECONDS = 60
 MAX_INTERNAL_BODY_BYTES = 16 * 1024 * 1024
 MAX_ID_HEADER_LENGTH = 255
 SIGNATURE_VERSION = "2"
+# GSD-215 rollout: agents deploy before km is upgraded to v2, so we temporarily
+# accept the legacy v1 signature (an absent version header, or an explicit "1").
+# Contract this out once km signs v2 everywhere — grep prod logs for the warning
+# below to confirm no caller still uses v1.
+LEGACY_SIGNATURE_VERSIONS = ("", "1")
+_warned_legacy = False
+
+
+def legacy_signature_message(*, ts: str, method: str, path: str, body: bytes = b"") -> bytes:
+    """Pre-GSD-215 internal-auth message: ts + method + path + body, no header
+    binding. Matches the outbound signer on main/prod km and the Next.js
+    verifiers before the v2 upgrade."""
+    return ts.encode() + method.encode() + path.encode() + body
 
 
 def canonical_signature_message(
@@ -60,7 +76,10 @@ async def require_internal(
     secret = os.environ.get("INHALE_INTERNAL_SECRET")
     if not secret:
         raise HTTPException(status_code=503, detail="internal auth unavailable")
-    if x_inhale_sig_version != SIGNATURE_VERSION:
+    if (
+        x_inhale_sig_version != SIGNATURE_VERSION
+        and x_inhale_sig_version not in LEGACY_SIGNATURE_VERSIONS
+    ):
         raise HTTPException(status_code=401, detail="unsupported signature version")
     try:
         ts_int = int(x_inhale_ts)
@@ -86,16 +105,31 @@ async def require_internal(
     signed_path = request.url.path
     if request.url.query:
         signed_path = f"{signed_path}?{request.url.query}"
-    msg = canonical_signature_message(
-        ts=x_inhale_ts,
-        method=request.method,
-        path=signed_path,
-        user_id=x_inhale_user_id,
-        paper_id=x_inhale_paper_id or "",
-        llm_key=x_inhale_llm_key,
-        ocr_key=x_inhale_ocr_key,
-        body=body,
-    )
+    if x_inhale_sig_version == SIGNATURE_VERSION:
+        msg = canonical_signature_message(
+            ts=x_inhale_ts,
+            method=request.method,
+            path=signed_path,
+            user_id=x_inhale_user_id,
+            paper_id=x_inhale_paper_id or "",
+            llm_key=x_inhale_llm_key,
+            ocr_key=x_inhale_ocr_key,
+            body=body,
+        )
+    else:
+        global _warned_legacy
+        if not _warned_legacy:
+            _warned_legacy = True
+            logger.warning(
+                "internal-auth accepted a legacy v1 signature (GSD-215 rollout); "
+                "km has not yet upgraded to v2 — do not contract out v1 yet"
+            )
+        msg = legacy_signature_message(
+            ts=x_inhale_ts,
+            method=request.method,
+            path=signed_path,
+            body=body,
+        )
     expected = hmac.new(secret.encode(), msg, hashlib.sha256).hexdigest()
     if not hmac.compare_digest(expected, x_inhale_sig):
         raise HTTPException(status_code=401, detail="sig mismatch")
