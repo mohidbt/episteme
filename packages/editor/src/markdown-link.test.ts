@@ -64,7 +64,7 @@ function simulatePaste(editor: Editor, plain: string): void {
   const event = Object.assign(new Event("paste"), { clipboardData });
 
   const handled = view.someProp("handlePaste", (handler) =>
-    handler(view, event, slice),
+    handler(view, event as unknown as ClipboardEvent, slice),
   );
 
   // No handler claimed the paste → fall through to ProseMirror's default,
@@ -89,7 +89,7 @@ describe("D6 markdown link behaviours", () => {
       const view = editor.view;
       const { from, to } = view.state.selection;
       const handled = view.someProp("handleTextInput", (h) =>
-        h(view, from, to, ch),
+        (h as (...a: unknown[]) => boolean)(view, from, to, ch),
       );
       if (!handled) {
         const tr = view.state.tr.insertText(ch, from, to);

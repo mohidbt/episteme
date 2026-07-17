@@ -211,6 +211,6 @@ async def test_tool_invoked_and_returns_data(tool: str, prompt: str, skills: lis
     elif tool in ("read_note", "create_note", "update_note", "get_reference"):
         assert isinstance(output, dict) and "id" in output, f"{tool} missing 'id' in output"
     elif tool == "list_folders":
-        assert isinstance(output, dict) and "folders" in output, f"list_folders missing 'folders' key"
+        assert isinstance(output, dict) and "folders" in output, "list_folders missing 'folders' key"
     elif tool == "agentic_search_papers":
-        assert isinstance(output, dict) and "found" in output, f"agentic_search_papers missing 'found' key"
+        assert isinstance(output, dict) and "found" in output, "agentic_search_papers missing 'found' key"

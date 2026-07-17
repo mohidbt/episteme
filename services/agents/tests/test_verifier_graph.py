@@ -17,7 +17,7 @@ import pytest
 from langchain_core.tools import tool
 
 import subagents.verifier as verifier_mod
-from subagents.verifier import VERIFIER_TOOL_NAMES, VerifierState, build_verifier, build_verifier_graph
+from subagents.verifier import VerifierState, build_verifier, build_verifier_graph
 
 
 def _identity_fetch(state: VerifierState) -> dict:

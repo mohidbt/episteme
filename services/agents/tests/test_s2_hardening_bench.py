@@ -29,7 +29,6 @@ M4 is xfail until the cooldown store lands. Post-fix: all GREEN.
 """
 from __future__ import annotations
 
-import asyncio
 import os
 from unittest.mock import AsyncMock, MagicMock, patch
 

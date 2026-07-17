@@ -1,7 +1,6 @@
 """Tests for agentic_search_papers and agentic_fetch_papers tools."""
 from __future__ import annotations
 
-import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest

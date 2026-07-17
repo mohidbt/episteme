@@ -9,7 +9,6 @@ by a full-key `UPDATE`. The UPDATE is scoped by user_id + thread_id + message_id
 """
 from __future__ import annotations
 
-import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest

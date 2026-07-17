@@ -1,0 +1,92 @@
+name: build-gate
+
+# GSD-219 — full per-branch build/type/lint gate.
+#
+# Why this exists: apps/km/next.config.ts sets `typescript.ignoreBuildErrors:
+# true`, so a green `next build` does NOT mean the tree is type-clean. This gate
+# runs `pnpm typecheck` (plain `tsc --noEmit`, which ignores that flag) as a
+# hard step, so type regressions fail CI even though `next build` would swallow
+# them. It also runs the production build, eslint, the agents ruff+pytest
+# suites, a frozen install, and a non-blocking dependency audit.
+#
+# Policy (locked 2026-07-17):
+#   - typecheck / lint / build / ruff / pytest: BLOCKING.
+#   - pnpm audit: WARN-ONLY (continue-on-error) — the current criticals are all
+#     transitive inside next@16.2.6's own dep tree and cannot be fixed here; a
+#     blocking audit would be permanently red. Revisit on the next Next upgrade.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: build-gate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  node-gate:
+    name: node (typecheck + lint + build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.12.0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+
+      # TS ENFORCED — plain tsc, unaffected by next.config's ignoreBuildErrors.
+      - name: Typecheck (all packages)
+        run: pnpm typecheck
+
+      - name: Lint (km)
+        run: pnpm -F km lint
+
+      - name: Production build (km)
+        # App Router defers DB/secrets to request time, so build needs no real
+        # secrets. Sentry source-map upload self-skips without SENTRY_AUTH_TOKEN.
+        env:
+          NEXT_TELEMETRY_DISABLED: "1"
+        run: pnpm -F km build
+
+      - name: Dependency audit (warn-only)
+        continue-on-error: true
+        run: pnpm audit
+
+  agents-gate:
+    name: agents (ruff + pytest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Install agents deps
+        working-directory: services/agents
+        run: uv sync
+
+      - name: Ruff
+        working-directory: services/agents
+        run: uv run ruff check .
+
+      - name: Pytest
+        working-directory: services/agents
+        run: uv run pytest tests/

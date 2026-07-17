@@ -17,8 +17,8 @@ from lib.sse_events import EventType, format_sse, format_typed
 def _parse_sse(raw: str) -> tuple[str, dict]:
     """Parse 'event: X\ndata: {...}\n\n' into (event_type, data_dict)."""
     lines = raw.strip().splitlines()
-    event_line = next(l for l in lines if l.startswith("event:"))
-    data_line = next(l for l in lines if l.startswith("data:"))
+    event_line = next(ln for ln in lines if ln.startswith("event:"))
+    data_line = next(ln for ln in lines if ln.startswith("data:"))
     return event_line.split(":", 1)[1].strip(), json.loads(data_line.split(":", 1)[1].strip())
 
 
@@ -330,7 +330,7 @@ async def test_gen_emits_tool_result_error_and_done_on_cancelled_error():
     know to keep both in sync if the finally block changes.
     """
     import asyncio  # noqa: PLC0415
-    from unittest.mock import AsyncMock, MagicMock, patch  # noqa: PLC0415
+    from unittest.mock import MagicMock  # noqa: PLC0415
 
     RUN_ID = "run-cancel-1"
     THREAD_ID = "thread-test-cancel"

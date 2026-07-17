@@ -1,4 +1,7 @@
-import hmac, hashlib, time, os
+import hmac
+import hashlib
+import time
+import os
 from fastapi.testclient import TestClient
 
 SECRET = os.environ.get("INHALE_INTERNAL_SECRET", "test-secret-abc")

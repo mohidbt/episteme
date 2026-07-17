@@ -25,7 +25,6 @@ invocation (covered by test_km_agent.py).
 """
 from __future__ import annotations
 
-import pytest
 
 from lib.library_handles import build_library_system_hint, parse_library_tokens
 from lib import attachments

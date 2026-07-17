@@ -5,7 +5,7 @@ os.environ["INHALE_STUB_EMBEDDINGS"] = "1"
 from unittest.mock import AsyncMock
 import pytest
 
-from lib.rag import retrieve, ChunkRow
+from lib.rag import retrieve
 
 
 def _chunk_record(id=1, content="text", page_start=1, page_end=1, score=0.9):

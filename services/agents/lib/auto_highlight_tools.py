@@ -396,7 +396,6 @@ def _match_fragment_glyphs(
     (e.g. synthesised newline in `text`, or whitespace that doesn't
     exist in the plumber stream).
     """
-    n = len(plumber_chars)
     tlen = len(text)
 
     # Needle: non-whitespace chars from pypdf text, with their indices in `text`.

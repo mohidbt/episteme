@@ -37,8 +37,8 @@ function simulatePaste(
   // someProp() with no callback returning the only handler.
   return !!editor.view.someProp(
     "handlePaste",
-    (handler: (v: unknown, e: Event, s: unknown) => boolean) =>
-      handler(editor.view, event, null),
+    (handler) =>
+      (handler as (...a: unknown[]) => boolean)(editor.view, event, null),
   );
 }
 

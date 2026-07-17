@@ -19,7 +19,6 @@ A live integration test against the real DB is deferred until migration
 from __future__ import annotations
 
 import asyncio
-import json
 from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, patch
 
