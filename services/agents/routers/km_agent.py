@@ -17,6 +17,7 @@ import asyncio
 import hashlib
 import json
 import logging
+import re
 import uuid
 from functools import cache as _fn_cache
 
@@ -83,6 +84,7 @@ _RECURSION_LOG_INTERVAL = 10
 
 _GUEST_FORBIDDEN = {"error": "guests cannot use agents", "code": "guest_forbidden"}
 _MAX_THREAD_ID_CHARS = 255
+_THREAD_ID_RE = re.compile(r"\A[A-Za-z0-9_-]+\Z")
 _MAX_MESSAGE_CHARS = 100_000
 _MAX_EXTRACT_CELLS = 128
 
@@ -127,7 +129,11 @@ def _checkpoint_lookup_config(*, thread_id: str, user_id: str) -> dict:
 def _validate_thread_id(value: object) -> str:
     if not isinstance(value, str) or not value or len(value) > _MAX_THREAD_ID_CHARS:
         raise HTTPException(status_code=400, detail={"error": "invalid_thread_id"})
-    if any(ord(ch) < 0x20 or ord(ch) == 0x7F for ch in value):
+    # GSD-219: thread_id is interpolated unescaped into the HMAC-signed state
+    # URL path on the km side. Restrict to a URL-segment-safe alphabet so a
+    # `#`/`?`/`/`/whitespace can never desync the signed path from the sent
+    # path. Real thread_ids are UUIDs — a strict subset of this alphabet.
+    if not _THREAD_ID_RE.match(value):
         raise HTTPException(status_code=400, detail={"error": "invalid_thread_id"})
     return value
 

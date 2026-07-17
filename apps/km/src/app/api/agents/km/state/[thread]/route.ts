@@ -1,5 +1,6 @@
 import { getSessionInfo } from "@/lib/auth";
 import { signRequest } from "@/lib/agents/sign-request";
+import { isValidThreadId } from "@/lib/agents/thread-id";
 
 export async function GET(
   req: Request,
@@ -9,6 +10,12 @@ export async function GET(
   if (!session) return Response.json({ error: "unauthorized" }, { status: 401 });
 
   const { thread } = await params;
+  // Reject transport-unsafe thread_ids BEFORE signing: a `#`/`?`/`/` here would
+  // make fetch re-parse the URL so the sent path diverges from the signed path
+  // → a 401 that looks like an auth bug. Fail closed with a clear 400 instead.
+  if (!isValidThreadId(thread)) {
+    return Response.json({ error: "invalid_thread_id" }, { status: 400 });
+  }
   const path = `/agents/km/state/${thread}`;
   const { headers } = signRequest({
     method: "GET",

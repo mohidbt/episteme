@@ -15,12 +15,13 @@ import {
   type AgentThreadStatus,
 } from "@/lib/threads";
 import { deriveThreadTitle } from "@/lib/thread-title";
+import { THREAD_ID_RE } from "@/lib/agents/thread-id";
 
 const MAX_AGENT_BODY_BYTES = 256 * 1024;
 
 const InvokeBody = z
   .object({
-    thread_id: z.string().min(1).max(255),
+    thread_id: z.string().min(1).max(255).regex(THREAD_ID_RE),
     message: z.string().min(1).max(100_000),
     skill: z.string().min(1).max(255).nullable().optional(),
     model_override: z.string().min(1).max(255).nullable().optional(),

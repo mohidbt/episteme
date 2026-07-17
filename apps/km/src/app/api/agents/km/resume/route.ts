@@ -13,11 +13,12 @@ import { streamPassthrough } from "@/lib/agents/stream-passthrough";
 import { tapAgentEvents } from "@/lib/agents/thread-lifecycle";
 import { OPENROUTER_KEY_MISSING } from "@/lib/openrouter-errors";
 import { recordUsage } from "@/lib/openrouter-usage";
+import { THREAD_ID_RE } from "@/lib/agents/thread-id";
 
 const MAX_AGENT_BODY_BYTES = 256 * 1024;
 const ResumeBody = z
   .object({
-    thread_id: z.string().min(1).max(255),
+    thread_id: z.string().min(1).max(255).regex(THREAD_ID_RE),
     decisions: z.array(z.unknown()).max(100).default([]),
     skill: z.string().min(1).max(255).nullable().optional(),
   })
