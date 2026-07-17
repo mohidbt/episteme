@@ -49,7 +49,9 @@ jobs:
 
       - name: Run pytest
         working-directory: services/agents
-        run: uv run pytest tests/
+        # Exclude the live-e2e suite: it needs a real Postgres pool + live
+        # infra and is covered by the dedicated live harness, not this gate.
+        run: uv run pytest tests/ --ignore=tests/test_phase15_live_e2e.py
 
   agents-scalability:
     name: scalability gate (check-skill-addition)

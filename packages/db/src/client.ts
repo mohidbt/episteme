@@ -14,12 +14,36 @@ import { resolveAppDatabaseUrl } from "./database-url";
 //     ...ann query...
 //   });
 // Today no TS code issues ANN queries (Python agents-svc uses its own conn).
-const { url: databaseUrl, usedFallback } = resolveAppDatabaseUrl();
-if (usedFallback) {
-  console.warn(
-    "[@episteme/db] APP_RUNTIME_DATABASE_URL not set — using DATABASE_URL outside production only.",
-  );
-}
-const queryClient = postgres(databaseUrl);
 
-export const db = drizzle({ client: queryClient, schema });
+type DrizzleClient = ReturnType<typeof createClient>;
+
+function createClient() {
+  // Resolution is deferred to first access (not module load) so that
+  // `next build` can import route modules under NODE_ENV=production without
+  // requiring APP_RUNTIME_DATABASE_URL at build time. The fail-closed guard in
+  // resolveAppDatabaseUrl still throws here on the first real DB access.
+  const { url: databaseUrl, usedFallback } = resolveAppDatabaseUrl();
+  if (usedFallback) {
+    console.warn(
+      "[@episteme/db] APP_RUNTIME_DATABASE_URL not set — using DATABASE_URL outside production only.",
+    );
+  }
+  const queryClient = postgres(databaseUrl);
+  return drizzle({ client: queryClient, schema });
+}
+
+// Memoized singleton — created once, on first property access via the Proxy.
+let client: DrizzleClient | undefined;
+function getClient(): DrizzleClient {
+  if (!client) client = createClient();
+  return client;
+}
+
+// Lazy Proxy preserves the exact drizzle API (db.select/insert/update/delete/
+// execute/transaction/...) and its types, so zero callers change. Every
+// property read forwards to the singleton, constructing it on first touch.
+export const db = new Proxy({} as DrizzleClient, {
+  get(_target, prop, receiver) {
+    return Reflect.get(getClient(), prop, receiver);
+  },
+}) as DrizzleClient;
