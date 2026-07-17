@@ -89,4 +89,7 @@ jobs:
 
       - name: Pytest
         working-directory: services/agents
-        run: uv run pytest tests/
+        # Exclude the live-e2e suite: it needs a real Postgres pool + live
+        # embeddings/PDF infra (pdf->embed->chat) and is covered by the
+        # dedicated live harness, not this no-service gate.
+        run: uv run pytest tests/ --ignore=tests/test_phase15_live_e2e.py

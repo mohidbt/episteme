@@ -1,4 +1,5 @@
 import { signRequest } from "@/lib/agents/sign-request";
+import { isValidThreadId } from "@/lib/agents/thread-id";
 import type { Citation } from "@/lib/agent-events";
 
 export type PersistedMessagePart =
@@ -62,6 +63,11 @@ export async function getThreadMessages(
 ): Promise<PersistedMessage[]> {
   const agentsUrl = process.env.AGENTS_URL;
   if (!agentsUrl) return [];
+
+  // GSD-219: threadId reaches here straight from a URL param (agents/[id]
+  // page). A transport-unsafe char would desync the signed path from the sent
+  // path → 401; degrade to empty (same as any other fetch failure below).
+  if (!isValidThreadId(threadId)) return [];
 
   const path = `/agents/km/state/${threadId}`;
   const { headers } = signRequest({
