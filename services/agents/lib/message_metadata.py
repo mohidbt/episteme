@@ -82,22 +82,43 @@ async def persist_message_metadata(
         return
     if not message_id:
         return
+    payload_json = json.dumps(payload)
     try:
         async with pool.acquire() as conn:
-            await conn.execute(
-                """
-                INSERT INTO agent_message_metadata
-                    (thread_id, user_id, message_id, kind, payload)
-                VALUES ($1, $2, $3, $4, $5::jsonb)
-                ON CONFLICT (thread_id, user_id, message_id, kind) DO UPDATE
-                  SET payload = EXCLUDED.payload
-                """,
-                thread_id,
-                user_id,
-                message_id,
-                kind,
-                json.dumps(payload),
-            )
+            # GSD-216 Option-C: upsert WITHOUT a PK-specific arbiter so it works
+            # against both the old (thread_id, message_id, kind) PK and the new
+            # (user_id, thread_id, message_id, kind) PK during the 0061
+            # migrate+deploy window. DO UPDATE requires an inference target, so
+            # we use a bare-conflict INSERT + a full-key UPDATE instead. The
+            # UPDATE is scoped by the whole tenant key, so it stays isolated
+            # under either schema. Wrapped in a txn so the pair is atomic.
+            async with conn.transaction():
+                await conn.execute(
+                    """
+                    INSERT INTO agent_message_metadata
+                        (thread_id, user_id, message_id, kind, payload)
+                    VALUES ($1, $2, $3, $4, $5::jsonb)
+                    ON CONFLICT DO NOTHING
+                    """,
+                    thread_id,
+                    user_id,
+                    message_id,
+                    kind,
+                    payload_json,
+                )
+                await conn.execute(
+                    """
+                    UPDATE agent_message_metadata
+                    SET payload = $5::jsonb
+                    WHERE thread_id = $1 AND user_id = $2
+                      AND message_id = $3 AND kind = $4
+                    """,
+                    thread_id,
+                    user_id,
+                    message_id,
+                    kind,
+                    payload_json,
+                )
     except Exception:  # noqa: BLE001
         logger.exception(
             "metadata persist failed thread_id=%s msg_id=%s kind=%s",

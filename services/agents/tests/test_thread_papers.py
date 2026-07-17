@@ -185,6 +185,11 @@ async def test_stamp_thread_paper_idempotent_sql() -> None:
     sql = conn.execute.await_args.args[0]
     assert "INSERT INTO agent_thread_papers" in sql
     assert "ON CONFLICT" in sql and "DO NOTHING" in sql
+    # GSD-216 Option-C tolerance: the ON CONFLICT must NOT name an arbiter
+    # column list, so it swallows a violation of EITHER the old 3-col PK or the
+    # new (user_id, thread_id, paper_id) PK during the migrate+deploy window.
+    collapsed = " ".join(sql.split())
+    assert "ON CONFLICT DO NOTHING" in collapsed
     # positional args: thread_id, paper_id, user_id
     assert conn.execute.await_args.args[1:] == ("th-1", PAPER_ID, "user_a")
 
