@@ -1,6 +1,7 @@
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import * as schema from "./schema";
+import { resolveAppDatabaseUrl } from "./database-url";
 
 // NOTE: ivfflat.probes defaults to 1. With our `lists=100` index on
 // document_chunks.embedding, per-document ANN searches (~30 chunks)
@@ -13,13 +14,12 @@ import * as schema from "./schema";
 //     ...ann query...
 //   });
 // Today no TS code issues ANN queries (Python agents-svc uses its own conn).
-const appUrl = process.env.APP_RUNTIME_DATABASE_URL;
-const fallbackUrl = process.env.DATABASE_URL;
-if (!appUrl && fallbackUrl) {
+const { url: databaseUrl, usedFallback } = resolveAppDatabaseUrl();
+if (usedFallback) {
   console.warn(
-    "[@episteme/db] APP_RUNTIME_DATABASE_URL not set — falling back to DATABASE_URL (owner role). B3 cutover incomplete in this environment.",
+    "[@episteme/db] APP_RUNTIME_DATABASE_URL not set — using DATABASE_URL outside production only.",
   );
 }
-const queryClient = postgres(appUrl ?? fallbackUrl!);
+const queryClient = postgres(databaseUrl);
 
 export const db = drizzle({ client: queryClient, schema });
