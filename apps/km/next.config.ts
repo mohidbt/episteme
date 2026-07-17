@@ -5,6 +5,24 @@ import { withSentryConfig } from "@sentry/nextjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
+// Baseline browser hardening that is safe for both the app and public-note
+// surfaces. The CSP deliberately limits only high-risk legacy capabilities;
+// it does not set default-src/script-src yet because Next.js and Sentry need a
+// nonce-aware rollout before those directives can be enforced safely.
+export const SECURITY_HEADERS = [
+  {
+    key: "Content-Security-Policy",
+    value: "base-uri 'self'; frame-ancestors 'none'; object-src 'none'",
+  },
+  { key: "X-Content-Type-Options", value: "nosniff" },
+  { key: "X-Frame-Options", value: "DENY" },
+  { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+  {
+    key: "Permissions-Policy",
+    value: "camera=(), geolocation=(), microphone=()",
+  },
+] as const;
+
 const config: NextConfig = {
   reactStrictMode: true,
   // Demo cut 2026-05-04: pre-existing tsc errors in unrelated files (reader pkg, test mocks)
@@ -43,6 +61,7 @@ const config: NextConfig = {
         source: "/:path*",
         headers: [
           { key: "Document-Policy", value: "js-profiling" },
+          ...SECURITY_HEADERS,
         ],
       },
     ];

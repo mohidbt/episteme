@@ -10,7 +10,6 @@ from contextlib import ExitStack
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
-import pytest
 from langchain_core.language_models.fake_chat_models import (
     FakeMessagesListChatModel,
 )

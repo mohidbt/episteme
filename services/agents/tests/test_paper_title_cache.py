@@ -38,18 +38,18 @@ async def test_title_cache_ttl_expires_after_60s(monkeypatch):
     monkeypatch.setattr(papers.time, "monotonic", lambda: state["now"])
 
     # t=0: cold fetch
-    t1 = await papers._get_paper_title(conn, "paper-1")
+    t1 = await papers._get_paper_title(conn, "paper-1", "user-1")
     assert t1 == "Old Title"
     assert conn.fetchrow.call_count == 1
 
     # t=30s: still within TTL → cache hit, no new DB call
     state["now"] = 1000.0 + 30
-    t2 = await papers._get_paper_title(conn, "paper-1")
+    t2 = await papers._get_paper_title(conn, "paper-1", "user-1")
     assert t2 == "Old Title"
     assert conn.fetchrow.call_count == 1, "30s in: must hit cache"
 
     # t=61s: past 60s TTL → re-fetch from DB
     state["now"] = 1000.0 + 61
-    t3 = await papers._get_paper_title(conn, "paper-1")
+    t3 = await papers._get_paper_title(conn, "paper-1", "user-1")
     assert conn.fetchrow.call_count == 2, "past TTL: must re-fetch"
     assert t3 == "New Title"

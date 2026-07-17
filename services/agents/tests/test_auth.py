@@ -1,6 +1,8 @@
-import hmac, hashlib, time, os
+import hashlib
+import hmac
+import os
+import time
 from fastapi.testclient import TestClient
-import pytest
 
 SECRET = "test-secret-abc"
 os.environ["INHALE_INTERNAL_SECRET"] = SECRET
@@ -11,7 +13,17 @@ client = TestClient(app)
 
 
 def sign(ts: str, method: str, path: str, body: bytes) -> str:
-    msg = ts.encode() + method.encode() + path.encode() + body
+    from deps.auth import canonical_signature_message
+
+    msg = canonical_signature_message(
+        ts=ts,
+        method=method,
+        path=path,
+        user_id="user_1",
+        paper_id="00000000-0000-0000-0000-000000000001",
+        llm_key="sk-test",
+        body=body,
+    )
     return hmac.new(SECRET.encode(), msg, hashlib.sha256).hexdigest()
 
 
@@ -22,6 +34,7 @@ def headers(ts: str, method: str, path: str, body: bytes = b""):
         "X-Inhale-LLM-Key": "sk-test",
         "X-Inhale-Ts": ts,
         "X-Inhale-Sig": sign(ts, method, path, body),
+        "X-Inhale-Sig-Version": "2",
     }
 
 
@@ -50,6 +63,19 @@ def test_rejects_tampered_body():
     assert r.status_code == 401
 
 
+def test_rejects_tampered_tenant_and_llm_headers():
+    ts = str(int(time.time()))
+    original = headers(ts, "GET", "/agents/health")
+    for name, value in (
+        ("X-Inhale-User-Id", "attacker"),
+        ("X-Inhale-Paper-Id", "00000000-0000-0000-0000-000000000099"),
+        ("X-Inhale-LLM-Key", "attacker-key"),
+    ):
+        tampered = {**original, name: value}
+        response = client.get("/agents/health", headers=tampered)
+        assert response.status_code == 401, name
+
+
 def test_accepts_query_string_signature():
     """Inbound verifier must sign path INCLUDING query string, matching the
     outbound signer in lib/km_http.py and the Next.js verifiers."""
@@ -65,6 +91,61 @@ def test_rejects_future_skew_timestamp():
     assert r.status_code == 401
 
 
+def _v1_sign(ts: str, method: str, path: str, body: bytes = b"") -> str:
+    """Legacy pre-GSD-215 signer: ts + method + path + body, no header binding."""
+    msg = ts.encode() + method.encode() + path.encode() + body
+    return hmac.new(SECRET.encode(), msg, hashlib.sha256).hexdigest()
+
+
+def _v1_headers(ts: str, method: str, path: str, body: bytes = b""):
+    return {
+        "X-Inhale-User-Id": "user_1",
+        "X-Inhale-Paper-Id": "00000000-0000-0000-0000-000000000001",
+        "X-Inhale-LLM-Key": "sk-test",
+        "X-Inhale-Ts": ts,
+        "X-Inhale-Sig": _v1_sign(ts, method, path, body),
+        # No X-Inhale-Sig-Version header — legacy km signer omits it entirely.
+    }
+
+
+def test_accepts_legacy_v1_signature_during_rollout():
+    """GSD-215 dual-accept: agents deploy first and must accept the legacy v1
+    signature (no version header) so main/prod km keeps working until km is
+    upgraded to v2. Absent version header == v1."""
+    ts = str(int(time.time()))
+    r = client.get("/agents/health", headers=_v1_headers(ts, "GET", "/agents/health"))
+    assert r.status_code == 200, r.text
+    assert r.json() == {"status": "ok"}
+
+
+def test_accepts_explicit_v1_version_header():
+    """An explicit X-Inhale-Sig-Version: 1 is also honored as legacy."""
+    ts = str(int(time.time()))
+    h = {**_v1_headers(ts, "GET", "/agents/health"), "X-Inhale-Sig-Version": "1"}
+    r = client.get("/agents/health", headers=h)
+    assert r.status_code == 200, r.text
+
+
+def test_v1_rejects_tampered_body():
+    ts = str(int(time.time()))
+    h = _v1_headers(ts, "POST", "/agents/health", b'{"a":1}')
+    r = client.post("/agents/health", headers=h, content=b'{"a":2}')
+    assert r.status_code == 401
+
+
+def test_v2_still_accepted_alongside_v1():
+    ts = str(int(time.time()))
+    r = client.get("/agents/health", headers=headers(ts, "GET", "/agents/health"))
+    assert r.status_code == 200
+
+
+def test_rejects_unknown_signature_version():
+    ts = str(int(time.time()))
+    h = {**headers(ts, "GET", "/agents/health"), "X-Inhale-Sig-Version": "9"}
+    r = client.get("/agents/health", headers=h)
+    assert r.status_code == 401
+
+
 def test_golden_hmac_vector_matches_outbound_signer():
     """Cross-language golden vector. The matching assertions live in
     apps/km/src/lib/internal-auth.test.ts and
@@ -74,12 +155,20 @@ def test_golden_hmac_vector_matches_outbound_signer():
                  b"1700000000POST/api/notes?q=foo{\"title\":\"hi\"}",
                  hashlib.sha256).hexdigest()
     """
-    expected = (
-        "b79393e07c11da2acad023e6bb8884a499303486bbcc5889884a41a44427e6a8"
+    expected = "f4e7e1e37132dbfe7fcd6bf877083d98ec9185b501a4e5b759bf2f4ac22c5e79"
+    from deps.auth import canonical_signature_message
+
+    msg = canonical_signature_message(
+        ts="1700000000",
+        method="POST",
+        path="/api/notes?q=foo",
+        user_id="u1",
+        paper_id="p1",
+        llm_key="llm",
+        ocr_key="ocr",
+        body=b'{"title":"hi"}',
     )
-    msg = b"1700000000" + b"POST" + b"/api/notes?q=foo" + b'{"title":"hi"}'
-    computed = hmac.new(b"test-secret", msg, hashlib.sha256).hexdigest()
-    assert computed == expected
+    assert hmac.new(b"test-secret", msg, hashlib.sha256).hexdigest() == expected
 
     # Also verify km_http.py's _sign produces the same bytes for the same
     # inputs (frozen ts). _sign builds: ts + method + path + body, identical
@@ -98,7 +187,13 @@ def test_golden_hmac_vector_matches_outbound_signer():
         _time.time = lambda: 1700000000  # type: ignore[assignment]
         try:
             ts_signed, sig_signed = km_http._sign(
-                "POST", "/api/notes?q=foo", b'{"title":"hi"}'
+                "POST",
+                "/api/notes?q=foo",
+                b'{"title":"hi"}',
+                user_id="u1",
+                paper_id="p1",
+                llm_key="llm",
+                ocr_key="ocr",
             )
         finally:
             _time.time = original_time

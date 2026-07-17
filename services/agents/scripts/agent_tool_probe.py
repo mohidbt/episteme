@@ -31,12 +31,19 @@ BASE = "http://localhost:8000"
 
 def sign(method: str, path: str, body: str) -> dict[str, str]:
     ts = str(int(time.time()))
-    msg = (ts + method + path + body).encode()
+    body_bytes = body.encode("utf-8")
+    msg = (
+        f"v2\n{ts}\n{method.upper()}\n{path}\n{USER_ID}\n\n"
+        f"{hashlib.sha256(LLM_KEY.encode()).hexdigest()}\n"
+        f"{hashlib.sha256(LLM_KEY.encode()).hexdigest()}\n"
+        f"{hashlib.sha256(body_bytes).hexdigest()}"
+    ).encode("utf-8")
     sig = hmac.new(SECRET.encode(), msg, hashlib.sha256).hexdigest()
     return {
         "X-Inhale-User-Id": USER_ID,
         "X-Inhale-Ts": ts,
         "X-Inhale-Sig": sig,
+        "X-Inhale-Sig-Version": "2",
         "X-Inhale-LLM-Key": LLM_KEY,
         "X-Inhale-OCR-Key": LLM_KEY,
         "Content-Type": "application/json",

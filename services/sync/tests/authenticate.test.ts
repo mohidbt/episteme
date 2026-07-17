@@ -197,6 +197,8 @@ const secretKey = new TextEncoder().encode(JWT_SECRET);
 function mintJwt(userId: string, expiresIn: string | number = "10m") {
   return new SignJWT({ userId })
     .setProtectedHeader({ alg: "HS256" })
+    .setIssuer("episteme-km")
+    .setAudience("episteme-sync")
     .setExpirationTime(expiresIn)
     .sign(secretKey);
 }
@@ -214,8 +216,20 @@ describe("authenticateExt — JWT bearer token", () => {
     const badKey = new TextEncoder().encode("wrong-secret-key-that-is-at-least-32-bytes");
     const token = await new SignJWT({ userId: userA.id })
       .setProtectedHeader({ alg: "HS256" })
+      .setIssuer("episteme-km")
+      .setAudience("episteme-sync")
       .setExpirationTime("10m")
       .sign(badKey);
+    await expect(
+      ext.onAuthenticate!(payload({ token, documentName: `note:${noteIdA}` })),
+    ).rejects.toThrow(/unauth/i);
+  });
+
+  it("rejects a correctly signed JWT without the collab issuer/audience", async () => {
+    const token = await new SignJWT({ userId: userA.id })
+      .setProtectedHeader({ alg: "HS256" })
+      .setExpirationTime("10m")
+      .sign(secretKey);
     await expect(
       ext.onAuthenticate!(payload({ token, documentName: `note:${noteIdA}` })),
     ).rejects.toThrow(/unauth/i);

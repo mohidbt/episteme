@@ -8,7 +8,7 @@ only when no context is provided.
 from __future__ import annotations
 
 import json
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -27,7 +27,16 @@ class _FakePool:
                 async def fetch(*_args, **_kwargs):
                     return rows
 
+                async def fetchrow(*_args, **_kwargs):
+                    return {
+                        "id": "p",
+                        "title": "t",
+                        "storage_url": "s",
+                        "processing_status": "done",
+                    }
+
                 conn.fetch = fetch
+                conn.fetchrow = fetchrow
                 return conn
 
             async def __aexit__(self_inner, *_):

@@ -236,6 +236,52 @@ describe("polymorphic note_links", () => {
       await deleteTestUser(u.id);
     }
   });
+
+  it("rejects a resolved link to another user's object", async () => {
+    const owner = await createTestUser();
+    const attacker = await createTestUser();
+    try {
+      const ownerLib = await createLib(owner, "Owner Link Lib");
+      const attackerLib = await createLib(attacker, "Attacker Link Lib");
+      const foreignNote = await (
+        await POST_NOTE(
+          req("/api/notes", {
+            method: "POST",
+            cookie: owner.cookie,
+            body: JSON.stringify({ libraryId: ownerLib, title: "Private target" }),
+          }),
+        )
+      ).json();
+      const sourceNote = await (
+        await POST_NOTE(
+          req("/api/notes", {
+            method: "POST",
+            cookie: attacker.cookie,
+            body: JSON.stringify({ libraryId: attackerLib, title: "Attacker source" }),
+          }),
+        )
+      ).json();
+
+      const response = await POST_LINK(
+        req(`/api/notes/${sourceNote.id}/links`, {
+          method: "POST",
+          cookie: attacker.cookie,
+          body: JSON.stringify({
+            targetKind: "note",
+            targetId: foreignNote.id,
+            targetTitleRaw: "Private target",
+          }),
+        }),
+        params({ id: sourceNote.id }),
+      );
+
+      expect(response.status).toBe(404);
+      expect(await response.json()).toEqual({ error: "target_not_found" });
+    } finally {
+      await deleteTestUser(owner.id);
+      await deleteTestUser(attacker.id);
+    }
+  });
 });
 
 describe("cross-library ownership on POST", () => {

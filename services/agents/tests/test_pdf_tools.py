@@ -38,10 +38,10 @@ def test_deep_read_skill_has_highlight_ordering_example():
     skill_path = pathlib.Path(__file__).parent.parent / "skills" / "deep-read" / "SKILL.md"
     text = skill_path.read_text()
     assert "Read-then-highlight ordering" in text, (
-        f"deep-read SKILL.md missing read-then-highlight worked example"
+        "deep-read SKILL.md missing read-then-highlight worked example"
     )
     assert "do NOT quote the sentence in prose" in text, (
-        f"deep-read SKILL.md missing anti-prose instruction in ordering example"
+        "deep-read SKILL.md missing anti-prose instruction in ordering example"
     )
 
 

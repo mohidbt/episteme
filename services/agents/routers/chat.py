@@ -9,7 +9,12 @@ from deps.auth import InternalAuthDep
 from deps.db import ConnDep
 import lib.storage as storage
 from lib.auto_highlight_tools import TOOLBELT_SYSTEM_HINT, build_tools
-from lib.conversations import upsert_conversation, insert_message, bump_updated_at
+from lib.conversations import (
+    ConversationNotFound,
+    upsert_conversation,
+    insert_message,
+    bump_updated_at,
+)
 from lib.rag import retrieve
 from lib.chat import CHAT_MODEL, run_chat
 from routers.auto_highlight import progress_detail
@@ -28,13 +33,18 @@ HIGHLIGHT_TOOL_LABELS = {
 }
 
 
+class ChatHistoryMessage(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str = Field(min_length=1, max_length=20_000)
+
+
 class ChatBody(BaseModel):
-    question: str = Field(min_length=1)
+    question: str = Field(min_length=1, max_length=20_000)
     conversationId: int | None = None
     viewportContext: dict | None = None
-    history: list[dict] = Field(default_factory=list)
+    history: list[ChatHistoryMessage] = Field(default_factory=list, max_length=20)
     scope: Literal["page", "selection", "paper"] = "paper"
-    selectionText: str | None = None
+    selectionText: str | None = Field(default=None, max_length=20_000)
     pageNumber: int | None = None
 
 
@@ -63,11 +73,22 @@ async def chat(body: ChatBody, auth: InternalAuthDep, conn: ConnDep):
 
     # Verify document exists + belongs to user
     paper = await conn.fetchrow(
-        "SELECT id, processing_status, storage_url FROM papers WHERE id = $1 AND user_id = $2",
+        "SELECT id, chandra_status, storage_url FROM papers WHERE id = $1 AND user_id = $2",
         paper_id, user_id,
     )
     if not paper:
         raise HTTPException(status_code=404, detail="Not found")
+    if body.conversationId is not None:
+        try:
+            await upsert_conversation(
+                conn,
+                user_id=user_id,
+                paper_id=paper_id,
+                conversation_id=body.conversationId,
+                title="",
+            )
+        except ConversationNotFound:
+            raise HTTPException(status_code=404, detail="Conversation not found") from None
 
     question = body.question.strip()
     scope = body.scope
@@ -75,9 +96,9 @@ async def chat(body: ChatBody, auth: InternalAuthDep, conn: ConnDep):
     selection_text = (body.selectionText or "").strip() or None
 
     # Processing status guard
-    if paper["processing_status"] != "ready":
-        status = paper["processing_status"]
-        if status in ("pending", "processing"):
+    if paper["chandra_status"] != "done":
+        status = paper["chandra_status"]
+        if status in ("pending", "running"):
             msg = "This document is still being processed. Refresh in a minute and try again."
         elif status == "failed":
             msg = "This document failed to process. Please re-upload it."
@@ -98,7 +119,7 @@ async def chat(body: ChatBody, auth: InternalAuthDep, conn: ConnDep):
                                  headers={"Cache-Control": "no-cache", "Connection": "keep-alive"})
 
     # RAG retrieval
-    retrieval = await retrieve(conn, paper_id=paper_id, question=question,
+    retrieval = await retrieve(conn, paper_id=paper_id, user_id=user_id, question=question,
                                scope=scope, focus_page=focus_page,
                                selection_text=selection_text, api_key=api_key)
 
@@ -215,7 +236,9 @@ async def chat(body: ChatBody, auth: InternalAuthDep, conn: ConnDep):
         assistant_content = ""
         try:
             async for event in run_chat(
-                api_key=api_key, history=body.history, question=question,
+                api_key=api_key,
+                history=[item.model_dump() for item in body.history],
+                question=question,
                 supporting_chunks=retrieval.supporting_chunks,
                 page_text=retrieval.page_text, anchor_text=retrieval.anchor_text,
                 selection_text=selection_text, scope=scope, focus_page=focus_page,
@@ -223,7 +246,6 @@ async def chat(body: ChatBody, auth: InternalAuthDep, conn: ConnDep):
                 tool_hints=[TOOLBELT_SYSTEM_HINT],
             ):
                 kind = event[0]
-                print(f"[IMPLICIT-DEBUG] router received event kind={kind} payload={str(event[1])[:80]!r}", flush=True)
                 if kind == "token":
                     token = event[1]
                     assistant_content += token

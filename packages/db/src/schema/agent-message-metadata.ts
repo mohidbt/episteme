@@ -19,7 +19,7 @@ export const agentMessageMetadata = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [
-    primaryKey({ columns: [t.threadId, t.messageId, t.kind] }),
+    primaryKey({ columns: [t.userId, t.threadId, t.messageId, t.kind] }),
     index("agent_message_metadata_user_id_idx").on(t.userId),
     index("agent_message_metadata_thread_id_idx").on(t.threadId),
   ],

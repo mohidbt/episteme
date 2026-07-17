@@ -15,7 +15,7 @@ export const agentThreadPapers = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [
-    primaryKey({ columns: [t.threadId, t.paperId] }),
+    primaryKey({ columns: [t.userId, t.threadId, t.paperId] }),
     index("agent_thread_papers_user_paper_idx").on(t.userId, t.paperId, t.createdAt),
   ],
 );

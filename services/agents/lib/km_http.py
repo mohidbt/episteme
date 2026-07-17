@@ -19,6 +19,7 @@ import time
 import httpx
 
 logger = logging.getLogger(__name__)
+SIGNATURE_VERSION = "2"
 
 
 def _safe_response(resp: httpx.Response) -> object:
@@ -65,21 +66,37 @@ _client = httpx.AsyncClient()
 _reader_client = httpx.AsyncClient()
 
 
-def _sign(method: str, path: str, body: bytes) -> tuple[str, str]:
+def _sign(
+    method: str,
+    path: str,
+    body: bytes,
+    *,
+    user_id: str,
+    paper_id: str = "",
+    llm_key: str = "",
+    ocr_key: str = "",
+) -> tuple[str, str]:
     """Return (ts, sig) for an outbound request."""
     secret = os.environ["INHALE_INTERNAL_SECRET"]
     ts = str(int(time.time()))
-    msg = ts.encode() + method.encode() + path.encode() + body
+    llm_digest = hashlib.sha256(llm_key.encode("utf-8")).hexdigest()
+    ocr_digest = hashlib.sha256(ocr_key.encode("utf-8")).hexdigest()
+    body_digest = hashlib.sha256(body).hexdigest()
+    msg = (
+        f"v2\n{ts}\n{method.upper()}\n{path}\n{user_id}\n{paper_id}\n"
+        f"{llm_digest}\n{ocr_digest}\n{body_digest}"
+    ).encode("utf-8")
     sig = hmac.new(secret.encode(), msg, hashlib.sha256).hexdigest()
     return ts, sig
 
 
 def _auth_headers(method: str, path: str, body: bytes, user_id: str) -> dict:
-    ts, sig = _sign(method, path, body)
+    ts, sig = _sign(method, path, body, user_id=user_id)
     return {
         "X-Inhale-User-Id": user_id,
         "X-Inhale-Ts": ts,
         "X-Inhale-Sig": sig,
+        "X-Inhale-Sig-Version": SIGNATURE_VERSION,
         "Content-Type": "application/json",
     }
 

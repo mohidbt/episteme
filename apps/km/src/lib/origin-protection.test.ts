@@ -1,5 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { isAllowedOrigin } from "./origin-protection";
+
+afterEach(() => vi.unstubAllEnvs());
 
 describe("isAllowedOrigin", () => {
   it("allows the app.<domain> subdomain (canonical app host)", () => {
@@ -15,7 +17,13 @@ describe("isAllowedOrigin", () => {
   });
 
   it("allows vercel preview deploys", () => {
+    vi.stubEnv("VERCEL_URL", "km-abc123.vercel.app");
     expect(isAllowedOrigin("https://km-abc123.vercel.app", null)).toBe(true);
+  });
+
+  it("rejects attacker-controlled deployments on the shared Vercel domain", () => {
+    vi.stubEnv("VERCEL_URL", "km-abc123.vercel.app");
+    expect(isAllowedOrigin("https://evil.vercel.app", null)).toBe(false);
   });
 
   it("rejects unknown origins and missing origin", () => {

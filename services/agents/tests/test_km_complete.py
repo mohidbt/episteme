@@ -1,4 +1,8 @@
-import hmac, hashlib, json, os, time
+import hmac
+import hashlib
+import json
+import os
+import time
 from unittest.mock import patch
 
 SECRET = "test-secret-abc"

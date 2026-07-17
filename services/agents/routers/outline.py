@@ -9,6 +9,7 @@ from deps.db import ConnDep
 from lib.openrouter_client import call_model
 from lib.pdf_text import extract_pages
 from lib.models import SectionOut
+from lib.ownership import ResourceNotOwned, require_paper_owner
 from lib.storage import (
     SourcePdfMissing,
     download_to_tempfile,
@@ -29,6 +30,14 @@ async def outline(
     conn: ConnDep,
     paperId: Annotated[str, Query()],
 ) -> OutlineResponse:
+    # Verify ownership before reading the shared document_sections cache.
+    try:
+        paper = await require_paper_owner(
+            conn, paper_id=paperId, user_id=auth["user_id"]
+        )
+    except ResourceNotOwned:
+        raise HTTPException(status_code=404, detail="Paper not found") from None
+
     # 1. Check for cached sections
     rows = await conn.fetch(
         """
@@ -41,14 +50,6 @@ async def outline(
     )
     if rows:
         return OutlineResponse(sections=[_row_to_section(r) for r in rows])
-
-    # 2. Get paper storage_url
-    paper = await conn.fetchrow(
-        "SELECT storage_url FROM papers WHERE id = $1 AND user_id = $2",
-        paperId, auth["user_id"],
-    )
-    if not paper:
-        raise HTTPException(status_code=404, detail="Paper not found")
 
     # GSD-135: Source PDF may be missing in R2 (ingest dropped or lifecycle
     # reaped). Pre-check so callers get a structured 404 instead of a 500.
@@ -69,7 +70,7 @@ async def outline(
     sample = "\n\n".join(
         f"[Page {p['page_number']}]\n{p['text']}"
         for p in pages[:30]
-    )
+    )[:120_000]
 
     # 4. Call LLM
     system = (

@@ -35,7 +35,7 @@ can reuse them.
 
 import logging
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from deps.auth import InternalAuthDep
@@ -45,6 +45,8 @@ from lib.chandra import (
     parse_blocks as _parse_blocks,  # re-exported under the original underscore name
     run_chandra as _run_chandra,    # so existing patch("routers.chandra_segments._run_chandra") works
 )
+from lib.ownership import ResourceNotOwned, require_paper_owner
+from lib.storage import paperSourceKey
 
 # Re-export internal helpers for tests that reach in by name.
 from lib.chandra import (  # noqa: F401
@@ -78,15 +80,29 @@ async def chandra_segments(
     auth: InternalAuthDep,
     conn: ConnDep,
 ) -> ChandraSegmentsResponse:
+    paper_id = body.paper_id
+    signed_paper_id = auth.get("paper_id")
+    if not signed_paper_id:
+        raise HTTPException(status_code=400, detail="missing signed paper id")
+    if signed_paper_id != paper_id:
+        raise HTTPException(status_code=403, detail="paper id does not match signature")
+    try:
+        paper = await require_paper_owner(
+            conn, paper_id=paper_id, user_id=auth["user_id"]
+        )
+    except ResourceNotOwned as exc:
+        raise HTTPException(status_code=404, detail="paper not found") from exc
+    expected_path = paper["storage_url"] or paperSourceKey(paper_id)
+    if body.file_path != expected_path:
+        raise HTTPException(status_code=403, detail="file path does not match signed paper")
+
     ocr_key: str = auth.get("ocr_key", "") or ""
     if not ocr_key:
         return ChandraSegmentsResponse(
             success=True, segment_count=0, page_count=0, skipped=True
         )
 
-    paper_id = body.paper_id
-
-    result = await _run_chandra(body.file_path, ocr_key)
+    result = await _run_chandra(expected_path, ocr_key)
 
     if not result.success or result.json is None:
         logger.warning(

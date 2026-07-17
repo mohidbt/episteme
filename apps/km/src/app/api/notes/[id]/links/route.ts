@@ -1,7 +1,6 @@
 import { and, asc, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { notes } from "@episteme/db/schema";
-import { noteLinks } from "@episteme/db/schema";
+import { noteLinks, notes, papers, references_ } from "@episteme/db/schema";
 import { getAuthedUserId, MissingInternalSecretError } from "@/lib/internal-auth";
 import { noteLinkCreateSchema } from "@/lib/validators";
 import { jsonError, requireOwned } from "@/lib/crud";
@@ -35,10 +34,33 @@ export async function POST(req: Request, { params }: Ctx) {
   const { id } = await params;
   const owner = await requireOwned<any>(notes, id, userId);
   if (!owner.ok) return jsonError(owner.status, owner.status === 404 ? "not_found" : "forbidden");
-  const body = JSON.parse(rawBody);
+  let body: unknown;
+  try {
+    body = JSON.parse(rawBody);
+  } catch {
+    return jsonError(400, "validation");
+  }
   const bodyWithSource = { ...(body ?? {}), sourceNoteId: id };
   const parsed = noteLinkCreateSchema.safeParse(bodyWithSource);
   if (!parsed.success) return jsonError(400, "validation", { issues: parsed.error.issues });
+
+  // note_links is polymorphic and therefore has no target foreign key. Enforce
+  // the missing tenant boundary here before accepting a resolved link.
+  if (parsed.data.targetId) {
+    const targetTable =
+      parsed.data.targetKind === "note"
+        ? notes
+        : parsed.data.targetKind === "paper"
+          ? papers
+          : references_;
+    const target = await requireOwned<any>(
+      targetTable,
+      parsed.data.targetId,
+      userId,
+    );
+    if (!target.ok) return jsonError(404, "target_not_found");
+  }
+
   const [row] = await db.insert(noteLinks).values(parsed.data).returning();
   return Response.json(row, { status: 201 });
 }

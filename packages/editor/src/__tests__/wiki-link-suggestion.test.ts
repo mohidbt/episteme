@@ -38,7 +38,9 @@ function makeSuggestion(onStart: ReturnType<typeof vi.fn>): WikiLinkSuggestion {
   return {
     items: () => [],
     render: () => ({
-      onStart,
+      // vi.fn() types as Mock<Procedure | Constructable>, not a plain
+      // (props) => void; cast at the boundary so the mock stays assertable.
+      onStart: onStart as unknown as () => void,
       onUpdate: () => {},
       onExit: () => {},
       onKeyDown: () => false,

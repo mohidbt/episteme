@@ -4,6 +4,7 @@ import { getUserIdFromRequest } from "@/lib/auth";
 import { jsonError, requireOwned, resolveNoteSlug } from "@/lib/crud";
 import { resolveUnresolvedNoteLinks, createRevisionIfNeeded } from "@episteme/notes-core";
 import { assertWithinLibraryLimit } from "@/lib/library-usage";
+import { isOwnedFolderInLibrary } from "@/lib/folder-ownership";
 
 export const runtime = "nodejs";
 
@@ -67,6 +68,9 @@ export async function POST(req: Request) {
 
   const folderPath = typeof folderPathRaw === "string" ? folderPathRaw : "";
   const folderId = typeof folderIdRaw === "string" ? folderIdRaw : null;
+  if (folderId && !(await isOwnedFolderInLibrary(folderId, libraryId, userId))) {
+    return jsonError(404, "folder_not_found");
+  }
 
   const slug = await resolveNoteSlug(userId, title);
 

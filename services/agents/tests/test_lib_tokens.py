@@ -16,7 +16,6 @@ Omitted: concurrency (pure function), DB integration (parser is a pure regex).
 """
 from __future__ import annotations
 
-import pytest
 
 from lib.library_handles import LibraryHandle, parse_library_tokens
 

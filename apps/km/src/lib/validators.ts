@@ -137,9 +137,9 @@ export const noteUpdateSchema = z.object({
 });
 
 export const noteLinkCreateSchema = z.object({
-  sourceNoteId: z.string(),
+  sourceNoteId: z.string().uuid(),
   targetKind: z.enum(["note", "paper", "reference"]),
-  targetId: z.string().nullable().optional(),
+  targetId: z.string().uuid().nullable().optional(),
   targetTitleRaw: nonEmptyTrimmed(1000),
 });
 

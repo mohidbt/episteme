@@ -221,35 +221,7 @@ async function listChangedMigrationFiles(repoRoot: string): Promise<string[]> {
     .filter((s) => s.length > 0);
 }
 
-const SKIP_TOKEN_RE = /predeploy-lint:skip[ \t]+(\S[^\n]*)/;
-
-export function parseSkipReason(prBody: string | undefined): string | null {
-  if (typeof prBody !== "string") return null;
-  const m = prBody.match(SKIP_TOKEN_RE);
-  if (!m) return null;
-  const reason = m[1].trim();
-  return reason.length > 0 ? reason : null;
-}
-
-export function shouldSkipLint(prBody: string | undefined): boolean {
-  return parseSkipReason(prBody) !== null;
-}
-
 async function main(): Promise<void> {
-  const prBody = process.env.PR_BODY;
-  const skipReason = parseSkipReason(prBody);
-  if (skipReason) {
-    console.log(
-      `[lint-schema-drift] skip token present in PR body (reason: ${skipReason}); exiting 0`,
-    );
-    return;
-  }
-  if (typeof prBody === "string" && prBody.includes("predeploy-lint:skip")) {
-    console.warn(
-      "[lint-schema-drift] WARNING: predeploy-lint:skip requires a reason — ignoring bare token and proceeding with lint",
-    );
-  }
-
   const here = dirname(fileURLToPath(import.meta.url));
   const repoRoot = resolve(here, "../../..");
   const schemaPath = join(repoRoot, "packages/db/src/schema-drift.ts");

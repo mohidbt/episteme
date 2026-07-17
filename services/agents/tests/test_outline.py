@@ -1,4 +1,8 @@
-import hmac, hashlib, json, os, time
+import hmac
+import hashlib
+import json
+import os
+import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, patch
@@ -60,8 +64,9 @@ def test_outline_returns_cached_sections():
         assert s["title"] == "Intro"
         assert s["pageStart"] == 1
         assert s["createdAt"].startswith("2026-04-16")
-        # DB should NOT have been called for insert
-        mock_conn.fetchrow.assert_not_called()
+        # One fetchrow is the mandatory ownership check; no insert occurred.
+        assert mock_conn.fetchrow.call_count == 1
+        assert "FROM papers" in mock_conn.fetchrow.call_args.args[0]
     finally:
         app.dependency_overrides.clear()
 

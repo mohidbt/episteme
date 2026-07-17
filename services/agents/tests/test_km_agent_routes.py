@@ -739,6 +739,7 @@ def test_state_returns_todos_from_checkpoint():
     path = "/agents/km/state/thread-abc"
     mock_tuple = MagicMock()
     mock_tuple.checkpoint = {"channel_values": {"todos": ["task A", "task B"]}}
+    mock_tuple.config = {"configurable": {"user_id": "user_1"}}
 
     mock_saver = MagicMock()
     mock_saver.aget_tuple = AsyncMock(return_value=mock_tuple)
@@ -775,6 +776,7 @@ def test_state_returns_serialized_messages_from_checkpoint():
     ]
     mock_tuple = MagicMock()
     mock_tuple.checkpoint = {"channel_values": {"todos": [], "messages": msgs}}
+    mock_tuple.config = {"configurable": {"user_id": "user_1"}}
     mock_saver = MagicMock()
     mock_saver.aget_tuple = AsyncMock(return_value=mock_tuple)
 
@@ -814,6 +816,7 @@ def test_state_serializes_tool_calls_into_parts_for_hydration():
     ]
     mock_tuple = MagicMock()
     mock_tuple.checkpoint = {"channel_values": {"todos": [], "messages": msgs}}
+    mock_tuple.config = {"configurable": {"user_id": "user_1"}}
     mock_saver = MagicMock()
     mock_saver.aget_tuple = AsyncMock(return_value=mock_tuple)
 

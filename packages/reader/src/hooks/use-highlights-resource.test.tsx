@@ -137,7 +137,7 @@ describe("useHighlightsResource", () => {
     await new Promise((r) => setTimeout(r, 50));
     expect(fetchSpy).toHaveBeenCalledTimes(1);
 
-    resolveFetch?.(
+    (resolveFetch as ((res: Response) => void) | null)?.(
       new Response(JSON.stringify({ highlights: [] }), {
         status: 200,
         headers: { "Content-Type": "application/json" },

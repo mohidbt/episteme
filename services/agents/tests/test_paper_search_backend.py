@@ -1,12 +1,10 @@
 """Tests for PaperSearchService and SemanticScholarSearch backend."""
 from __future__ import annotations
 
-import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from tools.search_backends.base import PaperResult
 from tools.search_backends.semantic_scholar import SemanticScholarSearch
 
 

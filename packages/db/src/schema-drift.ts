@@ -520,6 +520,44 @@ export async function runDbChecks(databaseUrl: string): Promise<DbCheckSummary> 
               and c.contype = 'f'
           ),
           'GSD-96 R3: user_library_recents.user_id FK to user.id (cascade on delete)'
+        union all
+        select
+          'agent_message_metadata.agent_message_metadata_pkey_tenant_scoped'::text as check_name,
+          exists (
+            select 1
+            from pg_constraint c
+            join pg_class t on t.oid = c.conrelid
+            join pg_namespace n on n.oid = t.relnamespace
+            where n.nspname = 'public'
+              and t.relname = 'agent_message_metadata'
+              and c.conname = 'agent_message_metadata_pkey'
+              and c.contype = 'p'
+              and (
+                select array_agg(a.attname order by k.ordinality)
+                from unnest(c.conkey) with ordinality as k(attnum, ordinality)
+                join pg_attribute a on a.attrelid = t.oid and a.attnum = k.attnum
+              ) = array['user_id', 'thread_id', 'message_id', 'kind']::name[]
+          ),
+          'agent_message_metadata primary key must include user_id before caller-supplied thread_id'
+        union all
+        select
+          'agent_thread_papers.agent_thread_papers_pkey_tenant_scoped'::text as check_name,
+          exists (
+            select 1
+            from pg_constraint c
+            join pg_class t on t.oid = c.conrelid
+            join pg_namespace n on n.oid = t.relnamespace
+            where n.nspname = 'public'
+              and t.relname = 'agent_thread_papers'
+              and c.conname = 'agent_thread_papers_pkey'
+              and c.contype = 'p'
+              and (
+                select array_agg(a.attname order by k.ordinality)
+                from unnest(c.conkey) with ordinality as k(attnum, ordinality)
+                join pg_attribute a on a.attrelid = t.oid and a.attnum = k.attnum
+              ) = array['user_id', 'thread_id', 'paper_id']::name[]
+          ),
+          'agent_thread_papers primary key must include user_id before caller-supplied thread_id'
       )
       select check_name, ok, details from checks
     `;

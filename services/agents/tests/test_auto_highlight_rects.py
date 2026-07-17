@@ -160,7 +160,7 @@ def test_rect_within_mediabox(pypdf_reader):
     """
     violations = []
 
-    with pdfplumber.open(str(FIXTURE)) as pdf:
+    with pdfplumber.open(str(FIXTURE)) as _pdf:
         # Fixture pages 1..4 correspond to source pages 1, 2, 5, 21.
         for pno in range(1, 5):
             mb = pypdf_reader.pages[pno - 1].mediabox

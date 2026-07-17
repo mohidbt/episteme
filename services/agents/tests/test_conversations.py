@@ -3,7 +3,7 @@ os.environ.setdefault("INHALE_INTERNAL_SECRET", "test-secret-abc")
 
 import json
 from unittest.mock import AsyncMock
-from datetime import datetime, timezone
+from datetime import datetime
 import pytest
 
 from lib.conversations import upsert_conversation, insert_message, bump_updated_at

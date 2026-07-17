@@ -3,6 +3,7 @@ import { libraries } from "@episteme/db/schema";
 import { getUserIdFromRequest } from "@/lib/auth";
 import { jsonError, requireOwned } from "@/lib/crud";
 import { exportLibraryZip, type Section } from "@/lib/io/zip-export";
+import { attachmentContentDisposition } from "@/lib/filename";
 
 export const runtime = "nodejs";
 
@@ -36,7 +37,7 @@ export async function GET(req: Request, { params }: Ctx) {
   return new Response(webStream, {
     headers: {
       "Content-Type": "application/zip",
-      "Content-Disposition": `attachment; filename="${lib.name}.zip"`,
+      "Content-Disposition": attachmentContentDisposition(`${lib.name}.zip`),
     },
   });
 }

@@ -1,4 +1,8 @@
-import hmac, hashlib, json, os, time
+import hmac
+import hashlib
+import json
+import os
+import time
 from unittest.mock import AsyncMock, patch
 
 SECRET = "test-secret-abc"
@@ -42,11 +46,11 @@ def _parse_sse(text: str) -> list:
     return events
 
 
-def _mock_conn(processing_status="ready"):
+def _mock_conn(chandra_status="done"):
     conn = AsyncMock()
     conn.fetchrow.return_value = {
         "id": 1,
-        "processing_status": processing_status,
+        "chandra_status": chandra_status,
         "storage_url": "/tmp/fake.pdf",
     }
     conn.execute.return_value = None
@@ -101,8 +105,8 @@ def test_chat_sse_contract():
 
 def test_chat_processing_status_guard():
     """Document not ready → status message SSE stream."""
-    mock_conn = _mock_conn(processing_status="processing")
-    mock_conn.fetchrow.return_value = {"id": 1, "processing_status": "processing"}
+    mock_conn = _mock_conn(chandra_status="running")
+    mock_conn.fetchrow.return_value = {"id": 1, "chandra_status": "running"}
 
     async def override():
         yield mock_conn
@@ -113,6 +117,10 @@ def test_chat_processing_status_guard():
         r = client.post("/agents/chat", content=body,
                        headers=_signed_headers("POST", "/agents/chat", body))
         assert r.status_code == 200
+        # Regression lock: guard must query the live column, not the dropped
+        # processing_status (see lib/ownership.py + GSD-207 preview finding).
+        sql = mock_conn.fetchrow.call_args_list[0][0][0]
+        assert "chandra_status" in sql and "processing_status" not in sql
         events = _parse_sse(r.text)
         assert events[0]["type"] == "sources"
         assert events[0]["sources"] == []
@@ -225,7 +233,7 @@ def test_chat_create_highlights_tool_call_inserts_run_and_finalizes():
         if "agent_conversations" in sql:
             return {"id": 1}
         # documents lookup
-        return {"id": 1, "processing_status": "ready", "storage_url": "/tmp/fake.pdf"}
+        return {"id": 1, "chandra_status": "done", "storage_url": "/tmp/fake.pdf"}
 
     mock_conn.fetchrow.side_effect = fetchrow_side_effect
 
@@ -293,7 +301,7 @@ def test_chat_emits_highlight_progress_and_done_events():
             return {"id": run_uuid}
         if "agent_conversations" in sql:
             return {"id": 1}
-        return {"id": 1, "processing_status": "ready", "storage_url": "/tmp/fake.pdf"}
+        return {"id": 1, "chandra_status": "done", "storage_url": "/tmp/fake.pdf"}
 
     mock_conn.fetchrow.side_effect = fetchrow_side_effect
 

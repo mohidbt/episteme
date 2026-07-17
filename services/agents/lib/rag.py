@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from lib.openrouter_client import embed_texts
+from lib.ownership import require_paper_owner
 
 MAX_PAGE_TEXT_CHARS = 12_000
 MAX_ANCHOR_CHARS = 4_000
@@ -22,8 +23,9 @@ class RetrievalResult:
     sources: list[dict]
 
 
-async def retrieve(conn, *, paper_id: str, question: str, scope: str,
+async def retrieve(conn, *, paper_id: str, user_id: str, question: str, scope: str,
                    focus_page: int | None, selection_text: str | None, api_key: str) -> RetrievalResult:
+    await require_paper_owner(conn, paper_id=paper_id, user_id=user_id)
     # Expand short paper-scoped queries for better embedding
     words = question.split()
     embedding_query = (

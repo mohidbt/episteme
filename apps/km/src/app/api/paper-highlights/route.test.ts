@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createHmac } from "crypto";
+import { internalAuthTestHeaders } from "@/__tests__/internal-auth-headers";
 import { GET, POST } from "./route";
 import { DELETE as DEL_ID } from "./[id]/route";
 import { POST as POST_LIB } from "../libraries/route";
@@ -219,18 +219,18 @@ describe("paper-highlights", () => {
     try {
       const path = "/api/paper-highlights";
       const body = JSON.stringify({ paperId, page: 7, color: "amber", noteMd: "via hmac" });
-      const ts = String(Math.floor(Date.now() / 1000));
-      const sig = createHmac("sha256", HMAC_SECRET)
-        .update(ts + "POST" + path + body)
-        .digest("hex");
       const r = await POST(
         new Request(`http://localhost${path}`, {
           method: "POST",
           headers: {
             "content-type": "application/json",
-            "X-Inhale-User-Id": u.id,
-            "X-Inhale-Ts": ts,
-            "X-Inhale-Sig": sig,
+            ...internalAuthTestHeaders({
+              secret: HMAC_SECRET,
+              userId: u.id,
+              method: "POST",
+              path,
+              body,
+            }),
           },
           body,
         }),
@@ -255,17 +255,14 @@ describe("paper-highlights", () => {
     process.env.INHALE_INTERNAL_SECRET = HMAC_SECRET;
     try {
       const path = `/api/paper-highlights?paperId=${paperId}`;
-      const ts = String(Math.floor(Date.now() / 1000));
-      const sig = createHmac("sha256", HMAC_SECRET)
-        .update(ts + "GET" + path + "")
-        .digest("hex");
       const r = await GET(
         new Request(`http://localhost${path}`, {
-          headers: {
-            "X-Inhale-User-Id": u.id,
-            "X-Inhale-Ts": ts,
-            "X-Inhale-Sig": sig,
-          },
+          headers: internalAuthTestHeaders({
+            secret: HMAC_SECRET,
+            userId: u.id,
+            method: "GET",
+            path,
+          }),
         }),
       );
       expect(r.status).toBe(200);

@@ -13,7 +13,7 @@ import {
   DeleteObjectCommand,
   ListObjectsV2Command,
 } from "@aws-sdk/client-s3";
-import { S3_BUCKET } from "@/lib/storage";
+import { storageConfig } from "@/lib/storage";
 
 export interface SkillManifest {
   slug: string;
@@ -43,16 +43,14 @@ export interface SkillJson {
   instructions: string;
 }
 
-const env = (k: string, d?: string) => process.env[k] ?? d;
-
 function buildClient(): S3Client {
   return new S3Client({
-    endpoint: env("S3_ENDPOINT", "http://localhost:9000")!,
-    region: env("S3_REGION", "us-east-1"),
-    forcePathStyle: true,
+    endpoint: storageConfig.endpoint,
+    region: storageConfig.region,
+    forcePathStyle: storageConfig.forcePathStyle,
     credentials: {
-      accessKeyId: env("S3_ACCESS_KEY", "episteme")!,
-      secretAccessKey: env("S3_SECRET_KEY", "episteme-dev")!,
+      accessKeyId: storageConfig.accessKey,
+      secretAccessKey: storageConfig.secretKey,
     },
   });
 }
@@ -80,7 +78,7 @@ export class MinioSkillStore implements SkillStore {
 
   constructor(client?: S3Client, bucket?: string) {
     this.client = client ?? buildClient();
-    this.bucket = bucket ?? S3_BUCKET;
+    this.bucket = bucket ?? storageConfig.bucket;
   }
 
   async list(userId: string): Promise<SkillManifest[]> {

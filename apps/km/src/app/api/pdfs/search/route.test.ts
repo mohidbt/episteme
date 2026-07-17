@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createHmac } from "crypto";
+import { internalAuthTestHeaders } from "@/__tests__/internal-auth-headers";
 import { GET } from "./route";
 import { createTestUser, deleteTestUser, req, type TestUser } from "../../_test-utils";
 import { db } from "@/lib/db";
@@ -138,17 +138,14 @@ describe("GET /api/pdfs/search", () => {
     process.env.INHALE_INTERNAL_SECRET = HMAC_SECRET;
     try {
       const path = "/api/pdfs/search?q=attention";
-      const ts = String(Math.floor(Date.now() / 1000));
-      const sig = createHmac("sha256", HMAC_SECRET)
-        .update(ts + "GET" + path + "")
-        .digest("hex");
       const r = await GET(
         new Request(`http://localhost${path}`, {
-          headers: {
-            "X-Inhale-User-Id": uA.id,
-            "X-Inhale-Ts": ts,
-            "X-Inhale-Sig": sig,
-          },
+          headers: internalAuthTestHeaders({
+            secret: HMAC_SECRET,
+            userId: uA.id,
+            method: "GET",
+            path,
+          }),
         }),
       );
       expect(r.status).toBe(200);

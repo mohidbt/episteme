@@ -74,11 +74,12 @@ function storePayload(overrides: {
 function loadPayload(overrides: {
   documentName: string;
   document?: Y.Doc;
+  context?: Record<string, unknown>;
 }) {
   return {
     documentName: overrides.documentName,
     document: overrides.document ?? new Y.Doc(),
-    context: {},
+    context: overrides.context ?? { user: { id: u.id } },
     instance: {} as never,
     requestHeaders: {},
     requestParameters: new URLSearchParams(),
@@ -166,6 +167,19 @@ describe("persistExt — onStoreDocument", () => {
         storePayload({ documentName: `note:${noteId}`, document: doc, context: {} }),
       ),
     ).rejects.toThrow(/no user on context/i);
+  });
+
+  it("rejects a store when the authenticated user does not own the note", async () => {
+    const noteId = await makeNote("");
+    await expect(
+      ext.onStoreDocument!(
+        storePayload({
+          documentName: `note:${noteId}`,
+          document: mdToYDoc("# Unauthorized"),
+          context: { user: { id: "00000000-0000-0000-0000-000000000000" } },
+        }),
+      ),
+    ).rejects.toThrow(/not owned/i);
   });
 
   it("bumps updated_at on store", async () => {
@@ -291,6 +305,14 @@ describe("persistExt — onStoreDocument", () => {
 });
 
 describe("persistExt — onLoadDocument", () => {
+  it("requires authenticated load context", async () => {
+    const noteId = await makeNote("# Private");
+    await expect(
+      ext.onLoadDocument!(
+        loadPayload({ documentName: `note:${noteId}`, context: {} }),
+      ),
+    ).rejects.toThrow(/authenticated user/i);
+  });
   it("bootstraps Y.Doc from content_md when yjs_state is null", async () => {
     const noteId = await makeNote("# Bootstrap\n\nSeeded from markdown.");
     // Ensure yjs_state is null

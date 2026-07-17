@@ -4,7 +4,10 @@ Mocks httpx; runs refresh_catalog against a mock asyncpg connection,
 and exercises GET/POST endpoints via FastAPI TestClient.
 """
 import json
+import hashlib
+import hmac
 import os
+import time
 from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, patch
 
@@ -13,11 +16,32 @@ import pytest
 os.environ.setdefault("INHALE_INTERNAL_SECRET", "test-secret-abc")
 
 import deps.db  # noqa: E402
+from deps.auth import canonical_signature_message  # noqa: E402
 from app import app  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 from routers import openrouter_catalog as cat  # noqa: E402
 
 client = TestClient(app)
+
+
+def _signed_headers(method: str, path: str, body: bytes = b"") -> dict[str, str]:
+    ts = str(int(time.time()))
+    message = canonical_signature_message(
+        ts=ts,
+        method=method,
+        path=path,
+        user_id="test-user",
+        body=body,
+    )
+    signature = hmac.new(
+        os.environ["INHALE_INTERNAL_SECRET"].encode(), message, hashlib.sha256
+    ).hexdigest()
+    return {
+        "X-Inhale-User-Id": "test-user",
+        "X-Inhale-Ts": ts,
+        "X-Inhale-Sig-Version": "2",
+        "X-Inhale-Sig": signature,
+    }
 
 
 SAMPLE_RESPONSE = {
@@ -201,7 +225,10 @@ def test_post_refresh_returns_count():
     app.dependency_overrides[deps.db.get_conn] = override
     try:
         with patch("routers.openrouter_catalog.httpx.AsyncClient", lambda *a, **kw: fake_client):
-            r = client.post("/openrouter/catalog/refresh")
+            r = client.post(
+                "/openrouter/catalog/refresh",
+                headers=_signed_headers("POST", "/openrouter/catalog/refresh"),
+            )
         assert r.status_code == 200, r.text
         body = r.json()
         assert body["count"] == 2

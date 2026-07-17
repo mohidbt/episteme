@@ -1,5 +1,5 @@
 from typing import Annotated
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from deps.auth import InternalAuthDep
 from deps.db import ConnDep
@@ -31,6 +31,13 @@ async def embed_chunks(
     auth: InternalAuthDep,
     conn: ConnDep,
 ) -> EmbedChunksResponse:
+    owned = await conn.fetchval(
+        "SELECT 1 FROM papers WHERE id = $1 AND user_id = $2",
+        body.paperId,
+        auth["user_id"],
+    )
+    if not owned:
+        raise HTTPException(status_code=404, detail="Paper not found")
     vecs = await embed_texts(auth["llm_key"], [c.content for c in body.chunks])
     if len(vecs) != len(body.chunks):
         raise ValueError("embedding count mismatch")
@@ -58,7 +65,8 @@ async def embed_chunks(
         # in the same INSERT above, so this single UPDATE is the canonical
         # "paper is RAG-ready" signal). Consumed by GET /api/papers/[id]/ingest-status.
         await conn.execute(
-            "UPDATE papers SET chunks_ready_at = now() WHERE id = $1",
+            "UPDATE papers SET chunks_ready_at = now() WHERE id = $1 AND user_id = $2",
             body.paperId,
+            auth["user_id"],
         )
     return EmbedChunksResponse(inserted=len(rows))

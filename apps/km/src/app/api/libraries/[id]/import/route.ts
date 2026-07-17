@@ -5,6 +5,7 @@ import { jsonError, requireOwned, resolveNoteSlug } from "@/lib/crud";
 import { toSlug } from "@/lib/slug";
 import { parseFrontmatter } from "@/lib/io/md-frontmatter";
 import { assertWithinLibraryLimit } from "@/lib/library-usage";
+import { isOwnedFolderInLibrary } from "@/lib/folder-ownership";
 
 // pdfjs (via extractMetadata) requires the Node runtime.
 export const runtime = "nodejs";
@@ -131,6 +132,9 @@ export async function POST(req: Request, { params }: Ctx) {
   const folderId = typeof rawFolderId === "string" && rawFolderId.length > 0
     ? rawFolderId
     : null;
+  if (folderId && !(await isOwnedFolderInLibrary(folderId, libId, userId))) {
+    return jsonError(404, "folder_not_found");
+  }
 
   const classified = classifyUpload(file);
   if (!classified) {

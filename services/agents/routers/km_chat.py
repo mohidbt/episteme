@@ -1,7 +1,7 @@
 import json
 import logging
 from collections.abc import AsyncIterator
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
@@ -34,9 +34,14 @@ SYSTEM_PROMPT = (
 EMPTY_REPLY = "I could not find anything in your notes about this topic."
 
 
+class KmChatHistoryMessage(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str = Field(min_length=1, max_length=20_000)
+
+
 class KmChatBody(BaseModel):
-    question: str = Field(min_length=1)
-    history: list[dict] = Field(default_factory=list)
+    question: str = Field(min_length=1, max_length=20_000)
+    history: list[KmChatHistoryMessage] = Field(default_factory=list, max_length=20)
 
 
 def _sse(obj) -> str:
@@ -126,7 +131,7 @@ async def chat(body: KmChatBody, auth: InternalAuthDep, conn: ConnDep):
     system = f"{SYSTEM_PROMPT}\n\n{context_block}"
 
     messages: list[dict] = [{"role": "system", "content": system}]
-    messages.extend(body.history[-10:])
+    messages.extend(item.model_dump() for item in body.history[-10:])
     messages.append({"role": "user", "content": body.question})
 
     # GSD-136: prime the first chat token BEFORE the StreamingResponse so a

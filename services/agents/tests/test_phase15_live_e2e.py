@@ -75,7 +75,6 @@ class _MemoryConn:
 
     async def fetch(self, sql: str, *args):
         if "FROM note_chunks" in sql and "JOIN notes" in sql:
-            user_id = str(args[0])
             out = []
             for c in self.note_chunks:
                 out.append(

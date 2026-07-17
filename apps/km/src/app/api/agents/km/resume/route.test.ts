@@ -94,6 +94,37 @@ describe("POST /api/agents/km/resume", () => {
     expect(r.status).toBe(401);
   });
 
+  it("returns 400 for malformed JSON instead of throwing", async () => {
+    const r = await POST(
+      req("/api/agents/km/resume", {
+        method: "POST",
+        cookie: "session=x",
+        body: "{not-json",
+      }),
+    );
+    expect(r.status).toBe(400);
+    expect(await r.json()).toEqual({ error: "bad_request" });
+  });
+
+  it("rejects client attempts to replace approval policy", async () => {
+    const fetchMock = vi.fn();
+    global.fetch = fetchMock as unknown as typeof fetch;
+    const r = await POST(
+      req("/api/agents/km/resume", {
+        method: "POST",
+        cookie: "session=x",
+        body: JSON.stringify({
+          thread_id: "t1",
+          decisions: [],
+          approval_rules: { delete_paper: "auto" },
+        }),
+      }),
+    );
+    expect(r.status).toBe(400);
+    expect(await r.json()).toEqual({ error: "bad_request" });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("400 when user has no API key", async () => {
     const { OpenRouterKeyMissing } = await import("@/lib/openrouter-key");
     vi.mocked(getOrApiKey).mockRejectedValue(new OpenRouterKeyMissing());

@@ -99,6 +99,19 @@ describe("getThreadMessages", () => {
     expect(result).toEqual([]);
   });
 
+  it.each(["a#b", "a?b", "a/b", "a b", ".."])(
+    "returns [] on transport-unsafe threadId %j — never signs or fetches",
+    async (bad) => {
+      vi.mocked(signRequest).mockClear();
+      const fetchMock = vi.fn();
+      global.fetch = fetchMock as unknown as typeof fetch;
+      const result = await getThreadMessages("u1", bad);
+      expect(result).toEqual([]);
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(signRequest).not.toHaveBeenCalled();
+    },
+  );
+
   it("returns [] when AGENTS_URL is unset", async () => {
     delete process.env.AGENTS_URL;
     const fetchMock = vi.fn();

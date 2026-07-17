@@ -17,6 +17,8 @@ describe("mintCollabToken", () => {
     const token = await mintCollabToken("user-xyz");
     const payload = decodeJwt(token);
     expect(payload.userId).toBe("user-xyz");
+    expect(payload.iss).toBe("episteme-km");
+    expect(payload.aud).toBe("episteme-sync");
   });
 
   it("token expires ~10 minutes from now", async () => {

@@ -3,8 +3,11 @@
  * (e.g. from services/agents -> apps/km or apps/reader).
  *
  * Mirrors `services/agents/deps/auth.py::require_internal`. Signature scheme:
- *   sig = HMAC-SHA256(INHALE_INTERNAL_SECRET, ts + method + path + body)
- * Headers: X-Inhale-User-Id, X-Inhale-Ts, X-Inhale-Sig.
+ *   sig = HMAC-SHA256(INHALE_INTERNAL_SECRET, canonical v2 envelope)
+ *
+ * v2 binds delegated identity and context headers as well as the request
+ * bytes. This prevents a proxy/on-path actor from swapping user, paper, or
+ * LLM credentials while retaining a valid signature.
  *
  * Routes use this in a dual-auth pattern: accept either a Better Auth session
  * cookie OR a valid HMAC. See `getAuthedUserId` below.
@@ -12,10 +15,53 @@
  * Note: outbound signer (services/agents/lib/km_http.py) signs path INCLUDING
  * query string, so this verifier signs `pathname + search` to match.
  */
-import { createHmac, timingSafeEqual } from "crypto";
+import { createHash, createHmac, timingSafeEqual } from "crypto";
 import { auth } from "./server";
 
 const FRESHNESS_SECONDS = 60;
+const MAX_ID_HEADER_LENGTH = 255;
+const MAX_INTERNAL_BODY_BYTES = 16 * 1024 * 1024;
+
+export const INTERNAL_AUTH_SIGNATURE_VERSION = "2" as const;
+
+export interface InternalAuthEnvelope {
+  ts: string;
+  method: string;
+  path: string;
+  userId: string;
+  paperId?: string | null;
+  llmKey?: string | null;
+  ocrKey?: string | null;
+  body: string;
+}
+
+function sha256Hex(value: string): string {
+  return createHash("sha256").update(value, "utf8").digest("hex");
+}
+
+/** Cross-language v2 canonical bytes. Sensitive values and body are hashed. */
+export function canonicalInternalAuthPayload(
+  envelope: InternalAuthEnvelope,
+): string {
+  return [
+    "v2",
+    envelope.ts,
+    envelope.method.toUpperCase(),
+    envelope.path,
+    envelope.userId,
+    envelope.paperId ?? "",
+    sha256Hex(envelope.llmKey ?? ""),
+    sha256Hex(envelope.ocrKey ?? ""),
+    sha256Hex(envelope.body),
+  ].join("\n");
+}
+
+function isSafeIdentityHeader(value: string, allowEmpty = false): boolean {
+  if ((!allowEmpty && value.length === 0) || value.length > MAX_ID_HEADER_LENGTH) {
+    return false;
+  }
+  return !/[\x00-\x1f\x7f]/.test(value);
+}
 
 export class MissingInternalSecretError extends Error {
   constructor() {
@@ -40,10 +86,27 @@ export async function verifyInternalAuth(
   rawBody: string,
 ): Promise<InternalAuthResult> {
   const userId = req.headers.get("x-inhale-user-id");
+  const paperId = req.headers.get("x-inhale-paper-id") ?? "";
+  const llmKey = req.headers.get("x-inhale-llm-key") ?? "";
+  const ocrKey = req.headers.get("x-inhale-ocr-key") ?? "";
   const ts = req.headers.get("x-inhale-ts");
   const sig = req.headers.get("x-inhale-sig");
-  if (!userId || !ts || !sig) {
+  const version = req.headers.get("x-inhale-sig-version");
+  if (!userId || !ts || !sig || version !== INTERNAL_AUTH_SIGNATURE_VERSION) {
     return { ok: false, reason: "missing headers" };
+  }
+  if (
+    !isSafeIdentityHeader(userId) ||
+    !isSafeIdentityHeader(paperId, true) ||
+    // LLM keys can be longer than identifiers, but controls are still invalid
+    // in a canonical HTTP header value.
+    /[\x00-\x1f\x7f]/.test(llmKey) ||
+    /[\x00-\x1f\x7f]/.test(ocrKey)
+  ) {
+    return { ok: false, reason: "invalid signed headers" };
+  }
+  if (Buffer.byteLength(rawBody, "utf8") > MAX_INTERNAL_BODY_BYTES) {
+    return { ok: false, reason: "body too large" };
   }
   const tsInt = Number(ts);
   if (!Number.isFinite(tsInt)) return { ok: false, reason: "invalid ts" };
@@ -63,7 +126,18 @@ export async function verifyInternalAuth(
   const signedPath = url.pathname + url.search;
 
   const expected = createHmac("sha256", secret)
-    .update(ts + req.method + signedPath + rawBody)
+    .update(
+      canonicalInternalAuthPayload({
+        ts,
+        method: req.method,
+        path: signedPath,
+        userId,
+        paperId,
+        llmKey,
+        ocrKey,
+        body: rawBody,
+      }),
+    )
     .digest("hex");
 
   const a = Buffer.from(expected, "hex");

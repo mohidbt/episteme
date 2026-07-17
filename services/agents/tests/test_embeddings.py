@@ -1,4 +1,8 @@
-import hmac, hashlib, json, os, time
+import hmac
+import hashlib
+import json
+import os
+import time
 from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, MagicMock
 
@@ -72,6 +76,9 @@ class _FakeConn:
                 outer.in_transaction = False
 
         return _tx()
+
+    async def fetchval(self, sql: str, *args):
+        return 1
 
     async def executemany(self, sql: str, rows):
         self.last_insert_sql = sql

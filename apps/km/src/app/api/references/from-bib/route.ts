@@ -6,6 +6,7 @@ import { deriveCitationKey, type CslItem } from "@/lib/csl";
 import { parseCsl } from "@/lib/csl-import";
 import { isUniqueViolation } from "@/lib/references";
 import { and, eq } from "drizzle-orm";
+import { isOwnedFolderInLibrary } from "@/lib/folder-ownership";
 
 export const runtime = "nodejs";
 
@@ -52,6 +53,9 @@ export async function POST(req: Request) {
 
   const folderPath = typeof folderPathRaw === "string" ? folderPathRaw : "";
   const folderId = typeof folderIdRaw === "string" ? folderIdRaw : null;
+  if (folderId && !(await isOwnedFolderInLibrary(folderId, libraryId, userId))) {
+    return jsonError(404, "folder_not_found");
+  }
 
   // Load existing citation keys in this library to detect duplicates
   const existingRows = await db

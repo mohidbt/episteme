@@ -2,8 +2,21 @@ import json as _json
 from datetime import datetime, timezone
 
 
+class ConversationNotFound(LookupError):
+    pass
+
+
 async def upsert_conversation(conn, *, user_id, paper_id, conversation_id, title):
     if conversation_id is not None:
+        owned = await conn.fetchval(
+            "SELECT 1 FROM agent_conversations "
+            "WHERE id = $1 AND user_id = $2 AND paper_id = $3 AND kind = 'chat'",
+            conversation_id,
+            user_id,
+            paper_id,
+        )
+        if not owned:
+            raise ConversationNotFound("conversation not found")
         return conversation_id
     row = await conn.fetchrow(
         "INSERT INTO agent_conversations (user_id, paper_id, title) VALUES ($1, $2, $3) RETURNING id",

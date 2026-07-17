@@ -13,6 +13,7 @@ from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
 
 from lib.km_http import km_get, km_post
+from lib.ownership import ResourceNotOwned, require_paper_owner
 from tools._auth import user_id_from_config
 from tools._drive_filter import filter_hidden
 from tools.papers import read_paper
@@ -225,6 +226,10 @@ async def highlight(
     if pool is None:
         return {"error": True, "message": "db pool not initialized"}
     async with pool.acquire() as conn:
+        try:
+            await require_paper_owner(conn, paper_id=pdf_id, user_id=user_id)
+        except ResourceNotOwned:
+            return {"error": True, "message": "paper not found"}
         rows = await conn.fetch(
             """
             SELECT page, bbox, order_index

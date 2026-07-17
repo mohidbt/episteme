@@ -14,8 +14,10 @@ enough for legitimate runs while still bounding pathological loops
 (§1.3b-E2E-fix-2).
 """
 import asyncio
+import hashlib
 import json
 import logging
+import re
 import uuid
 from functools import cache as _fn_cache
 
@@ -81,6 +83,10 @@ _RECURSION_STEP_INTERVAL = 1
 _RECURSION_LOG_INTERVAL = 10
 
 _GUEST_FORBIDDEN = {"error": "guests cannot use agents", "code": "guest_forbidden"}
+_MAX_THREAD_ID_CHARS = 255
+_THREAD_ID_RE = re.compile(r"\A[A-Za-z0-9_-]+\Z")
+_MAX_MESSAGE_CHARS = 100_000
+_MAX_EXTRACT_CELLS = 128
 
 
 @_fn_cache
@@ -98,6 +104,38 @@ def _reject_guest(user_id: str) -> None:
     """
     if user_id == GUEST_USER_ID:
         raise HTTPException(status_code=403, detail=_GUEST_FORBIDDEN)
+
+
+def _checkpoint_namespace(user_id: str) -> str:
+    """Return a stable, non-enumerable tenant namespace for LangGraph state.
+
+    ``thread_id`` is supplied by the client and is not globally unique.  A
+    per-user checkpoint namespace prevents one tenant from loading or
+    resuming another tenant's checkpoint when the same thread id is reused.
+    """
+    digest = hashlib.sha256(user_id.encode("utf-8")).hexdigest()
+    return f"tenant-{digest}"
+
+
+def _checkpoint_lookup_config(*, thread_id: str, user_id: str) -> dict:
+    return {
+        "configurable": {
+            "thread_id": thread_id,
+            "checkpoint_ns": _checkpoint_namespace(user_id),
+        }
+    }
+
+
+def _validate_thread_id(value: object) -> str:
+    if not isinstance(value, str) or not value or len(value) > _MAX_THREAD_ID_CHARS:
+        raise HTTPException(status_code=400, detail={"error": "invalid_thread_id"})
+    # GSD-219: thread_id is interpolated unescaped into the HMAC-signed state
+    # URL path on the km side. Restrict to a URL-segment-safe alphabet so a
+    # `#`/`?`/`/`/whitespace can never desync the signed path from the sent
+    # path. Real thread_ids are UUIDs — a strict subset of this alphabet.
+    if not _THREAD_ID_RE.match(value):
+        raise HTTPException(status_code=400, detail={"error": "invalid_thread_id"})
+    return value
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/agents/km", tags=["km-agent"])
@@ -172,7 +210,9 @@ def _pending_action_requests(state) -> list[dict]:
     return []
 
 
-async def _flush_pending_interrupts(agent, thread_id: str) -> list[tuple[str, dict]]:
+async def _flush_pending_interrupts(
+    agent, thread_id: str, user_id: str
+) -> list[tuple[str, dict]]:
     """Read post-stream snapshot for pending HITL interrupts.
 
     `astream_events(version="v2")` does NOT surface `__interrupt__` in any
@@ -191,7 +231,9 @@ async def _flush_pending_interrupts(agent, thread_id: str) -> list[tuple[str, di
     """
     out: list[tuple[str, dict]] = []
     try:
-        snap = await agent.aget_state({"configurable": {"thread_id": thread_id}})
+        snap = await agent.aget_state(
+            _checkpoint_lookup_config(thread_id=thread_id, user_id=user_id)
+        )
     except Exception as e:  # noqa: BLE001
         logger.warning("snapshot read for interrupt flush failed: %s", e)
         return out
@@ -543,7 +585,11 @@ def _build_configurable(
     propagate them here so every agent run has the runtime context tools
     need.
     """
-    configurable: dict = {"thread_id": thread_id, "user_id": user_id}
+    configurable: dict = {
+        "thread_id": thread_id,
+        "checkpoint_ns": _checkpoint_namespace(user_id),
+        "user_id": user_id,
+    }
     if active_paper_id:
         configurable["paper_id"] = active_paper_id
     if run_id:
@@ -574,6 +620,10 @@ async def invoke(req: Request, auth: InternalAuthDep):
     _reject_guest(auth["user_id"])
     body = await req.json()
     user_id = auth["user_id"]
+    thread_id = _validate_thread_id(body.get("thread_id"))
+    user_message = body.get("message")
+    if not isinstance(user_message, str) or len(user_message) > _MAX_MESSAGE_CHARS:
+        raise HTTPException(status_code=400, detail={"error": "invalid_message"})
     cfg = load_user_config(user_id)
     # Postgres is source of truth for modelPreference + enabledSkills — Next.js
     # passes them on the wire so a cold Python cache can't fall back to the
@@ -592,7 +642,7 @@ async def invoke(req: Request, auth: InternalAuthDep):
         approval_rules = cfg.get("approvalRules", {})
     agent = await build_km_agent(
         user_id=user_id,
-        thread_id=body["thread_id"],
+        thread_id=thread_id,
         model=model_for(model_pref, auth["llm_key"]),
         enabled_skills=enabled,
         approval_rules=approval_rules,
@@ -617,7 +667,6 @@ async def invoke(req: Request, auth: InternalAuthDep):
     if not isinstance(page_context, dict):
         page_context = {}
     active_paper_id = page_context.get("paperId") if isinstance(page_context.get("paperId"), str) else None
-    user_message = body["message"]
     # GSD-96 R2 — parse `[lib: ...]` tokens FIRST. Library handles are ID
     # references (not bytes); the agent uses its own tools (read_paper,
     # read_note, lookup_reference, list_paperset_papers) to inspect them. We
@@ -648,7 +697,6 @@ async def invoke(req: Request, auth: InternalAuthDep):
 
     async def gen():
         step = 0
-        thread_id = body["thread_id"]
         pending_citations: list[dict] = []
         # G1: track run_ids from on_tool_start so we can emit synthetic
         # output-error frames for any tool that never received on_tool_end.
@@ -740,7 +788,9 @@ async def invoke(req: Request, auth: InternalAuthDep):
                             yield format_typed(mapped[0], mapped[1])
                         for extra in _extra_events(ev, mapped):
                             yield format_typed(extra[0], extra[1])
-                for ev_type, payload in await _flush_pending_interrupts(agent, thread_id):
+                for ev_type, payload in await _flush_pending_interrupts(
+                    agent, thread_id, user_id
+                ):
                     yield format_typed(ev_type, payload)
             except asyncio.CancelledError:
                 logger.info("agent stream cancelled thread_id=%s", thread_id)
@@ -825,6 +875,7 @@ async def resume(req: Request, auth: InternalAuthDep):
     _reject_guest(auth["user_id"])
     body = await req.json()
     user_id = auth["user_id"]
+    thread_id = _validate_thread_id(body.get("thread_id"))
     cfg = load_user_config(user_id)
     model_pref = body.get("model_preference") or cfg["modelPreference"]
     enabled = body.get("enabled_skills")
@@ -838,7 +889,7 @@ async def resume(req: Request, auth: InternalAuthDep):
         approval_rules = cfg.get("approvalRules", {})
     agent = await build_km_agent(
         user_id=user_id,
-        thread_id=body["thread_id"],
+        thread_id=thread_id,
         model=model_for(model_pref, auth["llm_key"]),
         enabled_skills=enabled,
         approval_rules=approval_rules,
@@ -866,9 +917,10 @@ async def resume(req: Request, auth: InternalAuthDep):
             out["tool_call_id"] = d["tool_call_id"]
         client_decisions.append(out)
 
-    thread_id = body["thread_id"]
     try:
-        snap = await agent.aget_state({"configurable": {"thread_id": thread_id}})
+        snap = await agent.aget_state(
+            _checkpoint_lookup_config(thread_id=thread_id, user_id=user_id)
+        )
         pending = _pending_action_requests(snap)
     except Exception as e:  # noqa: BLE001
         logger.warning("resume: state lookup failed (%s); forwarding decisions verbatim", e)
@@ -899,7 +951,6 @@ async def resume(req: Request, auth: InternalAuthDep):
 
     async def gen():
         step = 0
-        thread_id = body["thread_id"]
         resume_run_id = str(uuid.uuid4())
         configurable = _build_configurable(
             thread_id=thread_id,
@@ -961,7 +1012,9 @@ async def resume(req: Request, auth: InternalAuthDep):
                         yield format_typed(mapped[0], mapped[1])
                     for extra in _extra_events(ev, mapped):
                         yield format_typed(extra[0], extra[1])
-            for ev_type, payload in await _flush_pending_interrupts(agent, thread_id):
+            for ev_type, payload in await _flush_pending_interrupts(
+                agent, thread_id, user_id
+            ):
                 yield format_typed(ev_type, payload)
         except openai.RateLimitError as e:
             logger.warning("agent stream rate-limited: %s", e)
@@ -1003,7 +1056,7 @@ async def resume(req: Request, auth: InternalAuthDep):
                 "message": str(e),
                 "retriable": False,
             })
-        yield format_sse("done", {"thread_id": body["thread_id"]})
+        yield format_sse("done", {"thread_id": thread_id})
 
     return StreamingResponse(
         gen(),
@@ -1130,18 +1183,16 @@ async def state(thread_id: str, auth: InternalAuthDep):
     _reject_guest(auth["user_id"])
     caller_user_id = auth["user_id"]
     saver = get_saver()
-    config = {"configurable": {"thread_id": thread_id}}
+    thread_id = _validate_thread_id(thread_id)
+    config = _checkpoint_lookup_config(
+        thread_id=thread_id, user_id=caller_user_id
+    )
     tuple_ = await saver.aget_tuple(config)
     if tuple_ is None:
         return {"todos": [], "pending_interrupts": [], "messages": []}
-    # BG1#7 owner-check (best-effort). LangGraph threads have no first-class
-    # owner table; we propagate `user_id` into `RunnableConfig.configurable`
-    # at /invoke and /resume (see `_build_configurable`), and the checkpointer
-    # persists it on the saved config. If a mismatch is detectable we 403;
-    # if no user_id is present (older threads, or a checkpointer that didn't
-    # round-trip configurable), we fall through and serve. ACCEPTED RISK:
-    # threads written before this stamping land in the no-owner bucket and
-    # remain readable cross-user. Proper fix requires a thread->user table.
+    # Defense in depth on top of the tenant checkpoint namespace: every new
+    # checkpoint must retain the authenticated owner stamp.  Missing stamps
+    # fail closed rather than exposing legacy/global checkpoints.
     tuple_cfg = getattr(tuple_, "config", None) or {}
     tuple_configurable = tuple_cfg.get("configurable") if isinstance(tuple_cfg, dict) else None
     owner_user_id = (
@@ -1149,7 +1200,7 @@ async def state(thread_id: str, auth: InternalAuthDep):
         if isinstance(tuple_configurable, dict)
         else None
     )
-    if isinstance(owner_user_id, str) and owner_user_id and owner_user_id != caller_user_id:
+    if owner_user_id != caller_user_id:
         from fastapi import HTTPException  # noqa: PLC0415
         raise HTTPException(status_code=403, detail="thread not owned by caller")
     channel_values = tuple_.checkpoint.get("channel_values", {})
@@ -1275,6 +1326,8 @@ async def extract(req: Request, auth: InternalAuthDep):
         raise HTTPException(status_code=400, detail={"error": "paperset_id_required"})
     if not isinstance(cells, list) or not cells:
         raise HTTPException(status_code=400, detail={"error": "cells_required"})
+    if len(cells) > _MAX_EXTRACT_CELLS:
+        raise HTTPException(status_code=413, detail={"error": "too_many_cells"})
     for c in cells:
         if not isinstance(c, dict):
             raise HTTPException(status_code=400, detail={"error": "validation"})
@@ -1347,6 +1400,7 @@ async def extract(req: Request, auth: InternalAuthDep):
                     config={
                         "configurable": {
                             "thread_id": tid,
+                            "checkpoint_ns": _checkpoint_namespace(user_id),
                             "user_id": user_id,
                             "ocr_key": ocr_key,
                             "allow_direct_csv_write": True,

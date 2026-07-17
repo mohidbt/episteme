@@ -15,7 +15,6 @@ import os
 import time
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
 
 SECRET = "test-secret-abc"
 os.environ["INHALE_INTERNAL_SECRET"] = SECRET

@@ -3,7 +3,7 @@
  * passes either a UUID or a slug; the route must accept both transparently.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { createHmac } from "crypto";
+import { internalAuthTestHeaders } from "@/__tests__/internal-auth-headers";
 
 vi.mock("@/lib/db", () => ({ db: { select: vi.fn() } }));
 
@@ -12,10 +12,6 @@ import { GET } from "./route";
 
 const SECRET = "test-secret-abc";
 const UUID = "11111111-2222-3333-4444-555555555555";
-
-function sign(ts: string, method: string, path: string, body: string): string {
-  return createHmac("sha256", SECRET).update(ts + method + path + body).digest("hex");
-}
 
 function selectChain(rows: unknown[]) {
   const limitFn = vi.fn().mockResolvedValue(rows);
@@ -32,14 +28,13 @@ function selectChain(rows: unknown[]) {
 }
 
 function hmacReq(path: string): Request {
-  const ts = String(Math.floor(Date.now() / 1000));
-  const sig = sign(ts, "GET", path, "");
   return new Request(`http://localhost:3001${path}`, {
-    headers: {
-      "X-Inhale-User-Id": "user-1",
-      "X-Inhale-Ts": ts,
-      "X-Inhale-Sig": sig,
-    },
+    headers: internalAuthTestHeaders({
+      secret: SECRET,
+      userId: "user-1",
+      method: "GET",
+      path,
+    }),
   });
 }
 
@@ -66,6 +61,7 @@ describe("GET /api/notes/[id] [HMAC + slug fallback]", () => {
         "X-Inhale-User-Id": "u",
         "X-Inhale-Ts": String(Math.floor(Date.now() / 1000)),
         "X-Inhale-Sig": "bad".repeat(20),
+        "X-Inhale-Sig-Version": "2",
       },
     });
     const res = await GET(req, { params: Promise.resolve({ id: "foo" }) });

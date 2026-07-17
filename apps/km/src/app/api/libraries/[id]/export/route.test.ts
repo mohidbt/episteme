@@ -76,8 +76,11 @@ describe("GET /api/libraries/:id/export", () => {
     );
     expect(r.status).toBe(200);
     expect(r.headers.get("content-type")).toBe("application/zip");
-    expect(r.headers.get("content-disposition")).toBe(
+    expect(r.headers.get("content-disposition")).toContain(
       `attachment; filename="${libName}.zip"`,
+    );
+    expect(r.headers.get("content-disposition")).toContain(
+      `filename*=UTF-8''Export%20Lib.zip`,
     );
     const buf = Buffer.from(await r.arrayBuffer());
     // ZIP local file header magic: PK\x03\x04

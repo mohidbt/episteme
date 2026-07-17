@@ -1,5 +1,10 @@
-import hmac, hashlib, json, os, time
-from unittest.mock import AsyncMock
+import hmac
+import hashlib
+import json
+import os
+import time
+from contextlib import asynccontextmanager
+from unittest.mock import AsyncMock, MagicMock
 
 SECRET = "test-secret-abc"
 os.environ["INHALE_INTERNAL_SECRET"] = SECRET
@@ -12,6 +17,18 @@ from fastapi.testclient import TestClient  # noqa: E402
 client = TestClient(app)
 
 NOTE_ID = "11111111-2222-3333-4444-555555555555"
+
+
+@asynccontextmanager
+async def _transaction():
+    yield
+
+
+def _mock_conn() -> AsyncMock:
+    conn = AsyncMock()
+    conn.fetchval.return_value = 1
+    conn.transaction = MagicMock(return_value=_transaction())
+    return conn
 
 
 def _signed_headers(method: str, path: str, body: bytes):
@@ -32,7 +49,7 @@ def _signed_headers(method: str, path: str, body: bytes):
 
 
 def test_embed_note_chunks_stub_mode():
-    mock_conn = AsyncMock()
+    mock_conn = _mock_conn()
 
     async def override_get_conn():
         yield mock_conn
@@ -60,7 +77,7 @@ def test_embed_note_chunks_stub_mode():
 
 
 def test_embed_note_chunks_rejects_empty_chunks():
-    mock_conn = AsyncMock()
+    mock_conn = _mock_conn()
 
     async def override_get_conn():
         yield mock_conn
@@ -79,7 +96,7 @@ def test_embed_note_chunks_rejects_empty_chunks():
 
 
 def test_embed_note_chunks_rejects_too_many_chunks():
-    mock_conn = AsyncMock()
+    mock_conn = _mock_conn()
 
     async def override_get_conn():
         yield mock_conn
@@ -109,7 +126,7 @@ def test_embed_note_chunks_unauthenticated():
 
 def test_embed_note_chunks_deletes_before_insert():
     call_order: list[str] = []
-    mock_conn = AsyncMock()
+    mock_conn = _mock_conn()
 
     async def record_execute(*args, **kwargs):
         call_order.append("execute")

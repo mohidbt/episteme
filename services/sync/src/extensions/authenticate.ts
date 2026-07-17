@@ -6,13 +6,28 @@ import { notes } from "@episteme/db/schema";
 import { eq } from "drizzle-orm";
 import { parseNoteDocumentName } from "./document-name.js";
 
+const COLLAB_JWT_ISSUER = "episteme-km";
+const COLLAB_JWT_AUDIENCE = "episteme-sync";
+const MIN_SECRET_BYTES = 32;
+
+function jwtSecret(): Uint8Array {
+  const value = process.env.BETTER_AUTH_SECRET;
+  if (!value || new TextEncoder().encode(value).byteLength < MIN_SECRET_BYTES) {
+    throw new Error("unauth: collab JWT verifier is not configured");
+  }
+  return new TextEncoder().encode(value);
+}
+
 async function resolveUserId(token: string): Promise<string> {
   // JWT bearer path: JWTs always start with base64url-encoded '{"' = "eyJ"
   if (token.startsWith("eyJ") && token.split(".").length === 3) {
-    const secret = new TextEncoder().encode(process.env.BETTER_AUTH_SECRET);
     let payload: { userId?: unknown };
     try {
-      const result = await jwtVerify(token, secret);
+      const result = await jwtVerify(token, jwtSecret(), {
+        algorithms: ["HS256"],
+        issuer: COLLAB_JWT_ISSUER,
+        audience: COLLAB_JWT_AUDIENCE,
+      });
       payload = result.payload as { userId?: unknown };
     } catch {
       throw new Error("unauth: invalid JWT");
@@ -36,15 +51,6 @@ export function authenticateExt(): Pick<Extension, "onAuthenticate"> {
       documentName,
     }: onAuthenticatePayload) {
       if (!token) throw new Error("unauth: missing session token");
-
-      // Build request headers for the cookie path — token is the trust anchor,
-      // so we strip any cookie from requestHeaders to prevent clobbering.
-      const headers = new Headers();
-      for (const [k, v] of Object.entries(requestHeaders ?? {})) {
-        if (k.toLowerCase() === "cookie") continue;
-        const value = Array.isArray(v) ? v.join(", ") : v;
-        if (typeof value === "string") headers.set(k, value);
-      }
 
       const userId = await resolveUserId(token);
 

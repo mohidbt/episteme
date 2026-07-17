@@ -1,6 +1,7 @@
 import { getAuthedUserId, MissingInternalSecretError } from "@/lib/internal-auth";
 import { jsonError, requireOwned } from "@/lib/crud";
 import { papersets } from "@episteme/db/schema";
+import { attachmentContentDisposition } from "@/lib/filename";
 
 export const runtime = "nodejs";
 
@@ -36,9 +37,10 @@ export async function GET(req: Request, { params }: Ctx) {
     status: 200,
     headers: {
       "Content-Type": "text/csv; charset=utf-8",
-      "Content-Disposition": `attachment; filename="${ensureCsvFilename(owned.row.filename)}"`,
+      "Content-Disposition": attachmentContentDisposition(
+        ensureCsvFilename(owned.row.filename),
+      ),
       "Cache-Control": "private, no-store",
     },
   });
 }
-

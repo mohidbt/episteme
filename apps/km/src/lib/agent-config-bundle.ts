@@ -17,6 +17,7 @@
 // follow later behind an explicit flag.
 
 import JSZip from "jszip";
+import unzipper from "unzipper";
 import { and, eq, like, or } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { agentConfigs, notes, libraries } from "@episteme/db/schema";
@@ -66,6 +67,34 @@ export type BundleDiff = {
 const SKILLS_PREFIX = ".episteme/agents/skills/";
 const PERSONAL_SKILLS_PREFIX = ".episteme/agents/skills-personal/";
 const MEMORIES_PREFIX = ".episteme/agents/memories/";
+const MAX_BUNDLE_ENTRIES = 100;
+const MAX_BUNDLE_ENTRY_BYTES = 1024 * 1024;
+const MAX_BUNDLE_UNCOMPRESSED_BYTES = 5 * 1024 * 1024;
+const SAFE_SLUG_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
+const SAFE_PATH_SEGMENT_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
+
+function isCanonicalBundleFile(path: string): boolean {
+  if (path === "agent_config.json" || path === "memory.md" || path === "settings.json") {
+    return true;
+  }
+  const personal = path.match(
+    /^\.episteme\/agents\/skills-personal\/([^/]+)\/SKILL\.json$/,
+  );
+  if (personal) return SAFE_SLUG_RE.test(personal[1]);
+
+  const skill = path.match(/^\.episteme\/agents\/skills\/([^/]+)\/(.+\.md)$/);
+  if (!skill || !SAFE_SLUG_RE.test(skill[1])) return false;
+  return skill[2].split("/").every((segment) => SAFE_PATH_SEGMENT_RE.test(segment));
+}
+
+function isCanonicalMemoryPath(path: string): boolean {
+  if (!path.startsWith(MEMORIES_PREFIX) || !path.endsWith(".md")) return false;
+  const relative = path.slice(MEMORIES_PREFIX.length);
+  return (
+    relative.length > 0 &&
+    relative.split("/").every((segment) => SAFE_PATH_SEGMENT_RE.test(segment))
+  );
+}
 
 // G3: SYSTEM_SKILL_SLUGS is now generated from `services/agents/skills/*` at
 // build time by `scripts/gen-system-skills.ts` (wired via `predev`/`prebuild`).
@@ -228,48 +257,132 @@ export async function buildSkillsOnly(userId: string): Promise<Uint8Array> {
 }
 
 export async function parseBundle(zipBytes: Uint8Array): Promise<AgentConfigBundle> {
-  const zip = await JSZip.loadAsync(zipBytes);
-  const cfgFile = zip.file("agent_config.json");
-  if (!cfgFile) throw new Error("bundle missing agent_config.json");
-  const cfgRaw = JSON.parse(await cfgFile.async("string")) as Record<string, unknown>;
+  const directory = await unzipper.Open.buffer(Buffer.from(zipBytes));
+  const files = directory.files.filter((entry) => entry.type !== "Directory");
+  if (files.length > MAX_BUNDLE_ENTRIES) throw new Error("bundle has too many entries");
+  const seen = new Set<string>();
+  let totalUncompressed = 0;
+  for (const entry of files) {
+    const path = entry.path;
+    if (
+      !path ||
+      /[\x00-\x1f\x7f]/.test(path) ||
+      path.startsWith("/") ||
+      path.split("/").some((segment) => segment === ".." || segment === ".")
+    ) {
+      throw new Error("bundle contains an unsafe path");
+    }
+    if (seen.has(path)) throw new Error(`bundle contains duplicate entry: ${path}`);
+    seen.add(path);
+    if (!isCanonicalBundleFile(path)) {
+      throw new Error(`bundle contains unsupported entry: ${path}`);
+    }
+    // `Open.buffer()` returns central-directory `File` records.  Read the
+    // declared uncompressed size directly and fail closed if unzipper ever
+    // stops providing it; treating missing metadata as zero would disable the
+    // zip-bomb preflight.
+    const size = entry.uncompressedSize;
+    if (!Number.isSafeInteger(size) || size < 0 || size > MAX_BUNDLE_ENTRY_BYTES) {
+      throw new Error(`bundle entry too large: ${path}`);
+    }
+    totalUncompressed += size;
+    if (totalUncompressed > MAX_BUNDLE_UNCOMPRESSED_BYTES) {
+      throw new Error("bundle uncompressed size exceeds limit");
+    }
+  }
+
+  // Do not hand the archive to an eager ZIP decoder after the metadata check:
+  // a malicious archive can lie in its central directory. Stream every entry
+  // through independent actual-byte limits and use only those bounded buffers.
+  const contents = new Map<string, Buffer>();
+  let actualTotal = 0;
+  for (const entry of files) {
+    const chunks: Buffer[] = [];
+    let actualEntrySize = 0;
+    const stream = entry.stream();
+    for await (const rawChunk of stream) {
+      const chunk = Buffer.isBuffer(rawChunk) ? rawChunk : Buffer.from(rawChunk);
+      actualEntrySize += chunk.byteLength;
+      actualTotal += chunk.byteLength;
+      if (
+        actualEntrySize > MAX_BUNDLE_ENTRY_BYTES ||
+        actualTotal > MAX_BUNDLE_UNCOMPRESSED_BYTES
+      ) {
+        stream.destroy();
+        throw new Error(`bundle entry too large: ${entry.path}`);
+      }
+      chunks.push(chunk);
+    }
+    if (actualEntrySize !== entry.uncompressedSize) {
+      throw new Error(`bundle entry size mismatch: ${entry.path}`);
+    }
+    contents.set(entry.path, Buffer.concat(chunks, actualEntrySize));
+  }
+
+  const decodeText = (name: string, fallback?: string): string => {
+    const bytes = contents.get(name);
+    if (!bytes) {
+      if (fallback !== undefined) return fallback;
+      throw new Error(`bundle missing ${name}`);
+    }
+    try {
+      return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    } catch {
+      throw new Error(`bundle entry is not valid UTF-8: ${name}`);
+    }
+  };
+
+  const cfgRaw = JSON.parse(decodeText("agent_config.json")) as Record<string, unknown>;
   const agent_config = serializeAgentConfig(cfgRaw);
 
-  const memBlob = (await zip.file("memory.md")?.async("string")) ?? "";
-  const settingsBlob = (await zip.file("settings.json")?.async("string")) ?? "{}";
+  const memBlob = decodeText("memory.md", "");
+  const settingsBlob = decodeText("settings.json", "{}");
 
   // Collect system skills from structured .episteme/agents/skills/<slug>/SKILL.md entries
   const skills: SkillNote[] = [];
-  for (const [relativePath, file] of Object.entries(zip.files)) {
-    if (!file.dir && relativePath.startsWith(SKILLS_PREFIX) && relativePath.endsWith(".md")) {
-      const body = await file.async("string");
+  for (const relativePath of contents.keys()) {
+    if (relativePath.startsWith(SKILLS_PREFIX) && relativePath.endsWith(".md")) {
+      const body = decodeText(relativePath);
       skills.push({ path: relativePath, body });
     }
   }
 
   // Collect personal skills from .episteme/agents/skills-personal/<slug>/SKILL.json
   const personalSkills: PersonalSkillEntry[] = [];
-  for (const [relativePath, file] of Object.entries(zip.files)) {
-    if (!file.dir && relativePath.startsWith(PERSONAL_SKILLS_PREFIX) && relativePath.endsWith("/SKILL.json")) {
-      const json = await file.async("string");
+  for (const relativePath of contents.keys()) {
+    if (relativePath.startsWith(PERSONAL_SKILLS_PREFIX) && relativePath.endsWith("/SKILL.json")) {
+      const json = decodeText(relativePath);
       // Extract slug: .episteme/agents/skills-personal/<slug>/SKILL.json
       const slug = relativePath.slice(PERSONAL_SKILLS_PREFIX.length, -"/SKILL.json".length);
+      const parsed = JSON.parse(json);
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        throw new Error(`invalid personal skill JSON: ${relativePath}`);
+      }
       personalSkills.push({ slug, json });
     }
   }
 
   let settings_json: Record<string, unknown> = {};
-  try {
-    const parsed = JSON.parse(settingsBlob);
-    if (parsed && typeof parsed === "object") settings_json = parsed;
-  } catch {
-    // ignore — keep empty
+  const parsedSettings = JSON.parse(settingsBlob);
+  if (parsedSettings && typeof parsedSettings === "object" && !Array.isArray(parsedSettings)) {
+    settings_json = parsedSettings;
+  } else {
+    throw new Error("settings.json must contain an object");
+  }
+
+  const memories = decodeNotes(memBlob);
+  if (memories.some((memory) => !isCanonicalMemoryPath(memory.path))) {
+    throw new Error("memory.md contains an unsafe or non-canonical path");
+  }
+  if (new Set(memories.map((memory) => memory.path)).size !== memories.length) {
+    throw new Error("memory.md contains duplicate paths");
   }
 
   return {
     agent_config,
     skills,
     personalSkills,
-    memories: decodeNotes(memBlob),
+    memories,
     settings_json,
   };
 }
