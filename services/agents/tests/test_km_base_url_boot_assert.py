@@ -80,6 +80,59 @@ async def test_deployed_healthy_host_passes(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_deployed_malformed_url_raises(monkeypatch):
+    """A malformed base URL (e.g. missing scheme) raises httpx.InvalidURL,
+    which is NOT an httpx.HTTPError — it must be converted to the clear
+    KmBaseUrlMisconfigured, not leak as a raw InvalidURL at boot."""
+    monkeypatch.setenv("EPISTEME_AGENTS_PG_URL", "postgres://x")
+    monkeypatch.setenv("EPISTEME_KM_BASE_URL", "app.tryepisteme.com")  # no scheme
+    with pytest.raises(KmBaseUrlMisconfigured, match="malformed|invalid"):
+        await validate_km_base_url(client=_client_returning(200))
+
+
+@pytest.mark.asyncio
+async def test_deployed_unsupported_protocol_raises(monkeypatch):
+    """httpx.UnsupportedProtocol IS an httpx.HTTPError, so it must be handled
+    as a hard config error (not swallowed by the non-fatal probe branch)."""
+    monkeypatch.setenv("EPISTEME_AGENTS_PG_URL", "postgres://x")
+    monkeypatch.setenv("EPISTEME_KM_BASE_URL", "ftp://app.tryepisteme.com")
+    with pytest.raises(KmBaseUrlMisconfigured, match="malformed|protocol|invalid"):
+        await validate_km_base_url(client=_client_returning(200))
+
+
+@pytest.mark.asyncio
+async def test_localhost_lookalike_host_passes(monkeypatch):
+    """`localhost.example.com` is a real remote host — the loopback check must
+    parse the hostname, not substring-match 'localhost'."""
+    monkeypatch.setenv("EPISTEME_AGENTS_PG_URL", "postgres://x")
+    monkeypatch.setenv("EPISTEME_KM_BASE_URL", "https://localhost.example.com")
+    await validate_km_base_url(client=_client_returning(200))
+
+
+@pytest.mark.asyncio
+async def test_loopback_ipv6_and_zero_host_raise(monkeypatch):
+    monkeypatch.setenv("EPISTEME_AGENTS_PG_URL", "postgres://x")
+    for host in ("http://[::1]:3001", "http://0.0.0.0:3001"):
+        monkeypatch.setenv("EPISTEME_KM_BASE_URL", host)
+        with pytest.raises(KmBaseUrlMisconfigured, match="loopback|localhost"):
+            await validate_km_base_url(client=_client_returning(200))
+
+
+@pytest.mark.asyncio
+async def test_error_message_redacts_userinfo(monkeypatch):
+    """A base URL with embedded credentials must not leak them into the boot
+    exception (public repo, deployed logs)."""
+    monkeypatch.setenv("EPISTEME_AGENTS_PG_URL", "postgres://x")
+    monkeypatch.setenv(
+        "EPISTEME_KM_BASE_URL", "https://user:s3cr3t-token@localhost:3001"
+    )
+    with pytest.raises(KmBaseUrlMisconfigured) as ei:
+        await validate_km_base_url(client=_client_returning(200))
+    assert "s3cr3t-token" not in str(ei.value)
+    assert "user" not in str(ei.value).replace("EPISTEME_KM_BASE_URL", "")
+
+
+@pytest.mark.asyncio
 async def test_probe_network_error_is_non_fatal(monkeypatch):
     """A transient network error on the startup probe must NOT crash boot —
     the config-shape checks already passed; the probe is best-effort."""
