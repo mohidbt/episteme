@@ -15,6 +15,7 @@ import { DriveCollapsedShortcut, DriveTree } from "./DriveTree";
 import { ByTypeNav } from "./ByTypeNav";
 import { SidebarAgentSection } from "./SidebarAgentSection";
 import { SidebarSettingsSection } from "./SidebarSettingsSection";
+import { SidebarReportBug } from "./SidebarReportBug";
 import type { TreeResponse } from "@/lib/tree-server";
 import { useDriveSync } from "@/lib/drive-sync";
 
@@ -171,6 +172,7 @@ export function SidebarShell({ library, tree, isAnonymous }: SidebarShellProps) 
             <ByTypeNav libraryId={library.id} />
             <SidebarAgentSection />
             <SidebarSettingsSection />
+            <SidebarReportBug />
           </SidebarContent>
           {isAnonymous ? (
             <SidebarFooter className="px-3 pb-3">

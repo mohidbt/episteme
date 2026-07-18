@@ -13,6 +13,7 @@ import type { ReferenceRow } from "@/lib/references-server";
 import { FolderDestinationPicker } from "@/components/FolderDestinationPicker";
 import type { FolderRow } from "@/lib/folders";
 import { cn } from "@/lib/utils";
+import { maybeShowGuestError } from "@/lib/guest-error";
 
 interface ReferenceFormProps {
   reference: ReferenceRow;
@@ -234,6 +235,7 @@ export function ReferenceForm({ reference, folders = [] }: ReferenceFormProps) {
       });
       if (!res.ok) {
         const body = await res.json().catch(() => null);
+        if (maybeShowGuestError(res, body)) return;
         const desc =
           body?.error === "validation" && Array.isArray(body?.issues) && body.issues[0]
             ? `${(body.issues[0].path ?? []).join(".") || "field"}: ${body.issues[0].message}`

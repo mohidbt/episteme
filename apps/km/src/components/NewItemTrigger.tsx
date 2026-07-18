@@ -25,6 +25,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { validateFolderName } from "@/lib/folders";
+import { maybeShowGuestError } from "@/lib/guest-error";
 import { PapersetCreateDialog } from "./PapersetCreateDialog";
 
 type Variant = "group" | "menu-item" | "sub-menu-item" | "toolbar";
@@ -190,6 +191,8 @@ function NoteCreateDialog({
     });
     setBusy(false);
     if (!r.ok) {
+      const body = await r.json().catch(() => null);
+      if (maybeShowGuestError(r, body)) return;
       toast.error("Create failed");
       return;
     }
@@ -260,6 +263,8 @@ function ReferenceCreateDialog({
     });
     setBusy(false);
     if (!r.ok) {
+      const body = await r.json().catch(() => null);
+      if (maybeShowGuestError(r, body)) return;
       toast.error("Create failed");
       return;
     }
@@ -337,6 +342,8 @@ function FolderCreateDialog({
     });
     setBusy(false);
     if (!r.ok) {
+      const body = await r.json().catch(() => null);
+      if (maybeShowGuestError(r, body)) return;
       if (r.status === 409) toast.error("A folder with that name already exists");
       else toast.error("Create folder failed");
       return;

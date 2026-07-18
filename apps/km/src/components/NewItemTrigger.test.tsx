@@ -13,6 +13,14 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
 }));
 
+vi.mock("sonner", () => ({
+  toast: {
+    success: vi.fn(),
+    error: vi.fn(),
+  },
+}));
+
+import { toast } from "sonner";
 import { NewItemTrigger } from "./NewItemTrigger";
 
 type FetchImpl = (url: string, init?: RequestInit) => Response | Promise<Response>;
@@ -113,6 +121,35 @@ describe("NewItemTrigger", () => {
       expect(body.libraryId).toBe(1);
       expect(body.title).toBe("Hello");
     });
+  });
+
+  it("note-create on 403 guest_forbidden shows guest toast, not generic", async () => {
+    mockFetch((url, init) => {
+      if (url === "/api/notes" && init?.method === "POST") {
+        return new Response(JSON.stringify({ error: "guest_forbidden" }), {
+          status: 403,
+        });
+      }
+      return new Response("nope", { status: 404 });
+    });
+    renderTrigger();
+    fireEvent.click(screen.getByRole("button", { name: /new/i }));
+    await waitFor(() => screen.getByText(/^note$/i));
+    fireEvent.click(screen.getByText(/^note$/i));
+
+    const input = await waitFor(
+      () => screen.getByLabelText(/title/i) as HTMLInputElement,
+    );
+    fireEvent.change(input, { target: { value: "Hello" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    const errorMock = toast.error as ReturnType<typeof vi.fn>;
+    await waitFor(() => {
+      expect(errorMock).toHaveBeenCalled();
+    });
+    const messages = errorMock.mock.calls.map((c) => String(c[0]).toLowerCase());
+    expect(messages.some((m) => m.includes("guest mode"))).toBe(true);
+    expect(messages.some((m) => m.includes("create failed"))).toBe(false);
   });
 
   it("dropdown menu includes a Paperset option", async () => {

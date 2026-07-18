@@ -32,6 +32,7 @@ import { useExpanded } from "@/hooks/use-expanded";
 import { buildFolderTree, type FolderNode, type TreeItem } from "@/lib/tree";
 import { isDescendantOf, type FolderRow } from "@/lib/folders";
 import { cn } from "@/lib/utils";
+import { maybeShowGuestError } from "@/lib/guest-error";
 import {
   sidebarSectionContentClassName,
   sidebarSectionGroupClassName,
@@ -147,7 +148,11 @@ export async function resolveSidebarDrop(
             target: { kind: active.itemKind, id: active.id },
           }),
         });
-        if (!res.ok) throw new Error(`status ${res.status}`);
+        if (!res.ok) {
+          const body = await res.json().catch(() => null);
+          if (maybeShowGuestError(res, body)) return false;
+          throw new Error(`status ${res.status}`);
+        }
         return true;
       } catch (err) {
         toast.error(`Failed to move ${active.title ?? active.itemKind} to trash`);
@@ -167,7 +172,11 @@ export async function resolveSidebarDrop(
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ folderId: targetFolderId }),
       });
-      if (!res.ok) throw new Error(`status ${res.status}`);
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        if (maybeShowGuestError(res, body)) return false;
+        throw new Error(`status ${res.status}`);
+      }
       return true;
     } catch (err) {
       toast.error(`Failed to move ${active.title ?? active.itemKind}`);
@@ -203,7 +212,11 @@ export async function resolveSidebarDrop(
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ folderId: subjectId, targetParentId }),
       });
-      if (!res.ok) throw new Error(`status ${res.status}`);
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        if (maybeShowGuestError(res, body)) return false;
+        throw new Error(`status ${res.status}`);
+      }
       return true;
     } catch (err) {
       toast.error("Failed to move folder");
