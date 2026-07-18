@@ -75,6 +75,25 @@ describe("GSD-170: Enter-to-send in the rephrase prompt", () => {
     expect(call.prompt).toBe("make it punchy");
   });
 
+  it("Enter is ignored while a rephrase is streaming (input disabled)", () => {
+    const editor = makeEditor();
+    // Hold the stream open (never resolve) so mode stays "rephrase-streaming".
+    runSlashAiMock.mockImplementation(() => new Promise(() => {}));
+    render(<AiBubbleMenu editor={editor} />);
+    fireEvent.click(screen.getByText("AI Rephrase"));
+    const input = screen.getByPlaceholderText("How should AI rewrite this?");
+    fireEvent.change(input, { target: { value: "first" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(runSlashAiMock).toHaveBeenCalledTimes(1);
+    // Now streaming — a second Enter must NOT fire another request. This pins
+    // the upper boundary of the "Enter submits whenever Send is actionable"
+    // gate: Send is replaced by a spinner while streaming, so Enter must be a
+    // no-op too (mode === "rephrase-streaming" is excluded).
+    fireEvent.change(input, { target: { value: "second" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(runSlashAiMock).toHaveBeenCalledTimes(1);
+  });
+
   it("Shift+Enter does NOT submit", () => {
     const editor = makeEditor();
     render(<AiBubbleMenu editor={editor} />);

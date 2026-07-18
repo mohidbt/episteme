@@ -140,11 +140,19 @@ function RephrasePanel({
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
             onKeyDown={(e) => {
-              // Plain Enter sends (same as the Send button). Shift+Enter is left
-              // alone. stopPropagation keeps the key from bubbling into the
-              // underlying ProseMirror editor, which would otherwise insert a
-              // stray paragraph break into the note (GSD-170).
-              if (e.key === "Enter" && !e.shiftKey && mode === "rephrase-prompt") {
+              // Plain Enter sends whenever the Send button is actionable — i.e.
+              // any mode where the input is shown and we're NOT mid-stream. The
+              // Send button only renders in the non-streaming branch and has no
+              // mode gate, so Enter must match that exact availability. Gating on
+              // `mode === "rephrase-prompt"` was too narrow: during the
+              // BubbleMenu → tippy reparent the handler closure could observe a
+              // transitional mode, so Enter silently did nothing while Send still
+              // worked (GSD-170). `submitPrompt`/submitWithPromptText no-op on an
+              // empty/whitespace prompt, matching Send. Shift+Enter is left alone.
+              // stopPropagation keeps the key from bubbling into the underlying
+              // ProseMirror editor, which would otherwise insert a stray
+              // paragraph break into the note (GSD-170).
+              if (e.key === "Enter" && !e.shiftKey && mode !== "rephrase-streaming") {
                 e.preventDefault();
                 e.stopPropagation();
                 submitPrompt();
