@@ -23,6 +23,7 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { LinkPopover } from "@/components/LinkPopover";
+import { MessageResponse } from "@/components/ai-elements/message";
 
 type Mode = "format" | "rephrase-prompt" | "rephrase-streaming" | "rephrase-done";
 type Source = "bubble" | "portal";
@@ -56,6 +57,7 @@ function RephrasePanel({
   prompt,
   setPrompt,
   aiOutput,
+  aiError,
   turns,
   submitPrompt,
   submitWithPrompt,
@@ -70,6 +72,7 @@ function RephrasePanel({
   prompt: string;
   setPrompt: (v: string) => void;
   aiOutput: string;
+  aiError: string;
   turns: Turn[];
   submitPrompt: () => void;
   submitWithPrompt: (prompt: string) => void;
@@ -137,8 +140,13 @@ function RephrasePanel({
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
             onKeyDown={(e) => {
+              // Plain Enter sends (same as the Send button). Shift+Enter is left
+              // alone. stopPropagation keeps the key from bubbling into the
+              // underlying ProseMirror editor, which would otherwise insert a
+              // stray paragraph break into the note (GSD-170).
               if (e.key === "Enter" && !e.shiftKey && mode === "rephrase-prompt") {
                 e.preventDefault();
+                e.stopPropagation();
                 submitPrompt();
               }
             }}
@@ -224,7 +232,14 @@ function RephrasePanel({
         </div>
       )}
       {aiOutput && (
-        <div className="max-h-60 overflow-y-auto text-sm whitespace-pre-wrap">{aiOutput}</div>
+        <div className="max-h-60 overflow-y-auto text-sm">
+          <MessageResponse>{aiOutput}</MessageResponse>
+        </div>
+      )}
+      {aiError && (
+        <p className="text-xs text-destructive whitespace-pre-wrap">
+          {aiError}
+        </p>
       )}
       {mode === "rephrase-done" && aiOutput && (
         <div className="flex items-center gap-1">
@@ -265,6 +280,7 @@ export function AiBubbleMenu({
   const [prompt, setPrompt] = useState("");
   const [selectedText, setSelectedText] = useState("");
   const [aiOutput, setAiOutput] = useState("");
+  const [aiError, setAiError] = useState("");
   const [turns, setTurns] = useState<Turn[]>([]);
   const [source, setSource] = useState<Source>("bubble");
   const [portalPos, setPortalPos] = useState({ top: 0, left: 0 });
@@ -280,6 +296,7 @@ export function AiBubbleMenu({
     abortRef.current = null;
     setMode("format");
     setAiOutput("");
+    setAiError("");
     setPrompt("");
     setTurns([]);
   }, []);
@@ -382,6 +399,7 @@ export function AiBubbleMenu({
     abortRef.current = controller;
     setMode("rephrase-streaming");
     setAiOutput("");
+    setAiError("");
 
     const isGenerate = source === "portal";
     let context: string | undefined;
@@ -404,7 +422,10 @@ export function AiBubbleMenu({
       mode: isGenerate ? "generate" : "rephrase",
       signal: controller.signal,
       onToken: (chunk) => { accumulated += chunk; setAiOutput(accumulated); },
-      onError: (msg) => { setAiOutput((p) => p + ` [ai error: ${msg}]`); },
+      // Errors render as plain text (see aiError below), never through the
+      // markdown pipeline — otherwise brackets/underscores in the message get
+      // reinterpreted as links/emphasis (GSD-170 codex review).
+      onError: (msg) => { setAiError(`AI error: ${msg}`); },
     }).catch(() => {}).finally(() => {
       setMode("rephrase-done");
       if (abortRef.current === controller) abortRef.current = null;
@@ -554,6 +575,7 @@ export function AiBubbleMenu({
             prompt={prompt}
             setPrompt={setPrompt}
             aiOutput={aiOutput}
+            aiError={aiError}
             turns={turns}
             submitPrompt={submitPrompt}
             submitWithPrompt={submitWithPromptText}
@@ -622,6 +644,7 @@ export function AiBubbleMenu({
             prompt={prompt}
             setPrompt={setPrompt}
             aiOutput={aiOutput}
+            aiError={aiError}
             turns={turns}
             submitPrompt={submitPrompt}
             submitWithPrompt={submitWithPromptText}
