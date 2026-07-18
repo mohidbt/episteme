@@ -183,3 +183,111 @@ describe("GSD-170: LLM output renders as markdown, not raw text", () => {
     expect(container.querySelector('[data-streamdown]')).toBeNull();
   });
 });
+
+// An editor mock that records exactly what `insertContent(...)` was called
+// with, so we can assert the AI output is parsed into ProseMirror nodes rather
+// than dropped in as a literal markdown string.
+function makeInsertCapturingEditor() {
+  const insertContent = vi.fn();
+  const selection = { from: 5, to: 12, $from: { parent: { textContent: "hello world" } } };
+  const editor = {
+    state: {
+      selection,
+      doc: {
+        textBetween: () => "selected",
+        resolve: () => ({ start: () => 0 }),
+      },
+    },
+    view: {
+      dom: document.createElement("div"),
+      coordsAtPos: () => ({ top: 0, bottom: 20, left: 0, right: 0 }),
+    },
+    chain: () => editor,
+    focus: () => editor,
+    deleteRange: () => editor,
+    insertContent: (arg: unknown) => {
+      insertContent(arg);
+      return editor;
+    },
+    setTextSelection: () => editor,
+    toggleBold: () => editor,
+    toggleItalic: () => editor,
+    toggleCode: () => editor,
+    run: () => true,
+    isActive: () => false,
+    on: () => {},
+    off: () => {},
+    commands: { focus: () => {} },
+  };
+  return {
+    editor: editor as unknown as Parameters<typeof AiBubbleMenu>[0]["editor"],
+    insertContent,
+  };
+}
+
+// Run one full rephrase with the given markdown output, then click a button.
+async function rephraseThenClick(
+  editor: Parameters<typeof AiBubbleMenu>[0]["editor"],
+  markdown: string,
+  buttonLabel: RegExp,
+) {
+  runSlashAiMock.mockImplementation((args: { onToken: (c: string) => void }) => {
+    act(() => {
+      args.onToken(markdown);
+    });
+    return Promise.resolve(undefined);
+  });
+  render(<AiBubbleMenu editor={editor} />);
+  fireEvent.click(screen.getByText("AI Rephrase"));
+  const input = screen.getByPlaceholderText("How should AI rewrite this?");
+  fireEvent.change(input, { target: { value: "rewrite" } });
+  fireEvent.keyDown(input, { key: "Enter" });
+  // Flush the runSlashAi promise's `.finally()` so mode advances to
+  // "rephrase-done", which is where the Replace/Append buttons render.
+  await act(async () => { await Promise.resolve(); });
+  // Now in rephrase-done mode: click the requested action button.
+  fireEvent.click(screen.getByText(buttonLabel));
+}
+
+// Collect every ProseMirror node type present anywhere in a JSONContent tree.
+function collectNodeTypes(node: unknown, out: Set<string> = new Set()): Set<string> {
+  if (!node || typeof node !== "object") return out;
+  const n = node as { type?: string; content?: unknown[]; marks?: { type?: string }[] };
+  if (typeof n.type === "string") out.add(n.type);
+  for (const mark of n.marks ?? []) if (mark.type) out.add(mark.type);
+  for (const child of n.content ?? []) collectNodeTypes(child, out);
+  return out;
+}
+
+describe("GSD-170: accepting AI output inserts formatted nodes, not raw markdown", () => {
+  it("Replace inserts parsed ProseMirror content, not the literal **bold** string", async () => {
+    const { editor, insertContent } = makeInsertCapturingEditor();
+    await rephraseThenClick(editor, "This is **bold** and _italic_ text", /Replace/);
+
+    expect(insertContent).toHaveBeenCalledTimes(1);
+    const arg = insertContent.mock.calls[0]![0];
+    // Must NOT be the raw markdown string.
+    expect(typeof arg).not.toBe("string");
+    // Must be a ProseMirror JSON doc carrying a bold mark.
+    const types = collectNodeTypes(arg);
+    expect(types.has("bold")).toBe(true);
+    expect(types.has("italic")).toBe(true);
+    // Belt-and-suspenders: the serialized doc must not contain the literal
+    // markdown asterisks as text content.
+    expect(JSON.stringify(arg)).not.toContain("**bold**");
+  });
+
+  it("Append inserts parsed heading/list nodes, not literal markdown", async () => {
+    const { editor, insertContent } = makeInsertCapturingEditor();
+    await rephraseThenClick(editor, "# Title\n\n- one\n- two", /Append/);
+
+    expect(insertContent).toHaveBeenCalledTimes(1);
+    const arg = insertContent.mock.calls[0]![0];
+    expect(typeof arg).not.toBe("string");
+    const types = collectNodeTypes(arg);
+    expect(types.has("heading")).toBe(true);
+    expect(types.has("bulletList")).toBe(true);
+    expect(types.has("listItem")).toBe(true);
+    expect(JSON.stringify(arg)).not.toContain("# Title");
+  });
+});

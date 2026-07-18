@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/command";
 import { LinkPopover } from "@/components/LinkPopover";
 import { MessageResponse } from "@/components/ai-elements/message";
+import { mdToProseMirror } from "@episteme/markdown";
 
 type Mode = "format" | "rephrase-prompt" | "rephrase-streaming" | "rephrase-done";
 type Source = "bubble" | "portal";
@@ -444,15 +445,21 @@ export function AiBubbleMenu({
     submitWithPromptText(prompt);
   }, [prompt, submitWithPromptText]);
 
+  // The AI output is markdown. Parse it into a ProseMirror document via the
+  // app's canonical pipeline (same one save-note-md uses) so `**bold**`,
+  // `# heading`, `- list`, `[link](url)` land as real formatted nodes matching
+  // the preview — not as literal markdown text (GSD-170 codex review). No HTML
+  // sanitization is needed: tiptap-markdown parses markdown structurally rather
+  // than injecting raw model-authored HTML.
   const handleReplace = useCallback(() => {
     const { from, to } = selRef.current;
-    editor.chain().focus().deleteRange({ from, to }).insertContent(aiOutput).run();
+    editor.chain().focus().deleteRange({ from, to }).insertContent(mdToProseMirror(aiOutput)).run();
     setMode("format");
     setTurns([]);
   }, [editor, aiOutput]);
 
   const handleAppend = useCallback(() => {
-    editor.chain().focus().setTextSelection(selRef.current.to).insertContent(aiOutput).run();
+    editor.chain().focus().setTextSelection(selRef.current.to).insertContent(mdToProseMirror(aiOutput)).run();
     setMode("format");
     setTurns([]);
   }, [editor, aiOutput]);
