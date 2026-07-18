@@ -1,7 +1,7 @@
 "use client";
 
 import { BubbleMenu, type TiptapEditor } from "@episteme/editor";
-import { useRef, useState, useCallback, useEffect } from "react";
+import { useRef, useState, useCallback, useEffect, useLayoutEffect } from "react";
 import { createPortal } from "react-dom";
 import { runSlashAi } from "@/app/(app)/n/[slug]/run-slash-ai";
 import type { SkillCategory } from "@/lib/skills";
@@ -23,6 +23,8 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { LinkPopover } from "@/components/LinkPopover";
+import { MessageResponse } from "@/components/ai-elements/message";
+import { mdToProseMirror, type JSONContent } from "@episteme/markdown";
 
 type Mode = "format" | "rephrase-prompt" | "rephrase-streaming" | "rephrase-done";
 type Source = "bubble" | "portal";
@@ -56,6 +58,7 @@ function RephrasePanel({
   prompt,
   setPrompt,
   aiOutput,
+  aiError,
   turns,
   submitPrompt,
   submitWithPrompt,
@@ -70,6 +73,7 @@ function RephrasePanel({
   prompt: string;
   setPrompt: (v: string) => void;
   aiOutput: string;
+  aiError: string;
   turns: Turn[];
   submitPrompt: () => void;
   submitWithPrompt: (prompt: string) => void;
@@ -83,6 +87,52 @@ function RephrasePanel({
   const [skillsOpen, setSkillsOpen] = useState(false);
   const [skills, setSkills] = useState<SkillEntry[] | null>(null);
   const [skillsError, setSkillsError] = useState<string | null>(null);
+
+  // Enter-to-send must be handled by a NATIVE keydown listener on the input,
+  // not React's `onKeyDown` (GSD-170 real root cause). The rephrase input lives
+  // inside the Tiptap BubbleMenu tippy popper, which — because tippy is
+  // `interactive` with the default `appendTo` — mounts inside the editor's
+  // key-isolation host (packages/editor Editor.tsx). That host runs a
+  // BUBBLE-phase keydown listener (attachEditorKeyIsolation) that
+  // `stopPropagation()`s every non-modifier key except Escape/Tab, Enter
+  // included. React 19 delegates events at `document`, so the stopped keydown
+  // never reaches React's root and the input's React `onKeyDown` never fires —
+  // while the Send button's click is untouched. A native listener bound
+  // directly on the input runs at the target phase, BEFORE the event bubbles up
+  // to the host, so it fires reliably.
+  //
+  // A `ref` carries the latest mode/submit so the handler never goes stale.
+  // A CALLBACK ref (not a plain ref + mount effect) attaches/detaches the
+  // native listener, so it re-binds whenever the input element is remounted —
+  // e.g. after "Refine", which unmounts and re-creates the input.
+  //
+  // The ref is refreshed in a layout effect (post-commit), not during render,
+  // so a discarded concurrent render can't leak uncommitted mode/submit into
+  // the handler. The native keydown only fires on real user interaction, always
+  // after commit, so the committed value is what runs.
+  const enterRef = useRef<{ mode: Mode; submit: () => void }>({ mode, submit: submitPrompt });
+  useLayoutEffect(() => {
+    enterRef.current = { mode, submit: submitPrompt };
+  }, [mode, submitPrompt]);
+  const inputCleanupRef = useRef<(() => void) | null>(null);
+  const inputRef = useCallback((el: HTMLInputElement | null) => {
+    inputCleanupRef.current?.();
+    inputCleanupRef.current = null;
+    if (!el) return;
+    const handler = (e: KeyboardEvent) => {
+      // Match the Send button's availability: any non-streaming mode. Plain
+      // Enter only; Shift+Enter is left alone. submitPrompt no-ops on an
+      // empty/whitespace prompt, mirroring Send. stopPropagation keeps the key
+      // from reaching the underlying editor.
+      if (e.key === "Enter" && !e.shiftKey && enterRef.current.mode !== "rephrase-streaming") {
+        e.preventDefault();
+        e.stopPropagation();
+        enterRef.current.submit();
+      }
+    };
+    el.addEventListener("keydown", handler);
+    inputCleanupRef.current = () => el.removeEventListener("keydown", handler);
+  }, []);
 
   // Lazy-load skills the first time the picker opens.
   useEffect(() => {
@@ -133,15 +183,14 @@ function RephrasePanel({
           className="flex items-center justify-center gap-2 px-2"
         >
           <input
+            ref={inputRef}
             type="text"
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey && mode === "rephrase-prompt") {
-                e.preventDefault();
-                submitPrompt();
-              }
-            }}
+            // Enter-to-send is wired via a native keydown listener on this input
+            // (see the effect above) — a React `onKeyDown` here never fires,
+            // because the editor's key-isolation host stops keydown propagation
+            // before it reaches React's document-level delegation root (GSD-170).
             placeholder={placeholder}
             className="flex-1 bg-transparent text-sm outline-none"
             autoFocus
@@ -224,7 +273,14 @@ function RephrasePanel({
         </div>
       )}
       {aiOutput && (
-        <div className="max-h-60 overflow-y-auto text-sm whitespace-pre-wrap">{aiOutput}</div>
+        <div className="max-h-60 overflow-y-auto text-sm">
+          <MessageResponse>{aiOutput}</MessageResponse>
+        </div>
+      )}
+      {aiError && (
+        <p className="text-xs text-destructive whitespace-pre-wrap">
+          {aiError}
+        </p>
       )}
       {mode === "rephrase-done" && aiOutput && (
         <div className="flex items-center gap-1">
@@ -265,6 +321,7 @@ export function AiBubbleMenu({
   const [prompt, setPrompt] = useState("");
   const [selectedText, setSelectedText] = useState("");
   const [aiOutput, setAiOutput] = useState("");
+  const [aiError, setAiError] = useState("");
   const [turns, setTurns] = useState<Turn[]>([]);
   const [source, setSource] = useState<Source>("bubble");
   const [portalPos, setPortalPos] = useState({ top: 0, left: 0 });
@@ -280,6 +337,7 @@ export function AiBubbleMenu({
     abortRef.current = null;
     setMode("format");
     setAiOutput("");
+    setAiError("");
     setPrompt("");
     setTurns([]);
   }, []);
@@ -382,6 +440,7 @@ export function AiBubbleMenu({
     abortRef.current = controller;
     setMode("rephrase-streaming");
     setAiOutput("");
+    setAiError("");
 
     const isGenerate = source === "portal";
     let context: string | undefined;
@@ -404,7 +463,10 @@ export function AiBubbleMenu({
       mode: isGenerate ? "generate" : "rephrase",
       signal: controller.signal,
       onToken: (chunk) => { accumulated += chunk; setAiOutput(accumulated); },
-      onError: (msg) => { setAiOutput((p) => p + ` [ai error: ${msg}]`); },
+      // Errors render as plain text (see aiError below), never through the
+      // markdown pipeline — otherwise brackets/underscores in the message get
+      // reinterpreted as links/emphasis (GSD-170 codex review).
+      onError: (msg) => { setAiError(`AI error: ${msg}`); },
     }).catch(() => {}).finally(() => {
       setMode("rephrase-done");
       if (abortRef.current === controller) abortRef.current = null;
@@ -415,18 +477,39 @@ export function AiBubbleMenu({
     submitWithPromptText(prompt);
   }, [prompt, submitWithPromptText]);
 
+  // The AI output is markdown. Parse it into ProseMirror nodes via the app's
+  // canonical pipeline (same one save-note-md uses) so `**bold**`, `# heading`,
+  // `- list`, `[link](url)` land as real formatted nodes matching the preview —
+  // not as literal markdown text (GSD-170 codex review). No HTML sanitization is
+  // needed: createExtensions() configures tiptap-markdown with `html: false`, so
+  // model-authored raw HTML renders as escaped text, never DOM nodes.
+  //
+  // `mdToProseMirror` returns a full `{ type: "doc", content: [...] }` node.
+  // insertContent treats a `doc`-type node as a single opaque node and won't
+  // spread its children into the live doc, so we pass the block-node array
+  // (`.content`). If conversion throws (malformed/truncated model output), fall
+  // back to the raw string so the user never loses their generated content —
+  // mirrors the degrade-gracefully pattern in lib/notes/save-note-md.ts.
+  const aiOutputAsContent = useCallback((): JSONContent[] | string => {
+    try {
+      return mdToProseMirror(aiOutput).content ?? aiOutput;
+    } catch {
+      return aiOutput;
+    }
+  }, [aiOutput]);
+
   const handleReplace = useCallback(() => {
     const { from, to } = selRef.current;
-    editor.chain().focus().deleteRange({ from, to }).insertContent(aiOutput).run();
+    editor.chain().focus().deleteRange({ from, to }).insertContent(aiOutputAsContent()).run();
     setMode("format");
     setTurns([]);
-  }, [editor, aiOutput]);
+  }, [editor, aiOutputAsContent]);
 
   const handleAppend = useCallback(() => {
-    editor.chain().focus().setTextSelection(selRef.current.to).insertContent(aiOutput).run();
+    editor.chain().focus().setTextSelection(selRef.current.to).insertContent(aiOutputAsContent()).run();
     setMode("format");
     setTurns([]);
-  }, [editor, aiOutput]);
+  }, [editor, aiOutputAsContent]);
 
   const openLink = useCallback(() => {
     const { from, to } = editor.state.selection;
@@ -554,6 +637,7 @@ export function AiBubbleMenu({
             prompt={prompt}
             setPrompt={setPrompt}
             aiOutput={aiOutput}
+            aiError={aiError}
             turns={turns}
             submitPrompt={submitPrompt}
             submitWithPrompt={submitWithPromptText}
@@ -622,6 +706,7 @@ export function AiBubbleMenu({
             prompt={prompt}
             setPrompt={setPrompt}
             aiOutput={aiOutput}
+            aiError={aiError}
             turns={turns}
             submitPrompt={submitPrompt}
             submitWithPrompt={submitWithPromptText}
