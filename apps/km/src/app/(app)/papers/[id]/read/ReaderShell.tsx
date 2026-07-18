@@ -39,6 +39,32 @@ async function createThread(signal: AbortSignal): Promise<string | null> {
   }
 }
 
+// GSD-222 — the reader's `activeThreadId` lives only in the in-memory zustand
+// store, so a page reload resets it to null. Without this, `ensureThread`
+// would POST a brand-new empty thread and the prior conversation would be
+// orphaned (transcript rehydrates empty). Before creating, ask the server for
+// this paper's threads (ordered created_at DESC) and restore the most recent
+// one so its `/state` history replays. Returns null when the paper has no
+// prior thread, letting the caller fall back to createThread().
+async function mostRecentThreadForPaper(
+  paperId: string,
+  signal: AbortSignal,
+): Promise<string | null> {
+  try {
+    const res = await fetch(
+      `/api/agents/km/threads-for-paper/${encodeURIComponent(paperId)}`,
+      { credentials: "include", signal },
+    );
+    if (!res.ok) return null;
+    const data = (await res.json()) as {
+      threads?: { thread_id: string }[];
+    };
+    return data.threads?.[0]?.thread_id ?? null;
+  } catch {
+    return null;
+  }
+}
+
 function ReaderShellInner({ paperId }: { paperId: string }) {
   const searchParams = useSearchParams();
   const panelOpen = useAgentBallStore((s) => s.panelOpen);
@@ -118,19 +144,23 @@ function ReaderShellInner({ paperId }: { paperId: string }) {
     threadCtlRef.current?.abort();
     const ctl = new AbortController();
     threadCtlRef.current = ctl;
-    const p = createThread(ctl.signal).then((id) => {
-      threadInFlightRef.current = null;
-      if (ctl.signal.aborted) return null;
-      // Race guard: if user picked a past thread from the dropdown while
-      // this create was in flight, do NOT overwrite their selection with
-      // the freshly-created empty thread id.
-      if (useAgentBallStore.getState().activeThreadId) return null;
-      if (id) useAgentBallStore.getState().setActiveThread(id);
-      return id;
-    });
+    // GSD-222 — restore the most recent thread for this paper before creating
+    // a new one, so a reload rehydrates the prior conversation instead of
+    // orphaning it behind a fresh empty thread.
+    const p = mostRecentThreadForPaper(paperId, ctl.signal)
+      .then((restored) => (restored ? restored : createThread(ctl.signal)))
+      .then((id) => {
+        threadInFlightRef.current = null;
+        if (ctl.signal.aborted) return null;
+        // Race guard: if user picked a past thread from the dropdown while
+        // this restore/create was in flight, do NOT overwrite their selection.
+        if (useAgentBallStore.getState().activeThreadId) return null;
+        if (id) useAgentBallStore.getState().setActiveThread(id);
+        return id;
+      });
     threadInFlightRef.current = p;
     return p;
-  }, []);
+  }, [paperId]);
 
   useEffect(() => {
     if (!agentOpen || activeThreadId) return;
