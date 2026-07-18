@@ -45,6 +45,7 @@ import {
   type TiptapEditor,
 } from "@episteme/editor";
 import { formatLibraryHandles, type LibraryHandle, type LibraryKind } from "@/lib/agent/lib-tokens";
+import { orderHitsForDisplay } from "./chat-mention-order";
 
 export interface ChatComposerSubmitPayload {
   text: string;
@@ -426,8 +427,12 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
               kind: LibraryKind;
               title: string;
             }>;
+            // GSD-152: pre-order into the Picker's grouped visual order so
+            // flat index == visual row and ArrowDown/Up stay linear.
             setItems(
-              arr.map((it) => ({ id: it.id, kind: it.kind, title: it.title })),
+              orderHitsForDisplay(
+                arr.map((it) => ({ id: it.id, kind: it.kind, title: it.title })),
+              ),
             );
           } else {
             const merged: SearchHit[] = [];
@@ -440,7 +445,8 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
             for (const r of data.references ?? []) {
               merged.push({ id: r.id, kind: "reference", title: r.title });
             }
-            setItems(merged.slice(0, 10));
+            // GSD-152: same grouped visual order as the recents branch.
+            setItems(orderHitsForDisplay(merged.slice(0, 10)));
           }
           setSelected(0);
         })
