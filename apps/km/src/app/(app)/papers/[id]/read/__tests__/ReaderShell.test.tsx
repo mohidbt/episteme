@@ -65,6 +65,12 @@ const storeStateRef: {
   },
 };
 
+// Records every setActiveThread(id) call so tests can assert what the reader
+// restored/created. Reset in afterEach.
+const setActiveThreadSpy = vi.fn((id: string | null) => {
+  storeStateRef.value.activeThreadId = id;
+});
+
 vi.mock("@/state/agent-ball", () => ({
   useAgentBallStore: Object.assign(
     (selector: (s: unknown) => unknown) =>
@@ -76,7 +82,7 @@ vi.mock("@/state/agent-ball", () => ({
     {
       getState: () => ({
         activeThreadId: storeStateRef.value.activeThreadId,
-        setActiveThread: () => {},
+        setActiveThread: setActiveThreadSpy,
         close: () => {},
       }),
     },
@@ -89,6 +95,7 @@ afterEach(() => {
   readerPropsRef.value = null;
   pastThreadsPropsRef.value = null;
   agentTranscriptPropsRef.value = null;
+  setActiveThreadSpy.mockClear();
   storeStateRef.value = {
     panelOpen: false,
     mountPoint: "reader-side-panel",
@@ -367,6 +374,98 @@ describe("ReaderShell PastThreadsDropdown refresh signal (codex NEEDS-FIX)", () 
       expect(agentTranscriptPropsRef.value).not.toBeNull();
       expect(agentTranscriptPropsRef.value?.initialMessages).toEqual([]);
     });
+
+    vi.unstubAllGlobals();
+  });
+
+  it("restores the most-recent paper thread on reload instead of creating a fresh empty one (GSD-222)", async () => {
+    // Reload: panel open (persisted mountPoint), but activeThreadId reset to
+    // null because the zustand store is in-memory only. The paper HAS a prior
+    // chat thread. The reader must RESTORE it — not POST a brand-new empty
+    // thread — otherwise the prior history is orphaned and the transcript
+    // rehydrates empty.
+    storeStateRef.value = {
+      panelOpen: true,
+      mountPoint: "reader-side-panel",
+      activeThreadId: null,
+    };
+
+    const priorThreads = [
+      { thread_id: "tid-recent", created_at: "2026-07-18T10:00:00Z", title: "recent chat" },
+      { thread_id: "tid-older", created_at: "2026-07-17T10:00:00Z", title: "older chat" },
+    ];
+    const fetchMock = vi.fn(async (input: string | URL | Request, _init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.includes("/api/agents/km/threads-for-paper/")) {
+        return new Response(JSON.stringify({ threads: priorThreads }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      return new Response("{}", { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    vi.resetModules();
+    const { ReaderShell } = await import("../ReaderShell");
+    render(<ReaderShell paperId="paper-reload" />);
+
+    // The reader must restore the MOST RECENT prior thread (threads[0]).
+    await waitFor(() => {
+      expect(setActiveThreadSpy).toHaveBeenCalledWith("tid-recent");
+    });
+
+    // It must NOT create a brand-new empty thread when a prior one exists.
+    const createdNew = fetchMock.mock.calls.some(
+      (c) =>
+        String(c[0]).includes("/api/agent/threads") &&
+        (c[1] as RequestInit | undefined)?.method === "POST",
+    );
+    expect(createdNew).toBe(false);
+
+    vi.unstubAllGlobals();
+  });
+
+  it("creates a new thread on reload when the paper has NO prior threads (GSD-222)", async () => {
+    // No prior chat on this paper → falling through to createThread() is the
+    // correct behaviour; the empty-list restore path must not break it.
+    storeStateRef.value = {
+      panelOpen: true,
+      mountPoint: "reader-side-panel",
+      activeThreadId: null,
+    };
+
+    const fetchMock = vi.fn(async (input: string | URL | Request, _init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.includes("/api/agents/km/threads-for-paper/")) {
+        return new Response(JSON.stringify({ threads: [] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      if (url.includes("/api/agent/threads")) {
+        return new Response(JSON.stringify({ thread: { threadId: "tid-fresh" } }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      return new Response("{}", { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    vi.resetModules();
+    const { ReaderShell } = await import("../ReaderShell");
+    render(<ReaderShell paperId="paper-no-prior" />);
+
+    await waitFor(() => {
+      expect(setActiveThreadSpy).toHaveBeenCalledWith("tid-fresh");
+    });
+    const createdNew = fetchMock.mock.calls.some(
+      (c) =>
+        String(c[0]).includes("/api/agent/threads") &&
+        (c[1] as RequestInit | undefined)?.method === "POST",
+    );
+    expect(createdNew).toBe(true);
 
     vi.unstubAllGlobals();
   });
