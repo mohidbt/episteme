@@ -242,6 +242,21 @@ describe("ModelPicker", () => {
       // Content centered inside the fixed-width box.
       expect(cls).toContain("text-center");
     }
+
+    // The real alignment fix: each row is full width and the name span
+    // consumes the free space (flex-1 min-w-0), so ml-auto pushes the badge
+    // to a constant right column instead of resolving against per-row content
+    // width. Without this the badge right-edges are ragged even with a
+    // fixed-width box.
+    for (const item of items) {
+      const rowCls = item.getAttribute("class") ?? "";
+      expect(rowCls).toContain("w-full");
+      const nameSpan = item.querySelector("span.truncate");
+      expect(nameSpan).not.toBeNull();
+      const nameCls = nameSpan?.getAttribute("class") ?? "";
+      expect(nameCls).toContain("flex-1");
+      expect(nameCls).toContain("min-w-0");
+    }
   });
 
   it("typeahead filters list as the user types", async () => {

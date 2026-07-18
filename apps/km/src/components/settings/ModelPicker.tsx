@@ -195,12 +195,20 @@ export function ModelPicker({
                     value={`${label} ${m.id}`}
                     data-testid="model-picker-item"
                     data-checked={m.id === value ? "true" : undefined}
+                    // GSD-144: force the row full width so ml-auto on the badge
+                    // resolves against a constant row width (the shadcn base is
+                    // flex but shrink-to-fit), giving every badge a common
+                    // right column instead of a ragged per-row edge.
+                    className="w-full"
                     onSelect={() => {
                       onChange(m.id);
                       setOpen(false);
                     }}
                   >
-                    <span className="truncate">{label}</span>
+                    {/* flex-1 min-w-0: the name span eats the free space and
+                        truncates, pushing the ml-auto badge to the shared
+                        right column. */}
+                    <span className="flex-1 min-w-0 truncate">{label}</span>
                     <PriceTierBadge model={m} />
                   </CommandItem>
                 );
