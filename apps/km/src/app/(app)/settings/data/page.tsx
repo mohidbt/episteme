@@ -1,4 +1,4 @@
-import { getCurrentSession } from "@/lib/session";
+import { requireVerifiedSession } from "@/lib/session";
 import { getDefaultLibrary } from "@/lib/default-library";
 import { listAllFolders } from "@/lib/folders-server";
 import { getLibraryUsageBytes } from "@/lib/library-usage";
@@ -18,7 +18,8 @@ import { DriveUsage } from "./DriveUsage";
 import { OrUsage } from "./OrUsage";
 
 export default async function DataSettingsPage() {
-  const session = (await getCurrentSession())!;
+  // GSD-142: gate email verification before any library / usage / DB read.
+  const session = await requireVerifiedSession();
   const userId = session.userId;
   const lib = await getDefaultLibrary(userId);
   const folders = lib ? await listAllFolders(lib.id, userId) : [];

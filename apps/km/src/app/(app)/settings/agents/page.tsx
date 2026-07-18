@@ -1,14 +1,15 @@
-import { redirect } from "next/navigation";
 import { eq } from "drizzle-orm";
-import { getCurrentUserId } from "@/lib/session";
+import { requireVerifiedSession } from "@/lib/session";
 import { db } from "@/lib/db";
 import { agentConfigs } from "@episteme/db/schema";
 import { PermissionsForm } from "@/components/settings/PermissionsForm";
 import { getDefaultAgentModel } from "@/lib/agent-config-defaults";
 
 export default async function AgentsSettingsPage() {
-  const userId = await getCurrentUserId();
-  if (!userId) redirect("/login");
+  // GSD-142: gate email verification BEFORE any protected DB read. Redirects
+  // to /sign-in (missing) or /verify-email (unverified real user); returns the
+  // session otherwise. Anonymous users pass through.
+  const { userId } = await requireVerifiedSession();
 
   const rows = await db
     .select()

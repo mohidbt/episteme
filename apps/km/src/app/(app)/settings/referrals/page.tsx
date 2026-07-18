@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { UserPlus } from "lucide-react";
 import { db } from "@/lib/db";
 import { user as userTable } from "@episteme/db/schema";
-import { getCurrentSession } from "@/lib/session";
+import { getCurrentSession, requireVerifiedSession } from "@/lib/session";
 import {
   ensureUserReferralCodes,
   listReferralCodesForUser,
@@ -35,6 +35,11 @@ export default async function ReferralsSettingsPage() {
       </div>
     );
   }
+
+  // GSD-142: real (non-anonymous) users past the anon CTA branch above must be
+  // email-verified before we run any protected DB read. requireVerifiedSession
+  // reuses the cached session, so this adds no extra auth round-trip.
+  await requireVerifiedSession();
 
   const [me] = await db
     .select({ username: userTable.username })
