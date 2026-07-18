@@ -200,6 +200,65 @@ describe("ModelPicker", () => {
     expect(findBadge(/Unknown Price/)).toBeNull();
   });
 
+  // GSD-144 — the $ / $$ / $$$ badges must align into a single column: a
+  // fixed-width, centered box so every tier's box occupies the same width and
+  // the badges' right edges line up regardless of "$" vs "$$" vs "$$$" length.
+  it("GSD-144: badges share a fixed-width centered box so the $ column is aligned", async () => {
+    const priced = [
+      {
+        id: "vendor/cheap",
+        name: "Cheap Model",
+        created: 1_700_000_000,
+        pricing: { prompt: "0", completion: "0.0000004" }, // low → "$"
+      },
+      {
+        id: "vendor/premium",
+        name: "Premium Model",
+        created: 1_600_000_000,
+        pricing: { prompt: "0", completion: "0.000075" }, // high → "$$$"
+      },
+    ];
+    globalThis.fetch = vi.fn(async () =>
+      new Response(JSON.stringify({ models: priced, fetched_at: null }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    ) as unknown as typeof fetch;
+
+    render(<ModelPicker value="vendor/cheap" onChange={vi.fn()} />);
+    await waitFor(() => expect(globalThis.fetch).toHaveBeenCalled());
+    await openPicker();
+
+    const items = await screen.findAllByTestId("model-picker-item");
+    const badges = items
+      .map((el) => el.querySelector('[data-testid="model-price-tier"]'))
+      .filter((b): b is Element => b !== null);
+    expect(badges.length).toBe(2);
+
+    for (const badge of badges) {
+      const cls = badge.getAttribute("class") ?? "";
+      // Fixed-width box (all tiers same width) → column right edges align.
+      expect(cls).toMatch(/\bw-\d/);
+      // Content centered inside the fixed-width box.
+      expect(cls).toContain("text-center");
+    }
+
+    // The real alignment fix: each row is full width and the name span
+    // consumes the free space (flex-1 min-w-0), so ml-auto pushes the badge
+    // to a constant right column instead of resolving against per-row content
+    // width. Without this the badge right-edges are ragged even with a
+    // fixed-width box.
+    for (const item of items) {
+      const rowCls = item.getAttribute("class") ?? "";
+      expect(rowCls).toContain("w-full");
+      const nameSpan = item.querySelector("span.truncate");
+      expect(nameSpan).not.toBeNull();
+      const nameCls = nameSpan?.getAttribute("class") ?? "";
+      expect(nameCls).toContain("flex-1");
+      expect(nameCls).toContain("min-w-0");
+    }
+  });
+
   it("typeahead filters list as the user types", async () => {
     render(<ModelPicker value="vendor/old-model" onChange={vi.fn()} />);
     await waitFor(() => expect(globalThis.fetch).toHaveBeenCalled());

@@ -23,6 +23,8 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { LinkPopover } from "@/components/LinkPopover";
+import { MessageResponse } from "@/components/ai-elements/message";
+import { mdToProseMirror, type JSONContent } from "@episteme/markdown";
 
 type Mode = "format" | "rephrase-prompt" | "rephrase-streaming" | "rephrase-done";
 type Source = "bubble" | "portal";
@@ -56,6 +58,7 @@ function RephrasePanel({
   prompt,
   setPrompt,
   aiOutput,
+  aiError,
   turns,
   submitPrompt,
   submitWithPrompt,
@@ -70,6 +73,7 @@ function RephrasePanel({
   prompt: string;
   setPrompt: (v: string) => void;
   aiOutput: string;
+  aiError: string;
   turns: Turn[];
   submitPrompt: () => void;
   submitWithPrompt: (prompt: string) => void;
@@ -137,8 +141,21 @@ function RephrasePanel({
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey && mode === "rephrase-prompt") {
+              // Plain Enter sends whenever the Send button is actionable — i.e.
+              // any mode where the input is shown and we're NOT mid-stream. The
+              // Send button only renders in the non-streaming branch and has no
+              // mode gate, so Enter must match that exact availability. Gating on
+              // `mode === "rephrase-prompt"` was too narrow: during the
+              // BubbleMenu → tippy reparent the handler closure could observe a
+              // transitional mode, so Enter silently did nothing while Send still
+              // worked (GSD-170). `submitPrompt`/submitWithPromptText no-op on an
+              // empty/whitespace prompt, matching Send. Shift+Enter is left alone.
+              // stopPropagation keeps the key from bubbling into the underlying
+              // ProseMirror editor, which would otherwise insert a stray
+              // paragraph break into the note (GSD-170).
+              if (e.key === "Enter" && !e.shiftKey && mode !== "rephrase-streaming") {
                 e.preventDefault();
+                e.stopPropagation();
                 submitPrompt();
               }
             }}
@@ -224,7 +241,14 @@ function RephrasePanel({
         </div>
       )}
       {aiOutput && (
-        <div className="max-h-60 overflow-y-auto text-sm whitespace-pre-wrap">{aiOutput}</div>
+        <div className="max-h-60 overflow-y-auto text-sm">
+          <MessageResponse>{aiOutput}</MessageResponse>
+        </div>
+      )}
+      {aiError && (
+        <p className="text-xs text-destructive whitespace-pre-wrap">
+          {aiError}
+        </p>
       )}
       {mode === "rephrase-done" && aiOutput && (
         <div className="flex items-center gap-1">
@@ -265,6 +289,7 @@ export function AiBubbleMenu({
   const [prompt, setPrompt] = useState("");
   const [selectedText, setSelectedText] = useState("");
   const [aiOutput, setAiOutput] = useState("");
+  const [aiError, setAiError] = useState("");
   const [turns, setTurns] = useState<Turn[]>([]);
   const [source, setSource] = useState<Source>("bubble");
   const [portalPos, setPortalPos] = useState({ top: 0, left: 0 });
@@ -280,6 +305,7 @@ export function AiBubbleMenu({
     abortRef.current = null;
     setMode("format");
     setAiOutput("");
+    setAiError("");
     setPrompt("");
     setTurns([]);
   }, []);
@@ -382,6 +408,7 @@ export function AiBubbleMenu({
     abortRef.current = controller;
     setMode("rephrase-streaming");
     setAiOutput("");
+    setAiError("");
 
     const isGenerate = source === "portal";
     let context: string | undefined;
@@ -404,7 +431,10 @@ export function AiBubbleMenu({
       mode: isGenerate ? "generate" : "rephrase",
       signal: controller.signal,
       onToken: (chunk) => { accumulated += chunk; setAiOutput(accumulated); },
-      onError: (msg) => { setAiOutput((p) => p + ` [ai error: ${msg}]`); },
+      // Errors render as plain text (see aiError below), never through the
+      // markdown pipeline — otherwise brackets/underscores in the message get
+      // reinterpreted as links/emphasis (GSD-170 codex review).
+      onError: (msg) => { setAiError(`AI error: ${msg}`); },
     }).catch(() => {}).finally(() => {
       setMode("rephrase-done");
       if (abortRef.current === controller) abortRef.current = null;
@@ -415,18 +445,39 @@ export function AiBubbleMenu({
     submitWithPromptText(prompt);
   }, [prompt, submitWithPromptText]);
 
+  // The AI output is markdown. Parse it into ProseMirror nodes via the app's
+  // canonical pipeline (same one save-note-md uses) so `**bold**`, `# heading`,
+  // `- list`, `[link](url)` land as real formatted nodes matching the preview —
+  // not as literal markdown text (GSD-170 codex review). No HTML sanitization is
+  // needed: createExtensions() configures tiptap-markdown with `html: false`, so
+  // model-authored raw HTML renders as escaped text, never DOM nodes.
+  //
+  // `mdToProseMirror` returns a full `{ type: "doc", content: [...] }` node.
+  // insertContent treats a `doc`-type node as a single opaque node and won't
+  // spread its children into the live doc, so we pass the block-node array
+  // (`.content`). If conversion throws (malformed/truncated model output), fall
+  // back to the raw string so the user never loses their generated content —
+  // mirrors the degrade-gracefully pattern in lib/notes/save-note-md.ts.
+  const aiOutputAsContent = useCallback((): JSONContent[] | string => {
+    try {
+      return mdToProseMirror(aiOutput).content ?? aiOutput;
+    } catch {
+      return aiOutput;
+    }
+  }, [aiOutput]);
+
   const handleReplace = useCallback(() => {
     const { from, to } = selRef.current;
-    editor.chain().focus().deleteRange({ from, to }).insertContent(aiOutput).run();
+    editor.chain().focus().deleteRange({ from, to }).insertContent(aiOutputAsContent()).run();
     setMode("format");
     setTurns([]);
-  }, [editor, aiOutput]);
+  }, [editor, aiOutputAsContent]);
 
   const handleAppend = useCallback(() => {
-    editor.chain().focus().setTextSelection(selRef.current.to).insertContent(aiOutput).run();
+    editor.chain().focus().setTextSelection(selRef.current.to).insertContent(aiOutputAsContent()).run();
     setMode("format");
     setTurns([]);
-  }, [editor, aiOutput]);
+  }, [editor, aiOutputAsContent]);
 
   const openLink = useCallback(() => {
     const { from, to } = editor.state.selection;
@@ -554,6 +605,7 @@ export function AiBubbleMenu({
             prompt={prompt}
             setPrompt={setPrompt}
             aiOutput={aiOutput}
+            aiError={aiError}
             turns={turns}
             submitPrompt={submitPrompt}
             submitWithPrompt={submitWithPromptText}
@@ -622,6 +674,7 @@ export function AiBubbleMenu({
             prompt={prompt}
             setPrompt={setPrompt}
             aiOutput={aiOutput}
+            aiError={aiError}
             turns={turns}
             submitPrompt={submitPrompt}
             submitWithPrompt={submitWithPromptText}

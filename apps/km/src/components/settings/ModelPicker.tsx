@@ -51,7 +51,9 @@ function PriceTierBadge({ model }: { model: CatalogModel }) {
       data-tier={tier}
       aria-label={`Price tier ${tierLabel(tier)}`}
       className={cn(
-        "ml-auto rounded-md px-1.5 py-0.5 font-mono text-[10px] leading-none",
+        // GSD-144: fixed-width, centered box so "$" / "$$" / "$$$" all occupy
+        // the same width and the badges' right edges line up into one column.
+        "ml-auto inline-block w-6 rounded-md py-0.5 text-center font-mono text-[10px] leading-none",
         TIER_CLASSES[tier],
       )}
     >
@@ -193,12 +195,20 @@ export function ModelPicker({
                     value={`${label} ${m.id}`}
                     data-testid="model-picker-item"
                     data-checked={m.id === value ? "true" : undefined}
+                    // GSD-144: force the row full width so ml-auto on the badge
+                    // resolves against a constant row width (the shadcn base is
+                    // flex but shrink-to-fit), giving every badge a common
+                    // right column instead of a ragged per-row edge.
+                    className="w-full"
                     onSelect={() => {
                       onChange(m.id);
                       setOpen(false);
                     }}
                   >
-                    <span className="truncate">{label}</span>
+                    {/* flex-1 min-w-0: the name span eats the free space and
+                        truncates, pushing the ml-auto badge to the shared
+                        right column. */}
+                    <span className="flex-1 min-w-0 truncate">{label}</span>
                     <PriceTierBadge model={m} />
                   </CommandItem>
                 );
