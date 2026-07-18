@@ -5,8 +5,10 @@ import {
   SidebarGroup,
   SidebarGroupContent,
   SidebarMenu,
+  SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
+import { sidebarSectionGroupClassName } from "./SidebarChrome";
 import { cn } from "@/lib/utils";
 import { openFeedbackDialog } from "@/lib/sentry/open-feedback";
 
@@ -15,26 +17,29 @@ import { openFeedbackDialog } from "@/lib/sentry/open-feedback";
  * nav sections. Replaces Sentry's floating actor launcher (hidden via the
  * shadow-root stylesheet in instrumentation-client.ts) and opens the SAME
  * Sentry feedback dialog via openFeedbackDialog() — no form is rebuilt.
+ *
+ * Uses SidebarMenuButton (not a raw <button>) so it inherits the shared
+ * `data-sidebar="menu-button"` row styling — identical alignment to the
+ * Settings/Agent rows, and icon-only collapse via the globals.css rules.
  */
 export function SidebarReportBug() {
   return (
-    <SidebarGroup className="py-0">
+    <SidebarGroup className={sidebarSectionGroupClassName}>
       <SidebarGroupContent>
         <SidebarMenu>
           <SidebarMenuItem>
-            <button
+            <SidebarMenuButton
               type="button"
               data-testid="sidebar-report-bug"
               onClick={() => void openFeedbackDialog()}
               className={cn(
-                "flex w-full items-center gap-2 rounded-md px-2.5 py-1.5",
-                "text-[13px] font-normal text-[var(--fg-2)]",
-                "hover:bg-[var(--bg-roof-2)] transition-colors",
+                "gap-2 rounded-md px-2.5 py-1.5 text-[13px] font-normal text-[var(--fg-2)]",
+                "hover:bg-[var(--bg-roof-2)]",
               )}
             >
               <Megaphone aria-hidden className="size-4" />
               <span>Report a bug</span>
-            </button>
+            </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarGroupContent>
