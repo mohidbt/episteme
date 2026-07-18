@@ -13,12 +13,22 @@ type FeedbackForm = Awaited<
 >;
 
 let cachedForm: FeedbackForm | null = null;
+// In-flight guard: concurrent clicks before createForm() resolves must await the
+// SAME promise, else the losing form leaks detached into the DOM (codex GSD-53).
+let pendingForm: Promise<FeedbackForm> | null = null;
 
 export async function openFeedbackDialog(): Promise<void> {
   const feedback = getFeedback();
   if (!feedback) return;
   if (!cachedForm) {
-    cachedForm = await feedback.createForm();
+    if (!pendingForm) {
+      pendingForm = feedback.createForm();
+    }
+    try {
+      cachedForm = await pendingForm;
+    } finally {
+      pendingForm = null;
+    }
   }
   cachedForm.appendToDom();
   cachedForm.open();

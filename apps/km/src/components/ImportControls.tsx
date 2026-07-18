@@ -34,13 +34,13 @@ export function ImportControls({
         method: "POST",
         body: fd,
       });
-      const json = await res.json();
+      const json = await res.json().catch(() => null);
       if (!res.ok) {
         if (maybeShowGuestError(res, json)) return;
         if (res.status === 413 && json?.error === "over_limit") {
           toast.error("Library is over the 100 MB limit");
         } else {
-          toast.error(json.error ?? "Import failed");
+          toast.error(json?.error ?? "Import failed");
         }
         return;
       }
