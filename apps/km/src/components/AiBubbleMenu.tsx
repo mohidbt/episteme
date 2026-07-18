@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/command";
 import { LinkPopover } from "@/components/LinkPopover";
 import { MessageResponse } from "@/components/ai-elements/message";
-import { mdToProseMirror } from "@episteme/markdown";
+import { mdToProseMirror, type JSONContent } from "@episteme/markdown";
 
 type Mode = "format" | "rephrase-prompt" | "rephrase-streaming" | "rephrase-done";
 type Source = "bubble" | "portal";
@@ -445,24 +445,39 @@ export function AiBubbleMenu({
     submitWithPromptText(prompt);
   }, [prompt, submitWithPromptText]);
 
-  // The AI output is markdown. Parse it into a ProseMirror document via the
-  // app's canonical pipeline (same one save-note-md uses) so `**bold**`,
-  // `# heading`, `- list`, `[link](url)` land as real formatted nodes matching
-  // the preview — not as literal markdown text (GSD-170 codex review). No HTML
-  // sanitization is needed: tiptap-markdown parses markdown structurally rather
-  // than injecting raw model-authored HTML.
+  // The AI output is markdown. Parse it into ProseMirror nodes via the app's
+  // canonical pipeline (same one save-note-md uses) so `**bold**`, `# heading`,
+  // `- list`, `[link](url)` land as real formatted nodes matching the preview —
+  // not as literal markdown text (GSD-170 codex review). No HTML sanitization is
+  // needed: createExtensions() configures tiptap-markdown with `html: false`, so
+  // model-authored raw HTML renders as escaped text, never DOM nodes.
+  //
+  // `mdToProseMirror` returns a full `{ type: "doc", content: [...] }` node.
+  // insertContent treats a `doc`-type node as a single opaque node and won't
+  // spread its children into the live doc, so we pass the block-node array
+  // (`.content`). If conversion throws (malformed/truncated model output), fall
+  // back to the raw string so the user never loses their generated content —
+  // mirrors the degrade-gracefully pattern in lib/notes/save-note-md.ts.
+  const aiOutputAsContent = useCallback((): JSONContent[] | string => {
+    try {
+      return mdToProseMirror(aiOutput).content ?? aiOutput;
+    } catch {
+      return aiOutput;
+    }
+  }, [aiOutput]);
+
   const handleReplace = useCallback(() => {
     const { from, to } = selRef.current;
-    editor.chain().focus().deleteRange({ from, to }).insertContent(mdToProseMirror(aiOutput)).run();
+    editor.chain().focus().deleteRange({ from, to }).insertContent(aiOutputAsContent()).run();
     setMode("format");
     setTurns([]);
-  }, [editor, aiOutput]);
+  }, [editor, aiOutputAsContent]);
 
   const handleAppend = useCallback(() => {
-    editor.chain().focus().setTextSelection(selRef.current.to).insertContent(mdToProseMirror(aiOutput)).run();
+    editor.chain().focus().setTextSelection(selRef.current.to).insertContent(aiOutputAsContent()).run();
     setMode("format");
     setTurns([]);
-  }, [editor, aiOutput]);
+  }, [editor, aiOutputAsContent]);
 
   const openLink = useCallback(() => {
     const { from, to } = editor.state.selection;

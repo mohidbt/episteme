@@ -21,6 +21,21 @@ vi.mock("@/app/(app)/n/[slug]/run-slash-ai", () => ({
   runSlashAi: (args: unknown) => runSlashAiMock(args),
 }));
 
+// Wrap the real markdown->ProseMirror pipeline so individual tests can force it
+// to throw (malformed/truncated model output) and assert the graceful fallback.
+// The factory captures the ACTUAL converter and the mock delegates to it by
+// default, so real markdown parses normally unless a test overrides.
+const hoisted = vi.hoisted(() => ({
+  mdToProseMirrorMock: vi.fn(),
+  realImpl: null as null | ((md: string) => unknown),
+}));
+const { mdToProseMirrorMock } = hoisted;
+vi.mock("@episteme/markdown", async () => {
+  const actual = await vi.importActual<typeof import("@episteme/markdown")>("@episteme/markdown");
+  hoisted.realImpl = actual.mdToProseMirror as (md: string) => unknown;
+  return { ...actual, mdToProseMirror: (md: string) => mdToProseMirrorMock(md) };
+});
+
 import { AiBubbleMenu } from "./AiBubbleMenu";
 
 function makeEditor() {
@@ -57,6 +72,9 @@ function makeEditor() {
 beforeEach(() => {
   runSlashAiMock.mockReset();
   runSlashAiMock.mockResolvedValue(undefined);
+  // Default: delegate to the real markdown->ProseMirror converter.
+  mdToProseMirrorMock.mockReset();
+  mdToProseMirrorMock.mockImplementation((md: string) => hoisted.realImpl!(md));
   globalThis.fetch = vi.fn(async () => new Response("not found", { status: 404 })) as unknown as typeof fetch;
 });
 
@@ -249,9 +267,14 @@ async function rephraseThenClick(
   fireEvent.click(screen.getByText(buttonLabel));
 }
 
-// Collect every ProseMirror node type present anywhere in a JSONContent tree.
+// Collect every ProseMirror node/mark type present anywhere in a JSONContent
+// tree (or an array of block nodes, as insertContent receives).
 function collectNodeTypes(node: unknown, out: Set<string> = new Set()): Set<string> {
   if (!node || typeof node !== "object") return out;
+  if (Array.isArray(node)) {
+    for (const child of node) collectNodeTypes(child, out);
+    return out;
+  }
   const n = node as { type?: string; content?: unknown[]; marks?: { type?: string }[] };
   if (typeof n.type === "string") out.add(n.type);
   for (const mark of n.marks ?? []) if (mark.type) out.add(mark.type);
@@ -268,11 +291,15 @@ describe("GSD-170: accepting AI output inserts formatted nodes, not raw markdown
     const arg = insertContent.mock.calls[0]![0];
     // Must NOT be the raw markdown string.
     expect(typeof arg).not.toBe("string");
-    // Must be a ProseMirror JSON doc carrying a bold mark.
+    // Must be a block-node ARRAY, not a wrapped `{type:"doc"}` node — Tiptap's
+    // insertContent treats a doc-type node as a single opaque node and won't
+    // spread its children into the live document (codex review Q1/Q3).
+    expect(Array.isArray(arg)).toBe(true);
+    // Must carry parsed emphasis marks.
     const types = collectNodeTypes(arg);
     expect(types.has("bold")).toBe(true);
     expect(types.has("italic")).toBe(true);
-    // Belt-and-suspenders: the serialized doc must not contain the literal
+    // Belt-and-suspenders: the serialized content must not contain the literal
     // markdown asterisks as text content.
     expect(JSON.stringify(arg)).not.toContain("**bold**");
   });
@@ -284,10 +311,24 @@ describe("GSD-170: accepting AI output inserts formatted nodes, not raw markdown
     expect(insertContent).toHaveBeenCalledTimes(1);
     const arg = insertContent.mock.calls[0]![0];
     expect(typeof arg).not.toBe("string");
+    expect(Array.isArray(arg)).toBe(true);
     const types = collectNodeTypes(arg);
     expect(types.has("heading")).toBe(true);
     expect(types.has("bulletList")).toBe(true);
     expect(types.has("listItem")).toBe(true);
     expect(JSON.stringify(arg)).not.toContain("# Title");
+  });
+
+  it("falls back to inserting the raw string if markdown conversion throws", async () => {
+    const { editor, insertContent } = makeInsertCapturingEditor();
+    // Simulate mdToProseMirror throwing (malformed / truncated model output).
+    mdToProseMirrorMock.mockImplementation(() => {
+      throw new Error("boom");
+    });
+    // The handler must not crash; it degrades to inserting the raw markdown so
+    // the user never loses their generated content.
+    await rephraseThenClick(editor, "**bold**", /Replace/);
+    expect(insertContent).toHaveBeenCalledTimes(1);
+    expect(insertContent.mock.calls[0]![0]).toBe("**bold**");
   });
 });
