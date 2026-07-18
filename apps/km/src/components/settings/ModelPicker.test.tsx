@@ -200,6 +200,50 @@ describe("ModelPicker", () => {
     expect(findBadge(/Unknown Price/)).toBeNull();
   });
 
+  // GSD-144 — the $ / $$ / $$$ badges must align into a single column: a
+  // fixed-width, centered box so every tier's box occupies the same width and
+  // the badges' right edges line up regardless of "$" vs "$$" vs "$$$" length.
+  it("GSD-144: badges share a fixed-width centered box so the $ column is aligned", async () => {
+    const priced = [
+      {
+        id: "vendor/cheap",
+        name: "Cheap Model",
+        created: 1_700_000_000,
+        pricing: { prompt: "0", completion: "0.0000004" }, // low → "$"
+      },
+      {
+        id: "vendor/premium",
+        name: "Premium Model",
+        created: 1_600_000_000,
+        pricing: { prompt: "0", completion: "0.000075" }, // high → "$$$"
+      },
+    ];
+    globalThis.fetch = vi.fn(async () =>
+      new Response(JSON.stringify({ models: priced, fetched_at: null }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    ) as unknown as typeof fetch;
+
+    render(<ModelPicker value="vendor/cheap" onChange={vi.fn()} />);
+    await waitFor(() => expect(globalThis.fetch).toHaveBeenCalled());
+    await openPicker();
+
+    const items = await screen.findAllByTestId("model-picker-item");
+    const badges = items
+      .map((el) => el.querySelector('[data-testid="model-price-tier"]'))
+      .filter((b): b is Element => b !== null);
+    expect(badges.length).toBe(2);
+
+    for (const badge of badges) {
+      const cls = badge.getAttribute("class") ?? "";
+      // Fixed-width box (all tiers same width) → column right edges align.
+      expect(cls).toMatch(/\bw-\d/);
+      // Content centered inside the fixed-width box.
+      expect(cls).toContain("text-center");
+    }
+  });
+
   it("typeahead filters list as the user types", async () => {
     render(<ModelPicker value="vendor/old-model" onChange={vi.fn()} />);
     await waitFor(() => expect(globalThis.fetch).toHaveBeenCalled());

@@ -51,7 +51,9 @@ function PriceTierBadge({ model }: { model: CatalogModel }) {
       data-tier={tier}
       aria-label={`Price tier ${tierLabel(tier)}`}
       className={cn(
-        "ml-auto rounded-md px-1.5 py-0.5 font-mono text-[10px] leading-none",
+        // GSD-144: fixed-width, centered box so "$" / "$$" / "$$$" all occupy
+        // the same width and the badges' right edges line up into one column.
+        "ml-auto inline-block w-6 rounded-md py-0.5 text-center font-mono text-[10px] leading-none",
         TIER_CLASSES[tier],
       )}
     >
