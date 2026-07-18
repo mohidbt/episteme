@@ -4,8 +4,10 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+import httpx
 from deps import db as db_module
 from deps.db import init_pool, close_pool
+from lib.km_boot_check import validate_km_base_url
 from lib.openrouter_client import OpenRouterTrialExhausted
 from routers import (
     health,
@@ -54,6 +56,13 @@ async def _reap_orphan_runs(boot_time: datetime) -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # GSD-204: fail LOUD at boot if EPISTEME_KM_BASE_URL is misconfigured
+    # (missing/localhost in a deployed env, or a redirecting host). km_get/
+    # km_post use follow_redirects=False, so a redirecting base URL would 500
+    # every agent /invoke at runtime. No-op in local dev.
+    async with httpx.AsyncClient(follow_redirects=False) as km_probe:
+        await validate_km_base_url(client=km_probe)
+
     await init_pool()
     await _reap_orphan_runs(datetime.now(timezone.utc))
 

@@ -8,6 +8,7 @@ from fastapi.responses import StreamingResponse
 from langchain.agents import create_agent
 from langchain_core.messages import AIMessage
 from langchain_openai import ChatOpenAI
+from langgraph.errors import GraphRecursionError
 from pydantic import BaseModel, Field
 
 from deps.auth import InternalAuthDep
@@ -26,9 +27,23 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/agents", tags=["auto-highlight"])
 
-AGENT_RECURSION_LIMIT = 25  # max tool-call depth before agent aborts
+# GSD-138: each highlight candidate costs two super-steps (page_text +
+# locate_phrase), and a multi-passage instruction may drill into several
+# candidates before the single create_highlights batch and finish. The old
+# limit of 25 (~11 model↔tool rounds) tripped GRAPH_RECURSION_LIMIT mid-stream
+# on content-heavy PDFs where locate_phrase returns empty (extraction mismatch)
+# and the model retries a few phrasings. 40 (~19 rounds) gives that headroom
+# while staying bounded by TOTAL_TIMEOUT_S below, so cost/latency stay capped.
+AGENT_RECURSION_LIMIT = 40  # max tool-call depth before agent aborts
 IDLE_TIMEOUT_S = 60  # max seconds between stream updates before we give up
 TOTAL_TIMEOUT_S = 300  # hard wall-clock ceiling per run (5 minutes)
+
+# User-facing terminal message for the non-convergence case. The raw langgraph
+# "Recursion limit of N reached..." string is opaque; the UI branches on `code`.
+RECURSION_LIMIT_MESSAGE = (
+    "The assistant couldn't finish highlighting this document — it made too "
+    "many attempts without converging. Try a more specific instruction."
+)
 
 SYSTEM_PROMPT = (
     "You create highlights on a single PDF based on the user's instruction.\n"
@@ -191,6 +206,7 @@ async def _run_agent_stream(agent, conn, conn_lock, run_id, conv_id, instruction
     """
     summary = ""
     error_msg: str | None = None
+    error_code: str | None = None
     iterator = agent.astream(
         {"messages": [{"role": "user", "content": instruction}]},
         config={"recursion_limit": AGENT_RECURSION_LIMIT},
@@ -255,6 +271,14 @@ async def _run_agent_stream(agent, conn, conn_lock, run_id, conv_id, instruction
         except Exception:
             logger.exception("failed to mark highlight run failed (best-effort)")
         raise
+    except GraphRecursionError:
+        # GSD-138: tool-call loop hit the recursion limit without converging
+        # (common on content-heavy PDFs where locate_phrase returns empty and
+        # the model retries phrasings). Surface a stable code + readable message
+        # instead of leaking the raw "Recursion limit of N reached..." string.
+        logger.warning("auto-highlight run %s hit GRAPH_RECURSION_LIMIT", run_id)
+        error_code = "recursion_limit"
+        error_msg = RECURSION_LIMIT_MESSAGE
     except Exception as e:  # noqa: BLE001
         error_msg = str(e)
 
@@ -277,7 +301,10 @@ async def _run_agent_stream(agent, conn, conn_lock, run_id, conv_id, instruction
         )
 
     if error_msg is not None:
-        yield _sse({"type": "error", "message": error_msg})
+        err_event = {"type": "error", "message": error_msg}
+        if error_code is not None:
+            err_event["code"] = error_code
+        yield _sse(err_event)
         async with conn_lock:
             await conn.execute(
                 "UPDATE ai_highlight_runs SET status = 'failed', completed_at = now() "

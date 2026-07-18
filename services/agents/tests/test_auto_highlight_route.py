@@ -486,6 +486,72 @@ def test_failure_path_marks_run_failed():
         app.dependency_overrides.clear()
 
 
+def test_recursion_limit_emits_graceful_terminal_state():
+    """GSD-138: when the langgraph agent loop hits GRAPH_RECURSION_LIMIT
+    without converging, the stream must emit a structured, user-friendly
+    terminal `error` event (code + readable message) instead of leaking the
+    raw "Recursion limit of N reached..." string as a generic toast. The run
+    row is still marked failed and the stream closes cleanly with [DONE].
+    """
+    from langgraph.errors import GraphRecursionError
+
+    mock_conn = _mock_conn()
+
+    async def override():
+        yield mock_conn
+
+    app.dependency_overrides[deps.db.get_conn] = override
+
+    fake = MagicMock()
+
+    async def astream(_input, _config=None, *, stream_mode=None, **kwargs):
+        yield {"model": {"messages": []}}
+        raise GraphRecursionError(
+            "Recursion limit of 25 reached without hitting a stop condition."
+        )
+
+    fake.astream = astream
+
+    try:
+        with (
+            patch("routers.auto_highlight.create_agent", return_value=fake),
+            patch("routers.auto_highlight.object_exists", AsyncMock(return_value=True)),
+            patch("routers.auto_highlight.download_to_tempfile", _fake_download),
+        ):
+            body = json.dumps({"instruction": "highlight losses"}).encode()
+            r = client.post(
+                PATH, content=body, headers=_signed_headers("POST", PATH, body)
+            )
+            assert r.status_code == 200
+
+            events = _parse_sse(r.text)
+            errs = [
+                e for e in events if isinstance(e, dict) and e.get("type") == "error"
+            ]
+            assert len(errs) == 1, events
+            err = errs[0]
+            # Stable machine code for the UI to branch on.
+            assert err.get("code") == "recursion_limit"
+            # Human message must NOT be the raw langgraph string.
+            assert "Recursion limit of" not in err["message"]
+            assert "couldn't finish" in err["message"].lower() or (
+                "too many" in err["message"].lower()
+            )
+            assert events[-1] == "[DONE]"
+
+        executes = [c.args for c in mock_conn.execute.call_args_list]
+        failed_updates = [
+            args
+            for args in executes
+            if "UPDATE" in args[0].upper()
+            and "AI_HIGHLIGHT_RUNS" in args[0].upper()
+            and "failed" in " ".join(str(a) for a in args)
+        ]
+        assert len(failed_updates) >= 1
+    finally:
+        app.dependency_overrides.clear()
+
+
 def test_cancelled_run_marks_failed():
     """Browser disconnect (CancelledError) -> row marked 'failed' before re-raising."""
     import asyncio
