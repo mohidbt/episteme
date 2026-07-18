@@ -14,6 +14,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { maybeShowGuestError } from "@/lib/guest-error";
 
 type Section = "papers" | "references" | "notes";
 
@@ -71,6 +72,8 @@ export function RenameFolderDialog({
     });
     setBusy(false);
     if (!r.ok) {
+      const body = await r.json().catch(() => null);
+      if (maybeShowGuestError(r, body)) return;
       toast.error("Rename failed");
       return;
     }
@@ -134,6 +137,8 @@ export function DeleteFolderDialog({
     });
     setBusy(false);
     if (!r.ok) {
+      const body = await r.json().catch(() => null);
+      if (maybeShowGuestError(r, body)) return;
       toast.error("Move to Trash failed");
       return;
     }
@@ -203,6 +208,8 @@ export function RenameLeafDialog({
     });
     setBusy(false);
     if (!r.ok) {
+      const body = await r.json().catch(() => null);
+      if (maybeShowGuestError(r, body)) return;
       toast.error("Rename failed");
       return;
     }
@@ -279,6 +286,8 @@ export function DeleteLeafDialog({
     });
     setBusy(false);
     if (!r.ok) {
+      const body = await r.json().catch(() => null);
+      if (maybeShowGuestError(r, body)) return;
       toast.error("Move to Trash failed");
       return;
     }
@@ -335,6 +344,8 @@ export function NewNoteDialog({
     });
     setBusy(false);
     if (!r.ok) {
+      const body = await r.json().catch(() => null);
+      if (maybeShowGuestError(r, body)) return;
       toast.error("Create failed");
       return;
     }
@@ -401,6 +412,8 @@ export function NewFolderDialog({
     });
     setBusy(false);
     if (!r.ok) {
+      const body = await r.json().catch(() => null);
+      if (maybeShowGuestError(r, body)) return;
       if (r.status === 409) {
         toast.error("A folder with that name already exists");
       } else {
@@ -475,6 +488,8 @@ export function MoveDialog({
     });
     setBusy(false);
     if (!r.ok) {
+      const body = await r.json().catch(() => null);
+      if (maybeShowGuestError(r, body)) return;
       toast.error("Move failed");
       return;
     }
@@ -543,6 +558,8 @@ export function MoveFolderDialog({
     });
     setBusy(false);
     if (!r.ok) {
+      const body = await r.json().catch(() => null);
+      if (maybeShowGuestError(r, body)) return;
       toast.error("Move failed");
       return;
     }
