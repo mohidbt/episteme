@@ -1,7 +1,7 @@
 "use client";
 
 import { BubbleMenu, type TiptapEditor } from "@episteme/editor";
-import { useRef, useState, useCallback, useEffect } from "react";
+import { useRef, useState, useCallback, useEffect, useLayoutEffect } from "react";
 import { createPortal } from "react-dom";
 import { runSlashAi } from "@/app/(app)/n/[slug]/run-slash-ai";
 import type { SkillCategory } from "@/lib/skills";
@@ -88,6 +88,52 @@ function RephrasePanel({
   const [skills, setSkills] = useState<SkillEntry[] | null>(null);
   const [skillsError, setSkillsError] = useState<string | null>(null);
 
+  // Enter-to-send must be handled by a NATIVE keydown listener on the input,
+  // not React's `onKeyDown` (GSD-170 real root cause). The rephrase input lives
+  // inside the Tiptap BubbleMenu tippy popper, which — because tippy is
+  // `interactive` with the default `appendTo` — mounts inside the editor's
+  // key-isolation host (packages/editor Editor.tsx). That host runs a
+  // BUBBLE-phase keydown listener (attachEditorKeyIsolation) that
+  // `stopPropagation()`s every non-modifier key except Escape/Tab, Enter
+  // included. React 19 delegates events at `document`, so the stopped keydown
+  // never reaches React's root and the input's React `onKeyDown` never fires —
+  // while the Send button's click is untouched. A native listener bound
+  // directly on the input runs at the target phase, BEFORE the event bubbles up
+  // to the host, so it fires reliably.
+  //
+  // A `ref` carries the latest mode/submit so the handler never goes stale.
+  // A CALLBACK ref (not a plain ref + mount effect) attaches/detaches the
+  // native listener, so it re-binds whenever the input element is remounted —
+  // e.g. after "Refine", which unmounts and re-creates the input.
+  //
+  // The ref is refreshed in a layout effect (post-commit), not during render,
+  // so a discarded concurrent render can't leak uncommitted mode/submit into
+  // the handler. The native keydown only fires on real user interaction, always
+  // after commit, so the committed value is what runs.
+  const enterRef = useRef<{ mode: Mode; submit: () => void }>({ mode, submit: submitPrompt });
+  useLayoutEffect(() => {
+    enterRef.current = { mode, submit: submitPrompt };
+  }, [mode, submitPrompt]);
+  const inputCleanupRef = useRef<(() => void) | null>(null);
+  const inputRef = useCallback((el: HTMLInputElement | null) => {
+    inputCleanupRef.current?.();
+    inputCleanupRef.current = null;
+    if (!el) return;
+    const handler = (e: KeyboardEvent) => {
+      // Match the Send button's availability: any non-streaming mode. Plain
+      // Enter only; Shift+Enter is left alone. submitPrompt no-ops on an
+      // empty/whitespace prompt, mirroring Send. stopPropagation keeps the key
+      // from reaching the underlying editor.
+      if (e.key === "Enter" && !e.shiftKey && enterRef.current.mode !== "rephrase-streaming") {
+        e.preventDefault();
+        e.stopPropagation();
+        enterRef.current.submit();
+      }
+    };
+    el.addEventListener("keydown", handler);
+    inputCleanupRef.current = () => el.removeEventListener("keydown", handler);
+  }, []);
+
   // Lazy-load skills the first time the picker opens.
   useEffect(() => {
     if (!skillsOpen || skills !== null) return;
@@ -137,28 +183,14 @@ function RephrasePanel({
           className="flex items-center justify-center gap-2 px-2"
         >
           <input
+            ref={inputRef}
             type="text"
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
-            onKeyDown={(e) => {
-              // Plain Enter sends whenever the Send button is actionable — i.e.
-              // any mode where the input is shown and we're NOT mid-stream. The
-              // Send button only renders in the non-streaming branch and has no
-              // mode gate, so Enter must match that exact availability. Gating on
-              // `mode === "rephrase-prompt"` was too narrow: during the
-              // BubbleMenu → tippy reparent the handler closure could observe a
-              // transitional mode, so Enter silently did nothing while Send still
-              // worked (GSD-170). `submitPrompt`/submitWithPromptText no-op on an
-              // empty/whitespace prompt, matching Send. Shift+Enter is left alone.
-              // stopPropagation keeps the key from bubbling into the underlying
-              // ProseMirror editor, which would otherwise insert a stray
-              // paragraph break into the note (GSD-170).
-              if (e.key === "Enter" && !e.shiftKey && mode !== "rephrase-streaming") {
-                e.preventDefault();
-                e.stopPropagation();
-                submitPrompt();
-              }
-            }}
+            // Enter-to-send is wired via a native keydown listener on this input
+            // (see the effect above) — a React `onKeyDown` here never fires,
+            // because the editor's key-isolation host stops keydown propagation
+            // before it reaches React's document-level delegation root (GSD-170).
             placeholder={placeholder}
             className="flex-1 bg-transparent text-sm outline-none"
             autoFocus
