@@ -46,9 +46,10 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     >
       <body className="min-h-full">
         {children}
-        {/* MobileGate self-suppresses on /landing via usePathname (GSD-151);
-            no server-side header read here, so the root layout no longer forces
-            dynamic rendering and /landing can be statically prerendered. */}
+        {/* MobileGate self-suppresses on the landing route via the data-landing
+            <html> attribute (GSD-151); no server-side header read here, so the
+            root layout no longer forces dynamic rendering and /landing can be
+            statically prerendered. */}
         <MobileGate />
         <Toaster position="bottom-right" />
         <SpeedInsights />

@@ -28,9 +28,10 @@ export function proxy(request: NextRequest) {
   }
 
   // GSD-151: the landing route is now suppressed client-side (MobileGate reads
-  // usePathname), so the proxy no longer needs to stamp an x-mk-landing header
-  // for the server layout. Removing that read let the root layout drop its
-  // headers() call, which is what unblocked static prerender of /landing.
+  // the data-landing <html> attribute set by the landing page), so the proxy no
+  // longer needs to stamp an x-mk-landing header for the server layout. Removing
+  // that read let the root layout drop its headers() call, which is what
+  // unblocked static prerender of /landing.
   if (decision.kind === "rewrite") {
     const url = request.nextUrl.clone();
     url.pathname = decision.targetPath;
