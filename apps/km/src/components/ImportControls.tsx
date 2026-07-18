@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { type FolderRow } from "@/lib/folders";
 import { FolderDestinationPicker } from "./FolderDestinationPicker";
 import { invalidateDriveTree } from "@/lib/drive-sync";
+import { maybeShowGuestError } from "@/lib/guest-error";
 
 export function ImportControls({
   libraryId,
@@ -35,6 +36,7 @@ export function ImportControls({
       });
       const json = await res.json();
       if (!res.ok) {
+        if (maybeShowGuestError(res, json)) return;
         if (res.status === 413 && json?.error === "over_limit") {
           toast.error("Library is over the 100 MB limit");
         } else {

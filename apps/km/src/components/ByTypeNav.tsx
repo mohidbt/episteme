@@ -21,6 +21,7 @@ import { SidebarSection } from "./SidebarSection";
 import { sidebarSectionIconClassName } from "./SidebarChrome";
 import { cn } from "@/lib/utils";
 import { invalidateDriveTree } from "@/lib/drive-sync";
+import { maybeShowGuestError } from "@/lib/guest-error";
 
 type QuickCreateKind = "note" | "reference" | "paperset";
 
@@ -72,6 +73,8 @@ export function ByTypeNav({ libraryId }: ByTypeNavProps = {}) {
           }),
         });
         if (!r.ok) {
+          const body = await r.json().catch(() => null);
+          if (maybeShowGuestError(r, body)) return;
           toast.error("Create note failed");
           return;
         }
@@ -93,6 +96,8 @@ export function ByTypeNav({ libraryId }: ByTypeNavProps = {}) {
           }),
         });
         if (!r.ok) {
+          const body = await r.json().catch(() => null);
+          if (maybeShowGuestError(r, body)) return;
           toast.error("Create reference failed");
           return;
         }
@@ -117,6 +122,8 @@ export function ByTypeNav({ libraryId }: ByTypeNavProps = {}) {
           }),
         });
         if (!r.ok) {
+          const body = await r.json().catch(() => null);
+          if (maybeShowGuestError(r, body)) return;
           toast.error("Create paperset failed");
           return;
         }

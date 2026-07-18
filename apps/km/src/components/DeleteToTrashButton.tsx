@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { invalidateDriveTree } from "@/lib/drive-sync";
+import { maybeShowGuestError } from "@/lib/guest-error";
 
 export type DeleteToTrashKind = "paper" | "reference" | "note";
 
@@ -34,7 +35,11 @@ export function DeleteToTrashButton({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ libraryId, target: { kind, id } }),
       });
-      if (!res.ok) throw new Error(`status ${res.status}`);
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        if (maybeShowGuestError(res, body)) return;
+        throw new Error(`status ${res.status}`);
+      }
       toast.success("Moved to trash");
       invalidateDriveTree();
       router.push("/drive");
