@@ -6,6 +6,13 @@ import { auth } from "@episteme/auth";
 export interface CurrentSession {
   userId: string;
   isAnonymous: boolean;
+  /**
+   * better-auth core `User.emailVerified` (mirrors the `email_verified`
+   * column). Anonymous users are created unverified; the hard-block gate
+   * (GSD-142) exempts them via `isAnonymous`, so this stays informational
+   * for them.
+   */
+  emailVerified: boolean;
 }
 
 export const getCurrentSession = cache(
@@ -16,6 +23,9 @@ export const getCurrentSession = cache(
       userId: session.user.id,
       isAnonymous: Boolean(
         (session.user as { isAnonymous?: boolean }).isAnonymous,
+      ),
+      emailVerified: Boolean(
+        (session.user as { emailVerified?: boolean }).emailVerified,
       ),
     };
   },

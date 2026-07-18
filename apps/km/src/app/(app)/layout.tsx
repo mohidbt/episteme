@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
+import { redirect } from "next/navigation";
 import { getCurrentSession } from "@/lib/session";
+import { shouldBlockForEmailVerification } from "@/lib/email-verify-gate";
 import { getUserPreferences } from "@/lib/preferences-server";
 import { Sidebar } from "@/components/Sidebar";
 import { SidebarProvider } from "@/components/ui/sidebar";
@@ -15,6 +17,9 @@ import { getGuestTourTargets, type GuestTourTargets } from "@/lib/guest-tour/see
 export default async function AppLayout({ children }: { children: ReactNode }) {
   const session = await getCurrentSession();
   if (!session) return <AnonAutoSignIn />;
+  // GSD-142: hard-block real (non-anonymous) users until their email is
+  // verified. Anonymous/guest sessions are exempt (see shouldBlockFor…).
+  if (shouldBlockForEmailVerification(session)) redirect("/verify-email");
   const prefs = await getUserPreferences(session.userId);
   let guestTourTargets: GuestTourTargets | null = null;
   if (session.isAnonymous) {

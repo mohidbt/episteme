@@ -30,6 +30,7 @@ describe("getCurrentSession", () => {
     expect(await getCurrentSession()).toEqual({
       userId: "user_anon_1",
       isAnonymous: true,
+      emailVerified: false,
     });
   });
 
@@ -41,6 +42,19 @@ describe("getCurrentSession", () => {
     expect(await getCurrentSession()).toEqual({
       userId: "user_real_1",
       isAnonymous: false,
+      emailVerified: false,
+    });
+  });
+
+  it("surfaces emailVerified=true for a verified real user", async () => {
+    getSession.mockResolvedValue({
+      user: { id: "user_real_2", emailVerified: true },
+    });
+    const { getCurrentSession } = await import("./session");
+    expect(await getCurrentSession()).toEqual({
+      userId: "user_real_2",
+      isAnonymous: false,
+      emailVerified: true,
     });
   });
 });
