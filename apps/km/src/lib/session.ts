@@ -10,7 +10,8 @@ export interface CurrentSession {
    * better-auth core `User.emailVerified` (mirrors the `email_verified`
    * column). Anonymous users are created unverified; the hard-block gate
    * (GSD-142) exempts them via `isAnonymous`, so this stays informational
-   * for them.
+   * for them. The anon-plugin user object may omit this field at runtime,
+   * hence the `Boolean(...)` coercion below (undefined -> false).
    */
   emailVerified: boolean;
 }
