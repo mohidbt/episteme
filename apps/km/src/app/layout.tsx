@@ -1,4 +1,7 @@
 import "./globals.css";
+// GSD-171: KaTeX styles for LaTeX rendered in agent output (all 3 surfaces via
+// the shared Streamdown math plugin). Streamdown does not inject plugin CSS.
+import "katex/dist/katex.min.css";
 import type { ReactNode } from "react";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
