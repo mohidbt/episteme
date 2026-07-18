@@ -14,6 +14,7 @@
 // hydration (the prior `resize`-listener version sometimes missed CDP-driven
 // viewport changes on preview deploys).
 import { useSyncExternalStore } from "react";
+import { usePathname } from "next/navigation";
 
 const BREAKPOINT_PX = 768;
 const QUERY = `(max-width: ${BREAKPOINT_PX - 1}px)`;
@@ -58,9 +59,14 @@ function getServerSnapshot(): boolean {
 
 export function MobileGate() {
   const isMobile = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+  const pathname = usePathname();
 
-  // The public marketing landing is fully mobile-responsive; the server layout
-  // skips rendering this gate there (via the x-mk-landing request header).
+  // The public marketing landing is fully mobile-responsive, so the gate is
+  // suppressed there. This is a client-side pathname check (GSD-151) — the
+  // previous server-side x-mk-landing header gate lived in the root layout and
+  // read headers(), which forced dynamic rendering of every route (including
+  // /landing) and blocked its static prerender.
+  if (pathname === "/landing") return null;
   if (!isMobile) return null;
 
   return (

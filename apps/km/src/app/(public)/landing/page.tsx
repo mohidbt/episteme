@@ -26,6 +26,11 @@ export const metadata: Metadata = {
     "Replace Obsidian, Zotero, Acrobat, and ChatGPT with one workspace. Papers, references, highlights, notes, and reading, unified.",
 };
 
+// GSD-151: the marketing landing is fully static (no per-request data). Pin it
+// so it is prerendered at build time and can never silently regress to dynamic
+// rendering if a request-time API is later introduced upstream.
+export const dynamic = "force-static";
+
 export default function LandingPage() {
   return (
     <main

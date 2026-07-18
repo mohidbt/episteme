@@ -4,6 +4,15 @@ import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 import { render, screen, cleanup, act } from "@testing-library/react";
 import { MobileGate, isMobileViewport } from "./MobileGate";
 
+// GSD-151: MobileGate self-suppresses on the public marketing landing via
+// usePathname (replacing the old server-side x-mk-landing header gate, which
+// forced dynamic rendering of every route). Tests drive the pathname via this
+// mutable ref.
+let mockPathname = "/";
+vi.mock("next/navigation", () => ({
+  usePathname: () => mockPathname,
+}));
+
 const DESKTOP_UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36";
 const IPHONE_UA =
@@ -50,6 +59,7 @@ function installMatchMedia() {
 beforeEach(() => {
   listeners.clear();
   installMatchMedia();
+  mockPathname = "/";
 });
 
 afterEach(() => cleanup());
@@ -87,6 +97,16 @@ describe("MobileGate", () => {
   it("renders nothing on a desktop viewport", () => {
     setViewport(1440);
     setUserAgent(DESKTOP_UA);
+    act(() => {
+      render(<MobileGate />);
+    });
+    expect(screen.queryByTestId("mobile-gate")).toBeNull();
+  });
+
+  it("renders nothing on /landing even on a narrow viewport (public surface)", () => {
+    mockPathname = "/landing";
+    setViewport(400);
+    setUserAgent(IPHONE_UA);
     act(() => {
       render(<MobileGate />);
     });
