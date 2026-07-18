@@ -27,24 +27,18 @@ export function proxy(request: NextRequest) {
     return NextResponse.redirect(url, 308);
   }
 
-  // Mark the marketing landing so the server layout skips the desktop-only
-  // MobileGate there. Always derive the marker from the proxy decision (rewrite
-  // of "/" → /landing, or a direct /landing hit on previews) and overwrite any
-  // client-supplied value so it can't be spoofed to bypass the gate elsewhere.
-  const isLanding =
-    (decision.kind === "rewrite" && decision.targetPath === "/landing") ||
-    pathname === "/landing";
-  const requestHeaders = new Headers(request.headers);
-  if (isLanding) requestHeaders.set("x-mk-landing", "1");
-  else requestHeaders.delete("x-mk-landing");
-
+  // GSD-151: the landing route is now suppressed client-side (MobileGate reads
+  // the data-landing <html> attribute set by the landing page), so the proxy no
+  // longer needs to stamp an x-mk-landing header for the server layout. Removing
+  // that read let the root layout drop its headers() call, which is what
+  // unblocked static prerender of /landing.
   if (decision.kind === "rewrite") {
     const url = request.nextUrl.clone();
     url.pathname = decision.targetPath;
-    return NextResponse.rewrite(url, { request: { headers: requestHeaders } });
+    return NextResponse.rewrite(url);
   }
 
-  return NextResponse.next({ request: { headers: requestHeaders } });
+  return NextResponse.next();
 }
 
 export const config = {

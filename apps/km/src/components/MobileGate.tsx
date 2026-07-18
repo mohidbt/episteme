@@ -56,11 +56,39 @@ function getServerSnapshot(): boolean {
   return false;
 }
 
+// GSD-151: the marketing landing sets `data-landing` on <html> (the same marker
+// that hides the Sentry widget) while it is mounted. MobileGate keys off that
+// attribute — NOT usePathname — because the bare marketing domain serves the
+// landing via an internal `/` → `/landing` rewrite, so the client-visible
+// pathname is `/`, not `/landing`; the attribute is the only signal that
+// survives the rewrite. Watching it via useSyncExternalStore also flips the
+// gate off the moment the landing route mounts (it stamps the attr in an
+// effect), so no gate flashes on a mobile landing load.
+function subscribeLanding(cb: () => void): () => void {
+  if (typeof window === "undefined") return () => {};
+  const obs = new MutationObserver(cb);
+  obs.observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ["data-landing"],
+  });
+  return () => obs.disconnect();
+}
+
+function getLandingSnapshot(): boolean {
+  return document.documentElement.hasAttribute("data-landing");
+}
+
 export function MobileGate() {
   const isMobile = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+  const isLanding = useSyncExternalStore(
+    subscribeLanding,
+    getLandingSnapshot,
+    () => false,
+  );
 
-  // The public marketing landing is fully mobile-responsive; the server layout
-  // skips rendering this gate there (via the x-mk-landing request header).
+  // The public marketing landing is fully mobile-responsive, so the gate is
+  // suppressed there.
+  if (isLanding) return null;
   if (!isMobile) return null;
 
   return (
