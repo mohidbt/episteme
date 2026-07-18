@@ -1,17 +1,16 @@
 // @vitest-environment jsdom
 // GSD-11 — mobile-gate viewport detection + render.
-import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
+import { describe, it, expect, afterEach, beforeEach } from "vitest";
 import { render, screen, cleanup, act } from "@testing-library/react";
 import { MobileGate, isMobileViewport } from "./MobileGate";
 
-// GSD-151: MobileGate self-suppresses on the public marketing landing via
-// usePathname (replacing the old server-side x-mk-landing header gate, which
-// forced dynamic rendering of every route). Tests drive the pathname via this
-// mutable ref.
-let mockPathname = "/";
-vi.mock("next/navigation", () => ({
-  usePathname: () => mockPathname,
-}));
+// GSD-151: MobileGate self-suppresses on the public marketing landing. It keys
+// off the `data-landing` attribute that the landing route sets on <html> (the
+// same marker used to hide the Sentry widget), NOT off usePathname — the bare
+// marketing domain serves the landing via an internal `/` → `/landing` rewrite,
+// so the client-visible pathname is `/`, not `/landing`. The attribute is the
+// only signal that survives the rewrite. This replaced the old server-side
+// x-mk-landing header gate, which forced dynamic rendering of every route.
 
 const DESKTOP_UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36";
@@ -59,10 +58,13 @@ function installMatchMedia() {
 beforeEach(() => {
   listeners.clear();
   installMatchMedia();
-  mockPathname = "/";
+  document.documentElement.removeAttribute("data-landing");
 });
 
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+  document.documentElement.removeAttribute("data-landing");
+});
 
 describe("isMobileViewport", () => {
   it("returns true for narrow viewport regardless of UA", () => {
@@ -103,12 +105,31 @@ describe("MobileGate", () => {
     expect(screen.queryByTestId("mobile-gate")).toBeNull();
   });
 
-  it("renders nothing on /landing even on a narrow viewport (public surface)", () => {
-    mockPathname = "/landing";
+  it("renders nothing when the landing marker is present, even on a narrow viewport", () => {
+    // The landing route sets data-landing on <html> (survives the marketing
+    // host's `/` → `/landing` rewrite, where the client pathname is still `/`).
+    document.documentElement.setAttribute("data-landing", "");
     setViewport(400);
     setUserAgent(IPHONE_UA);
     act(() => {
       render(<MobileGate />);
+    });
+    expect(screen.queryByTestId("mobile-gate")).toBeNull();
+  });
+
+  it("hides the gate when the landing marker appears AFTER mount (mobile landing)", async () => {
+    setViewport(400);
+    setUserAgent(IPHONE_UA);
+    act(() => {
+      render(<MobileGate />);
+    });
+    // Gate is visible on a narrow viewport before the landing route mounts.
+    expect(screen.getByTestId("mobile-gate")).toBeTruthy();
+    // Landing route mounts and stamps the marker → gate must disappear. The
+    // MutationObserver callback fires on a microtask, so flush it inside act().
+    await act(async () => {
+      document.documentElement.setAttribute("data-landing", "");
+      await Promise.resolve();
     });
     expect(screen.queryByTestId("mobile-gate")).toBeNull();
   });
