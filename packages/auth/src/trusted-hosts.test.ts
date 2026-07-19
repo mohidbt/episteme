@@ -16,6 +16,16 @@ describe("trustedOriginsFor", () => {
     expect(origins).toContain("https://app.example.org");
   });
 
+  it("ADDS a custom domain to the canonical triple — never replaces it (GSD-148 codex MAJOR)", () => {
+    // A misconfigured/custom EPISTEME_PUBLISH_DOMAIN must not silently drop the
+    // canonical hosts and 403 real logins. Union, not either/or.
+    const origins = trustedOriginsFor("example.org");
+    expect(origins).toContain("https://app.example.org");
+    expect(origins).toContain("https://app.tryepisteme.com");
+    expect(origins).toContain("https://www.tryepisteme.com");
+    expect(origins).toContain("https://tryepisteme.com");
+  });
+
   it("falls back to tryepisteme.com on empty string (|| not ??)", () => {
     // .env.production ships EPISTEME_PUBLISH_DOMAIN="" — must NOT yield garbage "https://app.".
     const origins = trustedOriginsFor("");

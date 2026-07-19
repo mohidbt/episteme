@@ -19,11 +19,10 @@ export function isAllowedOrigin(origin: string | null, host: string | null): boo
   // outage (GSD-148). The empty-string `.env.production` fallback lives inside
   // trustedOriginsFor().
   //
-  // Behavioral note vs. the old hardcoded list: a custom EPISTEME_PUBLISH_DOMAIN
-  // now yields ONLY that domain's triple — it no longer *also* additively trusts
-  // tryepisteme.com. Intentional tightening (a self-host/fork with its own domain
-  // shouldn't trust the canonical domain) and prod-safe: prod ships "" or
-  // "tryepisteme.com", both of which resolve to the same tryepisteme triple.
+  // A custom EPISTEME_PUBLISH_DOMAIN is ADDITIVE: trustedOriginsFor() unions the
+  // canonical tryepisteme.com triple with the configured domain's triple, so an
+  // unexpected env value can never drop the canonical hosts and 403 real logins
+  // (GSD-148 codex MAJOR). Matches better-auth's resolveTrustedOrigins() exactly.
   const allowed = new Set(trustedOriginsFor(process.env.EPISTEME_PUBLISH_DOMAIN));
 
   const addConfiguredOrigin = (raw: string | undefined) => {

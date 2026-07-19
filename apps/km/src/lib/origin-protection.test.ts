@@ -54,6 +54,13 @@ describe("isAllowedOrigin", () => {
     expect(isAllowedOrigin("https://example.org", null)).toBe(true);
   });
 
+  it("a custom EPISTEME_PUBLISH_DOMAIN still trusts the canonical hosts (additive, GSD-148 codex MAJOR)", () => {
+    vi.stubEnv("EPISTEME_PUBLISH_DOMAIN", "example.org");
+    expect(isAllowedOrigin("https://app.tryepisteme.com", null)).toBe(true);
+    expect(isAllowedOrigin("https://www.tryepisteme.com", null)).toBe(true);
+    expect(isAllowedOrigin("https://tryepisteme.com", null)).toBe(true);
+  });
+
   it("allows every landing-CTA host the UI links users to (fails CI on CTA drift)", () => {
     // Driven off the same constants the landing page renders — a divergent CTA
     // host would fail here instead of shipping a login 403.
