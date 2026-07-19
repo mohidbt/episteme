@@ -1,10 +1,11 @@
-import { getCurrentUserId } from "@/lib/session";
+import { requireVerifiedSession } from "@/lib/session";
 import { getUserPreferences } from "@/lib/preferences-server";
 import { FontToggle } from "@/components/FontToggle";
 import { RuledLinesToggle } from "@/components/RuledLinesToggle";
 
 export default async function AppearanceSettingsPage() {
-  const userId = (await getCurrentUserId())!;
+  // GSD-142: gate email verification before reading preferences.
+  const { userId } = await requireVerifiedSession();
   const prefs = await getUserPreferences(userId);
 
   return (
