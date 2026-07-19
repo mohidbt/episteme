@@ -8,6 +8,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./server": "./src/server.ts",
+    "./trusted-hosts": "./src/trusted-hosts.ts",
     "./client": "./src/client.ts",
     "./internal": "./src/internal.ts",
     "./byok": "./src/byok.ts",

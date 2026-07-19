@@ -1,3 +1,5 @@
+import { trustedOriginsFor } from "@episteme/auth/trusted-hosts";
+
 // Allowlist origins — production + previews + local dev. Cross-origin POSTs
 // without a matching Origin header are rejected to prevent CSRF on custom auth
 // routes that run outside better-auth's native handler.
@@ -10,15 +12,18 @@ export function isAllowedOrigin(origin: string | null, host: string | null): boo
     return false;
   }
   if (host && url.host === host) return true;
-  const allowed = new Set([
-    "https://tryepisteme.com",
-    "https://www.tryepisteme.com",
-    "https://app.tryepisteme.com",
-    "http://localhost:3000",
-    "http://localhost:3001",
-    "http://127.0.0.1:3000",
-    "http://127.0.0.1:3001",
-  ]);
+
+  // Publish-domain-derived hosts (bare + www + app.<domain> + localhost/127 dev)
+  // come from the single shared source of truth so this list can never drift
+  // from better-auth's resolveTrustedOrigins() — that drift caused a login-origin
+  // outage (GSD-148). The empty-string `.env.production` fallback lives inside
+  // trustedOriginsFor().
+  //
+  // A custom EPISTEME_PUBLISH_DOMAIN is ADDITIVE: trustedOriginsFor() unions the
+  // canonical tryepisteme.com triple with the configured domain's triple, so an
+  // unexpected env value can never drop the canonical hosts and 403 real logins
+  // (GSD-148 codex MAJOR). Matches better-auth's resolveTrustedOrigins() exactly.
+  const allowed = new Set(trustedOriginsFor(process.env.EPISTEME_PUBLISH_DOMAIN));
 
   const addConfiguredOrigin = (raw: string | undefined) => {
     if (!raw) return;
@@ -34,13 +39,6 @@ export function isAllowedOrigin(origin: string | null, host: string | null): boo
   addConfiguredOrigin(process.env.VERCEL_URL);
   addConfiguredOrigin(process.env.VERCEL_BRANCH_URL);
   addConfiguredOrigin(process.env.VERCEL_PROJECT_PRODUCTION_URL);
-
-  const publishDomain = process.env.EPISTEME_PUBLISH_DOMAIN?.trim();
-  if (publishDomain) {
-    addConfiguredOrigin(publishDomain);
-    addConfiguredOrigin(`www.${publishDomain}`);
-    addConfiguredOrigin(`app.${publishDomain}`);
-  }
 
   // Never trust the shared *.vercel.app namespace. Only the exact deployment
   // hosts supplied by Vercel above are accepted.
