@@ -3,6 +3,7 @@ import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { anonymous } from "better-auth/plugins";
 import { db } from "@episteme/db";
 import * as schema from "@episteme/db/schema";
+import { trustedOriginsFor } from "./trusted-hosts";
 
 export interface CreateAuthOpts {
   /**
@@ -63,23 +64,21 @@ export function resolveTrustedOrigins(): string[] {
       // ignore malformed URL
     }
   };
+  // Publish-domain-derived hosts (bare + www + app.<domain> + localhost/127
+  // dev) come from the single shared source of truth so this list can never
+  // drift from apps/km's isAllowedOrigin() CSRF guard — that drift caused a
+  // login-origin outage (GSD-148). The empty-string `.env.production` fallback
+  // lives inside trustedOriginsFor().
+  for (const origin of trustedOriginsFor(process.env.EPISTEME_PUBLISH_DOMAIN)) {
+    origins.add(origin);
+  }
+  // Layer env-URL-derived origins (preview deploys, custom auth URL) on top —
+  // the shared helper only knows the publish domain, so these must stay here.
   add(process.env.BETTER_AUTH_URL);
   add(process.env.NEXT_PUBLIC_APP_URL);
   add(process.env.VERCEL_URL);
   add(process.env.VERCEL_BRANCH_URL);
   add(process.env.VERCEL_PROJECT_PRODUCTION_URL);
-  // The canonical app host is the `app.` subdomain — the landing page CTA links
-  // users there (GSD-137). bare + www serve marketing, app.<domain> serves the
-  // app, and all three run the auth flow, so all must be trusted origins.
-  // The env URLs above only yield bare + www, so add `app.` explicitly.
-  // `||` (not `??`) so an empty-string env value falls back too — `.env.production`
-  // ships EPISTEME_PUBLISH_DOMAIN="" and `??` would let it through, yielding the
-  // garbage origin `https://app.` and never trusting the real app host.
-  const publishDomain = process.env.EPISTEME_PUBLISH_DOMAIN || "tryepisteme.com";
-  add(publishDomain);
-  add(`app.${publishDomain}`);
-  origins.add("http://localhost:3000");
-  origins.add("http://localhost:3001");
   return Array.from(origins);
 }
 

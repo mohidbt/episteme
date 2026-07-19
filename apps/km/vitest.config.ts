@@ -71,6 +71,10 @@ export default defineConfig({
         __dirname,
         "../../packages/auth/src/internal.ts",
       ),
+      "@episteme/auth/trusted-hosts": path.resolve(
+        __dirname,
+        "../../packages/auth/src/trusted-hosts.ts",
+      ),
       "@episteme/auth": path.resolve(
         __dirname,
         "../../packages/auth/src/index.ts",
