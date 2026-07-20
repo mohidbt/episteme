@@ -107,21 +107,56 @@ def _reject_guest(user_id: str) -> None:
 
 
 def _checkpoint_namespace(user_id: str) -> str:
-    """Return a stable, non-enumerable tenant namespace for LangGraph state.
+    """Return a stable, non-enumerable tenant prefix for LangGraph state.
 
     ``thread_id`` is supplied by the client and is not globally unique.  A
-    per-user checkpoint namespace prevents one tenant from loading or
-    resuming another tenant's checkpoint when the same thread id is reused.
+    per-user prefix on the checkpoint storage key prevents one tenant from
+    loading or resuming another tenant's checkpoint when the same client
+    thread id is reused across tenants.
+
+    GSD-222 root cause: this value was previously used as ``checkpoint_ns``.
+    But ``checkpoint_ns`` is LangGraph's *subgraph* namespace, not a storage
+    partition: LangGraph resets a caller-supplied ``checkpoint_ns`` to ``""``
+    for the ROOT graph (``langgraph/pregel/_loop.py`` — ``if not
+    self.is_nested and config[CONF].get(CONFIG_KEY_CHECKPOINT_NS): ... ns =
+    ""``) and PUTs the checkpoint under ``""``, while the saver keys storage
+    rows by ``(thread_id, checkpoint_ns)``.  So writing under
+    ``tenant-<sha>`` silently landed under ``""`` and reading under
+    ``tenant-<sha>`` found nothing → every chat transcript rendered empty.
+    Tenancy now lives in ``thread_id`` (which LangGraph honors verbatim); see
+    ``_checkpoint_thread_key``.
     """
     digest = hashlib.sha256(user_id.encode("utf-8")).hexdigest()
     return f"tenant-{digest}"
 
 
+def _checkpoint_thread_key(*, thread_id: str, user_id: str) -> str:
+    """Derive the tenant-scoped LangGraph checkpoint storage key.
+
+    LangGraph persists (and looks up) checkpoints by ``thread_id`` verbatim,
+    but resets a caller-supplied ``checkpoint_ns`` to ``""`` on the root
+    graph.  So tenancy must be folded into the ``thread_id`` itself: a client
+    thread id reused across tenants resolves to a *different* storage key per
+    tenant, keeping the GSD-207 isolation property (tenant A cannot load
+    tenant B's checkpoint) while making write-key == read-key so the state
+    actually round-trips.
+
+    Note: side tables (``agent_thread_papers``, message metadata) stay keyed
+    on the raw client ``thread_id`` — only the LangGraph checkpointer key is
+    tenant-derived here.
+    """
+    return f"{_checkpoint_namespace(user_id)}:{thread_id}"
+
+
 def _checkpoint_lookup_config(*, thread_id: str, user_id: str) -> dict:
     return {
         "configurable": {
-            "thread_id": thread_id,
-            "checkpoint_ns": _checkpoint_namespace(user_id),
+            "thread_id": _checkpoint_thread_key(
+                thread_id=thread_id, user_id=user_id
+            ),
+            # Root-graph ns is always "" (LangGraph resets it); pin it so the
+            # saver query keys match what invoke actually persisted.
+            "checkpoint_ns": "",
         }
     }
 
@@ -586,8 +621,12 @@ def _build_configurable(
     need.
     """
     configurable: dict = {
-        "thread_id": thread_id,
-        "checkpoint_ns": _checkpoint_namespace(user_id),
+        # Tenant-scoped storage key — LangGraph persists this verbatim, so it
+        # must equal the key `_checkpoint_lookup_config` reads back with.
+        "thread_id": _checkpoint_thread_key(thread_id=thread_id, user_id=user_id),
+        # Root-graph ns is always "" (LangGraph resets a caller-supplied ns);
+        # do NOT set it to a tenant value — that silently broke persistence.
+        "checkpoint_ns": "",
         "user_id": user_id,
     }
     if active_paper_id:
@@ -1190,35 +1229,32 @@ async def state(thread_id: str, auth: InternalAuthDep):
     tuple_ = await saver.aget_tuple(config)
     if tuple_ is None:
         return {"todos": [], "pending_interrupts": [], "messages": []}
-    # Defense in depth on top of the tenant checkpoint namespace. The lookup
-    # config above already scopes ``aget_tuple`` to the caller's tenant
-    # ``checkpoint_ns`` — a foreign thread_id resolves to None, not a leak.
+    # GSD-222 root cause: tenancy now lives in the checkpoint ``thread_id``
+    # (``_checkpoint_thread_key`` = ``tenant-<sha>:<client_thread_id>``), NOT
+    # in ``checkpoint_ns`` — LangGraph resets a caller-supplied
+    # ``checkpoint_ns`` to ``""`` on the root graph, so the prior ns-based
+    # scoping was never actually applied at write time and every legit read
+    # returned None (empty transcript). The lookup config above scopes
+    # ``aget_tuple`` to the caller's derived key: a foreign caller derives a
+    # DIFFERENT key → the saver returns None → the ``tuple_ is None`` branch
+    # above returns empty, not a leak.
     #
-    # GSD-222: the previous check compared ``configurable.user_id``, but
-    # AsyncPostgresSaver only reconstructs thread_id / checkpoint_ns /
-    # checkpoint_id into ``config.configurable`` on a cold read — arbitrary
-    # keys (``user_id``) are dropped — so the check 403'd every real thread and
-    # both the reader panel and /agents/[id] rendered an empty transcript.
-    # Verify the ``checkpoint_ns`` instead: it survives the round-trip and must
-    # equal this caller's namespace.
-    #
-    # FINDING 4 (fail-closed): DENY when ``checkpoint_ns`` is absent / null /
-    # empty on the restored tuple. Every legit thread is stamped with the
-    # tenant namespace at invoke time (``_build_configurable`` → ``checkpoint_ns
-    # = _checkpoint_namespace(user_id)``), so real history always carries a
-    # non-empty ns and returns 200. An absent/empty ns is only reachable from
-    # unscoped / legacy / default-namespace state; trusting it would let a
-    # caller read another tenant's thread, so we fail closed instead of falling
-    # back to the (namespace-scoped) query.
-    expected_ns = _checkpoint_namespace(caller_user_id)
+    # Defense in depth (fail-closed): the saver reconstructs the stored
+    # ``thread_id`` (the derived key) into ``tuple_.config.configurable`` on a
+    # cold read — verify it equals this caller's expected derived key. This
+    # guards against a saver that ignores the WHERE clause. DENY when the
+    # restored key is absent / null / mismatched.
+    expected_key = _checkpoint_thread_key(
+        thread_id=thread_id, user_id=caller_user_id
+    )
     tuple_cfg = getattr(tuple_, "config", None) or {}
     tuple_configurable = tuple_cfg.get("configurable") if isinstance(tuple_cfg, dict) else None
-    owner_ns = (
-        tuple_configurable.get("checkpoint_ns")
+    owner_key = (
+        tuple_configurable.get("thread_id")
         if isinstance(tuple_configurable, dict)
         else None
     )
-    if not owner_ns or owner_ns != expected_ns:
+    if not owner_key or owner_key != expected_key:
         from fastapi import HTTPException  # noqa: PLC0415
         raise HTTPException(status_code=403, detail="thread not owned by caller")
     channel_values = tuple_.checkpoint.get("channel_values", {})
@@ -1417,8 +1453,13 @@ async def extract(req: Request, auth: InternalAuthDep):
                     {"messages": [{"role": "user", "content": prompt}]},
                     config={
                         "configurable": {
-                            "thread_id": tid,
-                            "checkpoint_ns": _checkpoint_namespace(user_id),
+                            # Tenant-scoped storage key; root-graph ns stays ""
+                            # (LangGraph resets a caller ns) — matching the
+                            # invoke/state keying so persistence round-trips.
+                            "thread_id": _checkpoint_thread_key(
+                                thread_id=tid, user_id=user_id
+                            ),
+                            "checkpoint_ns": "",
                             "user_id": user_id,
                             "ocr_key": ocr_key,
                             "allow_direct_csv_write": True,

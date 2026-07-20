@@ -61,7 +61,13 @@ def test_build_configurable_injects_ocr_and_llm_keys():
     cfg = _build_configurable(
         thread_id="t-1", user_id="u-1", auth=auth, active_paper_id=None
     )
-    assert cfg["thread_id"] == "t-1"
+    # GSD-222: checkpoint thread_id is tenant-derived (tenant-<sha>:<client>)
+    # and checkpoint_ns is "" — the client thread_id must NOT be the raw key.
+    from routers.km_agent import _checkpoint_thread_key  # noqa: PLC0415
+
+    assert cfg["thread_id"] == _checkpoint_thread_key(thread_id="t-1", user_id="u-1")
+    assert cfg["thread_id"] != "t-1"
+    assert cfg["checkpoint_ns"] == ""
     assert cfg["user_id"] == "u-1"
     assert cfg["ocr_key"] == "ocr-test-key"
     assert cfg["llm_key"] == "llm-test-key"
