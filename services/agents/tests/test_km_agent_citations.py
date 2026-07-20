@@ -301,6 +301,25 @@ def test_state_rejects_caller_when_checkpoint_ns_empty_string() -> None:
     assert r.status_code == 403, r.text
 
 
+def test_state_rejects_caller_when_checkpoint_ns_explicit_none() -> None:
+    """FINDING 4 (fail-closed): an explicit ``checkpoint_ns: None`` on the
+    restored config must DENY too — the fail-closed guard treats null the same
+    as absent/empty, never falling back to trusting the query."""
+    from langchain_core.messages import AIMessage  # noqa: PLC0415
+
+    path = "/agents/km/state/thread-none-ns"
+    mock_tuple = MagicMock()
+    mock_tuple.checkpoint = {"channel_values": {"todos": [], "messages": [AIMessage(content="x", id="a-1")]}}
+    mock_tuple.config = {"configurable": {"thread_id": "thread-none-ns", "checkpoint_ns": None}}
+    mock_saver = MagicMock()
+    mock_saver.aget_tuple = AsyncMock(return_value=mock_tuple)
+
+    with patch("routers.km_agent.get_saver", return_value=mock_saver):
+        r = client.get(path, headers=_signed_headers("GET", path, b""))
+
+    assert r.status_code == 403, r.text
+
+
 def test_persist_metadata_called_during_invoke_source() -> None:
     """Citations persist inline during the SSE stream — both /invoke and
     /resume must call ``persist_message_metadata`` when emitting sources.
