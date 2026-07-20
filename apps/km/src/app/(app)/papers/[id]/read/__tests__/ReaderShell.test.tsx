@@ -1,7 +1,17 @@
 // @vitest-environment jsdom
 import type React from "react";
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, cleanup, waitFor } from "@testing-library/react";
+import { render, cleanup, waitFor, screen, act } from "@testing-library/react";
+import { fireEvent } from "@testing-library/react";
+
+// Run a callback inside act() and flush the resulting microtasks. Used to
+// drive React state updates from a raw handler invocation in tests.
+async function actAsync(fn: () => void): Promise<void> {
+  await act(async () => {
+    fn();
+    await Promise.resolve();
+  });
+}
 
 const searchParamsRef: { value: URLSearchParams } = { value: new URLSearchParams() };
 
@@ -507,6 +517,220 @@ describe("ReaderShell PastThreadsDropdown refresh signal (codex NEEDS-FIX)", () 
     await waitFor(() => {
       expect(pastThreadsPropsRef.value?.refreshKey).toBe(initialKey + 1);
     });
+
+    vi.unstubAllGlobals();
+  });
+});
+
+describe("ReaderShell new-thread control (GSD-222 bug a)", () => {
+  it("renders a 'New chat' button when a thread is active", async () => {
+    storeStateRef.value = {
+      panelOpen: true,
+      mountPoint: "reader-side-panel",
+      activeThreadId: "tid-existing",
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("{}", { status: 200 })),
+    );
+
+    vi.resetModules();
+    const { ReaderShell } = await import("../ReaderShell");
+    render(<ReaderShell paperId="paper-new-chat" />);
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: /new chat/i }),
+      ).toBeTruthy();
+    });
+
+    vi.unstubAllGlobals();
+  });
+
+  it("POSTs a fresh thread and switches to it when 'New chat' is clicked", async () => {
+    storeStateRef.value = {
+      panelOpen: true,
+      mountPoint: "reader-side-panel",
+      activeThreadId: "tid-old",
+    };
+
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.includes("/api/agent/threads") && init?.method === "POST") {
+        return new Response(
+          JSON.stringify({ thread: { threadId: "tid-brand-new" } }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      return new Response("{}", { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    vi.resetModules();
+    const { ReaderShell } = await import("../ReaderShell");
+    render(<ReaderShell paperId="paper-new-chat-2" />);
+
+    const btn = await waitFor(() =>
+      screen.getByRole("button", { name: /new chat/i }),
+    );
+    fireEvent.click(btn);
+
+    await waitFor(() => {
+      expect(setActiveThreadSpy).toHaveBeenCalledWith("tid-brand-new");
+    });
+
+    const createdNew = fetchMock.mock.calls.some(
+      (c) =>
+        String(c[0]).includes("/api/agent/threads") &&
+        (c[1] as RequestInit | undefined)?.method === "POST",
+    );
+    expect(createdNew).toBe(true);
+
+    vi.unstubAllGlobals();
+  });
+
+  it("re-enables 'New chat' after its in-flight POST is aborted/superseded (codex NEEDS-FIX)", async () => {
+    // Reproduces the stuck-button bug: if the create-thread POST is aborted
+    // (e.g. the user picks a past thread, or a second new-chat click) while
+    // pending, `newThreadPending` must still reset — otherwise the button is
+    // permanently disabled.
+    storeStateRef.value = {
+      panelOpen: true,
+      mountPoint: "reader-side-panel",
+      activeThreadId: "tid-old",
+    };
+
+    // /api/agent/threads never resolves on its own; it only settles when its
+    // AbortSignal fires (mirrors the real fetch reject-on-abort behaviour).
+    const fetchMock = vi.fn((input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.includes("/api/agent/threads") && init?.method === "POST") {
+        return new Promise<Response>((_resolve, reject) => {
+          const signal = init?.signal;
+          if (signal) {
+            signal.addEventListener("abort", () =>
+              reject(new DOMException("aborted", "AbortError")),
+            );
+          }
+        });
+      }
+      return Promise.resolve(new Response("{}", { status: 200 }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    vi.resetModules();
+    const { ReaderShell } = await import("../ReaderShell");
+    render(<ReaderShell paperId="paper-abort" />);
+
+    const btn = await waitFor(() =>
+      screen.getByRole("button", { name: /new chat/i }),
+    );
+    // Kick off the new-chat POST — button becomes disabled while pending.
+    fireEvent.click(btn);
+    await waitFor(() =>
+      expect(
+        (screen.getByRole("button", { name: /new chat/i }) as HTMLButtonElement)
+          .disabled,
+      ).toBe(true),
+    );
+
+    // Supersede it (user picks a past thread) → aborts the in-flight controller.
+    (pastThreadsPropsRef.value?.onSelect as ((id: string) => void) | undefined)?.(
+      "tid-picked",
+    );
+
+    // The button MUST re-enable — not stay stuck disabled.
+    await waitFor(() =>
+      expect(
+        (screen.getByRole("button", { name: /new chat/i }) as HTMLButtonElement)
+          .disabled,
+      ).toBe(false),
+    );
+
+    vi.unstubAllGlobals();
+  });
+
+  it("keeps 'New chat' disabled when a SUPERSEDED create resolves while a newer create is still pending (FINDING 3)", async () => {
+    // The `disabled` attribute is only the UI-level guard; the pending-state
+    // machine must ALSO be correct so a superseded invocation's `finally`
+    // cannot re-enable the control while a newer create is still in flight
+    // (which would let a third create spawn a duplicate thread). Drive the
+    // handler directly (the button's onClick) to exercise the state machine:
+    // invocation A, then invocation B (which aborts A and starts a new POST),
+    // then resolve the SUPERSEDED A — the button must STAY disabled because B
+    // is still pending.
+    storeStateRef.value = {
+      panelOpen: true,
+      mountPoint: "reader-side-panel",
+      activeThreadId: "tid-old",
+    };
+
+    const posts: Array<{
+      resolve: (r: Response) => void;
+      aborted: boolean;
+    }> = [];
+    const fetchMock = vi.fn((input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.includes("/api/agent/threads") && init?.method === "POST") {
+        return new Promise<Response>((resolve) => {
+          const entry = { resolve, aborted: false };
+          posts.push(entry);
+          init?.signal?.addEventListener("abort", () => {
+            entry.aborted = true;
+          });
+        });
+      }
+      return Promise.resolve(new Response("{}", { status: 200 }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    vi.resetModules();
+    const { ReaderShell } = await import("../ReaderShell");
+    render(<ReaderShell paperId="paper-supersede" />);
+
+    const liveBtn = () =>
+      screen.getByRole("button", { name: /new chat/i }) as HTMLButtonElement;
+    await waitFor(() => expect(liveBtn()).toBeTruthy());
+
+    // Read the React onClick handler directly off the button's fiber props so
+    // we can drive the pending-state machine independently of the DOM
+    // `disabled` gate (which is only the first line of defense). This exercises
+    // the guard the finding asks for: a superseded invocation must not clear
+    // the pending flag that a newer invocation now owns.
+    const clickHandler = (): (() => void) => {
+      const btn = liveBtn();
+      const key = Object.keys(btn).find((k) =>
+        k.startsWith("__reactProps$"),
+      );
+      const props = (btn as unknown as Record<string, { onClick?: () => void }>)[
+        key as string
+      ];
+      return props.onClick as () => void;
+    };
+
+    // Invocation A — POST A pending, button disabled.
+    await actAsync(() => clickHandler()());
+    await waitFor(() => expect(posts.length).toBe(1));
+    await waitFor(() => expect(liveBtn().disabled).toBe(true));
+
+    // Invocation B supersedes A (aborts A's controller, starts POST B).
+    await actAsync(() => clickHandler()());
+    await waitFor(() => expect(posts.length).toBe(2));
+    expect(posts[0].aborted).toBe(true);
+
+    // Resolve the SUPERSEDED invocation A. Its `finally` runs — but B is still
+    // in flight, so the button must STAY disabled.
+    posts[0].resolve(
+      new Response(JSON.stringify({ thread: { threadId: "tid-A" } }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    await new Promise((r) => setTimeout(r, 20));
+
+    expect(liveBtn().disabled).toBe(true);
+    // The superseded A must NOT have switched the active thread.
+    expect(setActiveThreadSpy).not.toHaveBeenCalledWith("tid-A");
 
     vi.unstubAllGlobals();
   });

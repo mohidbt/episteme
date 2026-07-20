@@ -13,8 +13,14 @@ os.environ["INHALE_INTERNAL_SECRET"] = SECRET
 
 from app import app  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
+from routers.km_agent import _checkpoint_namespace  # noqa: E402
 
 client = TestClient(app)
+
+# Tenant namespace a real cold read reconstructs for the signed caller
+# ("user_1"). /state tests exercising a legit thread must stamp this on the
+# mock tuple's ``checkpoint_ns`` so the fail-closed owner check returns 200.
+_CALLER_NS = _checkpoint_namespace("user_1")
 
 
 # ---------------------------------------------------------------------------
@@ -739,7 +745,7 @@ def test_state_returns_todos_from_checkpoint():
     path = "/agents/km/state/thread-abc"
     mock_tuple = MagicMock()
     mock_tuple.checkpoint = {"channel_values": {"todos": ["task A", "task B"]}}
-    mock_tuple.config = {"configurable": {"user_id": "user_1"}}
+    mock_tuple.config = {"configurable": {"thread_id": path.rsplit("/", 1)[-1], "checkpoint_ns": _CALLER_NS}}
 
     mock_saver = MagicMock()
     mock_saver.aget_tuple = AsyncMock(return_value=mock_tuple)
@@ -776,7 +782,7 @@ def test_state_returns_serialized_messages_from_checkpoint():
     ]
     mock_tuple = MagicMock()
     mock_tuple.checkpoint = {"channel_values": {"todos": [], "messages": msgs}}
-    mock_tuple.config = {"configurable": {"user_id": "user_1"}}
+    mock_tuple.config = {"configurable": {"thread_id": path.rsplit("/", 1)[-1], "checkpoint_ns": _CALLER_NS}}
     mock_saver = MagicMock()
     mock_saver.aget_tuple = AsyncMock(return_value=mock_tuple)
 
@@ -816,7 +822,7 @@ def test_state_serializes_tool_calls_into_parts_for_hydration():
     ]
     mock_tuple = MagicMock()
     mock_tuple.checkpoint = {"channel_values": {"todos": [], "messages": msgs}}
-    mock_tuple.config = {"configurable": {"user_id": "user_1"}}
+    mock_tuple.config = {"configurable": {"thread_id": path.rsplit("/", 1)[-1], "checkpoint_ns": _CALLER_NS}}
     mock_saver = MagicMock()
     mock_saver.aget_tuple = AsyncMock(return_value=mock_tuple)
 

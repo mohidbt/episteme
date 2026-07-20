@@ -5,6 +5,7 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import dynamic from "next/dynamic";
 import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
+import { PlusIcon } from "lucide-react";
 import { postHighlightsChange } from "@episteme/reader/highlights-channel";
 import { AgentTranscript } from "@/components/agent/AgentTranscript";
 import { PastThreadsDropdown } from "@/components/agent/PastThreadsDropdown";
@@ -246,6 +247,42 @@ function ReaderShellInner({ paperId }: { paperId: string }) {
     useAgentBallStore.getState().setActiveThread(threadId);
   }, []);
 
+  // GSD-222 (bug a) — start a brand-new conversation on this paper. The reader
+  // otherwise only ever CONTINUES the restored/most-recent thread; there was no
+  // way to begin a fresh transcript. POST a new empty thread and switch to it —
+  // changing `activeThreadId` remounts <AgentTranscript> (keyed on it) and
+  // resets the /state hydration to an empty history.
+  const [newThreadPending, setNewThreadPending] = useState(false);
+  const handleNewThread = useCallback(async () => {
+    // Abort any in-flight restore/create so its .then() can't clobber the id
+    // we're about to set, then take a fresh controller for this POST.
+    threadCtlRef.current?.abort();
+    threadInFlightRef.current = null;
+    const ctl = new AbortController();
+    threadCtlRef.current = ctl;
+    setNewThreadPending(true);
+    try {
+      const id = await createThread(ctl.signal);
+      if (ctl.signal.aborted) return;
+      if (id) useAgentBallStore.getState().setActiveThread(id);
+      else toast.error("Couldn't start a new chat. Please try again.");
+    } finally {
+      // FINDING 3 — per-invocation guard. Only clear the pending flag if THIS
+      // invocation is still the current one (its controller is still the one
+      // stored on the ref). Two supersession shapes:
+      //   • A newer handleNewThread() replaces threadCtlRef.current with its own
+      //     controller. This stale finally must NOT clear pending — the newer,
+      //     still-in-flight create owns it (else the button re-enables mid-flight
+      //     and a further click spawns a duplicate thread).
+      //   • handlePickPastThread() aborts this controller but leaves
+      //     threadCtlRef.current pointing at it, so `=== ctl` still holds and we
+      //     DO clear pending — the button re-enables (abort-recovery preserved).
+      // Gating on `!ctl.signal.aborted` instead was wrong: it left the button
+      // permanently disabled after a pick-past abort (prior codex NEEDS-FIX).
+      if (threadCtlRef.current === ctl) setNewThreadPending(false);
+    }
+  }, []);
+
   // K8 follow-up: chat-input messages go through AgentTranscript.defaultSend
   // → POST /api/agents/km/invoke (NOT through `handleExplainPassage`). The
   // server stamps thread→paper during that /invoke, so the dropdown's
@@ -261,6 +298,17 @@ function ReaderShellInner({ paperId }: { paperId: string }) {
 
   const agentSlot = activeThreadId ? (
     <div className="flex h-full min-h-0 flex-col">
+      <div className="flex items-center justify-end border-b border-border/60 bg-background px-3 pt-2.5 pb-1">
+        <button
+          type="button"
+          onClick={() => void handleNewThread()}
+          disabled={newThreadPending}
+          className="inline-flex h-7 items-center gap-1.5 rounded-[10px] border border-border px-2.5 text-xs text-foreground outline-none transition-colors hover:border-foreground/30 focus-visible:border-foreground/40 focus-visible:ring-2 focus-visible:ring-ring/40 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <PlusIcon aria-hidden className="size-3.5" />
+          New chat
+        </button>
+      </div>
       <PastThreadsDropdown
         paperId={paperId}
         onSelect={handlePickPastThread}
