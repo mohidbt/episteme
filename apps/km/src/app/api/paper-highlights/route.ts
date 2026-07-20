@@ -1,6 +1,6 @@
 import { and, asc, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { paperHighlights, papers } from "@episteme/db/schema";
+import { paperHighlights, papers, userHighlights } from "@episteme/db/schema";
 import { getAuthedUserId, MissingInternalSecretError } from "@/lib/internal-auth";
 import { requireNonGuestAuthed } from "@/lib/auth/require-non-guest";
 import { paperHighlightCreateManySchema } from "@/lib/validators";
@@ -40,7 +40,41 @@ export async function GET(req: Request) {
       ),
     )
     .orderBy(asc(paperHighlights.createdAt));
-  return Response.json(rows);
+
+  // GSD-138: the auto-highlight pipeline + reader-chat `create_highlights`
+  // persist AI highlights to `user_highlights` (source='ai-auto', layer_id=run,
+  // rects[]), NOT `paper_highlights`. The reader's AI panel reads only this
+  // endpoint, so those rows must be surfaced here — mapped into the
+  // paper_highlights row shape the reader already renders (`use-paper-highlights`
+  // `toRects` accepts `bbox` as a rects array; `layer_id` → `runId`). Manual
+  // user highlights (source='user') are served by /api/user-highlights and are
+  // intentionally excluded here.
+  const aiRows = await db
+    .select()
+    .from(userHighlights)
+    .where(
+      and(
+        eq(userHighlights.paperId, paperId),
+        eq(userHighlights.userId, userId),
+        eq(userHighlights.source, "ai-auto"),
+      ),
+    )
+    .orderBy(asc(userHighlights.createdAt));
+
+  const mappedAiRows = aiRows.map((h) => ({
+    id: String(h.id),
+    paperId: h.paperId,
+    userId: h.userId,
+    page: h.pageNumber,
+    bbox: h.rects,
+    runId: h.layerId,
+    toolCallId: null,
+    color: h.color,
+    noteMd: h.note,
+    createdAt: h.createdAt,
+  }));
+
+  return Response.json([...rows, ...mappedAiRows]);
 }
 
 export async function POST(req: Request) {

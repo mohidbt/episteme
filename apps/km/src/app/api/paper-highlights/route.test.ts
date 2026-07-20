@@ -14,6 +14,9 @@ import {
 } from "../_test-utils";
 import { ensureMinIOReady } from "../_minio-setup";
 import { storage, paperSourceKey, paperCoverKey } from "@/lib/storage";
+import { db } from "@/lib/db";
+import { aiHighlightRuns, userHighlights } from "@episteme/db/schema";
+import { eq } from "drizzle-orm";
 
 let u: TestUser;
 let other: TestUser;
@@ -271,6 +274,59 @@ describe("paper-highlights", () => {
     } finally {
       if (prevSecret === undefined) delete process.env.INHALE_INTERNAL_SECRET;
       else process.env.INHALE_INTERNAL_SECRET = prevSecret;
+    }
+  });
+
+  it("GET surfaces auto-highlight rows written to user_highlights (source='ai-auto')", async () => {
+    // GSD-138: the auto-highlight pipeline persists to `user_highlights`
+    // (source='ai-auto', layer_id=run.id, rects[]), NOT `paper_highlights`.
+    // The reader's AI panel reads /api/paper-highlights, so those rows must be
+    // surfaced here — mapped into the paper_highlights row shape — or they
+    // never render and don't survive reload.
+    const [run] = await db
+      .insert(aiHighlightRuns)
+      .values({
+        paperId,
+        userId: u.id,
+        instruction: "highlight the methodology",
+        status: "completed",
+      })
+      .returning();
+
+    const rects = [{ page: 2, x0: 10, y0: 20, x1: 110, y1: 32 }];
+    const [uh] = await db
+      .insert(userHighlights)
+      .values({
+        userId: u.id,
+        paperId,
+        pageNumber: 2,
+        textContent: "the methodology section",
+        startOffset: 5,
+        endOffset: 28,
+        color: "amber",
+        source: "ai-auto",
+        layerId: run.id,
+        note: "auto note",
+        rects,
+      })
+      .returning();
+
+    try {
+      const list = await GET(
+        req(`/api/paper-highlights?paperId=${paperId}`, { cookie: u.cookie }),
+      );
+      expect(list.status).toBe(200);
+      const rows = await list.json();
+      const found = rows.find((r: any) => r.runId === run.id);
+      expect(found, "auto-highlight row must be surfaced via /api/paper-highlights").toBeTruthy();
+      expect(found.page).toBe(2);
+      expect(found.color).toBe("amber");
+      expect(found.noteMd).toBe("auto note");
+      // rects array is surfaced as `bbox` so the reader's toRects() renders it.
+      expect(found.bbox).toEqual(rects);
+    } finally {
+      await db.delete(userHighlights).where(eq(userHighlights.id, uh.id));
+      await db.delete(aiHighlightRuns).where(eq(aiHighlightRuns.id, run.id));
     }
   });
 
