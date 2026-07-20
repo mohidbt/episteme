@@ -3,6 +3,7 @@
 import { useState, type FormEvent } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { normalizeLinkHref } from "@/lib/normalize-link-href";
 
 export interface LinkPopoverProps {
   /** Reserved for parent state machines — component itself always renders. */
@@ -30,7 +31,10 @@ export function LinkPopover({
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
     if (!href.trim()) return;
-    onSave({ text: text.trim() || href.trim(), href: href.trim() });
+    // Normalize a bare hostname (`google.com`) to `https://google.com` so it
+    // isn't persisted as a link relative to the current editor route (GSD-224).
+    const normalizedHref = normalizeLinkHref(href);
+    onSave({ text: text.trim() || normalizedHref, href: normalizedHref });
   };
 
   return (

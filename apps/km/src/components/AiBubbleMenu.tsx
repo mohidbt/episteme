@@ -608,6 +608,10 @@ export function AiBubbleMenu({
         shouldShow={({ state }) => {
           if (inBubbleRephrase) return true;
           if (inPortalRephrase) return false;
+          // While the link popover overlay is open, dismiss the formatting
+          // toolbar so it doesn't overlap the popover (GSD-224a). Mirrors the
+          // inPortalRephrase early-return above.
+          if (linkOpen) return false;
           const { from, to } = state.selection;
           return from !== to;
         }}

@@ -32,6 +32,26 @@ describe("LinkPopover", () => {
     expect(onSave).toHaveBeenCalledWith({ text: "click me", href: "https://foo.com" });
   });
 
+  it("normalizes a bare hostname to https:// on save", () => {
+    const onSave = vi.fn();
+    render(
+      <LinkPopover open initialText="" initialHref="" onSave={onSave} onCancel={vi.fn()} />,
+    );
+    fireEvent.change(screen.getByLabelText(/url/i), { target: { value: "google.com" } });
+    fireEvent.click(screen.getByRole("button", { name: /insert/i }));
+    expect(onSave).toHaveBeenCalledWith({ text: "https://google.com", href: "https://google.com" });
+  });
+
+  it("leaves an already-absolute href unchanged on save", () => {
+    const onSave = vi.fn();
+    render(
+      <LinkPopover open initialText="go" initialHref="" onSave={onSave} onCancel={vi.fn()} />,
+    );
+    fireEvent.change(screen.getByLabelText(/url/i), { target: { value: "mailto:a@b.com" } });
+    fireEvent.click(screen.getByRole("button", { name: /insert/i }));
+    expect(onSave).toHaveBeenCalledWith({ text: "go", href: "mailto:a@b.com" });
+  });
+
   it("calls onCancel and not onSave when Cancel is clicked", () => {
     const onSave = vi.fn();
     const onCancel = vi.fn();
