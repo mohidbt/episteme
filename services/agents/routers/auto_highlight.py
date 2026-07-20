@@ -30,12 +30,22 @@ router = APIRouter(prefix="/agents", tags=["auto-highlight"])
 
 # GSD-138: each highlight candidate costs two super-steps (page_text +
 # locate_phrase), and a multi-passage instruction may drill into several
-# candidates before the single create_highlights batch and finish. The old
-# limit of 25 (~11 model↔tool rounds) tripped GRAPH_RECURSION_LIMIT mid-stream
-# on content-heavy PDFs where locate_phrase returns empty (extraction mismatch)
-# and the model retries a few phrasings. 40 (~19 rounds) gives that headroom
-# while staying bounded by TOTAL_TIMEOUT_S below, so cost/latency stay capped.
-AGENT_RECURSION_LIMIT = 40  # max tool-call depth before agent aborts
+# candidates before the single create_highlights batch and finish. Disabling
+# parallel tool calls (no_parallel_tool_calls, GSD-138) makes those rounds
+# sequential, so each candidate now consumes its own model↔tool super-step pair
+# instead of batching — a realistic 20–40 candidate paper needs ~2*N+2
+# super-steps, which saturated the old limit of 40 and surfaced a terminal
+# GRAPH_RECURSION_LIMIT error mid-run.
+#
+# This is a MAX cap, not a per-run cost: normal runs terminate early (they hit
+# `finish` long before the cap), so raising it does NOT increase cost/latency
+# for typical papers — the wall-clock TOTAL_TIMEOUT_S below still bounds every
+# run. It only lets large multi-candidate runs complete instead of erroring.
+# 100 (matching km_agent.py's deep-agent limit) gives headroom for ~25–40
+# candidates. If even 100 is exceeded, the terminal `recursion_limit` error
+# (see GraphRecursionError handling in _run_agent_stream) still surfaces so the
+# run fails loudly rather than spinning silently.
+AGENT_RECURSION_LIMIT = 100  # max tool-call depth before agent aborts
 IDLE_TIMEOUT_S = 60  # max seconds between stream updates before we give up
 TOTAL_TIMEOUT_S = 300  # hard wall-clock ceiling per run (5 minutes)
 

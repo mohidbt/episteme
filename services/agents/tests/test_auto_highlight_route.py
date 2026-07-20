@@ -13,6 +13,9 @@ os.environ["INHALE_STUB_EMBEDDINGS"] = "1"
 import deps.db  # noqa: E402
 from app import app  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
+from langchain_core.language_models.fake_chat_models import (  # noqa: E402
+    FakeMessagesListChatModel,
+)
 
 client = TestClient(app)
 
@@ -486,9 +489,132 @@ def test_failure_path_marks_run_failed():
         app.dependency_overrides.clear()
 
 
+class _FakeToolCallingModel(FakeMessagesListChatModel):
+    """Scripted chat model whose bind_tools returns self so create_agent can
+    cycle through the canned responses (the base class raises on bind_tools).
+    """
+
+    def bind_tools(self, tools, **kwargs):  # type: ignore[override]
+        return self
+
+
+def _large_candidate_agent(n_candidates: int):
+    """Build a REAL create_agent driven by a scripted model that performs
+    `n_candidates` sequential model→tool rounds (mirroring the post-GSD-138
+    sequential highlight loop, where parallel tool calls are disabled) and then
+    calls `finish`.
+
+    Each candidate consumes two langgraph super-steps (model turn + tool turn),
+    plus the finish model turn + finish tool turn + a final prose model turn to
+    reach END, so the run needs ~2*N+3 super-steps. This lets us exercise the
+    REAL `recursion_limit=` config value the route applies, rather than a
+    hand-raised GraphRecursionError.
+    """
+    from langchain.agents import create_agent
+    from langchain_core.messages import AIMessage
+    from langchain_core.tools import tool
+
+    from lib.no_parallel_tools import no_parallel_tool_calls
+
+    @tool
+    def page_text(page_number: int) -> str:
+        """Return the text of a page (trivial stub for the recursion test)."""
+        return f"text for page {page_number}"
+
+    turns: list = []
+    for i in range(n_candidates):
+        turns.append(
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "id": f"call_{i}",
+                        "name": "page_text",
+                        "args": {"page_number": i + 1},
+                        "type": "tool_call",
+                    }
+                ],
+            )
+        )
+    turns.append(
+        AIMessage(
+            content="",
+            tool_calls=[
+                {
+                    "id": "call_finish",
+                    "name": "finish",
+                    "args": {"summary": f"Highlighted {n_candidates} passages."},
+                    "type": "tool_call",
+                }
+            ],
+        )
+    )
+    # After `finish` runs, the real model responds in prose (no tool calls),
+    # which routes the agent to END — mirroring production, where `finish` is a
+    # normal tool that does not itself terminate the graph.
+    turns.append(AIMessage(content="Done."))
+
+    @tool
+    def finish(summary: str) -> str:
+        """Signal completion."""
+        return json.dumps({"summary": summary, "done": True})
+
+    model = _FakeToolCallingModel(responses=turns)
+    return create_agent(
+        model=model,
+        tools=[page_text, finish],
+        system_prompt="hi",
+        middleware=[no_parallel_tool_calls],
+    )
+
+
+def test_large_candidate_run_completes_within_recursion_limit_100():
+    """GSD-138 follow-up: raising AGENT_RECURSION_LIMIT to 100 lets a realistic
+    large multi-candidate paper (~25 sequential model→tool rounds, which is what
+    disabling parallel tool calls produces) reach `finish` instead of tripping
+    GRAPH_RECURSION_LIMIT. This drives a REAL langgraph agent through the route's
+    own `_run_agent_stream` with the REAL `recursion_limit=AGENT_RECURSION_LIMIT`
+    config, so it fails if the limit is ever lowered below the ~2*N+3 super-steps
+    the workload needs (25 candidates -> ~53 super-steps; tripped at limit 40).
+    """
+    import asyncio
+
+    from routers.auto_highlight import _run_agent_stream
+
+    n_candidates = 25
+    agent = _large_candidate_agent(n_candidates)
+
+    mock_conn = _mock_conn()
+    mock_conn.fetchval.return_value = n_candidates  # highlights persisted
+    conn_lock = asyncio.Lock()
+
+    async def run() -> list:
+        chunks: list[str] = []
+        async for chunk in _run_agent_stream(
+            agent,
+            mock_conn,
+            conn_lock,
+            run_id="11111111-1111-1111-1111-111111111111",
+            conv_id=42,
+            instruction="highlight all the losses in this long paper",
+        ):
+            chunks.append(chunk)
+        return _parse_sse("".join(chunks))
+
+    events = asyncio.run(run())
+
+    errs = [e for e in events if isinstance(e, dict) and e.get("type") == "error"]
+    assert not errs, f"large run must not error at limit 100; got {errs}"
+    dones = [e for e in events if isinstance(e, dict) and e.get("type") == "done"]
+    assert len(dones) == 1, events
+    assert dones[0]["summary"] == f"Highlighted {n_candidates} passages."
+    assert events[-1] == "[DONE]"
+
+
 def test_recursion_limit_emits_graceful_terminal_state():
     """GSD-138: when the langgraph agent loop hits GRAPH_RECURSION_LIMIT
-    without converging, the stream must emit a structured, user-friendly
+    without converging (even at the raised limit of 100, a truly pathological
+    run can still exhaust it), the stream must emit a structured, user-friendly
     terminal `error` event (code + readable message) instead of leaking the
     raw "Recursion limit of N reached..." string as a generic toast. The run
     row is still marked failed and the stream closes cleanly with [DONE].
