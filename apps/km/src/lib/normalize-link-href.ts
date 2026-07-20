@@ -10,6 +10,14 @@ const HAS_SCHEME = /^[a-z][a-z0-9+.-]*:/i;
 // mistaken for a scheme separator.
 const HOST_PORT = /^(?:localhost|[a-z0-9-]+(?:\.[a-z0-9-]+)+):\d+(?:[/?#]|$)/i;
 
+// A bare hostname as the first path segment, e.g. `google.com` or
+// `sub.example.co.uk/path?q=1`. The first segment (up to the next `/`, `?`, or
+// `#`) must contain a dot with a TLD-like label (2+ letters) after it, so we
+// only auto-prepend `https://` when the input really looks like an external
+// host. Schemeless relative paths (`foo/bar`, `foo`) have no such dotted-TLD
+// first segment and are left untouched.
+const HOST_NAME = /^[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}(?:[/?#:]|$)/i;
+
 // Schemes that can execute script or smuggle payloads. The manual link-insert
 // path (AiBubbleMenu/LinkBubbleMenu) writes the href straight into a link mark
 // via insertContent, bypassing Tiptap's setLink protocol allowlist, so we guard
@@ -31,6 +39,10 @@ const DANGEROUS_SCHEME = /^(?:javascript|data|vbscript|file):/i;
  * - internal/relative links (`/n/foo`, `#anchor`, `?q=1`)
  */
 export function normalizeLinkHref(input: string): string {
+  // Runtime guard: callers occasionally hand us null/undefined/non-string
+  // values (unset href attrs, malformed pasted marks). Fail closed to an inert
+  // href rather than throwing on `.trim()`.
+  if (typeof input !== "string") return "#";
   const trimmed = input.trim();
   if (!trimmed) return "";
   // Neutralize script-bearing schemes to an inert relative href rather than
@@ -40,5 +52,9 @@ export function normalizeLinkHref(input: string): string {
   if (HAS_SCHEME.test(trimmed)) return trimmed;
   if (trimmed.startsWith("//")) return trimmed;
   if (/^[/#?]/.test(trimmed)) return trimmed;
-  return `https://${trimmed}`;
+  // Only auto-prepend `https://` when the first path segment looks like an
+  // external host (dotted name with a TLD). Otherwise treat it as an
+  // intentional relative path (`./foo`, `../foo`, `foo/bar`) and leave it be.
+  if (HOST_NAME.test(trimmed)) return `https://${trimmed}`;
+  return trimmed;
 }
