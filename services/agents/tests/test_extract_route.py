@@ -83,7 +83,13 @@ def _build_agent_with_events(per_cell_events_by_thread):
     agent = MagicMock()
 
     async def astream_events(input_, config, version):  # noqa: ARG001
+        # GSD-222: the route passes a tenant-derived checkpoint key
+        # (``tenant-<sha>:<client_thread_id>``). Recover the client thread_id
+        # by stripping the single ``tenant-<sha>:`` prefix (the prefix has no
+        # internal ':'), keeping the ``extract:pset:row:col`` keying below.
         thread_id = config["configurable"]["thread_id"]
+        if thread_id.startswith("tenant-"):
+            thread_id = thread_id.split(":", 1)[1]
         spec = per_cell_events_by_thread.get(thread_id, [])
         if isinstance(spec, Exception):
             raise spec

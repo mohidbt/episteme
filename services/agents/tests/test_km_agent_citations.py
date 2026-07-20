@@ -19,16 +19,26 @@ from app import app  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
 from routers.km_agent import (  # noqa: E402
-    _checkpoint_namespace,
+    _checkpoint_thread_key,
     _extract_rag_citations_from_tool_result,
 )
 
 client = TestClient(app)
 
-# The tenant namespace a real cold read reconstructs for the signed caller
-# ("user_1"). Legit-thread /state tests must stamp this on the mock tuple's
-# ``checkpoint_ns`` so the fail-closed owner check (FINDING 4) returns 200.
-_CALLER_NS = _checkpoint_namespace("user_1")
+
+def _restored_configurable(client_thread_id: str, *, user_id: str = "user_1") -> dict:
+    """GSD-222: what AsyncPostgresSaver reconstructs on a cold read — the stored
+    ``thread_id`` (the tenant-derived key) + ``checkpoint_ns=""``. The
+    fail-closed owner check verifies the restored key equals the caller's
+    derived key, so legit-thread /state tests must stamp the derived key."""
+    return {
+        "configurable": {
+            "thread_id": _checkpoint_thread_key(
+                thread_id=client_thread_id, user_id=user_id
+            ),
+            "checkpoint_ns": "",
+        }
+    }
 
 
 def _signed_headers(method: str, path: str, body: bytes) -> dict:
@@ -143,7 +153,7 @@ def test_state_surfaces_citations_from_metadata_table() -> None:
     msgs = [HumanMessage(content="why?", id="u-1"), ai]
     mock_tuple = MagicMock()
     mock_tuple.checkpoint = {"channel_values": {"todos": [], "messages": msgs}}
-    mock_tuple.config = {"configurable": {"thread_id": path.rsplit("/", 1)[-1], "checkpoint_ns": _CALLER_NS}}
+    mock_tuple.config = _restored_configurable(path.rsplit("/", 1)[-1])
     mock_saver = MagicMock()
     mock_saver.aget_tuple = AsyncMock(return_value=mock_tuple)
 
@@ -191,7 +201,7 @@ def test_state_strips_lc_run_prefix_when_merging_metadata() -> None:
     msgs = [HumanMessage(content="q", id="u-1"), ai]
     mock_tuple = MagicMock()
     mock_tuple.checkpoint = {"channel_values": {"todos": [], "messages": msgs}}
-    mock_tuple.config = {"configurable": {"thread_id": path.rsplit("/", 1)[-1], "checkpoint_ns": _CALLER_NS}}
+    mock_tuple.config = _restored_configurable(path.rsplit("/", 1)[-1])
     mock_saver = MagicMock()
     mock_saver.aget_tuple = AsyncMock(return_value=mock_tuple)
 
@@ -216,19 +226,27 @@ def test_state_strips_lc_run_prefix_when_merging_metadata() -> None:
 
 def test_state_rejects_caller_when_thread_owner_mismatches() -> None:
     """GSD-222: /state/{thread_id} 403s when the checkpoint's restored
-    ``configurable.checkpoint_ns`` belongs to a DIFFERENT tenant.
+    ``configurable.thread_id`` (the tenant-derived key) belongs to a DIFFERENT
+    tenant.
 
-    (Rewritten from the pre-GSD-222 ``user_id`` contract: AsyncPostgresSaver
-    drops ``user_id`` on a cold read but preserves ``checkpoint_ns``, so the
-    owner check is enforced on the namespace instead.)
+    (Rewritten from the pre-GSD-222 ``checkpoint_ns`` contract: tenancy now
+    lives in the ``thread_id`` because LangGraph resets a caller-supplied
+    ``checkpoint_ns`` to "" on the root graph — see the roundtrip test.)
     """
     from langchain_core.messages import AIMessage  # noqa: PLC0415
-    from routers.km_agent import _checkpoint_namespace  # noqa: PLC0415
 
     path = "/agents/km/state/thread-owner-mismatch"
     mock_tuple = MagicMock()
     mock_tuple.checkpoint = {"channel_values": {"todos": [], "messages": [AIMessage(content="x", id="a-1")]}}
-    mock_tuple.config = {"configurable": {"thread_id": "thread-owner-mismatch", "checkpoint_ns": _checkpoint_namespace("user_999")}}
+    # Restored key belongs to user_999, not the signed caller (user_1).
+    mock_tuple.config = {
+        "configurable": {
+            "thread_id": _checkpoint_thread_key(
+                thread_id="thread-owner-mismatch", user_id="user_999"
+            ),
+            "checkpoint_ns": "",
+        }
+    }
     mock_saver = MagicMock()
     mock_saver.aget_tuple = AsyncMock(return_value=mock_tuple)
 
@@ -239,14 +257,13 @@ def test_state_rejects_caller_when_thread_owner_mismatches() -> None:
 
 
 def test_state_allows_caller_when_thread_owner_matches() -> None:
-    """GSD-222: caller's own tenant ``checkpoint_ns`` on the checkpoint → 200."""
+    """GSD-222: caller's own tenant-derived key on the checkpoint → 200."""
     from langchain_core.messages import AIMessage  # noqa: PLC0415
-    from routers.km_agent import _checkpoint_namespace  # noqa: PLC0415
 
     path = "/agents/km/state/thread-owner-match"
     mock_tuple = MagicMock()
     mock_tuple.checkpoint = {"channel_values": {"todos": [], "messages": [AIMessage(content="x", id="a-1")]}}
-    mock_tuple.config = {"configurable": {"thread_id": "thread-owner-match", "checkpoint_ns": _checkpoint_namespace("user_1")}}
+    mock_tuple.config = _restored_configurable("thread-owner-match")
     mock_saver = MagicMock()
     mock_saver.aget_tuple = AsyncMock(return_value=mock_tuple)
 
@@ -256,23 +273,18 @@ def test_state_allows_caller_when_thread_owner_matches() -> None:
     assert r.status_code == 200, r.text
 
 
-def test_state_rejects_caller_when_checkpoint_ns_absent() -> None:
-    """FINDING 4 (fail-closed): when the restored config carries NO
-    ``checkpoint_ns`` we must DENY with 403 — never trust an
-    unscoped/legacy/fallback tuple.
-
-    Legit threads are always stamped with the tenant namespace at invoke time
-    (``_build_configurable``), so real history still returns 200 (ns present →
-    the equality check runs). An absent ns is only reachable from unscoped or
-    legacy state and must not disclose another tenant's messages, so we fail
-    closed rather than fall back to trusting the query.
-    """
+def test_state_rejects_caller_when_thread_key_absent() -> None:
+    """Fail-closed: when the restored config carries NO ``thread_id`` we DENY
+    with 403 — never trust an unscoped/legacy tuple. Legit cold reads always
+    reconstruct the tenant-derived ``thread_id`` (the saver's PK column), so
+    real history still returns 200; an absent key is only reachable from
+    unscoped/legacy state and must not disclose another tenant's messages."""
     from langchain_core.messages import AIMessage  # noqa: PLC0415
 
-    path = "/agents/km/state/thread-no-ns"
+    path = "/agents/km/state/thread-no-key"
     mock_tuple = MagicMock()
     mock_tuple.checkpoint = {"channel_values": {"todos": [], "messages": [AIMessage(content="x", id="a-1")]}}
-    mock_tuple.config = {"configurable": {"thread_id": "thread-no-ns"}}  # no checkpoint_ns
+    mock_tuple.config = {"configurable": {"checkpoint_ns": ""}}  # no thread_id
     mock_saver = MagicMock()
     mock_saver.aget_tuple = AsyncMock(return_value=mock_tuple)
 
@@ -282,16 +294,17 @@ def test_state_rejects_caller_when_checkpoint_ns_absent() -> None:
     assert r.status_code == 403, r.text
 
 
-def test_state_rejects_caller_when_checkpoint_ns_empty_string() -> None:
-    """FINDING 4 (fail-closed): an empty-string ``checkpoint_ns`` is falsy and
-    must also DENY — the langgraph saver reconstructs ``checkpoint_ns`` as ""
-    for the default namespace, so this is the realistic legacy/unscoped shape."""
+def test_state_rejects_caller_when_thread_key_is_raw_client_id() -> None:
+    """Fail-closed: an unscoped legacy checkpoint whose restored ``thread_id``
+    is the RAW client id (pre-GSD-222, no tenant prefix) must DENY — it does
+    not equal the caller's derived key, so trusting it would leak legacy
+    unscoped state across tenants."""
     from langchain_core.messages import AIMessage  # noqa: PLC0415
 
-    path = "/agents/km/state/thread-empty-ns"
+    path = "/agents/km/state/thread-legacy"
     mock_tuple = MagicMock()
     mock_tuple.checkpoint = {"channel_values": {"todos": [], "messages": [AIMessage(content="x", id="a-1")]}}
-    mock_tuple.config = {"configurable": {"thread_id": "thread-empty-ns", "checkpoint_ns": ""}}
+    mock_tuple.config = {"configurable": {"thread_id": "thread-legacy", "checkpoint_ns": ""}}
     mock_saver = MagicMock()
     mock_saver.aget_tuple = AsyncMock(return_value=mock_tuple)
 
@@ -301,16 +314,15 @@ def test_state_rejects_caller_when_checkpoint_ns_empty_string() -> None:
     assert r.status_code == 403, r.text
 
 
-def test_state_rejects_caller_when_checkpoint_ns_explicit_none() -> None:
-    """FINDING 4 (fail-closed): an explicit ``checkpoint_ns: None`` on the
-    restored config must DENY too — the fail-closed guard treats null the same
-    as absent/empty, never falling back to trusting the query."""
+def test_state_rejects_caller_when_thread_key_explicit_none() -> None:
+    """Fail-closed: an explicit ``thread_id: None`` on the restored config must
+    DENY too — the guard treats null the same as absent/mismatched."""
     from langchain_core.messages import AIMessage  # noqa: PLC0415
 
-    path = "/agents/km/state/thread-none-ns"
+    path = "/agents/km/state/thread-none-key"
     mock_tuple = MagicMock()
     mock_tuple.checkpoint = {"channel_values": {"todos": [], "messages": [AIMessage(content="x", id="a-1")]}}
-    mock_tuple.config = {"configurable": {"thread_id": "thread-none-ns", "checkpoint_ns": None}}
+    mock_tuple.config = {"configurable": {"thread_id": None, "checkpoint_ns": ""}}
     mock_saver = MagicMock()
     mock_saver.aget_tuple = AsyncMock(return_value=mock_tuple)
 
@@ -346,7 +358,7 @@ def test_state_omits_citations_when_metadata_empty() -> None:
     msgs = [AIMessage(content="hi", id="a-x")]
     mock_tuple = MagicMock()
     mock_tuple.checkpoint = {"channel_values": {"todos": [], "messages": msgs}}
-    mock_tuple.config = {"configurable": {"thread_id": path.rsplit("/", 1)[-1], "checkpoint_ns": _CALLER_NS}}
+    mock_tuple.config = _restored_configurable(path.rsplit("/", 1)[-1])
     mock_saver = MagicMock()
     mock_saver.aget_tuple = AsyncMock(return_value=mock_tuple)
 
