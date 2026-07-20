@@ -600,18 +600,13 @@ def test_cancelled_run_marks_failed():
     assert len(failed_updates) >= 1
 
 
-def test_agent_disables_parallel_tool_calls():
-    """GSD-138 root cause: the model must NOT emit parallel tool calls.
+def test_auto_highlight_agent_wires_no_parallel_middleware():
+    """GSD-138: the auto-highlight agent must be built WITH the
+    `no_parallel_tool_calls` middleware (wiring guard).
 
-    When two tool calls arrive in one assistant turn, OpenRouter/OpenAI cancels
-    one branch ("another message came in before it could be completed") and
-    `create_highlights` — the persisting branch — is the one discarded, so
-    highlights never persist and the stream dies with zero output.
-
-    The auto-highlight agent must be built with the `no_parallel_tool_calls`
-    middleware. We capture the `middleware` kwarg passed to create_agent, then
-    drive the real middleware against a fake handler and assert it forces
-    `parallel_tool_calls=False` into the model bind settings.
+    This asserts wiring only; the async-path behavior (that the flag actually
+    reaches bind_tools under .astream()) is proved by
+    `test_no_parallel_flag_reaches_bind_tools_on_async_path` below.
     """
     from lib.no_parallel_tools import no_parallel_tool_calls
 
@@ -649,30 +644,75 @@ def test_agent_disables_parallel_tool_calls():
     finally:
         app.dependency_overrides.clear()
 
-    # Drive the real middleware: it must inject parallel_tool_calls=False into
-    # the model bind settings threaded into ChatOpenAI.bind_tools.
-    from langchain.agents.middleware import ModelRequest
 
-    seen: dict = {}
+def test_no_parallel_flag_reaches_bind_tools_on_async_path():
+    """GSD-138 async-path regression (the bug a `.invoke()`-only test hid).
 
-    def handler(req):
-        seen["model_settings"] = dict(req.model_settings)
-        return None
+    Both real call sites drive the agent with `.astream()` (async), which routes
+    through `awrap_model_call`, NOT `wrap_model_call`. A sync-only
+    `@wrap_model_call` middleware raises NotImplementedError on the async path,
+    so `parallel_tool_calls=False` NEVER reaches `model.bind_tools(...)` and the
+    parallel-tool-call cancellation keeps corrupting highlight runs.
 
-    request = ModelRequest(
-        model=MagicMock(),
-        system_prompt=None,
-        messages=[],
-        tool_choice=None,
-        tools=[],
-        response_format=None,
-        model_settings={},
-        runtime=MagicMock(),
-        state={},
+    Build a REAL `create_agent` agent with the real `no_parallel_tool_calls`
+    middleware and a real `ChatOpenAI`, spy on `ChatOpenAI.bind_tools`, and drive
+    a real `.astream(...)`. The network call is expected to fail (no server), but
+    only AFTER bind_tools runs — proving the flag was threaded through the async
+    middleware chain into the provider binding.
+    """
+    import asyncio
+
+    from langchain.agents import create_agent
+    from langchain_core.tools import tool
+    from langchain_openai import ChatOpenAI
+
+    from lib.no_parallel_tools import no_parallel_tool_calls
+
+    @tool
+    def sample_tool(x: str) -> str:
+        """A sample tool."""
+        return x
+
+    calls: list[dict] = []
+    orig_bind_tools = ChatOpenAI.bind_tools
+
+    def spy_bind_tools(self, tools, **kwargs):
+        calls.append(kwargs)
+        return orig_bind_tools(self, tools, **kwargs)
+
+    model = ChatOpenAI(
+        model="gpt-4o-mini",
+        api_key="sk-test",
+        base_url="http://127.0.0.1:1",  # unroutable: forces a fast connection error
     )
-    no_parallel_tool_calls.wrap_model_call(request, handler)
-    assert seen["model_settings"].get("parallel_tool_calls") is False, (
-        f"middleware must set parallel_tool_calls=False; got {seen['model_settings']!r}"
+    agent = create_agent(
+        model=model,
+        tools=[sample_tool],
+        system_prompt="hi",
+        middleware=[no_parallel_tool_calls],
+    )
+
+    async def drive():
+        with patch.object(ChatOpenAI, "bind_tools", spy_bind_tools):
+            try:
+                async for _ in agent.astream(
+                    {"messages": [{"role": "user", "content": "hi"}]}
+                ):
+                    pass
+            except Exception:
+                # Network failure AFTER bind_tools is the expected/normal outcome.
+                pass
+
+    asyncio.run(drive())
+
+    assert calls, (
+        "bind_tools was never called on the async path — the sync-only "
+        "middleware raised NotImplementedError under .astream() before the model "
+        "was ever bound (this is the GSD-138 bug)."
+    )
+    assert any(c.get("parallel_tool_calls") is False for c in calls), (
+        "parallel_tool_calls=False must reach model.bind_tools() on the async "
+        f"(.astream) path; bind_tools kwargs seen: {calls!r}"
     )
 
 
@@ -834,3 +874,148 @@ def test_clean_no_match_prose_exit_is_not_an_error():
         assert len(completed_updates) >= 1, "clean no-match run must be completed"
     finally:
         app.dependency_overrides.clear()
+
+
+def test_sequential_multi_candidate_run_fits_recursion_limit():
+    """GSD-138 codex RISK: forcing `parallel_tool_calls=False` serializes tool
+    calls, so each highlight candidate costs its own model↔tool round instead of
+    sharing a parallel turn. That consumes more langgraph super-steps against
+    AGENT_RECURSION_LIMIT=40 (routers/auto_highlight.py).
+
+    Drive the REAL `create_agent` graph (real langgraph super-step accounting)
+    with a scripted model that mimics the worst realistic sequential shape —
+    semantic_search, then page_text + locate_phrase one-tool-per-turn for 8
+    candidates, then create_highlights, then finish — and assert it reaches
+    `finish` WITHOUT GraphRecursionError at the production limit of 40.
+
+    Measured headroom (this harness, limit=40): 8 candidates one-tool-per-turn
+    fit (19 model turns ≈ 38 super-steps); 9 candidates trip the limit. 8
+    passages is ample for a realistic multi-passage instruction, so 40 has
+    enough headroom for the forced-sequential regime. If the toolbelt ever grows
+    tool rounds per candidate, bump AGENT_RECURSION_LIMIT and this fixture.
+    """
+    import asyncio
+    from typing import Any
+
+    from langchain.agents import create_agent
+    from langchain_core.callbacks import CallbackManagerForLLMRun
+    from langchain_core.language_models.chat_models import BaseChatModel
+    from langchain_core.messages import AIMessage, BaseMessage
+    from langchain_core.outputs import ChatGeneration, ChatResult
+    from langchain_core.tools import tool
+    from langgraph.errors import GraphRecursionError
+
+    from lib.no_parallel_tools import no_parallel_tool_calls
+    from routers.auto_highlight import AGENT_RECURSION_LIMIT
+
+    # Stub tools mirroring the real toolbelt names so the graph's ToolNode runs
+    # trivially (no PDF/DB) while the model drives a realistic call sequence.
+    @tool
+    def semantic_search(query: str) -> str:
+        """Find candidate passages."""
+        return "candidates found"
+
+    @tool
+    def page_text(page_number: int) -> str:
+        """Read a page's text."""
+        return "page text"
+
+    @tool
+    def locate_phrase(page_number: int, phrase: str) -> str:
+        """Locate a phrase's offsets/rects."""
+        return "located"
+
+    @tool
+    def create_highlights(matches: list) -> str:
+        """Persist the highlight batch."""
+        return "created"
+
+    @tool
+    def finish(summary: str) -> str:
+        """Finish the run."""
+        return "done"
+
+    N_CANDIDATES = 8
+
+    def _tc(name: str, args: dict, i: int) -> dict:
+        return {"name": name, "args": args, "id": f"call_{i}", "type": "tool_call"}
+
+    # One tool call PER model turn (the forced-sequential worst case).
+    script: list[dict] = [_tc("semantic_search", {"query": "q"}, 0)]
+    idx = 1
+    for c in range(N_CANDIDATES):
+        script.append(_tc("page_text", {"page_number": c + 1}, idx))
+        idx += 1
+        script.append(_tc("locate_phrase", {"page_number": c + 1, "phrase": "p"}, idx))
+        idx += 1
+    script.append(_tc("create_highlights", {"matches": [{"page_number": 1}]}, idx))
+    idx += 1
+    script.append(_tc("finish", {"summary": "done"}, idx))
+
+    class ScriptedModel(BaseChatModel):
+        """Emits one scripted tool call per turn, then a plain terminal message.
+
+        The agent loop stops when the model returns a message with NO tool calls,
+        so the post-script turn must be plain content (mirroring the model's
+        final assistant reply after `finish`).
+        """
+
+        step: int = 0
+
+        @property
+        def _llm_type(self) -> str:
+            return "scripted"
+
+        def bind_tools(self, tools, **kwargs):
+            # Tool schemas don't affect the scripted output; ignore them (and the
+            # parallel_tool_calls kwarg the middleware injects) and just bind.
+            return self.bind(**kwargs)
+
+        def _generate(
+            self,
+            messages: list[BaseMessage],
+            stop: list[str] | None = None,
+            run_manager: CallbackManagerForLLMRun | None = None,
+            **kwargs: Any,
+        ) -> ChatResult:
+            i = self.step
+            self.step += 1
+            if i < len(script):
+                msg = AIMessage(content="", tool_calls=[script[i]])
+            else:
+                msg = AIMessage(content="Highlighting complete.")
+            return ChatResult(generations=[ChatGeneration(message=msg)])
+
+    agent = create_agent(
+        model=ScriptedModel(),
+        tools=[semantic_search, page_text, locate_phrase, create_highlights, finish],
+        system_prompt="hi",
+        middleware=[no_parallel_tool_calls],
+    )
+
+    saw_finish = {"v": False}
+
+    async def drive():
+        async for update in agent.astream(
+            {"messages": [{"role": "user", "content": "highlight everything"}]},
+            config={"recursion_limit": AGENT_RECURSION_LIMIT},
+            stream_mode="updates",
+        ):
+            for _node, state in (update or {}).items():
+                for m in (state or {}).get("messages", []) or []:
+                    for tc in getattr(m, "tool_calls", None) or []:
+                        if tc.get("name") == "finish":
+                            saw_finish["v"] = True
+
+    try:
+        asyncio.run(drive())
+    except GraphRecursionError as e:  # pragma: no cover - the failure we guard
+        raise AssertionError(
+            f"{N_CANDIDATES}-candidate sequential highlight run exceeded "
+            f"AGENT_RECURSION_LIMIT={AGENT_RECURSION_LIMIT}: {e}"
+        ) from e
+
+    assert saw_finish["v"], (
+        "sequential multi-candidate run must reach `finish` within "
+        f"AGENT_RECURSION_LIMIT={AGENT_RECURSION_LIMIT}"
+    )
