@@ -16,6 +16,7 @@ from deps.db import ConnDep
 from lib.auto_highlight_tools import TOOLBELT_SYSTEM_HINT, build_tools
 from lib.chat import CHAT_MODEL, OPENROUTER_BASE
 from lib.conversations import ConversationNotFound, bump_updated_at, insert_message
+from lib.no_parallel_tools import no_parallel_tool_calls
 from lib.storage import (
     SourcePdfMissing,
     download_to_tempfile,
@@ -182,7 +183,10 @@ async def auto_highlight(body: AutoHighlightBody, auth: InternalAuthDep, conn: C
                 conn_lock=conn_lock,
             )
             agent = create_agent(
-                model=model, tools=tools, system_prompt=SYSTEM_PROMPT
+                model=model,
+                tools=tools,
+                system_prompt=SYSTEM_PROMPT,
+                middleware=[no_parallel_tool_calls],
             )
             async for chunk in _run_agent_stream(
                 agent, conn, conn_lock, run_id, conv_id, instruction
@@ -205,6 +209,8 @@ async def _run_agent_stream(agent, conn, conn_lock, run_id, conv_id, instruction
     caller's download_to_tempfile context) stays alive for the whole run.
     """
     summary = ""
+    finished = False
+    create_attempted = False
     error_msg: str | None = None
     error_code: str | None = None
     iterator = agent.astream(
@@ -252,7 +258,10 @@ async def _run_agent_stream(agent, conn, conn_lock, run_id, conv_id, instruction
                         yield _sse(
                             {"type": "progress", "step": name, "detail": detail}
                         )
+                        if name == "create_highlights":
+                            create_attempted = True
                         if name == "finish":
+                            finished = True
                             summary = str(args.get("summary", "")) or summary
     except asyncio.CancelledError:
         # Browser disconnect: cancel the underlying agent generator, mark row
@@ -298,6 +307,28 @@ async def _run_agent_stream(agent, conn, conn_lock, run_id, conv_id, instruction
                 run_id,
             )
             or 0
+        )
+
+    # GSD-138 no-silent-death: the model ATTEMPTED create_highlights (it intended
+    # to persist) but the loop ended with 0 rows and never reached `finish` —
+    # the mid-flight cancellation outcome where the create_highlights tool call
+    # is superseded and dropped. Surface a terminal error instead of a hollow
+    # `done` (highlightsCount 0) that the UI renders as silent success.
+    #
+    # A clean no-match run is DIFFERENT: the tool spec tells the model to answer
+    # in prose without calling create_highlights (or finish), so create_attempted
+    # is False and we let it complete normally — not every zero-highlight run is a
+    # failure.
+    if (
+        error_msg is None
+        and highlights_count == 0
+        and create_attempted
+        and not finished
+    ):
+        error_code = "no_highlights"
+        error_msg = (
+            "The assistant tried to highlight this document but the highlights "
+            "were cancelled before they could be saved. Please try again."
         )
 
     if error_msg is not None:

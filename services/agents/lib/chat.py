@@ -3,6 +3,7 @@ from typing import Any
 from langchain.agents import create_agent
 from langchain_core.messages import AIMessage, AIMessageChunk, ToolMessage
 from langchain_openai import ChatOpenAI
+from lib.no_parallel_tools import no_parallel_tool_calls
 from lib.rag import ChunkRow
 
 OPENROUTER_BASE = "https://openrouter.ai/api/v1"
@@ -69,6 +70,9 @@ async def run_chat(*, api_key: str, history: list[dict], question: str,
         # the slash path, where gpt-4o-mini reliably calls locate_phrase before
         # create_highlights. Inline system message alone is less reliable.
         agent_kwargs["system_prompt"] = system_prompt or system
+        # GSD-138: disable parallel tool calls on the highlight toolbelt so
+        # `create_highlights` is never superseded/cancelled mid-flight.
+        agent_kwargs["middleware"] = [no_parallel_tool_calls]
     agent = create_agent(**agent_kwargs)
 
     async for mode, payload in agent.astream(
