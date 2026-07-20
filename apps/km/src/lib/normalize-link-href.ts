@@ -3,6 +3,19 @@
 // terminated by a colon.
 const HAS_SCHEME = /^[a-z][a-z0-9+.-]*:/i;
 
+// A bare `host:port` authority with no scheme, e.g. `example.com:8080` or
+// `localhost:3000`. The host must look like a hostname (a dotted name or the
+// literal `localhost`) so we don't misclassify scheme URLs whose body is
+// numeric (`tel:112`). Checked before HAS_SCHEME so the port colon isn't
+// mistaken for a scheme separator.
+const HOST_PORT = /^(?:localhost|[a-z0-9-]+(?:\.[a-z0-9-]+)+):\d+(?:[/?#]|$)/i;
+
+// Schemes that can execute script or smuggle payloads. The manual link-insert
+// path (AiBubbleMenu/LinkBubbleMenu) writes the href straight into a link mark
+// via insertContent, bypassing Tiptap's setLink protocol allowlist, so we guard
+// here at the shared normalization chokepoint.
+const DANGEROUS_SCHEME = /^(?:javascript|data|vbscript|file):/i;
+
 /**
  * Normalize a user-typed link href so a bare hostname resolves as an absolute
  * external URL instead of a path relative to the current editor route.
@@ -20,6 +33,10 @@ const HAS_SCHEME = /^[a-z][a-z0-9+.-]*:/i;
 export function normalizeLinkHref(input: string): string {
   const trimmed = input.trim();
   if (!trimmed) return "";
+  // Neutralize script-bearing schemes to an inert relative href rather than
+  // persisting an executable link.
+  if (DANGEROUS_SCHEME.test(trimmed)) return "#";
+  if (HOST_PORT.test(trimmed)) return `https://${trimmed}`;
   if (HAS_SCHEME.test(trimmed)) return trimmed;
   if (trimmed.startsWith("//")) return trimmed;
   if (/^[/#?]/.test(trimmed)) return trimmed;
