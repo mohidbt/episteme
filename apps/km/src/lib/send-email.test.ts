@@ -17,20 +17,23 @@ describe("sendEmail", () => {
     vi.unstubAllGlobals();
   });
 
-  it("POSTs the correct Resend payload and returns true on 200", async () => {
+  it("POSTs the correct Resend payload and returns ok + Resend id on 200", async () => {
     const fetchMock = vi
       .fn()
-      .mockResolvedValue(new Response("{}", { status: 200 }));
+      .mockResolvedValue(
+        new Response(JSON.stringify({ id: "re_msg_123" }), { status: 200 }),
+      );
     vi.stubGlobal("fetch", fetchMock);
 
-    const ok = await sendEmail({
+    const res = await sendEmail({
       to: "u@example.com",
       subject: "Hello",
       text: "body text",
       html: "<p>body</p>",
     });
 
-    expect(ok).toBe(true);
+    expect(res.ok).toBe(true);
+    expect(res.id).toBe("re_msg_123");
     expect(fetchMock).toHaveBeenCalledOnce();
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe("https://api.resend.com/emails");
@@ -63,38 +66,41 @@ describe("sendEmail", () => {
     expect(payload.from).toBe("custom@tryepisteme.com");
   });
 
-  it("returns false and does not fetch when RESEND_API_KEY is unset", async () => {
+  it("returns ok=false with reason 'unset' and does not fetch when RESEND_API_KEY is unset", async () => {
     delete process.env.RESEND_API_KEY;
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 
-    const ok = await sendEmail({ to: "u@example.com", subject: "x", text: "y" });
+    const res = await sendEmail({ to: "u@example.com", subject: "x", text: "y" });
 
-    expect(ok).toBe(false);
+    expect(res.ok).toBe(false);
+    expect(res.reason).toBe("unset");
     expect(fetchMock).not.toHaveBeenCalled();
     expect(warn).toHaveBeenCalled();
   });
 
-  it("returns false (no throw) when fetch rejects", async () => {
+  it("returns ok=false (no throw) when fetch rejects", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockRejectedValue(new Error("network down")),
     );
     vi.spyOn(console, "error").mockImplementation(() => {});
 
-    const ok = await sendEmail({ to: "u@example.com", subject: "x", text: "y" });
-    expect(ok).toBe(false);
+    const res = await sendEmail({ to: "u@example.com", subject: "x", text: "y" });
+    expect(res.ok).toBe(false);
+    expect(res.reason).toBe("threw");
   });
 
-  it("returns false (no throw) when Resend responds non-2xx", async () => {
+  it("returns ok=false (no throw) when Resend responds non-2xx", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue(new Response("nope", { status: 422 })),
     );
     vi.spyOn(console, "error").mockImplementation(() => {});
 
-    const ok = await sendEmail({ to: "u@example.com", subject: "x", text: "y" });
-    expect(ok).toBe(false);
+    const res = await sendEmail({ to: "u@example.com", subject: "x", text: "y" });
+    expect(res.ok).toBe(false);
+    expect(res.reason).toBe("http_422");
   });
 });

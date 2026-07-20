@@ -14,7 +14,7 @@ describe("sendVerificationEmailCallback", () => {
   });
 
   it("sends to the user email with the verify url (callbackURL appended)", async () => {
-    mockedSend.mockResolvedValue(true);
+    mockedSend.mockResolvedValue({ ok: true, id: "re_msg_1" });
 
     await sendVerificationEmailCallback({
       user: { id: "u1", email: "ada@example.com", name: "Ada" },
@@ -29,6 +29,36 @@ describe("sendVerificationEmailCallback", () => {
     // original token preserved, callbackURL added pointing at our landing page
     expect(arg.text).toContain("token=tok");
     expect(arg.text).toContain(encodeURIComponent("/verify-email"));
+  });
+
+  it("logs success WITH the Resend id so a delivered send is traceable", async () => {
+    mockedSend.mockResolvedValue({ ok: true, id: "re_msg_42" });
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
+
+    await sendVerificationEmailCallback({
+      user: { id: "u1", email: "ada@example.com" },
+      url: "https://app.test/api/auth/verify-email?token=tok",
+      token: "tok",
+    });
+
+    expect(info).toHaveBeenCalled();
+    const logged = JSON.stringify(info.mock.calls);
+    expect(logged).toContain("re_msg_42");
+  });
+
+  it("loudly console.errors when the send is suppressed (missing Resend key)", async () => {
+    mockedSend.mockResolvedValue({ ok: false, reason: "unset" });
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await sendVerificationEmailCallback({
+      user: { id: "u1", email: "ada@example.com" },
+      url: "https://app.test/api/auth/verify-email?token=tok",
+      token: "tok",
+    });
+
+    expect(err).toHaveBeenCalled();
+    const logged = JSON.stringify(err.mock.calls);
+    expect(logged).toContain("unset");
   });
 
   it("does NOT throw when the send rejects (non-fatal to signup)", async () => {

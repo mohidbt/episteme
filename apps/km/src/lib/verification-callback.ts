@@ -19,7 +19,22 @@ export async function sendVerificationEmailCallback(args: {
       url,
       firstname: args.user.name,
     });
-    await sendEmail({ to: args.user.email, subject, text, html });
+    const res = await sendEmail({ to: args.user.email, subject, text, html });
+    if (res.ok) {
+      // Success — log the Resend id so a future "no email" report is traceable
+      // to a concrete delivered send.
+      console.info("[verification-callback] sent", {
+        to: args.user.email,
+        resendId: res.id,
+      });
+    } else {
+      // Loud failure — this is the exact case that silently trapped users
+      // (e.g. reason "unset" = RESEND_API_KEY missing in this env scope).
+      console.error("[verification-callback] send did not deliver", {
+        to: args.user.email,
+        reason: res.reason,
+      });
+    }
   } catch (err) {
     console.error("[verification-callback] send failed (non-fatal)", err);
   }
