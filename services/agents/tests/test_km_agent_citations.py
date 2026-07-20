@@ -207,15 +207,20 @@ def test_state_strips_lc_run_prefix_when_merging_metadata() -> None:
 
 
 def test_state_rejects_caller_when_thread_owner_mismatches() -> None:
-    """BG1#7: /state/{thread_id} 403s when the checkpoint's saved
-    ``configurable.user_id`` does not match the signed caller id.
+    """GSD-222: /state/{thread_id} 403s when the checkpoint's restored
+    ``configurable.checkpoint_ns`` belongs to a DIFFERENT tenant.
+
+    (Rewritten from the pre-GSD-222 ``user_id`` contract: AsyncPostgresSaver
+    drops ``user_id`` on a cold read but preserves ``checkpoint_ns``, so the
+    owner check is enforced on the namespace instead.)
     """
     from langchain_core.messages import AIMessage  # noqa: PLC0415
+    from routers.km_agent import _checkpoint_namespace  # noqa: PLC0415
 
     path = "/agents/km/state/thread-owner-mismatch"
     mock_tuple = MagicMock()
     mock_tuple.checkpoint = {"channel_values": {"todos": [], "messages": [AIMessage(content="x", id="a-1")]}}
-    mock_tuple.config = {"configurable": {"thread_id": "thread-owner-mismatch", "user_id": "user_999"}}
+    mock_tuple.config = {"configurable": {"thread_id": "thread-owner-mismatch", "checkpoint_ns": _checkpoint_namespace("user_999")}}
     mock_saver = MagicMock()
     mock_saver.aget_tuple = AsyncMock(return_value=mock_tuple)
 
@@ -226,13 +231,14 @@ def test_state_rejects_caller_when_thread_owner_mismatches() -> None:
 
 
 def test_state_allows_caller_when_thread_owner_matches() -> None:
-    """BG1#7: caller_id == thread.configurable.user_id returns 200."""
+    """GSD-222: caller's own tenant ``checkpoint_ns`` on the checkpoint → 200."""
     from langchain_core.messages import AIMessage  # noqa: PLC0415
+    from routers.km_agent import _checkpoint_namespace  # noqa: PLC0415
 
     path = "/agents/km/state/thread-owner-match"
     mock_tuple = MagicMock()
     mock_tuple.checkpoint = {"channel_values": {"todos": [], "messages": [AIMessage(content="x", id="a-1")]}}
-    mock_tuple.config = {"configurable": {"thread_id": "thread-owner-match", "user_id": "user_1"}}
+    mock_tuple.config = {"configurable": {"thread_id": "thread-owner-match", "checkpoint_ns": _checkpoint_namespace("user_1")}}
     mock_saver = MagicMock()
     mock_saver.aget_tuple = AsyncMock(return_value=mock_tuple)
 
@@ -242,21 +248,23 @@ def test_state_allows_caller_when_thread_owner_matches() -> None:
     assert r.status_code == 200, r.text
 
 
-def test_state_rejects_caller_when_thread_has_no_owner_stamp() -> None:
-    """Ownerless legacy checkpoints fail closed instead of leaking cross-tenant."""
+def test_state_allows_caller_when_checkpoint_ns_absent() -> None:
+    """When the restored config carries NO ``checkpoint_ns`` (defensive), fall
+    back to trusting the namespace-scoped ``aget_tuple`` query rather than
+    failing closed — the query already filtered to the caller's tenant ns."""
     from langchain_core.messages import AIMessage  # noqa: PLC0415
 
-    path = "/agents/km/state/thread-no-owner"
+    path = "/agents/km/state/thread-no-ns"
     mock_tuple = MagicMock()
     mock_tuple.checkpoint = {"channel_values": {"todos": [], "messages": [AIMessage(content="x", id="a-1")]}}
-    mock_tuple.config = {"configurable": {"thread_id": "thread-no-owner"}}  # no user_id
+    mock_tuple.config = {"configurable": {"thread_id": "thread-no-ns"}}  # no checkpoint_ns
     mock_saver = MagicMock()
     mock_saver.aget_tuple = AsyncMock(return_value=mock_tuple)
 
     with patch("routers.km_agent.get_saver", return_value=mock_saver):
         r = client.get(path, headers=_signed_headers("GET", path, b""))
 
-    assert r.status_code == 403, r.text
+    assert r.status_code == 200, r.text
 
 
 def test_persist_metadata_called_during_invoke_source() -> None:

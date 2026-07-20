@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import type React from "react";
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, cleanup, waitFor } from "@testing-library/react";
+import { render, cleanup, waitFor, screen } from "@testing-library/react";
+import { fireEvent } from "@testing-library/react";
 
 const searchParamsRef: { value: URLSearchParams } = { value: new URLSearchParams() };
 
@@ -507,6 +508,135 @@ describe("ReaderShell PastThreadsDropdown refresh signal (codex NEEDS-FIX)", () 
     await waitFor(() => {
       expect(pastThreadsPropsRef.value?.refreshKey).toBe(initialKey + 1);
     });
+
+    vi.unstubAllGlobals();
+  });
+});
+
+describe("ReaderShell new-thread control (GSD-222 bug a)", () => {
+  it("renders a 'New chat' button when a thread is active", async () => {
+    storeStateRef.value = {
+      panelOpen: true,
+      mountPoint: "reader-side-panel",
+      activeThreadId: "tid-existing",
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("{}", { status: 200 })),
+    );
+
+    vi.resetModules();
+    const { ReaderShell } = await import("../ReaderShell");
+    render(<ReaderShell paperId="paper-new-chat" />);
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: /new chat/i }),
+      ).toBeTruthy();
+    });
+
+    vi.unstubAllGlobals();
+  });
+
+  it("POSTs a fresh thread and switches to it when 'New chat' is clicked", async () => {
+    storeStateRef.value = {
+      panelOpen: true,
+      mountPoint: "reader-side-panel",
+      activeThreadId: "tid-old",
+    };
+
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.includes("/api/agent/threads") && init?.method === "POST") {
+        return new Response(
+          JSON.stringify({ thread: { threadId: "tid-brand-new" } }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      return new Response("{}", { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    vi.resetModules();
+    const { ReaderShell } = await import("../ReaderShell");
+    render(<ReaderShell paperId="paper-new-chat-2" />);
+
+    const btn = await waitFor(() =>
+      screen.getByRole("button", { name: /new chat/i }),
+    );
+    fireEvent.click(btn);
+
+    await waitFor(() => {
+      expect(setActiveThreadSpy).toHaveBeenCalledWith("tid-brand-new");
+    });
+
+    const createdNew = fetchMock.mock.calls.some(
+      (c) =>
+        String(c[0]).includes("/api/agent/threads") &&
+        (c[1] as RequestInit | undefined)?.method === "POST",
+    );
+    expect(createdNew).toBe(true);
+
+    vi.unstubAllGlobals();
+  });
+
+  it("re-enables 'New chat' after its in-flight POST is aborted/superseded (codex NEEDS-FIX)", async () => {
+    // Reproduces the stuck-button bug: if the create-thread POST is aborted
+    // (e.g. the user picks a past thread, or a second new-chat click) while
+    // pending, `newThreadPending` must still reset — otherwise the button is
+    // permanently disabled.
+    storeStateRef.value = {
+      panelOpen: true,
+      mountPoint: "reader-side-panel",
+      activeThreadId: "tid-old",
+    };
+
+    // /api/agent/threads never resolves on its own; it only settles when its
+    // AbortSignal fires (mirrors the real fetch reject-on-abort behaviour).
+    const fetchMock = vi.fn((input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.includes("/api/agent/threads") && init?.method === "POST") {
+        return new Promise<Response>((_resolve, reject) => {
+          const signal = init?.signal;
+          if (signal) {
+            signal.addEventListener("abort", () =>
+              reject(new DOMException("aborted", "AbortError")),
+            );
+          }
+        });
+      }
+      return Promise.resolve(new Response("{}", { status: 200 }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    vi.resetModules();
+    const { ReaderShell } = await import("../ReaderShell");
+    render(<ReaderShell paperId="paper-abort" />);
+
+    const btn = await waitFor(() =>
+      screen.getByRole("button", { name: /new chat/i }),
+    );
+    // Kick off the new-chat POST — button becomes disabled while pending.
+    fireEvent.click(btn);
+    await waitFor(() =>
+      expect(
+        (screen.getByRole("button", { name: /new chat/i }) as HTMLButtonElement)
+          .disabled,
+      ).toBe(true),
+    );
+
+    // Supersede it (user picks a past thread) → aborts the in-flight controller.
+    (pastThreadsPropsRef.value?.onSelect as ((id: string) => void) | undefined)?.(
+      "tid-picked",
+    );
+
+    // The button MUST re-enable — not stay stuck disabled.
+    await waitFor(() =>
+      expect(
+        (screen.getByRole("button", { name: /new chat/i }) as HTMLButtonElement)
+          .disabled,
+      ).toBe(false),
+    );
 
     vi.unstubAllGlobals();
   });

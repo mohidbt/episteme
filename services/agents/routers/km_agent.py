@@ -1190,17 +1190,27 @@ async def state(thread_id: str, auth: InternalAuthDep):
     tuple_ = await saver.aget_tuple(config)
     if tuple_ is None:
         return {"todos": [], "pending_interrupts": [], "messages": []}
-    # Defense in depth on top of the tenant checkpoint namespace: every new
-    # checkpoint must retain the authenticated owner stamp.  Missing stamps
-    # fail closed rather than exposing legacy/global checkpoints.
+    # Defense in depth on top of the tenant checkpoint namespace. The lookup
+    # config above already scopes ``aget_tuple`` to the caller's tenant
+    # ``checkpoint_ns`` — a foreign thread_id resolves to None, not a leak.
+    #
+    # GSD-222: the previous check compared ``configurable.user_id``, but
+    # AsyncPostgresSaver only reconstructs thread_id / checkpoint_ns /
+    # checkpoint_id into ``config.configurable`` on a cold read — arbitrary
+    # keys (``user_id``) are dropped — so the check 403'd every real thread and
+    # both the reader panel and /agents/[id] rendered an empty transcript.
+    # Verify the ``checkpoint_ns`` instead: it survives the round-trip and,
+    # when present, must equal this caller's namespace. Absent (defensive) →
+    # trust the namespace-scoped query. Cross-tenant → fail closed.
+    expected_ns = _checkpoint_namespace(caller_user_id)
     tuple_cfg = getattr(tuple_, "config", None) or {}
     tuple_configurable = tuple_cfg.get("configurable") if isinstance(tuple_cfg, dict) else None
-    owner_user_id = (
-        tuple_configurable.get("user_id")
+    owner_ns = (
+        tuple_configurable.get("checkpoint_ns")
         if isinstance(tuple_configurable, dict)
         else None
     )
-    if owner_user_id != caller_user_id:
+    if owner_ns is not None and owner_ns != expected_ns:
         from fastapi import HTTPException  # noqa: PLC0415
         raise HTTPException(status_code=403, detail="thread not owned by caller")
     channel_values = tuple_.checkpoint.get("channel_values", {})
