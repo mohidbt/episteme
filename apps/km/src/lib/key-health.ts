@@ -135,7 +135,8 @@ async function sendResendEmail(opts: {
     (opts.sampleError ?? "").trim().slice(0, 1000),
   ].join("\n");
 
-  return sendEmail({ to, subject, text });
+  const res = await sendEmail({ to, subject, text });
+  return res.ok;
 }
 
 export async function recordAndMaybeAlert(opts: {
