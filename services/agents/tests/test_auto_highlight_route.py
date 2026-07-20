@@ -598,3 +598,239 @@ def test_cancelled_run_marks_failed():
         and "failed" in " ".join(str(a) for a in args)
     ]
     assert len(failed_updates) >= 1
+
+
+def test_agent_disables_parallel_tool_calls():
+    """GSD-138 root cause: the model must NOT emit parallel tool calls.
+
+    When two tool calls arrive in one assistant turn, OpenRouter/OpenAI cancels
+    one branch ("another message came in before it could be completed") and
+    `create_highlights` — the persisting branch — is the one discarded, so
+    highlights never persist and the stream dies with zero output.
+
+    The auto-highlight agent must be built with the `no_parallel_tool_calls`
+    middleware. We capture the `middleware` kwarg passed to create_agent, then
+    drive the real middleware against a fake handler and assert it forces
+    `parallel_tool_calls=False` into the model bind settings.
+    """
+    from lib.no_parallel_tools import no_parallel_tool_calls
+
+    mock_conn = _mock_conn()
+
+    async def override():
+        yield mock_conn
+
+    app.dependency_overrides[deps.db.get_conn] = override
+
+    captured: dict = {}
+
+    def fake_create_agent(*args, **kwargs):
+        captured["middleware"] = kwargs.get("middleware")
+        return _make_fake_agent([{"model": {"messages": []}}])
+
+    try:
+        with (
+            patch("routers.auto_highlight.create_agent", fake_create_agent),
+            patch("routers.auto_highlight.object_exists", AsyncMock(return_value=True)),
+            patch("routers.auto_highlight.download_to_tempfile", _fake_download),
+        ):
+            body = json.dumps({"instruction": "highlight losses"}).encode()
+            r = client.post(
+                PATH, content=body, headers=_signed_headers("POST", PATH, body)
+            )
+            assert r.status_code == 200
+            _ = r.text  # drain stream
+
+        middleware = captured.get("middleware") or []
+        assert no_parallel_tool_calls in middleware, (
+            "auto-highlight create_agent must include the no_parallel_tool_calls "
+            f"middleware; got {middleware!r}"
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    # Drive the real middleware: it must inject parallel_tool_calls=False into
+    # the model bind settings threaded into ChatOpenAI.bind_tools.
+    from langchain.agents.middleware import ModelRequest
+
+    seen: dict = {}
+
+    def handler(req):
+        seen["model_settings"] = dict(req.model_settings)
+        return None
+
+    request = ModelRequest(
+        model=MagicMock(),
+        system_prompt=None,
+        messages=[],
+        tool_choice=None,
+        tools=[],
+        response_format=None,
+        model_settings={},
+        runtime=MagicMock(),
+        state={},
+    )
+    no_parallel_tool_calls.wrap_model_call(request, handler)
+    assert seen["model_settings"].get("parallel_tool_calls") is False, (
+        f"middleware must set parallel_tool_calls=False; got {seen['model_settings']!r}"
+    )
+
+
+def test_create_highlights_attempted_but_none_persisted_emits_terminal_error():
+    """GSD-138 no-silent-death: the model ATTEMPTED create_highlights (so it
+    intended to persist) but the run ended with 0 rows persisted and no `finish`
+    — the superseded-tool-call outcome ("another message came in before it could
+    be completed"). Must emit a terminal `error` (code='no_highlights') and mark
+    the run failed, NOT a hollow `done`.
+    """
+    from langchain_core.messages import AIMessage
+
+    mock_conn = _mock_conn()
+    mock_conn.fetchval.return_value = 0  # zero highlights persisted
+
+    async def override():
+        yield mock_conn
+
+    app.dependency_overrides[deps.db.get_conn] = override
+
+    # Model attempts create_highlights, then the stream ends — the tool call was
+    # superseded/cancelled, so no rows landed and finish was never reached.
+    updates = [
+        {
+            "model": {
+                "messages": [
+                    AIMessage(
+                        content="",
+                        tool_calls=[
+                            {
+                                "name": "create_highlights",
+                                "args": {"matches": [{"page_number": 1}]},
+                                "id": "call_1",
+                                "type": "tool_call",
+                            }
+                        ],
+                    )
+                ]
+            }
+        },
+    ]
+    fake_agent = _make_fake_agent(updates)
+
+    try:
+        with (
+            patch("routers.auto_highlight.create_agent", return_value=fake_agent),
+            patch("routers.auto_highlight.object_exists", AsyncMock(return_value=True)),
+            patch("routers.auto_highlight.download_to_tempfile", _fake_download),
+        ):
+            body = json.dumps({"instruction": "highlight losses"}).encode()
+            r = client.post(
+                PATH, content=body, headers=_signed_headers("POST", PATH, body)
+            )
+            assert r.status_code == 200
+
+            events = _parse_sse(r.text)
+            errs = [
+                e for e in events if isinstance(e, dict) and e.get("type") == "error"
+            ]
+            assert len(errs) == 1, events
+            assert errs[0].get("code") == "no_highlights", errs[0]
+            dones = [
+                e for e in events if isinstance(e, dict) and e.get("type") == "done"
+            ]
+            assert not dones, "must not emit a hollow done event"
+            assert events[-1] == "[DONE]"
+
+        executes = [c.args for c in mock_conn.execute.call_args_list]
+        failed_updates = [
+            args
+            for args in executes
+            if "UPDATE" in args[0].upper()
+            and "AI_HIGHLIGHT_RUNS" in args[0].upper()
+            and "failed" in " ".join(str(a) for a in args)
+        ]
+        assert len(failed_updates) >= 1
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_clean_no_match_prose_exit_is_not_an_error():
+    """GSD-138 false-positive guard: when NO passages match, the tool spec tells
+    the model to respond in prose WITHOUT calling create_highlights or finish
+    (auto_highlight_tools.py). That legitimate zero-result run must NOT be
+    reported as a `no_highlights` error — it completes as `done`.
+    """
+    from langchain_core.messages import AIMessage
+
+    mock_conn = _mock_conn()
+    mock_conn.fetchval.return_value = 0  # zero highlights, but that's fine here
+
+    async def override():
+        yield mock_conn
+
+    app.dependency_overrides[deps.db.get_conn] = override
+
+    # Model does a semantic_search, finds nothing relevant, and answers in prose
+    # — it never attempts create_highlights and never calls finish.
+    updates = [
+        {
+            "model": {
+                "messages": [
+                    AIMessage(
+                        content="",
+                        tool_calls=[
+                            {
+                                "name": "semantic_search",
+                                "args": {"query": "unicorns"},
+                                "id": "call_1",
+                                "type": "tool_call",
+                            }
+                        ],
+                    )
+                ]
+            }
+        },
+        {
+            "model": {
+                "messages": [
+                    AIMessage(content="I found no passages matching that.")
+                ]
+            }
+        },
+    ]
+    fake_agent = _make_fake_agent(updates)
+
+    try:
+        with (
+            patch("routers.auto_highlight.create_agent", return_value=fake_agent),
+            patch("routers.auto_highlight.object_exists", AsyncMock(return_value=True)),
+            patch("routers.auto_highlight.download_to_tempfile", _fake_download),
+        ):
+            body = json.dumps({"instruction": "highlight unicorns"}).encode()
+            r = client.post(
+                PATH, content=body, headers=_signed_headers("POST", PATH, body)
+            )
+            assert r.status_code == 200
+
+            events = _parse_sse(r.text)
+            errs = [
+                e for e in events if isinstance(e, dict) and e.get("type") == "error"
+            ]
+            assert not errs, f"clean no-match prose exit must not error: {events}"
+            dones = [
+                e for e in events if isinstance(e, dict) and e.get("type") == "done"
+            ]
+            assert len(dones) == 1
+            assert dones[0]["highlightsCount"] == 0
+            assert events[-1] == "[DONE]"
+
+        executes = [c.args for c in mock_conn.execute.call_args_list]
+        completed_updates = [
+            args
+            for args in executes
+            if "UPDATE" in args[0].upper()
+            and "AI_HIGHLIGHT_RUNS" in args[0].upper()
+            and "completed" in " ".join(str(a) for a in args)
+        ]
+        assert len(completed_updates) >= 1, "clean no-match run must be completed"
+    finally:
+        app.dependency_overrides.clear()
