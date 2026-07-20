@@ -69,4 +69,39 @@ describe("normalizeLinkHref", () => {
     expect(normalizeLinkHref("data:text/html,<script>alert(1)</script>")).toBe("#");
     expect(normalizeLinkHref("vbscript:msgbox(1)")).toBe("#");
   });
+
+  it("leaves a same-directory relative path unchanged", () => {
+    expect(normalizeLinkHref("./foo")).toBe("./foo");
+  });
+
+  it("leaves a parent-directory relative path unchanged", () => {
+    expect(normalizeLinkHref("../foo")).toBe("../foo");
+  });
+
+  it("leaves a schemeless relative path with no host-like first segment unchanged", () => {
+    expect(normalizeLinkHref("foo/bar")).toBe("foo/bar");
+  });
+
+  it("leaves a bare single-segment word (no dot, no port) unchanged", () => {
+    expect(normalizeLinkHref("foo")).toBe("foo");
+  });
+
+  it("still prepends https:// to a dotted bare host (regression lock)", () => {
+    expect(normalizeLinkHref("google.com")).toBe("https://google.com");
+    expect(normalizeLinkHref("example.com")).toBe("https://example.com");
+  });
+
+  it("still prepends https:// to host:port with a path (regression lock)", () => {
+    expect(normalizeLinkHref("example.com:8080/path")).toBe("https://example.com:8080/path");
+    expect(normalizeLinkHref("localhost:3000")).toBe("https://localhost:3000");
+  });
+
+  it("returns # for non-string runtime input (null/undefined/number)", () => {
+    // @ts-expect-error runtime guard for non-string input
+    expect(normalizeLinkHref(null)).toBe("#");
+    // @ts-expect-error runtime guard for non-string input
+    expect(normalizeLinkHref(undefined)).toBe("#");
+    // @ts-expect-error runtime guard for non-string input
+    expect(normalizeLinkHref(42)).toBe("#");
+  });
 });
