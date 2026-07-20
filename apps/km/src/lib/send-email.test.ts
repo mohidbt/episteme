@@ -49,6 +49,20 @@ describe("sendEmail", () => {
     });
   });
 
+  it("returns ok=true with id undefined when the 2xx body has no/invalid id", async () => {
+    // Resend already accepted the send (2xx); a missing/malformed body must NOT
+    // downgrade it to a failure — the email still went out.
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response("not json", { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const res = await sendEmail({ to: "u@example.com", subject: "x", text: "y" });
+
+    expect(res.ok).toBe(true);
+    expect(res.id).toBeUndefined();
+  });
+
   it("honours an explicit from override", async () => {
     const fetchMock = vi
       .fn()
