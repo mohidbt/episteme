@@ -267,12 +267,19 @@ function ReaderShellInner({ paperId }: { paperId: string }) {
       if (id) useAgentBallStore.getState().setActiveThread(id);
       else toast.error("Couldn't start a new chat. Please try again.");
     } finally {
-      // Always clear the pending flag — even on abort/supersession (user picked
-      // a past thread or clicked New chat again). Gating this behind
-      // `!ctl.signal.aborted` left the button permanently disabled once its
-      // POST was superseded (codex NEEDS-FIX). On unmount React no-ops the
-      // setState, so it's safe to run unconditionally.
-      setNewThreadPending(false);
+      // FINDING 3 — per-invocation guard. Only clear the pending flag if THIS
+      // invocation is still the current one (its controller is still the one
+      // stored on the ref). Two supersession shapes:
+      //   • A newer handleNewThread() replaces threadCtlRef.current with its own
+      //     controller. This stale finally must NOT clear pending — the newer,
+      //     still-in-flight create owns it (else the button re-enables mid-flight
+      //     and a further click spawns a duplicate thread).
+      //   • handlePickPastThread() aborts this controller but leaves
+      //     threadCtlRef.current pointing at it, so `=== ctl` still holds and we
+      //     DO clear pending — the button re-enables (abort-recovery preserved).
+      // Gating on `!ctl.signal.aborted` instead was wrong: it left the button
+      // permanently disabled after a pick-past abort (prior codex NEEDS-FIX).
+      if (threadCtlRef.current === ctl) setNewThreadPending(false);
     }
   }, []);
 

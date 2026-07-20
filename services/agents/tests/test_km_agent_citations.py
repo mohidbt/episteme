@@ -18,9 +18,17 @@ os.environ["INHALE_INTERNAL_SECRET"] = SECRET
 from app import app  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
-from routers.km_agent import _extract_rag_citations_from_tool_result  # noqa: E402
+from routers.km_agent import (  # noqa: E402
+    _checkpoint_namespace,
+    _extract_rag_citations_from_tool_result,
+)
 
 client = TestClient(app)
+
+# The tenant namespace a real cold read reconstructs for the signed caller
+# ("user_1"). Legit-thread /state tests must stamp this on the mock tuple's
+# ``checkpoint_ns`` so the fail-closed owner check (FINDING 4) returns 200.
+_CALLER_NS = _checkpoint_namespace("user_1")
 
 
 def _signed_headers(method: str, path: str, body: bytes) -> dict:
@@ -135,7 +143,7 @@ def test_state_surfaces_citations_from_metadata_table() -> None:
     msgs = [HumanMessage(content="why?", id="u-1"), ai]
     mock_tuple = MagicMock()
     mock_tuple.checkpoint = {"channel_values": {"todos": [], "messages": msgs}}
-    mock_tuple.config = {"configurable": {"user_id": "user_1"}}
+    mock_tuple.config = {"configurable": {"thread_id": path.rsplit("/", 1)[-1], "checkpoint_ns": _CALLER_NS}}
     mock_saver = MagicMock()
     mock_saver.aget_tuple = AsyncMock(return_value=mock_tuple)
 
@@ -183,7 +191,7 @@ def test_state_strips_lc_run_prefix_when_merging_metadata() -> None:
     msgs = [HumanMessage(content="q", id="u-1"), ai]
     mock_tuple = MagicMock()
     mock_tuple.checkpoint = {"channel_values": {"todos": [], "messages": msgs}}
-    mock_tuple.config = {"configurable": {"user_id": "user_1"}}
+    mock_tuple.config = {"configurable": {"thread_id": path.rsplit("/", 1)[-1], "checkpoint_ns": _CALLER_NS}}
     mock_saver = MagicMock()
     mock_saver.aget_tuple = AsyncMock(return_value=mock_tuple)
 
@@ -248,10 +256,17 @@ def test_state_allows_caller_when_thread_owner_matches() -> None:
     assert r.status_code == 200, r.text
 
 
-def test_state_allows_caller_when_checkpoint_ns_absent() -> None:
-    """When the restored config carries NO ``checkpoint_ns`` (defensive), fall
-    back to trusting the namespace-scoped ``aget_tuple`` query rather than
-    failing closed — the query already filtered to the caller's tenant ns."""
+def test_state_rejects_caller_when_checkpoint_ns_absent() -> None:
+    """FINDING 4 (fail-closed): when the restored config carries NO
+    ``checkpoint_ns`` we must DENY with 403 — never trust an
+    unscoped/legacy/fallback tuple.
+
+    Legit threads are always stamped with the tenant namespace at invoke time
+    (``_build_configurable``), so real history still returns 200 (ns present →
+    the equality check runs). An absent ns is only reachable from unscoped or
+    legacy state and must not disclose another tenant's messages, so we fail
+    closed rather than fall back to trusting the query.
+    """
     from langchain_core.messages import AIMessage  # noqa: PLC0415
 
     path = "/agents/km/state/thread-no-ns"
@@ -264,7 +279,26 @@ def test_state_allows_caller_when_checkpoint_ns_absent() -> None:
     with patch("routers.km_agent.get_saver", return_value=mock_saver):
         r = client.get(path, headers=_signed_headers("GET", path, b""))
 
-    assert r.status_code == 200, r.text
+    assert r.status_code == 403, r.text
+
+
+def test_state_rejects_caller_when_checkpoint_ns_empty_string() -> None:
+    """FINDING 4 (fail-closed): an empty-string ``checkpoint_ns`` is falsy and
+    must also DENY — the langgraph saver reconstructs ``checkpoint_ns`` as ""
+    for the default namespace, so this is the realistic legacy/unscoped shape."""
+    from langchain_core.messages import AIMessage  # noqa: PLC0415
+
+    path = "/agents/km/state/thread-empty-ns"
+    mock_tuple = MagicMock()
+    mock_tuple.checkpoint = {"channel_values": {"todos": [], "messages": [AIMessage(content="x", id="a-1")]}}
+    mock_tuple.config = {"configurable": {"thread_id": "thread-empty-ns", "checkpoint_ns": ""}}
+    mock_saver = MagicMock()
+    mock_saver.aget_tuple = AsyncMock(return_value=mock_tuple)
+
+    with patch("routers.km_agent.get_saver", return_value=mock_saver):
+        r = client.get(path, headers=_signed_headers("GET", path, b""))
+
+    assert r.status_code == 403, r.text
 
 
 def test_persist_metadata_called_during_invoke_source() -> None:
@@ -293,7 +327,7 @@ def test_state_omits_citations_when_metadata_empty() -> None:
     msgs = [AIMessage(content="hi", id="a-x")]
     mock_tuple = MagicMock()
     mock_tuple.checkpoint = {"channel_values": {"todos": [], "messages": msgs}}
-    mock_tuple.config = {"configurable": {"user_id": "user_1"}}
+    mock_tuple.config = {"configurable": {"thread_id": path.rsplit("/", 1)[-1], "checkpoint_ns": _CALLER_NS}}
     mock_saver = MagicMock()
     mock_saver.aget_tuple = AsyncMock(return_value=mock_tuple)
 
