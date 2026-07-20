@@ -155,3 +155,60 @@ async def test_run_chat_skips_list_content_chunks():
     token_events = [ev for ev in out if ev[0] == "token"]
     assert token_events == [("token", "hello "), ("token", "world")]
     assert all(isinstance(ev[1], str) for ev in token_events)
+
+
+@pytest.mark.asyncio
+async def test_run_chat_toolbelt_disables_parallel_on_async_path():
+    """GSD-138 (codex RISK): the chat highlight-toolbelt wires the
+    `no_parallel_tool_calls` middleware only when `tool_hints` is set
+    (lib/chat.py). `run_chat` drives the agent with `.astream()` (async), so the
+    flag must reach `model.bind_tools()` through the ASYNC middleware hook.
+
+    Unlike the other chat tests (which patch create_agent with a fake), this
+    drives the REAL `create_agent` from the real chat code path, spies
+    `ChatOpenAI.bind_tools`, and asserts `parallel_tool_calls=False` is bound.
+    Guards against a silent reintroduction of the sync-only no-op if chat's
+    middleware wiring is ever changed.
+    """
+    from langchain_core.tools import tool
+    from langchain_openai import ChatOpenAI
+
+    @tool
+    def sample_tool(x: str) -> str:
+        """A sample tool."""
+        return x
+
+    calls: list[dict] = []
+    orig_bind_tools = ChatOpenAI.bind_tools
+
+    def spy_bind_tools(self, tools, **kwargs):
+        calls.append(kwargs)
+        return orig_bind_tools(self, tools, **kwargs)
+
+    # Point ChatOpenAI at an unroutable host so the model call fails fast — but
+    # only AFTER bind_tools runs, which is all this test needs to observe.
+    with (
+        patch.object(ChatOpenAI, "bind_tools", spy_bind_tools),
+        patch("lib.chat.OPENROUTER_BASE", "http://127.0.0.1:1"),
+    ):
+        try:
+            async for _ in run_chat(
+                api_key="sk-test", history=[], question="highlight the intro",
+                supporting_chunks=[], page_text=None, anchor_text=None,
+                selection_text=None, scope="paper", focus_page=None,
+                tools=[sample_tool],
+                tool_hints=["Use the highlight toolset."],
+            ):
+                pass
+        except Exception:
+            # Network failure AFTER bind_tools is the expected outcome.
+            pass
+
+    assert calls, (
+        "bind_tools was never reached on the chat async path — the middleware "
+        "raised on .astream() before the model was bound (GSD-138 no-op)."
+    )
+    assert any(c.get("parallel_tool_calls") is False for c in calls), (
+        "parallel_tool_calls=False must reach model.bind_tools() on the chat "
+        f".astream() path; bind_tools kwargs seen: {calls!r}"
+    )
