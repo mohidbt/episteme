@@ -298,22 +298,22 @@ function ReaderShellInner({ paperId }: { paperId: string }) {
 
   const agentSlot = activeThreadId ? (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex items-center justify-end border-b border-border/60 bg-background px-3 pt-2.5 pb-1">
-        <button
-          type="button"
-          onClick={() => void handleNewThread()}
-          disabled={newThreadPending}
-          className="inline-flex h-7 items-center gap-1.5 rounded-[10px] border border-border px-2.5 text-xs text-foreground outline-none transition-colors hover:border-foreground/30 focus-visible:border-foreground/40 focus-visible:ring-2 focus-visible:ring-ring/40 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          <PlusIcon aria-hidden className="size-3.5" />
-          New chat
-        </button>
-      </div>
       <PastThreadsDropdown
         paperId={paperId}
         onSelect={handlePickPastThread}
         activeThreadId={activeThreadId}
         refreshKey={pastThreadsRefreshKey}
+        trailing={
+          <button
+            type="button"
+            onClick={() => void handleNewThread()}
+            disabled={newThreadPending}
+            className="inline-flex h-7 items-center gap-1.5 rounded-[10px] border border-border px-2.5 text-xs text-foreground outline-none transition-colors hover:border-foreground/30 focus-visible:border-foreground/40 focus-visible:ring-2 focus-visible:ring-ring/40 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <PlusIcon aria-hidden className="size-3.5" />
+            New chat
+          </button>
+        }
       />
       <div className="min-h-0 flex-1">
         {hydratedMessages?.threadId === activeThreadId ? (

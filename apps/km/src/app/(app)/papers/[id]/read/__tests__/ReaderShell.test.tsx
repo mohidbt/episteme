@@ -57,7 +57,13 @@ const pastThreadsPropsRef: { value: Record<string, unknown> | null } = {
 vi.mock("@/components/agent/PastThreadsDropdown", () => ({
   PastThreadsDropdown: (props: Record<string, unknown>) => {
     pastThreadsPropsRef.value = props;
-    return <div data-testid="past-threads-dropdown-stub" />;
+    // GSD-228 — the "New chat" button now lives in the dropdown's `trailing`
+    // slot, so the stub must render it for the button-level tests to see it.
+    return (
+      <div data-testid="past-threads-dropdown-stub">
+        {props.trailing as React.ReactNode}
+      </div>
+    );
   },
 }));
 

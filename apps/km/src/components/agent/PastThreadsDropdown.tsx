@@ -1,7 +1,7 @@
 "use client";
 
 import { ChevronDown } from "lucide-react";
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 
 interface PastThread {
   thread_id: string;
@@ -38,6 +38,12 @@ interface Props {
    * `setActiveThread` fires before `/invoke` completes.
    */
   refreshKey?: number;
+  /**
+   * GSD-228 — optional control rendered on the right of the header row (e.g. the
+   * reader's "New chat" button), so it shares a single horizontal baseline and
+   * bottom border with the "Past threads" label + dropdown instead of stacking.
+   */
+  trailing?: ReactNode;
 }
 
 /**
@@ -55,6 +61,7 @@ export function PastThreadsDropdown({
   onSelect,
   activeThreadId,
   refreshKey = 0,
+  trailing,
 }: Props) {
   const [threads, setThreads] = useState<PastThread[] | null>(null);
 
@@ -121,59 +128,60 @@ export function PastThreadsDropdown({
   return (
     <div
       data-testid="past-threads-dropdown"
-      className="border-b border-border/60 bg-background px-3 pt-3 pb-2.5"
+      className="flex items-center justify-between gap-3 border-b border-border/60 bg-background px-3 py-2.5"
     >
-      <div className="mb-1.5">
-        <span className="font-display text-[15px] leading-none tracking-[-0.01em] text-foreground">
+      <div className="flex min-w-0 flex-1 items-center gap-2.5">
+        <span className="shrink-0 font-display text-[15px] leading-none tracking-[-0.01em] text-foreground">
           Past threads
         </span>
-      </div>
-      <div className="group relative h-8">
-        <select
-          className="peer absolute inset-0 h-full w-full cursor-pointer rounded-[10px] border border-border bg-background pr-8 pl-3 text-sm text-transparent outline-none transition-colors hover:border-foreground/30 focus-visible:border-foreground/40 focus-visible:ring-2 focus-visible:ring-ring/40 disabled:cursor-not-allowed disabled:opacity-50 [&>option]:text-foreground"
-          value={selectValue}
-          disabled={isEmpty}
-          aria-label={isEmpty ? placeholder : "Past threads on this paper"}
-          onChange={(e) => {
-            const id = e.target.value;
-            if (id) onSelect(id);
-          }}
-        >
-          <option value="" disabled>
-            {placeholder}
-          </option>
-          {threads.map((t) => {
-            const isCurrent = t.thread_id === activeThreadId;
-            const trimmedTitle = t.title?.trim();
-            const label = trimmedTitle
-              ? sanitizeTitle(trimmedTitle)
-              : new Date(t.created_at).toLocaleString();
-            return (
-              <option key={t.thread_id} value={t.thread_id}>
-                {label}
-                {isCurrent ? " (current)" : ""}
-              </option>
-            );
-          })}
-        </select>
-        {/* Visual surface — matches the native <select> at pixel level so the
-            chevron + label appear over it without intercepting clicks. */}
-        <div className="pointer-events-none absolute inset-0 flex h-full items-center gap-1.5 rounded-[10px] border border-transparent pr-8 pl-3">
-          <span
-            className={
-              activeTitle
-                ? "truncate text-sm text-foreground"
-                : "truncate text-sm text-muted-foreground"
-            }
+        <div className="group relative h-8 min-w-0 flex-1">
+          <select
+            className="peer absolute inset-0 h-full w-full cursor-pointer rounded-[10px] border border-border bg-background pr-8 pl-3 text-sm text-transparent outline-none transition-colors hover:border-foreground/30 focus-visible:border-foreground/40 focus-visible:ring-2 focus-visible:ring-ring/40 disabled:cursor-not-allowed disabled:opacity-50 [&>option]:text-foreground"
+            value={selectValue}
+            disabled={isEmpty}
+            aria-label={isEmpty ? placeholder : "Past threads on this paper"}
+            onChange={(e) => {
+              const id = e.target.value;
+              if (id) onSelect(id);
+            }}
           >
-            {activeTitle ?? placeholder}
-          </span>
+            <option value="" disabled>
+              {placeholder}
+            </option>
+            {threads.map((t) => {
+              const isCurrent = t.thread_id === activeThreadId;
+              const trimmedTitle = t.title?.trim();
+              const label = trimmedTitle
+                ? sanitizeTitle(trimmedTitle)
+                : new Date(t.created_at).toLocaleString();
+              return (
+                <option key={t.thread_id} value={t.thread_id}>
+                  {label}
+                  {isCurrent ? " (current)" : ""}
+                </option>
+              );
+            })}
+          </select>
+          {/* Visual surface — matches the native <select> at pixel level so the
+              chevron + label appear over it without intercepting clicks. */}
+          <div className="pointer-events-none absolute inset-0 flex h-full items-center gap-1.5 rounded-[10px] border border-transparent pr-8 pl-3">
+            <span
+              className={
+                activeTitle
+                  ? "truncate text-sm text-foreground"
+                  : "truncate text-sm text-muted-foreground"
+              }
+            >
+              {activeTitle ?? placeholder}
+            </span>
+          </div>
+          <ChevronDown
+            aria-hidden
+            className="pointer-events-none absolute top-1/2 right-2.5 size-3.5 -translate-y-1/2 text-muted-foreground transition-colors group-hover:text-foreground"
+          />
         </div>
-        <ChevronDown
-          aria-hidden
-          className="pointer-events-none absolute top-1/2 right-2.5 size-3.5 -translate-y-1/2 text-muted-foreground transition-colors group-hover:text-foreground"
-        />
       </div>
+      {trailing ? <div className="shrink-0">{trailing}</div> : null}
     </div>
   );
 }
