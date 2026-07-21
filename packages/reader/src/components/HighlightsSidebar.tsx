@@ -1,7 +1,7 @@
 "use client";
 
 import { type ReactNode, useState, useCallback, useEffect } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Eye, EyeOff } from "lucide-react";
 import { Button } from "./ui/button";
 import { ConfirmDeleteButton } from "./ui/confirm-delete-button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "./ui/empty";
@@ -81,6 +81,17 @@ interface HighlightsSidebarProps {
   onDeleteRun?: (runId: string) => Promise<boolean>;
   onNavigateHighlight?: (highlightId: number | string, rectIndex?: number) => void;
   dockControl?: ReactNode;
+  /**
+   * GSD-227 — layerIds (run ids) currently hidden from the PDF. A run row is
+   * dimmed and shows a "show" affordance when its id is in this set.
+   */
+  hiddenRunLayerIds?: Set<string>;
+  /** GSD-227 — toggle one AI run's visibility (client-side view-state). */
+  onToggleRunVisibility?: (runId: string) => void;
+  /** GSD-227 — whether ALL user highlights are currently hidden. */
+  hideAllUserHighlights?: boolean;
+  /** GSD-227 — toggle every user (source==='user') highlight at once. */
+  onToggleAllUserHighlights?: () => void;
 }
 
 function storageKey(paperId: string) {
@@ -111,6 +122,10 @@ export function HighlightsSidebar({
   onDeleteRun,
   onNavigateHighlight,
   dockControl,
+  hiddenRunLayerIds,
+  onToggleRunVisibility,
+  hideAllUserHighlights = false,
+  onToggleAllUserHighlights,
 }: HighlightsSidebarProps) {
   // Group AI highlights by runId only. Highlights without runId all collapse
   // into a single "manual" pseudo-run keyed by "".
@@ -252,6 +267,36 @@ export function HighlightsSidebar({
 
         {!loading && !error && segment === "user" && (
           <>
+            {onToggleAllUserHighlights && userHighlights.length > 0 && (
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                  {userHighlights.length} highlight{userHighlights.length === 1 ? "" : "s"}
+                </p>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 shrink-0"
+                  onClick={onToggleAllUserHighlights}
+                  aria-pressed={hideAllUserHighlights}
+                  aria-label={
+                    hideAllUserHighlights
+                      ? "Show all user highlights"
+                      : "Hide all user highlights"
+                  }
+                  title={
+                    hideAllUserHighlights
+                      ? "Show all user highlights"
+                      : "Hide all user highlights"
+                  }
+                >
+                  {hideAllUserHighlights ? (
+                    <EyeOff className="size-4" />
+                  ) : (
+                    <Eye className="size-4" />
+                  )}
+                </Button>
+              </div>
+            )}
             {userHighlights.length === 0 ? (
               <Empty>
                 <EmptyHeader>
@@ -298,6 +343,10 @@ export function HighlightsSidebar({
                       label={label}
                       group={group}
                       cursor={cursor}
+                      hidden={hiddenRunLayerIds?.has(id) ?? false}
+                      onToggleVisibility={
+                        onToggleRunVisibility ? () => onToggleRunVisibility(id) : undefined
+                      }
                       onNavigateFirst={() => onNavigateHighlight?.(group[0].id, 0)}
                       onPrev={() => navigate(id, -1)}
                       onNext={() => navigate(id, 1)}
@@ -334,6 +383,8 @@ function RunRow({
   label,
   group,
   cursor,
+  hidden = false,
+  onToggleVisibility,
   onNavigateFirst,
   onPrev,
   onNext,
@@ -342,6 +393,8 @@ function RunRow({
   label: string;
   group: AiHighlight[];
   cursor: RunCursor;
+  hidden?: boolean;
+  onToggleVisibility?: () => void;
   onNavigateFirst: () => void;
   onPrev: () => void;
   onNext: () => void;
@@ -362,7 +415,15 @@ function RunRow({
   const isMulti = totalRects > 1;
   const highlightCountLabel = `${group.length} highlight${group.length === 1 ? "" : "s"}`;
   return (
-    <div className="space-y-2 rounded-lg border bg-card p-3">
+    <div
+      className={[
+        "space-y-2 rounded-lg border bg-card p-3 transition-opacity",
+        hidden ? "opacity-50" : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
+      data-run-hidden={hidden || undefined}
+    >
       <div className="flex items-start justify-between gap-2">
         <button
           type="button"
@@ -373,6 +434,19 @@ function RunRow({
         >
           <p className="line-clamp-2 text-sm font-medium leading-snug">{label}</p>
         </button>
+        {onToggleVisibility && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 shrink-0"
+            onClick={onToggleVisibility}
+            aria-pressed={hidden}
+            aria-label={hidden ? "Show highlight run" : "Hide highlight run"}
+            title={hidden ? "Show highlight run" : "Hide highlight run"}
+          >
+            {hidden ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+          </Button>
+        )}
         {onDelete && (
           <ConfirmDeleteButton
             ariaLabel="Delete highlight run"

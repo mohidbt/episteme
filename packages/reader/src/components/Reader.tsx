@@ -23,6 +23,7 @@ import { useUserHighlights } from "../hooks/use-user-highlights";
 import { usePaperHighlights } from "../hooks/use-paper-highlights";
 import { postHighlightsChange } from "../lib/highlights-channel";
 import { deriveChatAgentRuns } from "../lib/derive-chat-agent-runs";
+import { filterVisibleHighlights } from "../lib/filter-visible-highlights";
 import { scrollContainerToSegmentWithRetry, type SegmentBbox } from "../lib/scroll-to-segment";
 import type { ReaderMode } from "../plugins/types";
 
@@ -309,7 +310,34 @@ export function Reader({
     loading: aiHighlightsLoading,
     error: aiHighlightsError,
   } = usePaperHighlights(paperId, refreshKey);
-  const combinedUserHighlights = [...userHighlights, ...aiHighlights];
+  const combinedUserHighlights = useMemo(
+    () => [...userHighlights, ...aiHighlights],
+    [userHighlights, aiHighlights],
+  );
+  // GSD-227 — client-side highlight visibility view-state (no DB mutation).
+  //   hiddenRunLayerIds: layerIds (== run ids) of AI runs hidden from the PDF.
+  //   hideAllUserHighlights: single toggle that hides every source==='user' rect.
+  const [hiddenRunLayerIds, setHiddenRunLayerIds] = useState<Set<string>>(() => new Set());
+  const [hideAllUserHighlights, setHideAllUserHighlights] = useState(false);
+  const toggleRunVisibility = useCallback((runId: string) => {
+    setHiddenRunLayerIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(runId)) next.delete(runId);
+      else next.add(runId);
+      return next;
+    });
+  }, []);
+  const toggleAllUserHighlights = useCallback(() => {
+    setHideAllUserHighlights((v) => !v);
+  }, []);
+  const visibleHighlights = useMemo(
+    () =>
+      filterVisibleHighlights(combinedUserHighlights, {
+        hiddenLayerIds: hiddenRunLayerIds,
+        hideAllUser: hideAllUserHighlights,
+      }),
+    [combinedUserHighlights, hiddenRunLayerIds, hideAllUserHighlights],
+  );
   const aiSidebarHighlights = useMemo(
     () =>
       paperHighlights.map((h) => ({
@@ -825,6 +853,10 @@ export function Reader({
           }
           onDelete={handleSidebarDelete}
           onDeleteRun={handleSidebarDeleteRun}
+          hiddenRunLayerIds={hiddenRunLayerIds}
+          onToggleRunVisibility={toggleRunVisibility}
+          hideAllUserHighlights={hideAllUserHighlights}
+          onToggleAllUserHighlights={toggleAllUserHighlights}
         />
       ),
     });
@@ -947,7 +979,8 @@ export function Reader({
           url={url}
           containerRef={pdfScrollRef}
           markers={markers}
-          userHighlights={combinedUserHighlights}
+          userHighlights={visibleHighlights}
+          hiddenLayerIds={hiddenRunLayerIds}
           onPdfLoad={setPdfDoc}
         />
       </Panel>
