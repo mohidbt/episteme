@@ -9,7 +9,13 @@ from lib.rag import ChunkRow
 OPENROUTER_BASE = "https://openrouter.ai/api/v1"
 CHAT_MODEL = "openai/gpt-5.4-nano"
 
-AGENT_RECURSION_LIMIT = 40
+# GSD-225: match auto_highlight.py's cap. The toolbelt chat path forces
+# sequential tool calls (no_parallel_tool_calls middleware below), which burn
+# more langgraph super-steps per turn than parallel calls would — 40 could abort
+# a long multi-tool turn mid-stream. This is a MAX cap, not a per-run cost: runs
+# terminate early in normal use, so raising it adds no cost/latency to typical
+# turns. If 100 is still exceeded the terminal `recursion_limit` error surfaces.
+AGENT_RECURSION_LIMIT = 100
 
 
 def _build_system_prompt(supporting_chunks: list[ChunkRow], page_text: str | None,
