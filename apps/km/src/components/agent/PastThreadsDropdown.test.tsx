@@ -127,6 +127,38 @@ describe("PastThreadsDropdown", () => {
     expect(text).toContain("first line second line bell");
   });
 
+  it("renders the trailing slot on the same header row as the select (GSD-228)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      fetchOk({
+        threads: [
+          { thread_id: "t1", created_at: "2026-01-02T12:00:00.000Z" },
+        ],
+      }),
+    );
+    render(
+      <PastThreadsDropdown
+        paperId={PAPER}
+        onSelect={() => {}}
+        trailing={<button type="button">New chat</button>}
+      />,
+    );
+    const select = (await screen.findByRole("combobox")) as HTMLSelectElement;
+    const trailingBtn = screen.getByRole("button", { name: /new chat/i });
+    const row = select.closest(
+      "[data-testid=past-threads-dropdown]",
+    ) as HTMLElement | null;
+    // Both controls live under one bordered header container — a single row.
+    expect(row).not.toBeNull();
+    expect(row?.contains(trailingBtn)).toBe(true);
+    // That container IS a horizontal flex row (items-center + justify-between),
+    // so the select and the New-chat button lay out side-by-side rather than
+    // stacking in two separate full-width blocks.
+    expect(row?.className).toContain("flex");
+    expect(row?.className).toContain("items-center");
+    expect(row?.className).toContain("justify-between");
+  });
+
   it("invokes onSelect with the picked thread id", async () => {
     vi.stubGlobal(
       "fetch",
