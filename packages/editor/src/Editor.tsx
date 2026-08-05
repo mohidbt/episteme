@@ -15,6 +15,7 @@ import {
   attachWikiLinkRehydration,
   type ResolvedLinksMap,
 } from "./hydrate-wiki-links";
+import "katex/dist/katex.min.css";
 import "./styles.css";
 
 export interface EditorProps {
