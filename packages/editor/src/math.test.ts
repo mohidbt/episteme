@@ -8,6 +8,9 @@
  * The `$` character is common prose (prices), so the guards below are the
  * point of the feature, not extras.
  */
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { Editor } from "@tiptap/core";
 import { editorExtensions } from "./extensions";
@@ -79,6 +82,38 @@ describe("math rendering", () => {
     const editor = await mount("Broken $\\frac{1$ here.");
     expect(() => editor.view.dom.innerHTML).not.toThrow();
     editor.destroy();
+  });
+
+  /**
+   * The guest welcome note is the only place math is advertised to a new user,
+   * so it is also the only place a silent regression would be invisible: a
+   * markdown-pipeline change that ate the delimiters would just render prose.
+   * Reads the real seed file across the package boundary on purpose — asserting
+   * against a copy of the sample would pass while the shipped note was broken.
+   */
+  it("renders the math sample in the seeded welcome note", async () => {
+    // Anchored to this file, not to cwd — the suite has to resolve the same
+    // way whether it is run from the package or from the repo root. (Passing a
+    // URL object to readFileSync does not work here: jsdom's global URL is not
+    // the one node:fs recognises.)
+    const md = readFileSync(
+      resolve(dirname(fileURLToPath(import.meta.url)), "../../../apps/km/public/seed/welcome-note.md"),
+      "utf8",
+    );
+    const first = await mount(md);
+    expect(first.view.dom.querySelectorAll(".katex").length).toBeGreaterThanOrEqual(2);
+
+    // The first autosave rewrites the note in the serializer's own escaping
+    // (`\pi` is stored as `\\pi`), so what a returning user opens is this
+    // string, not the seed file. Math has to survive that round trip — a
+    // control sequence markdown treats as an escape (`\,` escapes a comma) is
+    // swallowed on the way in and gone for good.
+    const stored = (first.storage as any).markdown.getMarkdown() as string;
+    const second = await mount(stored);
+    expect(second.getText()).toBe(first.getText());
+    expect(second.view.dom.querySelectorAll(".katex").length).toBeGreaterThanOrEqual(2);
+    first.destroy();
+    second.destroy();
   });
 
   it("keeps math as plain text in the document (no new node type)", async () => {

@@ -16,6 +16,14 @@ Two pillars: **tool consolidation** (no more Obsidian ↔ Scholar ↔ Zotero ↔
 
 Edit this note. Delete it. Make it yours.
 
+## Math
+
+Wrap LaTeX in dollars and it renders: Euler's identity $e^{i\pi} + 1 = 0$ sits inline, while
+
+$$\int_0^\infty e^{-x^2} dx = \frac{\sqrt{\pi}}{2}$$
+
+gets its own line. Click into either one to edit the source; it re-renders when you click away.
+
 ## Markdown reminder
 
 Format with `**bold**`, `*italic*`, `` `code` ``, `[links](url)`, `# headings`, `- bullets`, `> quotes`.
