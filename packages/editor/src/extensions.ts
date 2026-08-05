@@ -115,6 +115,16 @@ export function buildCursorElement(user: Record<string, string>): HTMLElement {
  * Known edge: math the caret sits inside stays raw (that is the editing
  * affordance), which includes math at position 1 of a fresh document, since
  * the default selection lands there. It renders as soon as the caret moves.
+ *
+ * Two accepted false-positive/negative cases, both cosmetic — decorations
+ * never touch the stored markdown:
+ *   - `$\text{\$5}$` matches `$5}$`, because an escaped `\$` still closes the
+ *     span. Escape-aware content would need `(?:\\.|[^$\n\\])*`, whose
+ *     overlapping alternatives invite catastrophic backtracking.
+ *   - `PATH=$HOME/bin:$PATH` renders as math. Rejecting a word character after
+ *     the closing `$` would fix it and break `$n$th`, which is the more common
+ *     phrasing in research notes. Shell snippets normally sit in code, which
+ *     shouldRender already skips.
  */
 const MATH_REGEX = /\$\$([^$]+?)\$\$|\$(?![\s$])([^$\n]*[^\s$])\$(?!\d)/g;
 
