@@ -13,6 +13,7 @@ import Collaboration from "@tiptap/extension-collaboration";
 import CollaborationCursor from "@tiptap/extension-collaboration-cursor";
 import GlobalDragHandle from "tiptap-extension-global-drag-handle";
 import FileHandler from "@tiptap/extension-file-handler";
+import { Mathematics, defaultShouldRender } from "@tiptap/extension-mathematics";
 import { CollapsibleHeading } from "./collapsible-heading";
 import type * as Y from "yjs";
 import type { HocuspocusProvider } from "@hocuspocus/provider";
@@ -96,6 +97,54 @@ export function buildCursorElement(user: Record<string, string>): HTMLElement {
   caret.appendChild(label);
   return caret;
 }
+
+/**
+ * Math delimiters, Obsidian-style. `$$…$$` first so display math is consumed
+ * whole — a second alternative would otherwise match the inner `$…$` and paint
+ * the equation twice. Inline `$…$` requires a non-space after the opening `$`
+ * and before the closing one, and no digit after it, so prose prices
+ * ("$5 and $10 today") stay prose.
+ *
+ * Mathematics reads the first truthy capture group, so both alternatives can
+ * live in one regex.
+ *
+ * ponytail: `$$…$$` renders in inline mode — katexOptions is per-extension,
+ * not per-match. Split into a second Mathematics instance (distinct `name`,
+ * inline regex tightened to exclude `$$`) if centred display math matters.
+ *
+ * Known edge: math the caret sits inside stays raw (that is the editing
+ * affordance), which includes math at position 1 of a fresh document, since
+ * the default selection lands there. It renders as soon as the caret moves.
+ *
+ * Two accepted false-positive/negative cases, both cosmetic — decorations
+ * never touch the stored markdown:
+ *   - `$\text{\$5}$` matches `$5}$`, because an escaped `\$` still closes the
+ *     span. Escape-aware content would need `(?:\\.|[^$\n\\])*`, whose
+ *     overlapping alternatives invite catastrophic backtracking.
+ *   - `PATH=$HOME/bin:$PATH` renders as math. Rejecting a word character after
+ *     the closing `$` would fix it and break `$n$th`, which is the more common
+ *     phrasing in research notes. Shell snippets normally sit in code, which
+ *     shouldRender already skips.
+ */
+const MATH_REGEX = /\$\$([^$]+?)\$\$|\$(?![\s$])([^$\n]*[^\s$])\$(?!\d)/g;
+
+const MathRendering = Mathematics.extend({
+  // Decorations are built only in the plugin's `apply`, so a document seeded at
+  // construction (non-collab notes pass `content: initialMd`) never triggers
+  // one and math stays raw until the first keystroke. An empty transaction
+  // forces the first pass; it has no docChanged, so it fires no autosave.
+  onCreate() {
+    this.editor.view.dispatch(this.editor.state.tr);
+  },
+}).configure({
+  regex: MATH_REGEX,
+  katexOptions: { throwOnError: false },
+  // Default guard skips code blocks; inline `code` marks need the same
+  // treatment or documenting `$x$` inside backticks renders as math.
+  shouldRender: (state, pos, node) =>
+    defaultShouldRender(state, pos) &&
+    !node.marks.some((m) => m.type.name === "code"),
+});
 
 export type WikiLinkSuggestion = Omit<SuggestionOptions, "editor" | "pluginKey">;
 
@@ -209,6 +258,7 @@ export function editorExtensions(opts?: {
     wikiLink,
     TagMark,
     BibliographyHeading,
+    MathRendering,
     Placeholder.configure({ placeholder: opts?.placeholder ?? "Start writing…" }),
     ...(slashCommand ? [slashCommand] : []),
     ...(collab
