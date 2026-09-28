@@ -1,0 +1,30 @@
+name: keepalive
+
+# GitHub auto-disables scheduled workflows after 60 days without repo activity.
+# Re-enabling each scheduled workflow via the API resets that timer without
+# needing a dummy commit. Runs on the 1st and 15th (well inside the 60-day window) and also
+# re-enables itself, so it never lapses.
+
+on:
+  schedule:
+    - cron: "17 3 1,15 * *"
+  workflow_dispatch:
+
+permissions:
+  actions: write
+
+jobs:
+  keepalive:
+    name: re-enable scheduled workflows
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+    steps:
+      - name: Re-enable
+        run: |
+          for wf in keepalive.yml role-perms-audit.yml schema-snapshot-diff.yml; do
+            echo "enable $wf"
+            gh api -X PUT "repos/$REPO/actions/workflows/$wf/enable"
+          done
