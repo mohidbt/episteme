@@ -125,7 +125,10 @@ export function LinkBubbleMenu({ editor }: { editor: TiptapEditor }) {
           initialText={initial.text}
           initialHref={initial.href}
           onSave={save}
-          onCancel={close}
+          onCancel={() => {
+            close();
+            editor.commands.focus();
+          }}
           onRemove={remove}
         />
       ) : (

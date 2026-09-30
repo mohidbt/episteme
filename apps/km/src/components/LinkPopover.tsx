@@ -40,6 +40,12 @@ export function LinkPopover({
   return (
     <form
       onSubmit={handleSubmit}
+      onKeyDown={(e) => {
+        if (e.key === "Escape") {
+          e.stopPropagation();
+          onCancel();
+        }
+      }}
       className="flex flex-col gap-2 rounded-lg border bg-popover p-3 shadow-md"
       style={{ minWidth: 280 }}
     >

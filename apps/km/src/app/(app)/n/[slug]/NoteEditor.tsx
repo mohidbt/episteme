@@ -34,6 +34,11 @@ function openCaretMenu(testId: string, editor: TiptapEditor) {
   host.dataset.testid = testId;
   host.style.position = "absolute";
   host.style.zIndex = "50";
+  // As wide as its content, up to the editor's width. Left to shrink-to-fit,
+  // the width would depend on the room right of the caret and change every
+  // time the menu is moved back on screen.
+  host.style.width = "max-content";
+  host.style.maxWidth = `${editor.view.dom.clientWidth}px`;
   document.body.appendChild(host);
   const root = createRoot(host);
   let caretRect: () => CaretRect | null = () => null;

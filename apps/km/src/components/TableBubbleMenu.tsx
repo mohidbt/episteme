@@ -53,15 +53,23 @@ export function TableBubbleMenu({ editor }: { editor: TiptapEditor }) {
   const menuRef = useRef<HTMLDivElement | null>(null);
 
   // Where the menu goes for a table: above it, or below it when the editor's
-  // scroll container has no room above. Null while neither spot is in view.
+  // scroll container has no room above. With room on neither side it sits
+  // just above the part of the table that is in view. Null once the table
+  // has scrolled out of the container.
   const computeRect = useCallback(
     (el: HTMLElement): Rect | null => {
       // An overflowing table scrolls inside its wrapper: use the visible box.
       const r = (el.closest(".tableWrapper") ?? el).getBoundingClientRect();
       const clip = scrollClip(editor.view.dom);
+      if (r.bottom < clip.top || r.top > clip.bottom) return null;
       const above = r.top - MENU_GAP - MENU_HEIGHT;
-      const top = above >= clip.top ? above : r.bottom + MENU_GAP;
-      if (top < clip.top || top + MENU_HEIGHT > clip.bottom) return null;
+      const below = r.bottom + MENU_GAP;
+      const top =
+        above >= clip.top
+          ? above
+          : below + MENU_HEIGHT <= clip.bottom
+            ? below
+            : Math.max(r.top, clip.top) - MENU_GAP - MENU_HEIGHT;
       return {
         top: top + window.scrollY,
         left: r.left + window.scrollX,

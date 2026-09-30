@@ -61,6 +61,13 @@ describe("LinkPopover", () => {
     expect(onSave).not.toHaveBeenCalled();
   });
 
+  it("calls onCancel on Escape", () => {
+    const onCancel = vi.fn();
+    render(<LinkPopover open initialText="x" initialHref="" onSave={vi.fn()} onCancel={onCancel} />);
+    fireEvent.keyDown(screen.getByLabelText(/url/i), { key: "Escape" });
+    expect(onCancel).toHaveBeenCalled();
+  });
+
   it("does not render Remove button when onRemove is not provided", () => {
     render(<LinkPopover open initialText="" initialHref="" onSave={vi.fn()} onCancel={vi.fn()} />);
     expect(screen.queryByRole("button", { name: /remove/i })).toBeNull();

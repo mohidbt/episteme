@@ -519,6 +519,9 @@ export function AiBubbleMenu({
     const selectedText = editor.state.doc.textBetween(from, to, "");
     setLinkInitial({ text: selectedText, href: "" });
     setLinkOpen(true);
+    // BubbleMenu keeps the shouldShow it was first rendered with and only
+    // consults it on editor updates, so the toolbar is hidden by hand (GSD-224a).
+    tippyRef.current?.hide();
   }, [editor]);
 
   const insertLink = useCallback(
@@ -709,12 +712,17 @@ export function AiBubbleMenu({
 
       {linkOpen && typeof document !== "undefined" && createPortal(
         <div className="fixed inset-0 z-50" onMouseDown={(e) => { if (e.target === e.currentTarget) cancelLink(); }}>
-          <div ref={linkRef} className="fixed" data-testid="link-popover">
+          <div ref={linkRef} className="fixed w-max" data-testid="link-popover">
             <LinkPopover
               initialText={linkInitial.text}
               initialHref={linkInitial.href}
               onSave={insertLink}
-              onCancel={cancelLink}
+              onCancel={() => {
+                cancelLink();
+                // Back to the text: focus left on the page would hand the
+                // next keystrokes to whatever hosts the editor.
+                editor.commands.focus();
+              }}
             />
           </div>
         </div>,
@@ -724,7 +732,7 @@ export function AiBubbleMenu({
       {inPortalRephrase && typeof document !== "undefined" && createPortal(
         <div
           ref={panelRef}
-          style={{ position: "fixed", zIndex: 50 }}
+          style={{ position: "fixed", zIndex: 50, width: "max-content" }}
         >
           <RephrasePanel
             mode={mode}
