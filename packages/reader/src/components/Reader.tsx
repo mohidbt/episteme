@@ -52,6 +52,14 @@ export type ReaderProps = {
   agentOpen?: boolean;
   onAgentOpenChange?: (open: boolean) => void;
   /**
+   * Optional notes side-panel slot. When provided, Reader renders a "Notes"
+   * toolbar toggle and docks the slot like the other panels. The slot draws
+   * the whole panel, header included, and places the dock menu it is handed.
+   */
+  notesSlot?: (dockControl: ReactNode) => ReactNode;
+  notesOpen?: boolean;
+  onNotesOpenChange?: (open: boolean) => void;
+  /**
    * BG2a follow-up — initial 1-indexed page to scroll to on mount (e.g. from
    * `?p=<n>` deeplinks). Consumed once; clamped to `[1, totalPages]` when
    * totalPages is known. Out-of-range values are ignored (stay on page 1).
@@ -91,6 +99,8 @@ function SidebarPanelFragment({
   isFirst,
   withBorderLeft,
   withBorderRight,
+  minSize = side === "bottom" ? "120px" : "280px",
+  defaultSize = side === "bottom" ? "30%" : "25%",
 }: {
   panelId: string;
   children: React.ReactNode;
@@ -98,9 +108,9 @@ function SidebarPanelFragment({
   isFirst: boolean;
   withBorderLeft?: boolean;
   withBorderRight?: boolean;
+  minSize?: string;
+  defaultSize?: string;
 }) {
-  const minSize = side === "bottom" ? "120px" : "280px";
-  const defaultSize = side === "bottom" ? "30%" : "25%";
   const sepClass = "w-1 cursor-col-resize bg-border data-[hover]:bg-primary/40";
   const panel = (
     <Panel
@@ -152,6 +162,9 @@ export function Reader({
   agentSlot,
   agentOpen: agentOpenProp,
   onAgentOpenChange,
+  notesSlot,
+  notesOpen: notesOpenProp,
+  onNotesOpenChange,
   initialPage,
 }: ReaderProps) {
   // Paper meta (title, processingStatus)
@@ -198,6 +211,15 @@ export function Reader({
     },
     [agentOpenProp, onAgentOpenChange],
   );
+  const [notesOpenState, setNotesOpenState] = useState(false);
+  const notesOpen = notesOpenProp ?? notesOpenState;
+  const setNotesOpen = useCallback(
+    (open: boolean) => {
+      if (notesOpenProp === undefined) setNotesOpenState(open);
+      onNotesOpenChange?.(open);
+    },
+    [notesOpenProp, onNotesOpenChange],
+  );
   const pdfScrollRef = useRef<HTMLDivElement>(null);
   // Token for cancelling stale rAF poll loops on rapid scroll-to-highlight
   // clicks. Incremented per scheduled scroll; the polling closure aborts when
@@ -221,6 +243,7 @@ export function Reader({
   const [citationsDock, setCitationsDock] = useSidebarDock("citations", "right");
   const [commentsDock, setCommentsDock] = useSidebarDock("comments", "right");
   const [agentDock, setAgentDock] = useSidebarDock("agent", "right");
+  const [notesDock, setNotesDock] = useSidebarDock("notes", "right");
 
   // Citations
   const [citations, setCitations] = useState<CitationWithStatus[]>([]);
@@ -824,7 +847,13 @@ export function Reader({
     };
   }, [pdfDoc]);
 
-  type SidebarEntry = { id: string; dock: Dock; node: React.ReactNode };
+  type SidebarEntry = {
+    id: string;
+    dock: Dock;
+    node: React.ReactNode;
+    minSize?: string;
+    defaultSize?: string;
+  };
   const entries: SidebarEntry[] = [];
   if (sidebarOpen) {
     entries.push({
@@ -951,9 +980,28 @@ export function Reader({
     });
   }
 
+  if (notesOpen && notesSlot != null) {
+    entries.push({
+      id: "notes",
+      dock: notesDock,
+      // An editor needs more room than a list. In the bottom dock these are
+      // widths inside the bottom row; the dock's height is set below.
+      minSize: "360px",
+      defaultSize: "35%",
+      node: notesSlot(
+        <DockMenu
+          dock={notesDock}
+          onChange={setNotesDock}
+          onClose={() => setNotesOpen(false)}
+        />,
+      ),
+    });
+  }
+
   const leftEntries = entries.filter((e) => e.dock === "left");
   const rightEntries = entries.filter((e) => e.dock === "right");
   const bottomEntries = entries.filter((e) => e.dock === "bottom");
+  const notesAtBottom = bottomEntries.some((e) => e.id === "notes");
 
   const horizontalRow = (
     <Group orientation="horizontal" id="reader-horizontal" className="flex h-full w-full">
@@ -964,6 +1012,8 @@ export function Reader({
           withBorderRight
           isFirst={i === 0}
           side="left"
+          minSize={e.minSize}
+          defaultSize={e.defaultSize}
         >
           {e.node}
         </SidebarPanelFragment>
@@ -991,6 +1041,8 @@ export function Reader({
           withBorderLeft
           isFirst={i === 0}
           side="right"
+          minSize={e.minSize}
+          defaultSize={e.defaultSize}
         >
           {e.node}
         </SidebarPanelFragment>
@@ -1010,6 +1062,9 @@ export function Reader({
         agentEnabled={agentSlot != null}
         agentOpen={agentOpen}
         onToggleAgent={() => setAgentOpen(!agentOpen)}
+        notesEnabled={notesSlot != null}
+        notesOpen={notesOpen}
+        onToggleNotes={() => setNotesOpen(!notesOpen)}
         sidebarOpen={sidebarOpen}
         onToggleSidebar={() => setSidebarOpen((o) => !o)}
         outlineOpen={outlineOpen}
@@ -1038,8 +1093,8 @@ export function Reader({
             />
             <Panel
               id="reader-bottom-dock"
-              minSize="120px"
-              defaultSize="30%"
+              minSize={notesAtBottom ? "240px" : "120px"}
+              defaultSize={notesAtBottom ? "40%" : "30%"}
               className="flex w-full overflow-hidden border-t bg-background"
               data-testid="bottom-dock-panel"
             >
@@ -1051,6 +1106,8 @@ export function Reader({
                     withBorderLeft={i > 0}
                     isFirst={i === 0}
                     side="bottom"
+                    minSize={e.minSize}
+                    defaultSize={e.defaultSize}
                   >
                     {e.node}
                   </SidebarPanelFragment>
