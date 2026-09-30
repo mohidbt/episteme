@@ -1,9 +1,14 @@
 "use client";
 
 import { BubbleMenu, type TiptapEditor } from "@episteme/editor";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useLayoutEffect, useRef, type ComponentProps } from "react";
 import { Pencil } from "lucide-react";
 import { LinkPopover } from "@/components/LinkPopover";
+import { watchWidth } from "@/lib/caret-anchor";
+import { BUBBLE_POPPER_OPTIONS } from "@/lib/popover-placement";
+
+type TippyOptions = NonNullable<ComponentProps<typeof BubbleMenu>["tippyOptions"]>;
+type TippyInstance = Parameters<NonNullable<TippyOptions["onCreate"]>>[0];
 
 /**
  * GSD-29 (c) — when the caret is inside an existing link, show a small
@@ -19,6 +24,8 @@ export function LinkBubbleMenu({ editor }: { editor: TiptapEditor }) {
   const [editing, setEditing] = useState(false);
   const [initial, setInitial] = useState({ text: "", href: "" });
   const [range, setRange] = useState<{ from: number; to: number } | null>(null);
+  // BubbleMenu reads tippyOptions once, so the instance is kept from onCreate.
+  const tippyRef = useRef<TippyInstance | null>(null);
 
   const openEdit = useCallback(() => {
     const { from, $from } = editor.state.selection;
@@ -77,6 +84,22 @@ export function LinkBubbleMenu({ editor }: { editor: TiptapEditor }) {
     close();
   }, [editor, range, close]);
 
+  // The form is wider than the Edit button it replaces; tippy only re-places
+  // on editor updates.
+  useLayoutEffect(() => {
+    void tippyRef.current?.popperInstance?.update();
+  }, [editing]);
+
+  // A panel separator drag or a window resize leaves the bubble stale.
+  useEffect(
+    () =>
+      watchWidth(editor.view.dom, () => {
+        close();
+        tippyRef.current?.hide();
+      }),
+    [editor, close],
+  );
+
   return (
     <BubbleMenu
       editor={editor}
@@ -90,6 +113,10 @@ export function LinkBubbleMenu({ editor }: { editor: TiptapEditor }) {
       tippyOptions={{
         placement: "top",
         interactive: true,
+        popperOptions: BUBBLE_POPPER_OPTIONS,
+        onCreate: (instance) => {
+          tippyRef.current = instance;
+        },
       }}
       className="flex items-center gap-1 rounded-lg border bg-background p-1 shadow-lg"
     >
@@ -106,6 +133,7 @@ export function LinkBubbleMenu({ editor }: { editor: TiptapEditor }) {
           type="button"
           onClick={openEdit}
           aria-label="Edit link"
+          data-testid="link-edit-button"
           className="flex items-center gap-1 rounded px-2 py-1 text-xs hover:bg-accent"
         >
           <Pencil className="h-3 w-3" />

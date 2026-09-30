@@ -98,7 +98,10 @@ export function ReaderNotesPanel({
         )}
         {dockControl}
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto" data-testid="reader-notes-body">
+      <div
+        className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto [scrollbar-gutter:stable]"
+        data-testid="reader-notes-body"
+      >
         {noteId ? (
           <PanelNote
             key={noteId}

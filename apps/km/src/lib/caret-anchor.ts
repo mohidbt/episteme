@@ -47,18 +47,22 @@ export function anchorToCaret(
 }
 
 /**
- * `rect`, or null once its line has scrolled out of the editor's scroll
- * container (the note page's main column, the reader's notes panel body).
+ * Top and bottom of the editor's scroll container (the note page's main
+ * column, the reader's notes panel body), or of the viewport without one.
  */
-export function caretInView(editorDom: HTMLElement, rect: CaretRect | null): CaretRect | null {
-  if (!rect) return null;
+export function scrollClip(editorDom: HTMLElement): { top: number; bottom: number } {
   for (let el = editorDom.parentElement; el; el = el.parentElement) {
     const { overflowY } = getComputedStyle(el);
-    if (overflowY !== "auto" && overflowY !== "scroll") continue;
-    const clip = el.getBoundingClientRect();
-    return rect.bottom < clip.top || rect.top > clip.bottom ? null : rect;
+    if (overflowY === "auto" || overflowY === "scroll") return el.getBoundingClientRect();
   }
-  return rect;
+  return { top: 0, bottom: window.innerHeight };
+}
+
+/** `rect`, or null once its line has scrolled out of the editor's scroll container. */
+export function caretInView(editorDom: HTMLElement, rect: CaretRect | null): CaretRect | null {
+  if (!rect) return null;
+  const clip = scrollClip(editorDom);
+  return rect.bottom < clip.top || rect.top > clip.bottom ? null : rect;
 }
 
 /**

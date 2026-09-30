@@ -39,6 +39,19 @@ export interface PlacementInput {
 /** Distance kept between a clamped popover and the viewport edge, px. */
 export const VIEWPORT_MARGIN = 8;
 
+/**
+ * Popper options for the editor's tippy bubbles: positioned against the
+ * viewport (not the editor's scroll container), flipped below the selection
+ * when there is no room above, and shifted sideways to stay on screen.
+ */
+export const BUBBLE_POPPER_OPTIONS = {
+  strategy: "fixed" as const,
+  modifiers: [
+    { name: "flip", options: { padding: VIEWPORT_MARGIN } },
+    { name: "preventOverflow", options: { padding: VIEWPORT_MARGIN } },
+  ],
+};
+
 function clamp(value: number, size: number, viewport: number): number {
   const max = viewport - size - VIEWPORT_MARGIN;
   return Math.max(VIEWPORT_MARGIN, Math.min(value, max));

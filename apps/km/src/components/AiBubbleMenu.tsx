@@ -1,7 +1,10 @@
 "use client";
 
 import { BubbleMenu, type TiptapEditor } from "@episteme/editor";
-import { useRef, useState, useCallback, useEffect, useLayoutEffect } from "react";
+import {
+  useRef, useState, useCallback, useEffect, useLayoutEffect,
+  type ComponentProps,
+} from "react";
 import { createPortal } from "react-dom";
 import { runSlashAi } from "@/app/(app)/n/[slug]/run-slash-ai";
 import type { SkillCategory } from "@/lib/skills";
@@ -25,6 +28,11 @@ import {
 import { LinkPopover } from "@/components/LinkPopover";
 import { MessageResponse } from "@/components/ai-elements/message";
 import { mdToProseMirror, type JSONContent } from "@episteme/markdown";
+import { anchorToCaret, caretInView, watchWidth } from "@/lib/caret-anchor";
+import { BUBBLE_POPPER_OPTIONS } from "@/lib/popover-placement";
+
+type TippyOptions = NonNullable<ComponentProps<typeof BubbleMenu>["tippyOptions"]>;
+type TippyInstance = Parameters<NonNullable<TippyOptions["onCreate"]>>[0];
 
 type Mode = "format" | "rephrase-prompt" | "rephrase-streaming" | "rephrase-done";
 type Source = "bubble" | "portal";
@@ -167,6 +175,7 @@ function RephrasePanel({
 
   return (
     <div
+      data-testid="rephrase-panel"
       className="flex flex-col gap-2 rounded-lg bg-background p-2 shadow-lg"
       style={{ maxWidth: maxWidth ?? "480px" }}
       onKeyDown={(e) => {
@@ -324,13 +333,15 @@ export function AiBubbleMenu({
   const [aiError, setAiError] = useState("");
   const [turns, setTurns] = useState<Turn[]>([]);
   const [source, setSource] = useState<Source>("bubble");
-  const [portalPos, setPortalPos] = useState({ top: 0, left: 0 });
   const [portalMaxWidth, setPortalMaxWidth] = useState("480px");
   const abortRef = useRef<AbortController | null>(null);
   const selRef = useRef({ from: 0, to: 0 });
   const lastTriggerRef = useRef(0);
   const lineStartRef = useRef(0);
   const panelRef = useRef<HTMLDivElement | null>(null);
+  const linkRef = useRef<HTMLDivElement | null>(null);
+  // BubbleMenu reads tippyOptions once, so the instance is kept from onCreate.
+  const tippyRef = useRef<TippyInstance | null>(null);
 
   const resetToFormat = useCallback(() => {
     abortRef.current?.abort();
@@ -362,18 +373,9 @@ export function AiBubbleMenu({
     if (aiTriggerCount <= lastTriggerRef.current) return;
     lastTriggerRef.current = aiTriggerCount;
     const { from, to } = editor.state.selection;
-    // Position anchored to the start of the line where `/` was typed
-    const $pos = editor.state.doc.resolve(from);
-    const lineStart = $pos.start();
-    lineStartRef.current = lineStart;
-    const coords = editor.view.coordsAtPos(lineStart);
-    const editorEl = editor.view.dom as HTMLElement;
-    const editorRect = editorEl.getBoundingClientRect();
-    setPortalPos({
-      top: coords.bottom + 4,
-      left: Math.max(editorRect.left, coords.left),
-    });
-    setPortalMaxWidth(`${editorRect.width}px`);
+    // Anchored to the start of the line where `/` was typed
+    lineStartRef.current = editor.state.doc.resolve(from).start();
+    setPortalMaxWidth(`${editor.view.dom.getBoundingClientRect().width}px`);
     const { $from } = editor.state.selection;
     const paraText = $from.parent.textContent.trim();
     selRef.current = { from, to };
@@ -552,40 +554,65 @@ export function AiBubbleMenu({
     setMode("rephrase-prompt");
   }, [prompt, aiOutput]);
 
-  // Scroll-aware portal position — keeps panel anchored to the editor line
-  useEffect(() => {
-    if (!inPortalRephrase) return;
-    const editorEl = editor.view.dom as HTMLElement;
-    let rafId: number | null = null;
-    const updatePos = () => {
-      if (rafId != null) return;
-      rafId = requestAnimationFrame(() => {
-        rafId = null;
-        try {
-          const coords = editor.view.coordsAtPos(lineStartRef.current);
-          const editorRect = editorEl.getBoundingClientRect();
-          if (panelRef.current) {
-            panelRef.current.style.top = `${coords.bottom + 4}px`;
-            panelRef.current.style.left = `${Math.max(editorRect.left, coords.left)}px`;
-          }
-        } catch { /* position off-screen */ }
-      });
-    };
-    window.addEventListener("scroll", updatePos, { passive: true });
-    let scrollParent: HTMLElement | null = null;
-    let parent = editorEl.parentElement;
-    while (parent) {
-      const { overflowY } = getComputedStyle(parent);
-      if (overflowY === "auto" || overflowY === "scroll") { scrollParent = parent; break; }
-      parent = parent.parentElement;
-    }
-    if (scrollParent) scrollParent.addEventListener("scroll", updatePos, { passive: true });
-    return () => {
-      window.removeEventListener("scroll", updatePos);
-      if (scrollParent) scrollParent.removeEventListener("scroll", updatePos);
-      if (rafId != null) cancelAnimationFrame(rafId);
-    };
+  // The generate panel stays at the line it was opened from: below it, above
+  // when there is no room, never past a viewport edge. It is re-placed as it
+  // grows with streamed output and while the editor scrolls.
+  useLayoutEffect(() => {
+    const panel = panelRef.current;
+    if (!inPortalRephrase || !panel) return;
+    return anchorToCaret(
+      panel,
+      () => caretInView(editor.view.dom, editor.view.coordsAtPos(lineStartRef.current)),
+      "fixed",
+    ).stop;
   }, [inPortalRephrase, editor]);
+
+  // The link popover sits at the text it links.
+  useLayoutEffect(() => {
+    const popover = linkRef.current;
+    const range = linkRangeRef.current;
+    if (!linkOpen || !popover || !range) return;
+    return anchorToCaret(
+      popover,
+      () => {
+        const start = editor.view.coordsAtPos(range.from);
+        return { top: start.top, bottom: editor.view.coordsAtPos(range.to).bottom, left: start.left };
+      },
+      "fixed",
+    ).stop;
+  }, [linkOpen, editor]);
+
+  // The rephrase panel is taller and wider than the toolbar it replaces, and
+  // grows with streamed output; tippy only re-places on editor updates.
+  useLayoutEffect(() => {
+    void tippyRef.current?.popperInstance?.update();
+  }, [mode, aiOutput, aiError]);
+
+  // A panel separator drag or a window resize leaves every popup anchored in
+  // the editor stale: drop them. The toolbar returns with the next selection.
+  useEffect(
+    () =>
+      watchWidth(editor.view.dom, () => {
+        resetToFormat();
+        cancelLink();
+        tippyRef.current?.hide();
+      }),
+    [editor, resetToFormat, cancelLink],
+  );
+
+  // tippy follows the selection while the editor scrolls. Once the selection
+  // has left the scroll container, the toolbar has nothing to point at.
+  useEffect(() => {
+    const onScroll = () => {
+      if (!tippyRef.current?.state.isVisible) return;
+      const { from, to } = editor.state.selection;
+      const start = editor.view.coordsAtPos(from);
+      const rect = { top: start.top, bottom: editor.view.coordsAtPos(to).bottom, left: start.left };
+      if (!caretInView(editor.view.dom, rect)) tippyRef.current.hide();
+    };
+    window.addEventListener("scroll", onScroll, true);
+    return () => window.removeEventListener("scroll", onScroll, true);
+  }, [editor]);
 
   // Global Escape handler for portal mode
   useEffect(() => {
@@ -618,12 +645,9 @@ export function AiBubbleMenu({
         tippyOptions={{
           placement: "top",
           interactive: true,
-          popperOptions: {
-            strategy: "fixed",
-            modifiers: [
-              { name: "flip", enabled: false },
-              { name: "preventOverflow", enabled: false },
-            ],
+          popperOptions: BUBBLE_POPPER_OPTIONS,
+          onCreate: (instance) => {
+            tippyRef.current = instance;
           },
           onHidden: () => {
             if (!inRephrase) resetToFormat();
@@ -684,13 +708,15 @@ export function AiBubbleMenu({
       </BubbleMenu>
 
       {linkOpen && typeof document !== "undefined" && createPortal(
-        <div className="fixed inset-0 z-50 flex items-start justify-center pt-32" onMouseDown={(e) => { if (e.target === e.currentTarget) cancelLink(); }}>
-          <LinkPopover
-            initialText={linkInitial.text}
-            initialHref={linkInitial.href}
-            onSave={insertLink}
-            onCancel={cancelLink}
-          />
+        <div className="fixed inset-0 z-50" onMouseDown={(e) => { if (e.target === e.currentTarget) cancelLink(); }}>
+          <div ref={linkRef} className="fixed" data-testid="link-popover">
+            <LinkPopover
+              initialText={linkInitial.text}
+              initialHref={linkInitial.href}
+              onSave={insertLink}
+              onCancel={cancelLink}
+            />
+          </div>
         </div>,
         document.body,
       )}
@@ -698,12 +724,7 @@ export function AiBubbleMenu({
       {inPortalRephrase && typeof document !== "undefined" && createPortal(
         <div
           ref={panelRef}
-          style={{
-            position: "fixed",
-            top: portalPos.top,
-            left: portalPos.left,
-            zIndex: 50,
-          }}
+          style={{ position: "fixed", zIndex: 50 }}
         >
           <RephrasePanel
             mode={mode}

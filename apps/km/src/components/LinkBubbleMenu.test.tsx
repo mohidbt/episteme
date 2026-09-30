@@ -73,6 +73,7 @@ function makeEditor({ active }: { active: boolean }): EditorStub {
       },
       doc: { textBetween: () => "example" },
     },
+    view: { dom: document.createElement("div") },
   };
   editor.chain = () => editor as EditorStub;
   editor.focus = () => editor as EditorStub;
