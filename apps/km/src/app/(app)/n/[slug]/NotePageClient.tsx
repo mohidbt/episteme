@@ -15,6 +15,7 @@ import { AskNotesPanel } from "@/components/AskNotesPanel";
 import { PublishDialog } from "@/components/PublishDialog";
 import { DownloadButton } from "@/components/DownloadButton";
 import { DeleteToTrashButton } from "@/components/DeleteToTrashButton";
+import { invalidateDriveTree } from "@/lib/drive-sync";
 
 function formatRelativeTime(date: Date): string {
   const now = new Date();
@@ -104,6 +105,7 @@ export function NotePageClient({
       } else {
         router.refresh();
       }
+      invalidateDriveTree();
     } finally {
       setSavingTitle(false);
     }

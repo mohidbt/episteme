@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
-import { render, screen, cleanup } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
 import { PaperMetadataPanel } from "./PaperMetadataPanel";
 
 // Mock toast
@@ -83,5 +83,21 @@ describe("PaperMetadataPanel", () => {
     const row = heading.closest("[data-testid='metadata-header']");
     expect(row).toBeTruthy();
     expect(row!.querySelector("[data-testid='in-papersets-badge']")).toBeTruthy();
+  });
+
+  it("signals the drive bus after a successful save so sidebar, header and tab refresh", async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ ...basePaper, title: "New Title" }),
+    });
+    const onInvalidate = vi.fn();
+    window.addEventListener("episteme:drive-tree-invalidated", onInvalidate);
+    render(<PaperMetadataPanel paper={basePaper} />);
+    fireEvent.change(screen.getByLabelText("Title"), {
+      target: { value: "New Title" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(onInvalidate).toHaveBeenCalledTimes(1));
+    window.removeEventListener("episteme:drive-tree-invalidated", onInvalidate);
   });
 });

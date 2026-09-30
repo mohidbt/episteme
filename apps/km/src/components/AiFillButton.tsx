@@ -18,6 +18,7 @@ import {
   surfaceTrialExhaustedToast,
   maybeNotifyUsageThreshold,
 } from "@/lib/trial-exhausted";
+import { invalidateDriveTree } from "@/lib/drive-sync";
 
 interface Props {
   /** Endpoint that PATCHes accepted suggestions (e.g. `/api/papers/ID`). */
@@ -109,6 +110,7 @@ export function AiFillButton({
       }
       toast.success("Filled");
       router.refresh();
+      invalidateDriveTree();
     } catch (err) {
       if (err instanceof TrialExhaustedError) {
         surfaceTrialExhaustedToast();

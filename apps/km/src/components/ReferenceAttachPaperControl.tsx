@@ -13,6 +13,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { invalidateDriveTree } from "@/lib/drive-sync";
 
 // O2: restored manual paper attach + disconnect for /r/[id]. Replaces
 // ReferenceAttachToPaperButton deleted in b8b7556. Talks to the dedicated
@@ -69,6 +70,7 @@ export function ReferenceAttachPaperControl({
       setOpen(false);
       setQuery("");
       router.refresh();
+      invalidateDriveTree();
     } catch {
       toast.error("Network error");
     } finally {
@@ -89,6 +91,7 @@ export function ReferenceAttachPaperControl({
       }
       toast.success("Disconnected");
       router.refresh();
+      invalidateDriveTree();
     } catch {
       toast.error("Network error");
     } finally {

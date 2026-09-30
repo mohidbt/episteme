@@ -15,6 +15,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import type { FolderRow } from "@/lib/folders";
+import { invalidateDriveTree } from "@/lib/drive-sync";
 
 type PaperRow = typeof papers.$inferSelect;
 
@@ -148,6 +149,7 @@ export function PaperMetadataPanel({
       const updated = (await res.json()) as PaperRow;
       setForm(toForm(updated));
       toast.success("Saved");
+      invalidateDriveTree();
       onSaved?.(updated);
     } finally {
       setBusy(false);

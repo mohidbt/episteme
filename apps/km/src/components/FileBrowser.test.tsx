@@ -660,6 +660,44 @@ describe("FileBrowser context menu (T19)", () => {
     );
   });
 
+  it("drops a title override once server data matches, so later external renames show", async () => {
+    const props = {
+      libraryId: 1,
+      libraryName: "Default",
+      folderId: null,
+      folderChain: [],
+      folders: baseFolders,
+    };
+    const { rerender } = render(<FileBrowser {...props} contents={baseContents} />);
+    await act(async () => {
+      fireEvent.contextMenu(screen.getByTestId("fb-item-n1"));
+    });
+    await waitFor(() =>
+      expect(screen.getByRole("menuitem", { name: "Rename" })).toBeTruthy(),
+    );
+    await act(async () => {
+      fireEvent.click(screen.getByRole("menuitem", { name: "Rename" }));
+    });
+    fireEvent.change(await screen.findByTestId("rename-input"), {
+      target: { value: "Renamed note" },
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("rename-save"));
+    });
+    await waitFor(() => expect(screen.getByText("Renamed note")).toBeTruthy());
+
+    const withNote = (title: string): FolderContents => ({
+      ...baseContents,
+      notes: [{ ...baseContents.notes[0], title }],
+    });
+    // Server catches up with the rename.
+    rerender(<FileBrowser {...props} contents={withNote("Renamed note")} />);
+    // Same note renamed elsewhere (e.g. its detail page).
+    rerender(<FileBrowser {...props} contents={withNote("Renamed again")} />);
+    expect(screen.getByText("Renamed again")).toBeTruthy();
+    expect(screen.queryByText("Renamed note")).toBeNull();
+  });
+
   it("rename of a paperset PATCHes /api/papersets/:id with { filename }", async () => {
     render(
       <FileBrowser

@@ -337,6 +337,20 @@ export function FileBrowser({
     });
   }, [contents, titleOverrides]);
 
+  // Drop an override once the server data matches it, so a later rename of the
+  // same item from elsewhere is not shadowed by the stale optimistic title.
+  useEffect(() => {
+    setTitleOverrides((prev) => {
+      const stale = flatten(contents).filter(
+        (it) => prev[`${it.kind}:${it.id}`] === it.title,
+      );
+      if (stale.length === 0) return prev;
+      const next = { ...prev };
+      for (const it of stale) delete next[`${it.kind}:${it.id}`];
+      return next;
+    });
+  }, [contents, titleOverrides]);
+
   // ── List-view sort ───────────────────────────────────────────────────────
   const [sortKey, setSortKey] = useState<"title" | "kind" | "updatedAt">("title");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");

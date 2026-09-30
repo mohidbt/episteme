@@ -19,6 +19,7 @@ import {
   surfaceTrialExhaustedToast,
   maybeNotifyUsageThreshold,
 } from "@/lib/trial-exhausted";
+import { invalidateDriveTree } from "@/lib/drive-sync";
 
 export interface BatchRow {
   id: string;
@@ -121,6 +122,7 @@ export function AiFillBatchButton({ kind, rows, onFillStart, onFillEnd }: Props)
     if (failed > 0 && !keyErrorSeen && !trialExhausted)
       toast.error(`Failed on ${failed} row${failed === 1 ? "" : "s"}`);
     router.refresh();
+    if (filled > 0) invalidateDriveTree();
   }
 
   return (
