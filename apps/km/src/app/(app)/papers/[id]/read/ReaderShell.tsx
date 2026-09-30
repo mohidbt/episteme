@@ -1,6 +1,6 @@
 "use client";
 
-import type { ComponentProps } from "react";
+import type { ComponentProps, ReactNode } from "react";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { useSearchParams } from "next/navigation";
@@ -9,6 +9,8 @@ import { PlusIcon } from "lucide-react";
 import { postHighlightsChange } from "@episteme/reader/highlights-channel";
 import { AgentTranscript } from "@/components/agent/AgentTranscript";
 import { PastThreadsDropdown } from "@/components/agent/PastThreadsDropdown";
+import { ReaderNotesPanel } from "@/components/reader-notes/ReaderNotesPanel";
+import { useReaderNote } from "@/components/reader-notes/useReaderNote";
 import { useAgentBallStore } from "@/state/agent-ball";
 
 // N8 — historical messages prop shape (mirror of AgentTranscript.initialMessages).
@@ -66,8 +68,17 @@ async function mostRecentThreadForPaper(
   }
 }
 
-function ReaderShellInner({ paperId }: { paperId: string }) {
+type ReaderShellProps = {
+  paperId: string;
+  /** The paper's title, library and folder: what a note created from the reader starts with. */
+  paperTitle: string;
+  libraryId: number;
+  folderId: string | null;
+};
+
+function ReaderShellInner({ paperId, paperTitle, libraryId, folderId }: ReaderShellProps) {
   const searchParams = useSearchParams();
+  const readerNote = useReaderNote(paperId);
   const panelOpen = useAgentBallStore((s) => s.panelOpen);
   const mountPoint = useAgentBallStore((s) => s.mountPoint);
   const activeThreadId = useAgentBallStore((s) => s.activeThreadId);
@@ -334,6 +345,17 @@ function ReaderShellInner({ paperId }: { paperId: string }) {
     <div className="p-3 text-xs text-muted-foreground">Loading…</div>
   );
 
+  const notesSlot = (dockControl: ReactNode) => (
+    <ReaderNotesPanel
+      paperTitle={paperTitle}
+      libraryId={libraryId}
+      folderId={folderId}
+      noteId={readerNote.noteId}
+      onNoteIdChange={readerNote.setNoteId}
+      dockControl={dockControl}
+    />
+  );
+
   return (
     <div className="h-full min-h-0">
       <Reader
@@ -343,6 +365,9 @@ function ReaderShellInner({ paperId }: { paperId: string }) {
         agentSlot={agentSlot}
         agentOpen={agentOpen}
         onAgentOpenChange={handleAgentOpenChange}
+        notesSlot={notesSlot}
+        notesOpen={readerNote.open}
+        onNotesOpenChange={readerNote.setOpen}
         initialPage={initialPage}
       />
     </div>
@@ -351,10 +376,10 @@ function ReaderShellInner({ paperId }: { paperId: string }) {
 
 // `useSearchParams` requires a Suspense boundary in the App Router; the
 // parent page.tsx is a Server Component with no boundary, so wrap here.
-export function ReaderShell({ paperId }: { paperId: string }) {
+export function ReaderShell(props: ReaderShellProps) {
   return (
     <Suspense fallback={null}>
-      <ReaderShellInner paperId={paperId} />
+      <ReaderShellInner {...props} />
     </Suspense>
   );
 }
