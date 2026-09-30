@@ -1,5 +1,5 @@
 import path from "path";
-import { expect, type APIRequestContext, type Locator, type Page } from "@playwright/test";
+import { expect, test, type APIRequestContext, type Locator, type Page } from "@playwright/test";
 import { SCREENSHOT_DIR } from "../../playwright.config";
 
 export type Dock = "right" | "left" | "bottom";
@@ -55,9 +55,9 @@ export async function createNote(
   libraryId: number,
   contentMd = "",
 ): Promise<Note> {
-  const res = await request.post("/api/notes", {
-    data: { libraryId, folderId: null, title: `${NOTE_PREFIX}${Date.now()}` },
-  });
+  // The worker index keeps titles apart when two workers create in the same millisecond.
+  const title = `${NOTE_PREFIX}${Date.now()}-${test.info().parallelIndex}`;
+  const res = await request.post("/api/notes", { data: { libraryId, folderId: null, title } });
   expect(res.status(), await res.text()).toBe(201);
   const note = { ...(await res.json()), libraryId } as Note;
   if (contentMd) await setNoteContent(request, note, contentMd);
@@ -119,7 +119,7 @@ export async function setDock(page: Page, dock: Dock) {
   await panel(page).getByTestId("dock-menu-trigger").click();
   await panel(page).getByTestId(`dock-menu-item-${dock}`).click();
   await expect(async () => {
-    const [p, viewer] = [await box(panel(page)), await box(page.getByTestId("pdf-viewer-panel"))];
+    const [p, viewer] = [await box(panel(page)), await box(page.locator("#pdf-viewer"))];
     if (dock === "right") expect(p.x).toBeGreaterThanOrEqual(viewer.x + viewer.width);
     if (dock === "left") expect(p.x + p.width).toBeLessThanOrEqual(viewer.x);
     if (dock === "bottom") expect(p.y).toBeGreaterThanOrEqual(viewer.y + viewer.height);
@@ -156,18 +156,48 @@ export async function setSize(page: Page, dock: Dock, size: Size): Promise<numbe
   return after;
 }
 
+/**
+ * Open `note` in the paper's notes panel with `contentMd` as its text, at a
+ * window size, dock position and panel size. Defaults to the narrowest
+ * panel: docked right, dragged to its minimum, in a 1440x900 window.
+ */
+export async function openNoteInPanel(
+  page: Page,
+  request: APIRequestContext,
+  paper: Paper,
+  note: Note,
+  contentMd: string,
+  at: { viewport?: { width: number; height: number }; dock?: Dock; size?: Size } = {},
+) {
+  const { viewport = VIEWPORTS[1], dock = "right", size = "minimum" } = at;
+  await setNoteContent(request, note, contentMd);
+  await page.setViewportSize(viewport);
+  await openReader(page, paper, { noteId: note.id, open: true });
+  await noteReady(page);
+  if (dock !== "right") {
+    await setDock(page, dock);
+    await noteReady(page);
+  }
+  await setSize(page, dock, size);
+  await markBodyBaseline(page);
+}
+
 export async function screenshot(page: Page, name: string) {
   await page.screenshot({ path: path.join(SCREENSHOT_DIR, `${name}.png`) });
 }
 
 // ── editor ──────────────────────────────────────────────────────────────────
 
+/** Put the caret at the end of a block. */
+export async function caretToEndOf(block: Locator) {
+  await block.scrollIntoViewIfNeeded();
+  const b = await box(block);
+  await block.click({ position: { x: b.width - 2, y: b.height - 4 } });
+}
+
 /** Put the caret at the end of the note. */
 export async function caretToEnd(page: Page, root: Locator = editor(page)) {
-  const last = root.locator(":scope > *").last();
-  await last.scrollIntoViewIfNeeded();
-  const b = await box(last);
-  await last.click({ position: { x: b.width - 2, y: b.height - 4 } });
+  await caretToEndOf(root.locator(":scope > *").last());
 }
 
 /** The caret's line, or the selection's box, in viewport coordinates. */
@@ -191,7 +221,8 @@ export async function rectOf(locator: Locator): Promise<Rect> {
 
 /**
  * Centre of the last word on the first visual line of a paragraph: the word
- * closest to the panel's right edge.
+ * closest to the panel's right edge. One and two letter words are skipped: a
+ * double click on those can select the space next to them instead.
  */
 export async function lastWordOfFirstLine(paragraph: Locator): Promise<{ x: number; y: number }> {
   return paragraph.evaluate((p) => {
@@ -199,7 +230,7 @@ export async function lastWordOfFirstLine(paragraph: Locator): Promise<{ x: numb
     const range = document.createRange();
     let best: DOMRect | null = null;
     let firstTop: number | null = null;
-    for (const match of text.data.matchAll(/\S+/g)) {
+    for (const match of text.data.matchAll(/\w{3,}/g)) {
       range.setStart(text, match.index);
       range.setEnd(text, match.index + match[0].length);
       const r = range.getBoundingClientRect();
@@ -209,6 +240,23 @@ export async function lastWordOfFirstLine(paragraph: Locator): Promise<{ x: numb
     }
     return { x: best!.left + best!.width / 2, y: best!.top + best!.height / 2 };
   });
+}
+
+/** Centre of the first occurrence of `text` inside a block. */
+export async function pointOfText(block: Locator, text: string): Promise<{ x: number; y: number }> {
+  return block.evaluate((el, needle) => {
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode() as Text | null; node; node = walker.nextNode() as Text | null) {
+      const at = node.data.indexOf(needle);
+      if (at < 0) continue;
+      const range = document.createRange();
+      range.setStart(node, at);
+      range.setEnd(node, at + needle.length);
+      const r = range.getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    }
+    throw new Error(`"${needle}" is not in the block`);
+  }, text);
 }
 
 // ── popups ──────────────────────────────────────────────────────────────────
@@ -226,9 +274,20 @@ export const selectionToolbar = (page: Page) =>
 /** The selection toolbar's bubble once it has turned into the AI rephrase panel. */
 export const rephraseBubble = (page: Page) =>
   page.locator("[data-tippy-root]").filter({ has: page.getByTestId("rephrase-panel") });
-/** The edit bubble for a caret inside a link. */
+/** The edit bubble for a caret inside a link, and the form it turns into. */
 export const linkBubble = (page: Page) =>
   page.locator("[data-tippy-root]").filter({ has: page.getByTestId("link-edit-button") });
+export const linkEditForm = (page: Page) =>
+  page.locator("[data-tippy-root]").filter({ has: page.getByLabel("URL") });
+/** The reader's own toolbar over a selection in the PDF. */
+export const pdfSelectionToolbar = (page: Page) =>
+  page.locator("div.fixed").filter({ has: page.getByRole("button", { name: "Highlight green" }) });
+
+/** The AI call behind a rephrase or generate panel has come back with text. */
+export async function expectAiOutput(aiPanel: Locator) {
+  await expect(aiPanel).toContainText("Esc to dismiss", { timeout: 120_000 });
+  expect(await aiPanel.innerText(), "the AI call failed").not.toContain("AI error");
+}
 
 const EVERY_POPUP = [
   '[data-testid="slash-menu"]',

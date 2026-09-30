@@ -11,19 +11,15 @@ import {
   expectPopupSane,
   lastWordOfFirstLine,
   linkPopover,
-  markBodyBaseline,
   notePicker,
   noteReady,
-  openReader,
+  openNoteInPanel,
   panel,
   papersWithPdf,
   rectOf,
   screenshot,
   selectionRect,
   selectionToolbar,
-  setDock,
-  setNoteContent,
-  setSize,
   slashMenu,
   tableMenu,
   trashNote,
@@ -36,10 +32,11 @@ import {
 // window sizes: each one has to open where a user expects it and leave
 // nothing behind.
 
-const SEED = [
+const PARAGRAPHS = [
   "The first paragraph of the matrix note is long enough to wrap onto a second line in a narrow panel, which puts text at both edges of the panel.",
   "A short last line",
-].join("\n\n");
+];
+const SEED = PARAGRAPHS.join("\n\n");
 
 test.describe.configure({ mode: "parallel" });
 
@@ -61,16 +58,7 @@ for (const viewport of VIEWPORTS) {
       const cell = `${viewport.width}x${viewport.height}-${dock}-${size}`;
 
       test(`popups at ${viewport.width}x${viewport.height}, dock ${dock}, size ${size}`, async ({ page, request }) => {
-        await setNoteContent(request, note, SEED);
-        await page.setViewportSize(viewport);
-        await openReader(page, paper, { noteId: note.id, open: true });
-        await noteReady(page);
-        if (dock !== "right") {
-          await setDock(page, dock);
-          await noteReady(page);
-        }
-        await setSize(page, dock, size);
-        await markBodyBaseline(page);
+        await openNoteInPanel(page, request, paper, note, SEED, { viewport, dock, size });
         await expectNoHorizontalOverflow(page);
 
         await test.step("slash menu", async () => {
@@ -110,6 +98,7 @@ for (const viewport of VIEWPORTS) {
           await selectionToolbar(page).getByRole("button", { name: "Insert link" }).click();
           await expectPopupSane(linkPopover(page), selection, "link popover");
           await expect(selectionToolbar(page)).toHaveCount(0);
+          await screenshot(page, `${cell}-link-popover`);
           await page.keyboard.press("Escape");
           await expect(linkPopover(page)).toHaveCount(0);
           // Focus is back in the note, so the selection has its toolbar again.
@@ -147,6 +136,9 @@ for (const viewport of VIEWPORTS) {
           await expect(panel(page)).toBeVisible();
         });
 
+        // Opening and dismissing popups changed nothing in the note itself.
+        await expect(editor(page).locator("p").nth(0)).toHaveText(PARAGRAPHS[0]);
+        await expect(editor(page).locator("p").nth(1)).toHaveText(PARAGRAPHS[1]);
         await expectNoHorizontalOverflow(page);
         await noteReady(page);
       });
