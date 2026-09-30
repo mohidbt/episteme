@@ -61,6 +61,13 @@ interface Turn {
   response: string;
 }
 
+// The box of a text range. Its end is read from the left, so a range that
+// stops where a line wraps stays on the line it is drawn on.
+function rangeRect(editor: TiptapEditor, { from, to }: { from: number; to: number }) {
+  const start = editor.view.coordsAtPos(from);
+  return { top: start.top, bottom: editor.view.coordsAtPos(to, -1).bottom, left: start.left };
+}
+
 function RephrasePanel({
   mode,
   prompt,
@@ -575,14 +582,7 @@ export function AiBubbleMenu({
     const popover = linkRef.current;
     const range = linkRangeRef.current;
     if (!linkOpen || !popover || !range) return;
-    return anchorToCaret(
-      popover,
-      () => {
-        const start = editor.view.coordsAtPos(range.from);
-        return { top: start.top, bottom: editor.view.coordsAtPos(range.to).bottom, left: start.left };
-      },
-      "fixed",
-    ).stop;
+    return anchorToCaret(popover, () => rangeRect(editor, range), "fixed").stop;
   }, [linkOpen, editor]);
 
   // The rephrase panel is taller and wider than the toolbar it replaces, and
@@ -608,10 +608,9 @@ export function AiBubbleMenu({
   useEffect(() => {
     const onScroll = () => {
       if (!tippyRef.current?.state.isVisible) return;
-      const { from, to } = editor.state.selection;
-      const start = editor.view.coordsAtPos(from);
-      const rect = { top: start.top, bottom: editor.view.coordsAtPos(to).bottom, left: start.left };
-      if (!caretInView(editor.view.dom, rect)) tippyRef.current.hide();
+      if (!caretInView(editor.view.dom, rangeRect(editor, editor.state.selection))) {
+        tippyRef.current.hide();
+      }
     };
     window.addEventListener("scroll", onScroll, true);
     return () => window.removeEventListener("scroll", onScroll, true);
