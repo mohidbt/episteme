@@ -1,4 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { eq } from "drizzle-orm";
+import { db } from "@/lib/db";
+import { notes } from "@episteme/db/schema";
+import { getTrashFolderId } from "@/lib/folders-server";
 import { GET } from "./route";
 import { POST as POST_LIB } from "../../libraries/route";
 import { POST as POST_NOTE } from "../route";
@@ -143,5 +147,59 @@ describe("GET /api/notes/search", () => {
     expect(first).toHaveProperty("id");
     expect(first).toHaveProperty("title");
     expect(first).toHaveProperty("slug");
+  });
+});
+
+describe("GET /api/notes/search?sort=recent", () => {
+  async function recent(query = "") {
+    const r = await GET(
+      req(`/api/notes/search?sort=recent&k=50${query}`, { cookie: u.cookie }),
+    );
+    return (await r.json()).results as { id: string; title: string; updatedAt: string }[];
+  }
+
+  async function idOf(title: string): Promise<string> {
+    const [row] = await db.select({ id: notes.id }).from(notes).where(eq(notes.title, title));
+    return row.id;
+  }
+
+  it("lists notes for an empty q, last edited first, with updatedAt", async () => {
+    await db
+      .update(notes)
+      .set({ updatedAt: new Date("2030-01-02T00:00:00Z") })
+      .where(eq(notes.id, await idOf("CRISPR")));
+    await db
+      .update(notes)
+      .set({ updatedAt: new Date("2030-01-01T00:00:00Z") })
+      .where(eq(notes.id, await idOf("Deep Learning")));
+    const results = await recent();
+    expect(results.slice(0, 2).map((x) => x.title)).toEqual(["CRISPR", "Deep Learning"]);
+    expect(results[0].updatedAt).toBe("2030-01-02T00:00:00.000Z");
+  });
+
+  it("filters by q", async () => {
+    const titles = (await recent("&q=crisp")).map((x) => x.title);
+    expect(titles).toEqual(["CRISPR"]);
+  });
+
+  it("excludes notes in the trash folder", async () => {
+    const trashId = await getTrashFolderId(libraryId, u.id);
+    await db
+      .update(notes)
+      .set({ folderId: trashId })
+      .where(eq(notes.id, await idOf("Attention Mechanism")));
+    const titles = (await recent()).map((x) => x.title);
+    expect(titles).not.toContain("Attention Mechanism");
+    expect(titles).toContain("Transformers");
+  });
+
+  it("leaves the default search untouched: title order, no updatedAt", async () => {
+    const r = await GET(req("/api/notes/search?q=Trans", { cookie: u.cookie }));
+    const { results } = await r.json();
+    expect(results.map((x: { title: string }) => x.title)).toEqual([
+      "Transformer Circuits",
+      "Transformers",
+    ]);
+    expect(results[0]).not.toHaveProperty("updatedAt");
   });
 });

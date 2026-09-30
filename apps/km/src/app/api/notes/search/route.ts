@@ -1,6 +1,6 @@
-import { and, asc, eq, ilike } from "drizzle-orm";
+import { and, asc, desc, eq, ilike, isNull, notInArray, or } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { notes } from "@episteme/db/schema";
+import { folders, notes } from "@episteme/db/schema";
 import { getAuthedUserId, MissingInternalSecretError } from "@/lib/internal-auth";
 import { jsonError } from "@/lib/crud";
 
@@ -16,12 +16,33 @@ export async function GET(req: Request) {
 
   const url = new URL(req.url);
   const q = (url.searchParams.get("q") ?? "").trim();
-  if (q.length === 0) return Response.json({ results: [] });
+  const recent = url.searchParams.get("sort") === "recent";
+  if (q.length === 0 && !recent) return Response.json({ results: [] });
 
   const kRaw = Number(url.searchParams.get("k"));
   const limit = Number.isFinite(kRaw) && kRaw > 0
     ? Math.min(Math.floor(kRaw), MAX_LIMIT)
     : DEFAULT_LIMIT;
+
+  // sort=recent: the reader's note picker. Last edited first, trash excluded,
+  // and an empty q lists everything.
+  if (recent) {
+    const trashFolders = db
+      .select({ id: folders.id })
+      .from(folders)
+      .where(and(eq(folders.userId, userId), eq(folders.isTrash, true)));
+    const rows = await db
+      .select({ id: notes.id, title: notes.title, slug: notes.slug, updatedAt: notes.updatedAt })
+      .from(notes)
+      .where(and(
+        eq(notes.userId, userId),
+        q ? ilike(notes.title, `%${q}%`) : undefined,
+        or(isNull(notes.folderId), notInArray(notes.folderId, trashFolders)),
+      ))
+      .orderBy(desc(notes.updatedAt))
+      .limit(limit);
+    return Response.json({ results: rows });
+  }
 
   // TODO(1.4): swap ilike title match for pgvector semantic search
   const rows = await db

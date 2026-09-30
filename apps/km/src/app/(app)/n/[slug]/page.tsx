@@ -3,13 +3,13 @@
 // expired token to the client and break collab connections.
 export const dynamic = "force-dynamic";
 
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import { after } from "next/server";
 import { getRequiredUserId } from "@/lib/session";
 import { touchRecent } from "@/lib/library/touch-recents";
 import { db } from "@/lib/db";
-import { noteLinks, notes, papers, references_, user } from "@episteme/db/schema";
+import { notes, user } from "@episteme/db/schema";
 import { getDefaultLibrary } from "@/lib/default-library";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { TabTitleUpdater } from "@/components/TabBar";
@@ -18,6 +18,7 @@ import { NotePageClient } from "./NotePageClient";
 import { mintCollabToken } from "@/lib/collab-token";
 import { COLLAB_ENABLED } from "@/lib/flags";
 import { prepareNoteContent } from "@/lib/note-content";
+import { getResolvedLinks } from "@/lib/notes/resolved-links";
 
 export default async function NotePage({
   params,
@@ -50,64 +51,7 @@ export default async function NotePage({
   // provider synchronously on first render — no client-side round-trip needed.
   const initialCollabToken = COLLAB_ENABLED ? await mintCollabToken(userId) : null;
 
-  const linkRows = await db
-    .select({
-      title: noteLinks.targetTitleRaw,
-      targetKind: noteLinks.targetKind,
-      targetId: noteLinks.targetId,
-      targetSlug: notes.slug,
-      // GSD-62: resolved display label per kind.
-      // - notes: notes.title
-      // - papers: papers.title (nullable; fall back to filename)
-      // - references: cslJson->>'title' (Postgres JSON arrow extraction)
-      noteTitle: notes.title,
-      paperTitle: papers.title,
-      paperFilename: papers.filename,
-      referenceTitle: sql<
-        string | null
-      >`${references_.cslJson}->>'title'`.as("reference_title"),
-      referenceCitationKey: references_.citationKey,
-    })
-    .from(noteLinks)
-    .leftJoin(notes, eq(notes.id, noteLinks.targetId))
-    .leftJoin(papers, eq(papers.id, noteLinks.targetId))
-    .leftJoin(references_, eq(references_.id, noteLinks.targetId))
-    .where(eq(noteLinks.sourceNoteId, note.id));
-  // K6: WikiLink node `title` attr stores the STRIPPED label (no `p:` / `r:`
-  // / `@` / `pdf:` prefix). `note_links.target_title_raw` is also stored
-  // STRIPPED. Key the resolvedLinks map by `${kind}::${title.toLowerCase()}`
-  // so a paper "Foo" and a note "Foo" don't collide. Hydration in
-  // `hydrate-wiki-links.ts` reads `node.attrs.targetKind` and looks up the
-  // kind-qualified key, falling back to bare title for back-compat with
-  // pre-classifier nodes (targetKind=null).
-  const resolvedLinks: Record<
-    string,
-    {
-      targetKind: "note" | "reference" | "paper";
-      targetId: string | null;
-      targetSlug: string | null;
-      displayTitle: string | null;
-    }
-  > = Object.fromEntries(
-    linkRows.map((r) => {
-      // GSD-62: pick the human-friendly title per kind.
-      const displayTitle =
-        r.targetKind === "note"
-          ? r.noteTitle ?? null
-          : r.targetKind === "paper"
-            ? r.paperTitle ?? r.paperFilename ?? null
-            : r.referenceTitle ?? r.referenceCitationKey ?? null;
-      return [
-        `${r.targetKind}::${r.title.toLowerCase()}`,
-        {
-          targetKind: r.targetKind,
-          targetId: r.targetId,
-          targetSlug: r.targetKind === "note" ? r.targetSlug ?? null : null,
-          displayTitle,
-        },
-      ];
-    }),
-  );
+  const resolvedLinks = await getResolvedLinks(note.id);
 
   const library = await getDefaultLibrary(userId);
   return (
