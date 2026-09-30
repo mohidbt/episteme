@@ -12,16 +12,57 @@ import {
   hydrateCitations,
 } from "@episteme/editor";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { COLLAB_ENABLED, COLLAB_URL } from "@/lib/flags";
-import { createRoot, type Root } from "react-dom/client";
+import { createRoot } from "react-dom/client";
 import { WikiLinkTypeahead, type WikiLinkTypeaheadRef } from "@/components/WikiLinkTypeahead";
 import { SlashCommandTypeahead, type SlashCommandTypeaheadRef } from "@/components/SlashCommandTypeahead";
-import { computeSlashMenuPlacement } from "@/lib/popover-placement";
+import type { CaretRect } from "@/lib/popover-placement";
+import { anchorToCaret, caretInView, watchWidth } from "@/lib/caret-anchor";
 import { AiBubbleMenu } from "@/components/AiBubbleMenu";
 import { LinkBubbleMenu } from "@/components/LinkBubbleMenu";
 import { TableBubbleMenu } from "@/components/TableBubbleMenu";
 import { handleSlashCommand, type SlashCommandPayload } from "./slash-command-handler";
+
+/**
+ * Body-level host for a caret menu (slash commands, `[[`). It stays on screen,
+ * follows the caret when the note scrolls, and goes away when the editor's
+ * width changes (a panel separator drag leaves it anchored to stale text).
+ */
+function openCaretMenu(testId: string, editor: TiptapEditor) {
+  const host = document.createElement("div");
+  host.dataset.testid = testId;
+  host.style.position = "absolute";
+  host.style.zIndex = "50";
+  document.body.appendChild(host);
+  const root = createRoot(host);
+  let caretRect: () => CaretRect | null = () => null;
+  const anchor = anchorToCaret(host, () => caretInView(editor.view.dom, caretRect()), "absolute");
+  let closed = false;
+  const close = () => {
+    if (closed) return;
+    closed = true;
+    anchor.stop();
+    stopWatch();
+    // Defer unmount: Tiptap may call onExit during React's render phase
+    // (e.g. on editor teardown), and synchronously unmounting a root while
+    // React is rendering throws.
+    queueMicrotask(() => {
+      root.unmount();
+      host.remove();
+    });
+  };
+  const stopWatch = watchWidth(editor.view.dom, close);
+  return {
+    render(node: ReactNode, rect: () => CaretRect | null) {
+      if (closed) return;
+      root.render(node);
+      caretRect = rect;
+      anchor.update();
+    },
+    close,
+  };
+}
 
 export function NoteEditor({
   id,
@@ -33,6 +74,8 @@ export function NoteEditor({
   editorRef: externalEditorRef,
   transformMd,
   onPendingSaveChange,
+  onNavigate,
+  autofocus = true,
 }: {
   id: string;
   initialMd: string;
@@ -49,6 +92,12 @@ export function NoteEditor({
   */
   transformMd?: (body: string) => string;
   onPendingSaveChange?: (pending: boolean) => void;
+  /**
+   * Where wiki link and tag clicks go. Defaults to navigating the current
+   * tab; the reader's notes panel opens a background tab instead.
+   */
+  onNavigate?: (href: string, title: string) => void;
+  autofocus?: boolean;
 }) {
   const router = useRouter();
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -252,6 +301,9 @@ export function NoteEditor({
     const host = editorHostRef.current;
     if (!host) return;
 
+    const navigate = (href: string, title: string) =>
+      onNavigate ? onNavigate(href, title) : router.push(href);
+
     // Click/dblclick coordination: dblclick fires after two click events, so
     // naive navigation on single click steals the second click and the pill
     // never gets edited. We defer navigation by the browser's dblclick
@@ -275,11 +327,11 @@ export function NoteEditor({
       const title = wikiEl.getAttribute("data-title") ?? "";
       flush();
       if (kind === "reference" && id) {
-        router.push(`/r/${id}`);
+        navigate(`/r/${id}`, title);
         return;
       }
       if (kind === "paper" && id) {
-        router.push(`/p/${id}`);
+        navigate(`/p/${id}`, title);
         return;
       }
       // Notes: we need the slug, which the pill doesn't carry. Fall back to
@@ -291,7 +343,7 @@ export function NoteEditor({
       const hit =
         resolvedLinks?.[`note::${lower}`] ?? resolvedLinks?.[lower];
       if (hit?.targetKind === "note" && hit.targetSlug) {
-        router.push(`/n/${encodeURIComponent(hit.targetSlug)}`);
+        navigate(`/n/${encodeURIComponent(hit.targetSlug)}`, hit.displayTitle ?? title);
       }
     };
 
@@ -303,7 +355,7 @@ export function NoteEditor({
         if (!tag) return;
         e.preventDefault();
         flush();
-        router.push(`/tags/${encodeURIComponent(tag)}`);
+        navigate(`/tags/${encodeURIComponent(tag)}`, `#${tag}`);
         return;
       }
       const wikiEl = target?.closest?.(
@@ -370,7 +422,7 @@ export function NoteEditor({
       host.removeEventListener("dblclick", onDblClick);
       cancelPendingNav();
     };
-  }, [router, flush, resolvedLinks]);
+  }, [router, flush, resolvedLinks, onNavigate]);
 
   const wikiLinkSuggestion = useMemo<WikiLinkSuggestion>(
     () => ({
@@ -410,101 +462,48 @@ export function NoteEditor({
       // fall back to deriving the caret rect from the editor view's
       // `coordsAtPos(range.from)` so the popover always positions.
       render: () => {
-        let root: Root | null = null;
-        let host: HTMLDivElement | null = null;
+        let menu: ReturnType<typeof openCaretMenu> | null = null;
         let refObj: { current: WikiLinkTypeaheadRef | null } = { current: null };
 
-        const place = (
-          clientRect: (() => DOMRect | null) | null | undefined,
-          editor: TiptapEditor,
-          range: { from: number; to: number },
-        ) => {
-          if (!host) return;
-          let rect = clientRect?.() ?? null;
-          if (!rect) {
+        const render = (props: any) => {
+          menu?.render(
+            <WikiLinkTypeahead
+              ref={(r) => {
+                refObj.current = r;
+              }}
+              query={props.query}
+              onSelect={(payload) => props.command(payload as never)}
+            />,
             // Fallback when the suggestion plugin returned null (decoration
-            // not yet painted). Use the editor view's caret coords.
-            try {
-              const c = editor.view.coordsAtPos(range.from);
-              rect = {
-                top: c.top,
-                bottom: c.bottom,
-                left: c.left,
-                right: c.left,
-                width: 0,
-                height: c.bottom - c.top,
-                x: c.left,
-                y: c.top,
-                toJSON: () => ({}),
-              } as DOMRect;
-            } catch {
-              host.style.display = "none";
-              return;
-            }
-          }
-          host.style.display = "block";
-          // Measure actual menu height so flip-up math reflects the real popover.
-          // Fall back to a sensible estimate before first paint.
-          const measured = host.getBoundingClientRect().height;
-          const menuHeight = measured > 0 ? measured : 320;
-          const { top, left } = computeSlashMenuPlacement({
-            caret: { top: rect.top, bottom: rect.bottom, left: rect.left },
-            menuHeight,
-            viewportHeight: window.innerHeight,
-            scrollY: window.scrollY,
-            scrollX: window.scrollX,
-          });
-          host.style.top = `${top}px`;
-          host.style.left = `${left}px`;
+            // not yet painted): the editor view's caret coords.
+            () => {
+              try {
+                return props.clientRect?.() ?? props.editor.view.coordsAtPos(props.range.from);
+              } catch {
+                return null;
+              }
+            },
+          );
         };
 
         return {
           onStart: (props) => {
-            host = document.createElement("div");
-            host.style.position = "absolute";
-            host.style.zIndex = "50";
-            document.body.appendChild(host);
-            root = createRoot(host);
+            menu = openCaretMenu("wiki-link-menu", props.editor);
             refObj = { current: null };
-            root.render(
-              <WikiLinkTypeahead
-                ref={(r) => {
-                  refObj.current = r;
-                }}
-                query={props.query}
-                onSelect={(payload) => props.command(payload as never)}
-              />,
-            );
-            place(props.clientRect, props.editor, props.range);
+            render(props);
           },
-          onUpdate: (props) => {
-            if (!root) return;
-            root.render(
-              <WikiLinkTypeahead
-                ref={(r) => {
-                  refObj.current = r;
-                }}
-                query={props.query}
-                onSelect={(payload) => props.command(payload as never)}
-              />,
-            );
-            place(props.clientRect, props.editor, props.range);
-          },
+          onUpdate: render,
           onKeyDown: (props) => {
             if (props.event.key === "Escape") {
-              root?.unmount();
-              host?.remove();
-              root = null;
-              host = null;
+              menu?.close();
+              menu = null;
               return true;
             }
             return refObj.current?.onKeyDown({ event: props.event }) ?? false;
           },
           onExit: () => {
-            try { root?.unmount(); } catch (_) { /* portal already removed by DOM mutation */ }
-            try { host?.remove(); } catch (_) { /* already detached */ }
-            root = null;
-            host = null;
+            menu?.close();
+            menu = null;
           },
         };
       },
@@ -521,93 +520,43 @@ export function NoteEditor({
         );
       },
       render: () => {
-        let root: Root | null = null;
-        let host: HTMLDivElement | null = null;
+        let menu: ReturnType<typeof openCaretMenu> | null = null;
         let refObj: { current: SlashCommandTypeaheadRef | null } = { current: null };
 
-        const place = (clientRect: (() => DOMRect | null) | null | undefined) => {
-          if (!host) return;
-          const rect = clientRect?.() ?? null;
-          if (!rect) {
-            host.style.display = "none";
-            return;
-          }
-          host.style.display = "block";
-          // Measure actual menu height so flip-up math reflects the real popover.
-          // Fall back to a sensible estimate before first paint.
-          const measured = host.getBoundingClientRect().height;
-          const menuHeight = measured > 0 ? measured : 320;
-          const { top, left } = computeSlashMenuPlacement({
-            caret: { top: rect.top, bottom: rect.bottom, left: rect.left },
-            menuHeight,
-            viewportHeight: window.innerHeight,
-            scrollY: window.scrollY,
-            scrollX: window.scrollX,
-          });
-          host.style.top = `${top}px`;
-          host.style.left = `${left}px`;
+        const render = (props: any) => {
+          menu?.render(
+            <SlashCommandTypeahead
+              ref={(r) => {
+                refObj.current = r;
+              }}
+              query={props.query}
+              onSelect={(payload) => props.command(payload as never)}
+            />,
+            () => props.clientRect?.() ?? null,
+          );
         };
 
         const onStart = (props: any) => {
-          host = document.createElement("div");
-          host.style.position = "absolute";
-          host.style.zIndex = "50";
-          document.body.appendChild(host);
-          root = createRoot(host);
+          menu = openCaretMenu("slash-menu", props.editor);
           refObj = { current: null };
-          root.render(
-            <SlashCommandTypeahead
-              ref={(r) => {
-                refObj.current = r;
-              }}
-              query={props.query}
-              onSelect={(payload) => props.command(payload as never)}
-            />,
-          );
-          place(props.clientRect);
-        };
-
-        const onUpdate = (props: any) => {
-          if (!root) return;
-          root.render(
-            <SlashCommandTypeahead
-              ref={(r) => {
-                refObj.current = r;
-              }}
-              query={props.query}
-              onSelect={(payload) => props.command(payload as never)}
-            />,
-          );
-          place(props.clientRect);
+          render(props);
         };
 
         const onKeyDown = (props: any) => {
           if (props.event.key === "Escape") {
-            root?.unmount();
-            host?.remove();
-            root = null;
-            host = null;
+            menu?.close();
+            menu = null;
             return true;
           }
           return refObj.current?.onKeyDown({ event: props.event }) ?? false;
         };
 
         const onExit = () => {
-          // Defer unmount: Tiptap may call onExit during React's render phase
-          // (e.g. on editor teardown), and synchronously unmounting a root
-          // while React is rendering throws. Capture refs and clear the
-          // closure state immediately so onStart can recreate cleanly.
-          const r = root;
-          const h = host;
-          root = null;
-          host = null;
-          queueMicrotask(() => {
-            try { r?.unmount(); } catch (_) { /* portal already removed by DOM mutation */ }
-            try { h?.remove(); } catch (_) { /* already detached */ }
-          });
+          menu?.close();
+          menu = null;
         };
 
-        return { onStart, onUpdate, onKeyDown, onExit };
+        return { onStart, onUpdate: render, onKeyDown, onExit };
       },
     }),
     [],
@@ -634,7 +583,7 @@ export function NoteEditor({
         <Editor
           initialMd={initialMd}
           onChangeMd={onChangeMd}
-          autofocus
+          autofocus={autofocus}
           wikiLinkSuggestion={wikiLinkSuggestion}
           slashCommandSuggestion={slashCommandSuggestion}
           resolvedLinks={resolvedLinks}

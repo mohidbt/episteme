@@ -30,6 +30,18 @@ export interface PlacementInput {
   scrollX: number;
   /** Gap between caret and popover, px. Default 4. */
   gap?: number;
+  /** Viewport width (window.innerWidth). With `menuWidth`, clamps `left`. */
+  viewportWidth?: number;
+  /** Measured popover width in px. */
+  menuWidth?: number;
+}
+
+/** Distance kept between a clamped popover and the viewport edge, px. */
+export const VIEWPORT_MARGIN = 8;
+
+function clamp(value: number, size: number, viewport: number): number {
+  const max = viewport - size - VIEWPORT_MARGIN;
+  return Math.max(VIEWPORT_MARGIN, Math.min(value, max));
 }
 
 export interface PlacementResult {
@@ -45,17 +57,21 @@ export function computeSlashMenuPlacement(input: PlacementInput): PlacementResul
 
   // Flip up only when below is insufficient AND above has more room.
   const flipUp = roomBelow < input.menuHeight + gap && roomAbove > roomBelow;
+  const top = flipUp
+    ? input.caret.top - input.menuHeight - gap
+    : input.caret.bottom + gap;
 
-  if (flipUp) {
-    return {
-      top: input.caret.top + input.scrollY - input.menuHeight - gap,
-      left: input.caret.left + input.scrollX,
-      placement: "top",
-    };
-  }
+  // Narrow hosts (the reader's notes panel) put the caret close to the
+  // viewport's right edge: keep the whole menu on screen.
+  const left =
+    input.viewportWidth != null && input.menuWidth != null
+      ? clamp(input.caret.left, input.menuWidth, input.viewportWidth)
+      : input.caret.left;
+
   return {
-    top: input.caret.bottom + input.scrollY + gap,
-    left: input.caret.left + input.scrollX,
-    placement: "bottom",
+    // A menu taller than the room on both sides is pulled back on screen too.
+    top: clamp(top, input.menuHeight, input.viewportHeight) + input.scrollY,
+    left: left + input.scrollX,
+    placement: flipUp ? "top" : "bottom",
   };
 }

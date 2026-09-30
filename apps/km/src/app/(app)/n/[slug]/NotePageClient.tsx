@@ -1,13 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { ResolvedLinksMap, TiptapEditor } from "@episteme/editor";
-import {
-  buildMarkdownWithFrontmatter,
-  parseFrontmatter,
-  type FrontmatterRow,
-} from "@episteme/markdown";
 import { Check } from "lucide-react";
 import { NoteEditor } from "./NoteEditor";
 import { VersionDrawer } from "@/components/VersionDrawer";
@@ -16,6 +11,7 @@ import { PublishDialog } from "@/components/PublishDialog";
 import { DownloadButton } from "@/components/DownloadButton";
 import { DeleteToTrashButton } from "@/components/DeleteToTrashButton";
 import { invalidateDriveTree } from "@/lib/drive-sync";
+import { useNoteFrontmatter } from "@/hooks/useNoteFrontmatter";
 
 function formatRelativeTime(date: Date): string {
   const now = new Date();
@@ -62,17 +58,7 @@ export function NotePageClient({
   const router = useRouter();
   const flushRef = useRef<(() => Promise<void>) | null>(null);
   const editorRef = useRef<TiptapEditor | null>(null);
-  const initialParsed = useMemo(
-    () => parseFrontmatter(initialMd),
-    [initialMd],
-  );
-  const rowsRef = useRef<FrontmatterRow[]>(initialParsed.rows);
-  const initialBody = initialParsed.body;
-
-  const transformMd = useCallback(
-    (body: string) => buildMarkdownWithFrontmatter(rowsRef.current, body),
-    [],
-  );
+  const { body: initialBody, transformMd } = useNoteFrontmatter(initialMd);
 
   const [titleDraft, setTitleDraft] = useState(title);
   const [savingTitle, setSavingTitle] = useState(false);
@@ -197,7 +183,7 @@ export function NotePageClient({
               const body = editor?.storage?.markdown?.getMarkdown
                 ? (editor.storage.markdown.getMarkdown() as string)
                 : initialBody;
-              return buildMarkdownWithFrontmatter(rowsRef.current, body);
+              return transformMd(body);
             }}
           />
           <DeleteToTrashButton

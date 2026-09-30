@@ -121,4 +121,60 @@ describe("NoteEditor — wiki-link pill click navigation", () => {
 
     expect(mockPush).toHaveBeenCalledWith("/p/paper-7");
   });
+
+  it("calls onNavigate in place of router.push for wiki links and tags", () => {
+    const onNavigate = vi.fn();
+    const { container } = render(
+      <NoteEditor
+        id="note-1"
+        initialMd=""
+        onNavigate={onNavigate}
+        resolvedLinks={{
+          "note::my note": {
+            targetKind: "note",
+            targetId: "note-99",
+            targetSlug: "my-note",
+            displayTitle: "My Note",
+          },
+        }}
+      />,
+    );
+    const host = container.firstChild as HTMLElement;
+    const pill = document.createElement("span");
+    pill.setAttribute("data-type", "wiki-link");
+    pill.setAttribute("data-target-kind", "note");
+    pill.setAttribute("data-title", "my note");
+    host.appendChild(pill);
+    const tag = document.createElement("span");
+    tag.setAttribute("data-type", "tag");
+    tag.setAttribute("data-tag", "physics");
+    host.appendChild(tag);
+
+    pill.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    vi.advanceTimersByTime(260);
+    tag.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+
+    expect(onNavigate.mock.calls).toEqual([
+      ["/n/my-note", "My Note"],
+      ["/tags/physics", "#physics"],
+    ]);
+    expect(mockPush).not.toHaveBeenCalled();
+  });
+});
+
+describe("NoteEditor autofocus", () => {
+  afterEach(cleanup);
+
+  const autofocusProp = () =>
+    (mockEditor.mock.calls.at(-1) as unknown as [{ autofocus: boolean }])[0].autofocus;
+
+  it("focuses the editor by default", () => {
+    render(<NoteEditor id="note-1" initialMd="" />);
+    expect(autofocusProp()).toBe(true);
+  });
+
+  it("does not focus with autofocus={false}", () => {
+    render(<NoteEditor id="note-1" initialMd="" autofocus={false} />);
+    expect(autofocusProp()).toBe(false);
+  });
 });
