@@ -153,10 +153,11 @@ test("bold, italic and link from the selection toolbar", async ({ page, request 
   await page.keyboard.press("Enter");
   const link = first.locator('a[href="https://example.com"]');
   await expect(link).toHaveText("words");
-  await expectNothingLeftBehind(page);
+  await expect(linkPopover(page)).toHaveCount(0);
 
   await test.step("the link's edit bubble", async () => {
-    // The caret is right after the link: one step left puts it inside.
+    // The caret is right after the new link, which already shows its bubble;
+    // one step left puts the caret inside.
     await page.keyboard.press("ArrowLeft");
     await expectPopupSane(linkBubble(page), await rectOf(link), "link edit bubble");
     await linkBubble(page).getByTestId("link-edit-button").click();

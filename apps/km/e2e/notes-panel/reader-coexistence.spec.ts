@@ -59,16 +59,19 @@ async function scrollPdf(page: Page, by: number) {
   await expect.poll(() => pdfScrollTop(page)).toBe(before + by);
 }
 
-/** Drag over the start of a line of PDF text that is fully in view. */
+/**
+ * Drag over the start of a line of PDF text that is fully in view and not
+ * under a link annotation (dragging a link drags the link).
+ */
 async function selectPdfText(page: Page) {
   const line = await pdf(page).evaluate((container) => {
     const view = container.getBoundingClientRect();
     for (const span of container.querySelectorAll(".react-pdf__Page__textContent span")) {
       const r = span.getBoundingClientRect();
       const inView = r.top > view.top + 80 && r.bottom < view.bottom - 80 && r.left > view.left && r.right < view.right;
-      if (inView && r.width > 160 && span.textContent!.trim().length > 20) {
-        return { x: r.left, y: r.top + r.height / 2 };
-      }
+      const y = r.top + r.height / 2;
+      const plain = [r.left + 4, r.left + 140].every((x) => document.elementFromPoint(x, y) === span);
+      if (inView && plain && r.width > 160 && span.textContent!.trim().length > 20) return { x: r.left, y };
     }
     throw new Error("no line of PDF text in view");
   });
@@ -156,7 +159,9 @@ async function expectSideBySide(page: Page, label: string) {
 
 test("Notes and Agent are open together, in the same dock and in different docks", async ({ page }) => {
   await page.getByTestId("reader-toolbar-agent").click();
-  await expect(page.locator("#sidebar-agent")).toBeVisible();
+  // Opening the agent focuses its composer once that has loaded; wait for it
+  // so the focus move does not land in the middle of typing in the note.
+  await expect(page.locator("#sidebar-agent .episteme-chat-composer")).toBeFocused();
   await expectSideBySide(page, "agent-right-notes-right");
 
   for (const dock of ["left", "bottom"] as const) {
