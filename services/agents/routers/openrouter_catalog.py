@@ -119,7 +119,7 @@ def _is_stale(oldest: datetime | None) -> bool:
 
 
 @router.get("/catalog")
-async def get_catalog(conn: ConnDep) -> dict[str, Any]:
+async def get_catalog(conn: ConnDep, _auth: InternalAuthDep) -> dict[str, Any]:
     rows = await conn.fetch(
         "SELECT payload, fetched_at FROM openrouter_catalog ORDER BY fetched_at DESC"
     )
