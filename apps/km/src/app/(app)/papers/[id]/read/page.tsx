@@ -11,7 +11,13 @@ import { ReaderShell } from "./ReaderShell";
 
 const loadPaper = cache(async (paperId: string, userId: string) => {
   const rows = await db
-    .select({ id: papers.id, title: papers.title, filename: papers.filename })
+    .select({
+      id: papers.id,
+      title: papers.title,
+      filename: papers.filename,
+      libraryId: papers.libraryId,
+      folderId: papers.folderId,
+    })
     .from(papers)
     .where(and(eq(papers.id, paperId), eq(papers.userId, userId)))
     .limit(1);
@@ -32,7 +38,12 @@ export default async function PaperReadPage({
   return (
     <div className="h-full min-h-0 overflow-hidden">
       <TabTitleUpdater href={`/papers/${paper.id}/read`} title={tabTitle} />
-      <ReaderShell paperId={paper.id} />
+      <ReaderShell
+        paperId={paper.id}
+        paperTitle={tabTitle}
+        libraryId={paper.libraryId}
+        folderId={paper.folderId}
+      />
     </div>
   );
 }

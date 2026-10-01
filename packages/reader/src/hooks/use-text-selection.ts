@@ -88,7 +88,12 @@ export function useTextSelection() {
   }, [handleSelectionChange]);
 
   const clearSelection = useCallback(() => {
-    window.getSelection()?.removeAllRanges();
+    // Only a PDF selection is ours to clear. A caret elsewhere (the notes
+    // panel's editor, the agent input) must survive the reader's Escape.
+    const sel = window.getSelection();
+    const anchor = sel?.anchorNode;
+    const el = anchor instanceof Element ? anchor : anchor?.parentElement;
+    if (el?.closest("[data-pdf-container]")) sel?.removeAllRanges();
     setSelection(null);
   }, []);
 

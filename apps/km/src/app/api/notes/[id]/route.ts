@@ -24,7 +24,7 @@ export async function GET(req: Request, { params }: Ctx) {
   if (UUID_RE.test(id)) {
     const res = await requireOwned<any>(notes, id, userId);
     if (!res.ok) return jsonError(res.status, res.status === 404 ? "not_found" : "forbidden");
-    return Response.json(res.row);
+    return Response.json(await withInTrash(res.row, userId));
   }
   const [row] = await db
     .select()
@@ -32,7 +32,15 @@ export async function GET(req: Request, { params }: Ctx) {
     .where(and(eq(notes.userId, userId), eq(notes.slug, id)))
     .limit(1);
   if (!row) return jsonError(404, "not_found");
-  return Response.json(row);
+  return Response.json(await withInTrash(row, userId));
+}
+
+async function withInTrash<T extends { libraryId: number; folderId: string | null }>(
+  row: T,
+  userId: string,
+): Promise<T & { inTrash: boolean }> {
+  const trashId = await getTrashFolderId(row.libraryId, userId);
+  return { ...row, inTrash: row.folderId === trashId };
 }
 
 export async function PATCH(req: Request, { params }: Ctx) {

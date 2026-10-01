@@ -40,6 +40,12 @@ export function LinkPopover({
   return (
     <form
       onSubmit={handleSubmit}
+      onKeyDown={(e) => {
+        if (e.key === "Escape") {
+          e.stopPropagation();
+          onCancel();
+        }
+      }}
       className="flex flex-col gap-2 rounded-lg border bg-popover p-3 shadow-md"
       style={{ minWidth: 280 }}
     >
@@ -59,7 +65,9 @@ export function LinkPopover({
           onChange={(e) => setHref(e.target.value)}
           placeholder="https://"
           aria-label="URL"
-          autoFocus={isEdit ? false : true}
+          // Also when editing: the Edit button it replaces unmounts, and focus
+          // left on nothing means Escape never reaches this form.
+          autoFocus
         />
       </label>
       <div className="mt-1 flex items-center justify-end gap-2">

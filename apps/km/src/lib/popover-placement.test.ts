@@ -62,4 +62,59 @@ describe("computeSlashMenuPlacement", () => {
     });
     expect(result.placement).toBe("bottom");
   });
+
+  describe("horizontal clamp", () => {
+    const base = {
+      menuHeight: MENU_H,
+      viewportHeight: VIEWPORT_H,
+      scrollY: 0,
+      scrollX: 0,
+      viewportWidth: 1280,
+      menuWidth: 280,
+    };
+
+    it("pulls the menu left when it would cross the right edge", () => {
+      const result = computeSlashMenuPlacement({
+        ...base,
+        caret: { top: 100, bottom: 120, left: 1200 },
+      });
+      expect(result.left).toBe(1280 - 280 - 8);
+    });
+
+    it("pushes the menu right when the caret sits left of the margin", () => {
+      const result = computeSlashMenuPlacement({
+        ...base,
+        caret: { top: 100, bottom: 120, left: 2 },
+      });
+      expect(result.left).toBe(8);
+    });
+
+    it("leaves left at the caret when there is room", () => {
+      const result = computeSlashMenuPlacement({
+        ...base,
+        caret: { top: 100, bottom: 120, left: 400 },
+      });
+      expect(result.left).toBe(400);
+    });
+
+    it("adds the scroll offset after clamping", () => {
+      const result = computeSlashMenuPlacement({
+        ...base,
+        scrollX: 30,
+        caret: { top: 100, bottom: 120, left: 1200 },
+      });
+      expect(result.left).toBe(1280 - 280 - 8 + 30);
+    });
+  });
+
+  it("keeps a menu that fits on neither side inside the viewport", () => {
+    const result = computeSlashMenuPlacement({
+      caret: { top: 190, bottom: 210, left: 50 },
+      menuHeight: 380,
+      viewportHeight: 400,
+      scrollY: 0,
+      scrollX: 0,
+    });
+    expect(result.top).toBe(400 - 380 - 8);
+  });
 });

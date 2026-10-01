@@ -60,3 +60,18 @@ describe("DELETE /api/notes/:id — trash guard (T20)", () => {
     expect(row).toBeUndefined();
   });
 });
+
+describe("GET /api/notes/:id inTrash", () => {
+  async function inTrash(noteId: string): Promise<boolean> {
+    const r = await GET(req(`/api/notes/${noteId}`, { cookie: u.cookie }), params({ id: noteId }));
+    return (await r.json()).inTrash;
+  }
+
+  it("is false for a live note and true once the note sits in the trash folder", async () => {
+    const noteId = await createNote("Trash Flag Note");
+    expect(await inTrash(noteId)).toBe(false);
+    const trashId = await getTrashFolderId(libraryId, u.id);
+    await db.update(notes).set({ folderId: trashId }).where(eq(notes.id, noteId));
+    expect(await inTrash(noteId)).toBe(true);
+  });
+});

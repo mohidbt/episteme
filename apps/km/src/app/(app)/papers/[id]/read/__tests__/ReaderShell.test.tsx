@@ -15,6 +15,9 @@ async function actAsync(fn: () => void): Promise<void> {
 
 const searchParamsRef: { value: URLSearchParams } = { value: new URLSearchParams() };
 
+// What the page passes down for the notes panel's "New note".
+const PAPER = { paperTitle: "Paper", libraryId: 1, folderId: null };
+
 vi.mock("next/navigation", () => ({
   useSearchParams: () => searchParamsRef.value,
   useRouter: () => ({ refresh: () => {}, push: () => {} }),
@@ -123,7 +126,7 @@ describe("ReaderShell ?p= deep link (BG2a follow-up: prop-based)", () => {
   it("passes initialPage=3 to Reader when URL is ?p=3", async () => {
     searchParamsRef.value = new URLSearchParams("p=3");
     const { ReaderShell } = await import("../ReaderShell");
-    render(<ReaderShell paperId="paper-1" />);
+    render(<ReaderShell paperId="paper-1" {...PAPER} />);
     await waitFor(() => {
       expect(readerPropsRef.value).not.toBeNull();
     });
@@ -132,7 +135,7 @@ describe("ReaderShell ?p= deep link (BG2a follow-up: prop-based)", () => {
 
   it("passes initialPage=undefined when ?p= is absent", async () => {
     const { ReaderShell } = await import("../ReaderShell");
-    render(<ReaderShell paperId="paper-2" />);
+    render(<ReaderShell paperId="paper-2" {...PAPER} />);
     await waitFor(() => {
       expect(readerPropsRef.value).not.toBeNull();
     });
@@ -142,7 +145,7 @@ describe("ReaderShell ?p= deep link (BG2a follow-up: prop-based)", () => {
   it("passes initialPage=undefined for invalid ?p= (p=0, p=abc)", async () => {
     searchParamsRef.value = new URLSearchParams("p=0");
     const { ReaderShell } = await import("../ReaderShell");
-    render(<ReaderShell paperId="paper-3" />);
+    render(<ReaderShell paperId="paper-3" {...PAPER} />);
     await waitFor(() => {
       expect(readerPropsRef.value).not.toBeNull();
     });
@@ -166,7 +169,7 @@ describe("ReaderShell explain-passage handler (K8 follow-up)", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     const { ReaderShell } = await import("../ReaderShell");
-    render(<ReaderShell paperId="paper-explain" />);
+    render(<ReaderShell paperId="paper-explain" {...PAPER} />);
     await waitFor(() => {
       expect(readerPropsRef.value).not.toBeNull();
     });
@@ -222,7 +225,7 @@ describe("ReaderShell PastThreadsDropdown refresh signal (codex NEEDS-FIX)", () 
 
     vi.resetModules();
     const { ReaderShell } = await import("../ReaderShell");
-    render(<ReaderShell paperId="paper-refresh" />);
+    render(<ReaderShell paperId="paper-refresh" {...PAPER} />);
 
     await waitFor(() => {
       expect(pastThreadsPropsRef.value).not.toBeNull();
@@ -279,7 +282,7 @@ describe("ReaderShell PastThreadsDropdown refresh signal (codex NEEDS-FIX)", () 
 
     vi.resetModules();
     const { ReaderShell } = await import("../ReaderShell");
-    render(<ReaderShell paperId="paper-hydrate" />);
+    render(<ReaderShell paperId="paper-hydrate" {...PAPER} />);
 
     await waitFor(() => {
       expect(agentTranscriptPropsRef.value).not.toBeNull();
@@ -316,7 +319,7 @@ describe("ReaderShell PastThreadsDropdown refresh signal (codex NEEDS-FIX)", () 
 
     vi.resetModules();
     const { ReaderShell } = await import("../ReaderShell");
-    render(<ReaderShell paperId="paper-pending" />);
+    render(<ReaderShell paperId="paper-pending" {...PAPER} />);
 
     // Past-threads dropdown sits next to the skeleton — it should mount even
     // while we're waiting on /state.
@@ -343,7 +346,7 @@ describe("ReaderShell PastThreadsDropdown refresh signal (codex NEEDS-FIX)", () 
 
     vi.resetModules();
     const { ReaderShell } = await import("../ReaderShell");
-    render(<ReaderShell paperId="p-encode" />);
+    render(<ReaderShell paperId="p-encode" {...PAPER} />);
 
     await waitFor(() => {
       expect(
@@ -382,7 +385,7 @@ describe("ReaderShell PastThreadsDropdown refresh signal (codex NEEDS-FIX)", () 
 
     vi.resetModules();
     const { ReaderShell } = await import("../ReaderShell");
-    render(<ReaderShell paperId="paper-fail" />);
+    render(<ReaderShell paperId="paper-fail" {...PAPER} />);
 
     // On fetch failure we should still mount the transcript (with empty
     // messages) so the UI proceeds instead of hanging in the skeleton.
@@ -424,7 +427,7 @@ describe("ReaderShell PastThreadsDropdown refresh signal (codex NEEDS-FIX)", () 
 
     vi.resetModules();
     const { ReaderShell } = await import("../ReaderShell");
-    render(<ReaderShell paperId="paper-reload" />);
+    render(<ReaderShell paperId="paper-reload" {...PAPER} />);
 
     // The reader must restore the MOST RECENT prior thread (threads[0]).
     await waitFor(() => {
@@ -471,7 +474,7 @@ describe("ReaderShell PastThreadsDropdown refresh signal (codex NEEDS-FIX)", () 
 
     vi.resetModules();
     const { ReaderShell } = await import("../ReaderShell");
-    render(<ReaderShell paperId="paper-no-prior" />);
+    render(<ReaderShell paperId="paper-no-prior" {...PAPER} />);
 
     await waitFor(() => {
       expect(setActiveThreadSpy).toHaveBeenCalledWith("tid-fresh");
@@ -505,7 +508,7 @@ describe("ReaderShell PastThreadsDropdown refresh signal (codex NEEDS-FIX)", () 
 
     vi.resetModules();
     const { ReaderShell } = await import("../ReaderShell");
-    render(<ReaderShell paperId="paper-stream-done" />);
+    render(<ReaderShell paperId="paper-stream-done" {...PAPER} />);
 
     await waitFor(() => {
       expect(pastThreadsPropsRef.value).not.toBeNull();
@@ -542,7 +545,7 @@ describe("ReaderShell new-thread control (GSD-222 bug a)", () => {
 
     vi.resetModules();
     const { ReaderShell } = await import("../ReaderShell");
-    render(<ReaderShell paperId="paper-new-chat" />);
+    render(<ReaderShell paperId="paper-new-chat" {...PAPER} />);
 
     await waitFor(() => {
       expect(
@@ -574,7 +577,7 @@ describe("ReaderShell new-thread control (GSD-222 bug a)", () => {
 
     vi.resetModules();
     const { ReaderShell } = await import("../ReaderShell");
-    render(<ReaderShell paperId="paper-new-chat-2" />);
+    render(<ReaderShell paperId="paper-new-chat-2" {...PAPER} />);
 
     const btn = await waitFor(() =>
       screen.getByRole("button", { name: /new chat/i }),
@@ -626,7 +629,7 @@ describe("ReaderShell new-thread control (GSD-222 bug a)", () => {
 
     vi.resetModules();
     const { ReaderShell } = await import("../ReaderShell");
-    render(<ReaderShell paperId="paper-abort" />);
+    render(<ReaderShell paperId="paper-abort" {...PAPER} />);
 
     const btn = await waitFor(() =>
       screen.getByRole("button", { name: /new chat/i }),
@@ -692,7 +695,7 @@ describe("ReaderShell new-thread control (GSD-222 bug a)", () => {
 
     vi.resetModules();
     const { ReaderShell } = await import("../ReaderShell");
-    render(<ReaderShell paperId="paper-supersede" />);
+    render(<ReaderShell paperId="paper-supersede" {...PAPER} />);
 
     const liveBtn = () =>
       screen.getByRole("button", { name: /new chat/i }) as HTMLButtonElement;

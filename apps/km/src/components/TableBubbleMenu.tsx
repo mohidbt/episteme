@@ -10,8 +10,10 @@ import {
   Rows3,
   Columns3,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { scrollClip, watchWidth } from "@/lib/caret-anchor";
+import { VIEWPORT_MARGIN } from "@/lib/popover-placement";
 
 interface Rect {
   top: number;
@@ -35,7 +37,8 @@ export function shouldShowTableMenu(s: {
 }
 
 const HIDE_GRACE_MS = 150;
-const MENU_HEIGHT_OFFSET = 44;
+const MENU_HEIGHT = 38;
+const MENU_GAP = 6;
 
 export function TableBubbleMenu({ editor }: { editor: TiptapEditor }) {
   const [rect, setRect] = useState<Rect | null>(null);
@@ -47,15 +50,34 @@ export function TableBubbleMenu({ editor }: { editor: TiptapEditor }) {
   const pointerOnTableRef = useRef(false);
   const pointerOnMenuRef = useRef(false);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
 
-  const computeRect = useCallback((el: HTMLElement): Rect => {
-    const r = el.getBoundingClientRect();
-    return {
-      top: r.top + window.scrollY,
-      left: r.left + window.scrollX,
-      width: r.width,
-    };
-  }, []);
+  // Where the menu goes for a table: above it, or below it when the editor's
+  // scroll container has no room above. With room on neither side it sits
+  // just above the part of the table that is in view. Null once the table
+  // has scrolled out of the container.
+  const computeRect = useCallback(
+    (el: HTMLElement): Rect | null => {
+      // An overflowing table scrolls inside its wrapper: use the visible box.
+      const r = (el.closest(".tableWrapper") ?? el).getBoundingClientRect();
+      const clip = scrollClip(editor.view.dom);
+      if (r.bottom < clip.top || r.top > clip.bottom) return null;
+      const above = r.top - MENU_GAP - MENU_HEIGHT;
+      const below = r.bottom + MENU_GAP;
+      const top =
+        above >= clip.top
+          ? above
+          : below + MENU_HEIGHT <= clip.bottom
+            ? below
+            : Math.max(r.top, clip.top) - MENU_GAP - MENU_HEIGHT;
+      return {
+        top: top + window.scrollY,
+        left: r.left + window.scrollX,
+        width: r.width,
+      };
+    },
+    [editor],
+  );
 
   const recompute = useCallback(() => {
     const visible = shouldShowTableMenu({
@@ -154,9 +176,9 @@ export function TableBubbleMenu({ editor }: { editor: TiptapEditor }) {
     };
   }, [editor, recompute]);
 
-  // Reposition on scroll/resize while visible.
+  // Reposition on scroll/resize while a table is active. Not gated on the
+  // menu being shown: a table scrolled back into view gets its menu back.
   useEffect(() => {
-    if (!rect) return;
     const onScrollOrResize = () => {
       const t = tableRef.current;
       if (t) setRect(computeRect(t));
@@ -167,7 +189,28 @@ export function TableBubbleMenu({ editor }: { editor: TiptapEditor }) {
       window.removeEventListener("scroll", onScrollOrResize, true);
       window.removeEventListener("resize", onScrollOrResize);
     };
-  }, [rect, computeRect]);
+  }, [computeRect]);
+
+  // A panel separator drag leaves the menu stale: drop it. It returns with
+  // the next selection change or hover.
+  useEffect(
+    () =>
+      watchWidth(editor.view.dom, () => {
+        tableRef.current = null;
+        setRect(null);
+      }),
+    [editor],
+  );
+
+  // Centred on the table, with the whole menu kept on screen.
+  useLayoutEffect(() => {
+    const el = menuRef.current;
+    if (!el || !rect) return;
+    const min = window.scrollX + VIEWPORT_MARGIN;
+    const max = window.scrollX + window.innerWidth - el.offsetWidth - VIEWPORT_MARGIN;
+    const centred = rect.left + (rect.width - el.offsetWidth) / 2;
+    el.style.left = `${Math.max(min, Math.min(centred, max))}px`;
+  }, [rect]);
 
   useEffect(() => {
     return () => {
@@ -186,14 +229,9 @@ export function TableBubbleMenu({ editor }: { editor: TiptapEditor }) {
 
   const toolbar = (
     <div
+      ref={menuRef}
       data-testid="table-bubble-menu"
-      style={{
-        position: "absolute",
-        top: rect.top - MENU_HEIGHT_OFFSET,
-        left: rect.left + rect.width / 2,
-        transform: "translateX(-50%)",
-        zIndex: 50,
-      }}
+      style={{ position: "absolute", top: rect.top, zIndex: 50 }}
       onMouseEnter={() => {
         pointerOnMenuRef.current = true;
         recompute();

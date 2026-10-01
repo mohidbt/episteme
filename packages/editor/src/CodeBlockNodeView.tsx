@@ -51,7 +51,8 @@ export function CodeBlockNodeView({ node, updateAttributes }: NodeViewProps) {
         ))}
       </select>
       <pre>
-        <NodeViewContent as="code" />
+        {/* NodeViewContent wraps by default; whole lines let the `pre` scroll. */}
+        <NodeViewContent as="code" style={{ whiteSpace: "pre" }} />
       </pre>
     </NodeViewWrapper>
   );

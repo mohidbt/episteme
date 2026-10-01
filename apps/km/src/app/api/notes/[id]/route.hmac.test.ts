@@ -78,6 +78,17 @@ describe("GET /api/notes/[id] [HMAC + slug fallback]", () => {
     expect(body.id).toBe(UUID);
   });
 
+  it("reports inTrash by comparing the note's folder with the library trash folder", async () => {
+    const chain = (rows: unknown[]) =>
+      ({ from: vi.fn().mockReturnThis(), where: vi.fn().mockReturnThis(), limit: vi.fn().mockResolvedValue(rows) }) as never;
+    const note = { id: UUID, userId: "user-1", libraryId: 1, folderId: "trash-folder" };
+    for (const [trashId, expected] of [["trash-folder", true], ["other-folder", false]] as const) {
+      vi.mocked(db.select).mockReturnValueOnce(chain([note])).mockReturnValueOnce(chain([{ id: trashId }]));
+      const res = await GET(hmacReq(`/api/notes/${UUID}`), { params: Promise.resolve({ id: UUID }) });
+      expect((await res.json()).inTrash).toBe(expected);
+    }
+  });
+
   it("UUID path: 403 when row owned by other user", async () => {
     selectChain([{ id: UUID, userId: "other-user", title: "T" }]);
     const req = hmacReq(`/api/notes/${UUID}`);

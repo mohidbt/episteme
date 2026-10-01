@@ -347,6 +347,22 @@
   cursor: col-resize;
 }
 
+/* Wide content scrolls inside its own box, so a narrow host (the reader's
+   notes panel) never scrolls sideways as a whole. Math is an inline widget,
+   so the box that scrolls is its paragraph. Code scrolls in the `pre` above:
+   CodeBlockNodeView keeps its lines whole. */
+.episteme-prose .tableWrapper {
+  overflow-x: auto;
+}
+.episteme-prose p:has(.Tiptap-mathematics-render) {
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+.episteme-prose img {
+  max-width: 100%;
+  height: auto;
+}
+
 
 /* Appearance modifiers: applied via data attributes on the <main> ancestor
    in apps/km so the editor package stays unaware of the preference surface. */
