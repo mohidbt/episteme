@@ -65,7 +65,9 @@ export function LinkPopover({
           onChange={(e) => setHref(e.target.value)}
           placeholder="https://"
           aria-label="URL"
-          autoFocus={isEdit ? false : true}
+          // Also when editing: the Edit button it replaces unmounts, and focus
+          // left on nothing means Escape never reaches this form.
+          autoFocus
         />
       </label>
       <div className="mt-1 flex items-center justify-end gap-2">
