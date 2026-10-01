@@ -27,7 +27,9 @@ import { handleSlashCommand, type SlashCommandPayload } from "./slash-command-ha
 /**
  * Body-level host for a caret menu (slash commands, `[[`). It stays on screen,
  * follows the caret when the note scrolls, and goes away when the editor's
- * width changes (a panel separator drag leaves it anchored to stale text).
+ * width changes (a panel separator drag leaves it anchored to stale text) or
+ * focus moves elsewhere in the page (a click on the PDF next to the reader's
+ * notes panel), where Escape could no longer reach it.
  */
 function openCaretMenu(testId: string, editor: TiptapEditor) {
   const host = document.createElement("div");
@@ -49,6 +51,7 @@ function openCaretMenu(testId: string, editor: TiptapEditor) {
     closed = true;
     anchor.stop();
     stopWatch();
+    editor.off("blur", onBlur);
     // Defer unmount: Tiptap may call onExit during React's render phase
     // (e.g. on editor teardown), and synchronously unmounting a root while
     // React is rendering throws.
@@ -58,6 +61,11 @@ function openCaretMenu(testId: string, editor: TiptapEditor) {
     });
   };
   const stopWatch = watchWidth(editor.view.dom, close);
+  // Switching windows blurs the editor too; the menu should be there on return.
+  const onBlur = ({ event }: { event: FocusEvent }) => {
+    if (document.hasFocus() && !host.contains(event.relatedTarget as Node | null)) close();
+  };
+  editor.on("blur", onBlur);
   return {
     render(node: ReactNode, rect: () => CaretRect | null) {
       if (closed) return;
