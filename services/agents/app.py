@@ -104,7 +104,13 @@ async def lifespan(app: FastAPI):
     await close_pool()
 
 
-app = FastAPI(lifespan=lifespan)
+# No public API map on deployed environments (Vercel sets VERCEL).
+_docs_url, _redoc_url, _openapi_url = (
+    (None, None, None) if os.environ.get("VERCEL") else ("/docs", "/redoc", "/openapi.json")
+)
+app = FastAPI(
+    lifespan=lifespan, docs_url=_docs_url, redoc_url=_redoc_url, openapi_url=_openapi_url
+)
 
 
 @app.exception_handler(OpenRouterTrialExhausted)

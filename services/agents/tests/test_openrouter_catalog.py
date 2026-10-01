@@ -167,12 +167,28 @@ def test_get_catalog_returns_rows_from_db():
 
     app.dependency_overrides[deps.db.get_conn] = override
     try:
-        r = client.get("/openrouter/catalog")
+        r = client.get(
+            "/openrouter/catalog", headers=_signed_headers("GET", "/openrouter/catalog")
+        )
         assert r.status_code == 200, r.text
         body = r.json()
         assert len(body["models"]) == 2
         assert body["models"][0]["id"] == "a/m1"
         assert body["fetched_at"] is not None
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_get_catalog_without_internal_auth_is_rejected():
+    mock_conn = AsyncMock()
+
+    async def override():
+        yield mock_conn
+
+    app.dependency_overrides[deps.db.get_conn] = override
+    try:
+        assert client.get("/openrouter/catalog").status_code == 401
+        mock_conn.fetch.assert_not_called()
     finally:
         app.dependency_overrides.clear()
 
@@ -190,7 +206,9 @@ def test_get_catalog_handles_string_payload():
 
     app.dependency_overrides[deps.db.get_conn] = override
     try:
-        r = client.get("/openrouter/catalog")
+        r = client.get(
+            "/openrouter/catalog", headers=_signed_headers("GET", "/openrouter/catalog")
+        )
         assert r.status_code == 200
         body = r.json()
         assert body["models"][0]["id"] == "x/y"
@@ -207,7 +225,9 @@ def test_get_catalog_empty_returns_empty_list():
 
     app.dependency_overrides[deps.db.get_conn] = override
     try:
-        r = client.get("/openrouter/catalog")
+        r = client.get(
+            "/openrouter/catalog", headers=_signed_headers("GET", "/openrouter/catalog")
+        )
         assert r.status_code == 200
         body = r.json()
         assert body == {"models": [], "fetched_at": None}
