@@ -12,6 +12,7 @@ import { db } from "@/lib/db";
 import { noteLinks, notes, papers, references_, user } from "@episteme/db/schema";
 import { getDefaultLibrary } from "@/lib/default-library";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
+import { TabTitleUpdater } from "@/components/TabBar";
 import { BacklinksPanel } from "@/components/BacklinksPanel";
 import { NotePageClient } from "./NotePageClient";
 import { mintCollabToken } from "@/lib/collab-token";
@@ -111,6 +112,7 @@ export default async function NotePage({
   const library = await getDefaultLibrary(userId);
   return (
     <div className="mx-auto max-w-3xl p-6">
+      <TabTitleUpdater href={`/n/${slug}`} title={note.title} />
       {library && (
         <Breadcrumbs
           libraryName={library.name}

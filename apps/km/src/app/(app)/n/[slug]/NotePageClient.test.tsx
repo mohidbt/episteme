@@ -94,6 +94,27 @@ describe("NotePageClient — editable title", () => {
     });
   });
 
+  it.each([
+    ["slug changes", "hello-world"],
+    ["slug is unchanged", "hello"],
+  ])("signals the drive bus after a rename when the %s", async (_name, slug) => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ ok: true, json: async () => ({ slug }) }),
+    );
+    const onInvalidate = vi.fn();
+    window.addEventListener("episteme:drive-tree-invalidated", onInvalidate);
+
+    render(<NotePageClient {...baseProps} />);
+    fireEvent.change(screen.getByTestId("note-title"), {
+      target: { value: "Hello World" },
+    });
+    fireEvent.click(screen.getByTestId("note-title-confirm"));
+
+    await waitFor(() => expect(onInvalidate).toHaveBeenCalledTimes(1));
+    window.removeEventListener("episteme:drive-tree-invalidated", onInvalidate);
+  });
+
   it("hides the confirm button again when the draft is reset to the original title", () => {
     render(<NotePageClient {...baseProps} />);
     const input = screen.getByTestId("note-title") as HTMLInputElement;

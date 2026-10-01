@@ -14,6 +14,7 @@ import { FolderDestinationPicker } from "@/components/FolderDestinationPicker";
 import type { FolderRow } from "@/lib/folders";
 import { cn } from "@/lib/utils";
 import { maybeShowGuestError } from "@/lib/guest-error";
+import { invalidateDriveTree } from "@/lib/drive-sync";
 
 interface ReferenceFormProps {
   reference: ReferenceRow;
@@ -255,6 +256,7 @@ export function ReferenceForm({ reference, folders = [] }: ReferenceFormProps) {
       );
       toast.success("Saved");
       router.refresh();
+      invalidateDriveTree();
     } finally {
       setBusy(false);
     }

@@ -336,11 +336,14 @@ export function TabTitleUpdater({
   href: string;
   title: string;
 }) {
-  const { updateTabTitle } = useTabs();
+  const { tabs, updateTabTitle } = useTabs();
 
+  // Depend on `tabs` so the title is re-applied once the tab for `href` exists:
+  // on navigation this effect runs before the provider's pathname effect has
+  // created that tab. updateTabTitle is a no-op when the title already matches.
   useEffect(() => {
     updateTabTitle(href, title);
-  }, [href, title, updateTabTitle]);
+  }, [href, title, tabs, updateTabTitle]);
 
   return null;
 }

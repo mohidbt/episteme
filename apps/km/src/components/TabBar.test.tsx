@@ -309,6 +309,40 @@ describe("useTabs hook", () => {
     expect(api!.activeHref).toBe("/n/bar");
   });
 
+  it.each([
+    ["page title differs from the old page", "Foo Title", "Bar Title"],
+    ["title is unchanged across the navigation (slug-changing rename)", "Same", "Same"],
+  ])("page-supplied title wins over the URL fallback after navigation: %s", async (_name, fromTitle, toTitle) => {
+    // The page's TabTitleUpdater effect runs before the provider's pathname
+    // effect, so the new tab does not exist yet when the page first reports.
+    mockPathname = "/n/foo";
+    window.localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        tabs: [{ href: "/n/foo", title: fromTitle }],
+        activeHref: "/n/foo",
+      }),
+    );
+    const { TabBarProvider, TabTitleUpdater, useTabs } = await import("./TabBar");
+    let api: ReturnType<typeof useTabs> | null = null;
+    function Probe() {
+      api = useTabs();
+      return null;
+    }
+    const ui = (href: string, title: string) => (
+      <TabBarProvider>
+        <TabTitleUpdater href={href} title={title} />
+        <Probe />
+      </TabBarProvider>
+    );
+    const { rerender } = render(ui("/n/foo", fromTitle));
+    act(() => {
+      mockPathname = "/n/bar";
+      rerender(ui("/n/bar", toTitle));
+    });
+    expect(api!.tabs).toEqual([{ href: "/n/bar", title: toTitle }]);
+  });
+
   it("GSD-26: openInNewTab adds a tab without changing the current active tab", async () => {
     mockPathname = "/n/foo";
     window.localStorage.setItem(

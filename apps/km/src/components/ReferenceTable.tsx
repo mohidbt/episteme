@@ -10,6 +10,7 @@ import type { ReferenceRow } from "@/lib/references-server";
 import type { FolderRow } from "@/lib/folders";
 import { FolderBreadcrumbBadge } from "@/components/FolderBreadcrumbBadge";
 import { cn } from "@/lib/utils";
+import { invalidateDriveTree } from "@/lib/drive-sync";
 
 type SortKey = "citationKey" | "title" | "year";
 type SortDir = "asc" | "desc";
@@ -89,6 +90,7 @@ export function ReferenceTable({ rows, folders }: ReferenceTableProps) {
       }
       toast.success("Deleted");
       router.refresh();
+      invalidateDriveTree();
     } catch {
       toast.error("Delete failed");
     } finally {
