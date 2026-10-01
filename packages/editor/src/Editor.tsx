@@ -81,7 +81,10 @@ export function Editor({
     if (editor.isFocused) return;
     const currentMd = (editor.storage as any).markdown.getMarkdown() as string;
     if (currentMd === initialMd) return;
-    editor.commands.setContent(initialMd, false);
+    // Keep the caret where it was. setContent alone moves it to the end, and
+    // a formula there would show its source as if being edited.
+    const { from } = editor.state.selection;
+    editor.chain().setContent(initialMd, false).setTextSelection(from).run();
   }, [initialMd, editor, collab]);
 
   useEffect(() => {
