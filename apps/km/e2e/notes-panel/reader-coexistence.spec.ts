@@ -61,7 +61,9 @@ async function scrollPdf(page: Page, by: number) {
 
 /**
  * Drag over the start of a line of PDF text that is fully in view and not
- * under a link annotation (dragging a link drags the link).
+ * under a link annotation (dragging a link drags the link). Short lines are
+ * passed over: at an 827px wide PDF, dragging across "Preprint submitted on
+ * 26 Sep 2025" leaves a bare caret, with or without this panel.
  */
 async function selectPdfText(page: Page) {
   const line = await pdf(page).evaluate((container) => {
@@ -71,7 +73,7 @@ async function selectPdfText(page: Page) {
       const inView = r.top > view.top + 80 && r.bottom < view.bottom - 80 && r.left > view.left && r.right < view.right;
       const y = r.top + r.height / 2;
       const plain = [r.left + 4, r.left + 140].every((x) => document.elementFromPoint(x, y) === span);
-      if (inView && plain && r.width > 160 && span.textContent!.trim().length > 20) return { x: r.left, y };
+      if (inView && plain && r.width > 160 && span.textContent!.trim().length > 35) return { x: r.left, y };
     }
     throw new Error("no line of PDF text in view");
   });
