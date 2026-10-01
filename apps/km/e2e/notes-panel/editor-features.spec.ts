@@ -244,7 +244,9 @@ test("a long code line scrolls inside its own box", async ({ page, request }) =>
 });
 
 test("LaTeX renders, and a wide formula scrolls inside its own box", async ({ page, request }) => {
-  const wide = Array.from({ length: 40 }, (_, i) => `a_{${i + 1}}`).join(" + ");
+  // `$$` renders in KaTeX's inline mode, which breaks a long sum at its `+`
+  // signs; a fraction cannot break, so this one has to scroll.
+  const wide = `\\frac{${Array.from({ length: 40 }, (_, i) => `a_{${i + 1}}`).join(" + ")}}{2}`;
   const md = [
     "Inline $E = mc^2$ sits in a sentence.",
     // No `\,`: markdown reads it as an escaped comma and drops the backslash.
@@ -259,8 +261,8 @@ test("LaTeX renders, and a wide formula scrolls inside its own box", async ({ pa
     await expect(formula.locator(".katex")).toBeVisible();
     await expect(formula.locator(".katex-error")).toHaveCount(0);
   }
-  // Rendered math, not its source.
-  await expect(editor(page).locator("p").first()).not.toContainText("$E = mc^2$", { useInnerText: true });
+  // Rendered math, not its source. The source stays in the DOM, hidden.
+  await expect(editor(page).locator(".Tiptap-mathematics-editor:not(.Tiptap-mathematics-editor--hidden)")).toHaveCount(0);
 
   const state = await editor(page).locator("p").nth(2).evaluate(sideways);
   expect(state.overflow, "the formula is wider than its paragraph").toBeGreaterThan(100);

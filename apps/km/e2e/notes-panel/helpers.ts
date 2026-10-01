@@ -193,6 +193,18 @@ export async function caretToEndOf(block: Locator) {
   await block.scrollIntoViewIfNeeded();
   const b = await box(block);
   await block.click({ position: { x: b.width - 2, y: b.height - 4 } });
+  // ProseMirror takes a click's caret from the next selectionchange; a key
+  // pressed before that lands at the old caret.
+  await expect
+    .poll(() =>
+      block.evaluate((el) => {
+        type View = { state: { selection: { head: number } }; posAtDOM: (node: Node, offset: number) => number };
+        const { view } = (el.closest(".ProseMirror") as HTMLElement & { editor: { view: View } }).editor;
+        const sel = getSelection()!;
+        return view.state.selection.head === view.posAtDOM(sel.focusNode!, sel.focusOffset);
+      }),
+    )
+    .toBe(true);
 }
 
 /** Put the caret at the end of the note. */
