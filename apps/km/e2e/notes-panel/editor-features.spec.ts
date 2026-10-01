@@ -247,7 +247,8 @@ test("LaTeX renders, and a wide formula scrolls inside its own box", async ({ pa
   const wide = Array.from({ length: 40 }, (_, i) => `a_{${i + 1}}`).join(" + ");
   const md = [
     "Inline $E = mc^2$ sits in a sentence.",
-    "$$\\int_0^\\infty e^{-x^2}\\,dx = \\frac{\\sqrt{\\pi}}{2}$$",
+    // No `\,`: markdown reads it as an escaped comma and drops the backslash.
+    "$$\\int_0^\\infty e^{-x^2} dx = \\frac{\\sqrt{\\pi}}{2}$$",
     `$$${wide}$$`,
   ].join("\n\n");
   await openNoteInPanel(page, request, paper, note, md);

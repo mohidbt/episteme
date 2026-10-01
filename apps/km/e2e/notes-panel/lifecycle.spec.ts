@@ -86,6 +86,13 @@ test("switching notes removes an open popup", async ({ page }) => {
   await expectNothingLeftBehind(page);
 });
 
+test("a click on the PDF removes an open popup", async ({ page }) => {
+  const viewer = await rectOf(page.locator("#pdf-viewer"));
+  await page.mouse.click(viewer.left + 40, (viewer.top + viewer.bottom) / 2);
+  await expectNothingLeftBehind(page);
+  await expect(panel(page)).toBeVisible();
+});
+
 test("Escape closes the popup and leaves the panel open", async ({ page }) => {
   await page.keyboard.press("Escape");
   await expectNothingLeftBehind(page);
